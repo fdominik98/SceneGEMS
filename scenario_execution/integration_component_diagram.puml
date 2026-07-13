@@ -1,0 +1,112 @@
+@startuml
+
+
+
+package "Simulated World" as SimulatedWorld {
+
+  interface "Mavlink\n<<TCP>>" as SimMavlink
+  component "Simulator" as Simulator
+  component "Pixhawk/ArduPilot" as ArduPilot
+  component "Gazebo" as Gazebo
+  component "Smarc Sim" as SmarcSim
+  component "Blue Robotic Sim" as BlueSim
+  ArduPilot --|> Simulator
+  Gazebo --|> Simulator
+  SmarcSim --|> Simulator
+  BlueSim --|> Simulator
+  Simulator -- SimMavlink
+}
+
+
+package "WARA-PS Core System" as WARAPSCoreSystem {
+  interface "Mavlink\n<<UDP>>" as MavProxyMavlink
+  component "MavProxy" as MavProxy
+  MavProxy --> SimMavlink : uses
+  MavProxy -- MavProxyMavlink
+
+  package "Orchestration" {
+    interface "MQTT\n<<UDP>>" as BrokerMQTT
+    component "MQTT Broker" as Broker <<MQTT>>
+    Broker -- BrokerMQTT
+  }
+
+  database "Database" as Database {
+    folder "Monitor History\n<<not yet implemented>>" #lightgray
+    folder "Sensor History"
+  }
+  Broker --> Database : publish history
+}
+
+
+
+node "Scenario Management Service" as ScenarioManagement #lightgreen{
+  top to bottom direction
+  component "Scenario Generator Agent" as ScenarioGenerator {
+    artifact "User Specification <<scenario>>" as Spec
+    component "Initial Scene Generator" as InitialSceneGenerator
+    component "Path Planner" as PathPlanner
+    Spec --> InitialSceneGenerator : input
+    Spec --> PathPlanner : input
+  }
+  ScenarioGenerator --> BrokerMQTT : subscribes to requests/\npublishes status
+
+  component "Custom WARA-PS Vessel Agent" as VesselAgent
+  VesselAgent --> MavProxyMavlink : uses
+  VesselAgent --> BrokerMQTT : publishes sensor data/\nsubscribes to mission commands
+
+  component "COLREGS Monitor Agent\n<<not yet implemented>>" as MonitorAgent #lightgray
+  MonitorAgent --> BrokerMQTT : subscribes to sensor data/\npublishes monitor states
+
+  ScenarioGenerator ..> VesselAgent : <<create>>\n<<own>>
+  ScenarioGenerator ..> MonitorAgent : <<create>>\n<<own>>
+}
+
+package "Control (Manual/Autonomous)\n<<currently only manual control>>" #lightgray {
+  component "Controller" as Controller
+  component "MissionPlanner" as MissionPlanner
+  component "QGroundControl" as QGroundControl
+  component "Intelligent Controller (SUT)" as SUT
+  MissionPlanner --|> Controller
+  QGroundControl--|> Controller
+  SUT --|> Controller
+  Controller --> MavProxyMavlink : uses
+}
+
+note top of Broker
+  Handles topics and message routing between agents.
+  Protocol: MQTT over UDP.
+end note
+
+note top of ScenarioManagement
+  A service to specify, generate and
+  execute open sea scenarios.
+end note
+
+note top of ScenarioGenerator
+  - Based on the specification generates the
+   vessels and their trajectories.
+  - Translates the trajectories into missions.
+  - Creates the vessel agents and the monitor agents.
+  - Publishes the missions to the vessel agents.
+end note
+
+note top of VesselAgent
+  - Receives missions from the scenario generator.
+  - Executes the missions.
+  - Publishes the sensor data to the monitor agent.
+end note
+
+note top of MonitorAgent
+  - Receives sensor data from the vessel agents.
+  - Monitors the vessels for COLREGS violations.
+  - Ensures COLREGS awareness for the vessels.
+  - Publishes the monitor states to the broker.
+end note
+
+note top of Simulator
+  Any maritime physics simulator can be used.
+  Currently we only support ArduPilot SITL.
+end note
+
+
+@enduml

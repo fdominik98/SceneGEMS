@@ -1,0 +1,124 @@
+services:
+  gazebo:
+    image: ${GAZEBO_IMAGE:-scenegems-gazebo-harmonic:latest}
+    container_name: gazebo
+    hostname: gazebo
+    environment:
+      - GZ_HEADLESS=0
+      - GZ_VERBOSE=4
+      - DISPLAY=host.docker.internal:0.0
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - ./ocean.sdf:/worlds/ocean.sdf:ro
+      - ./models:/models:ro
+      - ./entrypoint.sh:/scripts/entrypoint.sh:ro
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        set -euo pipefail
+        tr -d '\r' < /scripts/entrypoint.sh > /tmp/entrypoint.sh
+        chmod +x /tmp/entrypoint.sh
+        exec /tmp/entrypoint.sh
+    ports:
+      - "11345:11345"
+    networks:
+      - maritime_net
+
+  # Passive gz-transport subscriber: logs all advertised topics on GZ_PARTITION (see bridge/ardupilot_gazebo.py).
+  # gz_json_bridge:
+  #   image: ${GZ_JSON_BRIDGE_IMAGE:-scenegems-gz-json-bridge:latest}
+  #   container_name: gz_json_bridge
+  #   hostname: gz_json_bridge
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #     - GZ_PARTITION=scenegems
+  #   networks:
+  #     - maritime_net
+  #   depends_on:
+  #     - gazebo
+
+  mavproxy1:
+    image: ${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}
+    tty: true
+    stdin_open: true
+    restart: unless-stopped
+    networks:
+      - maritime_net
+    ports:
+      - "14571:14571/udp"
+    command:
+      - python3
+      - -m
+      - MAVProxy.mavproxy
+      - --master=tcp:sitl1:5760
+      - --out=udp:host.docker.internal:14571
+    depends_on:
+      - sitl1
+      # - gz_json_bridge
+
+  # mavproxy2:
+  #   image: registry.waraps.org/waraps-mavproxy:latest
+  #   tty: true
+  #   stdin_open: true
+  #   restart: unless-stopped
+  #   networks:
+  #     - maritime_net
+  #   ports:
+  #    - "14570:14570/udp"
+  #   command: "mavproxy.py --master=tcp:sitl2:5760 --out=udp:host.docker.internal:14570" # 14570 for mission planner
+  #   depends_on:
+  #     - sitl2
+
+  # JSON physics: bridge hostname must become a numeric IPv4 for SITL (ArduPilot Socket uses inet_pton, not DNS).
+  # Protocol order is still servo → bridge → JSON reply; bridge binds before sitl (depends_on + delay).
+  sitl1:
+    image: ${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}
+    container_name: sitl1
+    hostname: sitl1
+    volumes:
+      - ./params/gazebo_boat_motors.parm:/params/gazebo_boat_motors.parm:ro
+      - ./sitl_entrypoint.sh:/scripts/sitl_entrypoint.sh:ro
+    environment:
+      SITL_RESOLVE_HOST: ${SITL_RESOLVE_HOST:-gazebo}
+      SITL_VEHICLE: ${SITL_VEHICLE:-Rover}
+      SITL_FRAME: ${SITL_FRAME:-rover-skid}
+      SITL_PARAM_FILE: ${SITL_PARAM_FILE:-/params/gazebo_boat_motors.parm}
+      SITL_MODEL: ${SITL_MODEL:-JSON}
+      SITL_NO_MAVPROXY: ${SITL_NO_MAVPROXY:-1}
+      SITL_NO_REBUILD: ${SITL_NO_REBUILD:-1}
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        tr -d '\r' < /scripts/sitl_entrypoint.sh > /tmp/sitl_entrypoint.sh
+        chmod +x /tmp/sitl_entrypoint.sh
+        exec /tmp/sitl_entrypoint.sh
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - maritime_net
+    depends_on:
+      - gazebo
+      # - gz_json_bridge
+
+  # sitl2:
+  #   image: ${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}
+  #   container_name: sitl2
+  #   hostname: sitl2
+  #   command: >
+  #     bash -lc "sim_vehicle.py -v Rover -f gazebo-rover -N --no-mavproxy --no-rebuild --sim-address=gazebo --model JSON"
+  #   ports:
+  #     - "9012:9012/udp"
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   networks:
+  #     - maritime_net
+  #   depends_on:
+  #     - gazebo
+
+
+networks:
+  maritime_net:
+    name: scenegems_net
+    driver: bridge

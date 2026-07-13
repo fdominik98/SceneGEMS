@@ -1,0 +1,1 @@
+docker build -f monitoring/Dockerfile -t scenegems-monitoring-subsystem:latest .

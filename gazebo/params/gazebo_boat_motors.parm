@@ -1,0 +1,23 @@
+# Servo / frame: differential thrust (skid steer). ArduPilotPlugin: PWM index 0 = SERVO1 → left thruster, index 2 = SERVO3 → right.
+#SERVO_32_ENABLE	0
+#FRAME_CLASS	2
+#FRAME_TYPE = 2
+# MOT_PWM_TYPE = 3
+# SITL default geofence (“fence present”) rejects many Guided / Fly-Here targets → set_desired_location fails silently in MP.
+#ENCE_ENABLE	0
+#ENCE_TYPE	0
+# JSON SITL often exposes two IMUs; slight mismatch trips “Accels inconsistent” — use primary IMU only in sim.
+#INS_USE2	0
+SERVO1_FUNCTION	74
+#SERVO2_FUNCTION	0
+SERVO3_FUNCTION	73
+#SERVO4_FUNCTION	0
+#SKID_STEER_IN	1
+SKID_STEER_OUT	1
+
+CRUISE_SPEED      10.0
+CRUISE_THROTTLE   60.0
+FRAME_CLASS       2.0
+FRAME_TYPE         2
+WP_SPEED          10.0
+

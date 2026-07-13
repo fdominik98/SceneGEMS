@@ -1,0 +1,13 @@
+# COLREGS maneuver detection parameters
+READILY_APPARENT_COURSE_CHANGE_TIME: 30  # Time (seconds) for a course change to be readily apparent
+READILY_APPARENT_HEADING_CHANGE: 0.5235987755982988  # Minimum heading change (radians) to be readily apparent: 30.0 degrees
+UNDETECTABLE_HEADING_CHANGE: 0.03490658503988659  # Maximum heading change (radians) that is undetectable: 2.0 degrees
+HEADING_PERSISTENCE_TIME: 30  # Time (seconds) a heading change must persist to be considered valid
+IMMEDIATE_HEADING_CHANGE_TIME: 60  # Time (seconds) for immediate heading change action (Rule 16 - give way early)
+UNDETECTABLE_HEADING_PERSISTENCE_TIME: 10  # Time (seconds) an undetectable heading change must persist
+
+# Speed change detection parameters
+READILY_APPARENT_SPEED_CHANGE: 1.0  # Minimum speed change (m/s) to be readily apparent
+UNDETECTABLE_SPEED_CHANGE: 0.1  # Maximum speed change (m/s) that is undetectable
+
+SAFE_TEMPORAL_DISTANCE: 600  # Safe temporal distance: 10 minutes in seconds

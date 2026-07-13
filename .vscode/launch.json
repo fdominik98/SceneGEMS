@@ -1,0 +1,164 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "View Trajectories",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/view_trajectory.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Generate Trajectories",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/generate_trajectories.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Test Hyper-parameters",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/hyperparam_test.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Evaluation",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/evaluation_main.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+
+        {
+            "name": "Table Browser",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/table_browser.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+
+        {
+            "name": "Evaluation Plots",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/eval_vis.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Annotate Risk Vectors",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/annotate_risk_vectors.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Annotate Functional Hash",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/annotate_hash.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Compress Eval Data",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/compress_eval_data.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+
+        {
+            "name": "Run Tests",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/run_tests.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Evaluate Hyperparameters",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/evaluate_hyperparameters.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+        {
+            "name": "Recover Ellipse Center and R",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/ellipse.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Rectangle Visualization",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/rectangle.py",
+            "console": "integratedTerminal",
+        },
+        {
+            "name": "Bound Circles",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/bound_circles.py",
+            "console": "integratedTerminal",
+        },
+
+        {    
+            "name": "Unzip Eval Data",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scripts/unzip_eval_data.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+
+        {
+            "name": "Run Simulation Backend",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "backend/src/scenegems_tool/backend_service/websocket_app.py",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}/backend/src"
+            }
+        },
+    ]
+}

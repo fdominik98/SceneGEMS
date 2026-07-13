@@ -1,0 +1,385 @@
+Metadata-Version: 2.4
+Name: scenegems-logic-scene-generation
+Version: 0.1.0
+Summary: Automated Scene Generation for Testing COLREGS-Compliance of Autonomous Surface Vehicles by Multi-Step Refinement
+Author-email: Research Team <contact@example.com>
+License: MIT
+Project-URL: Homepage, https://github.com/[username]/SceneGEMS
+Project-URL: Repository, https://github.com/[username]/SceneGEMS.git
+Project-URL: Documentation, https://github.com/[username]/SceneGEMS#readme
+Keywords: autonomous vehicles,COLREGS,scene generation,testing,marine robotics
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Researchers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Classifier: Topic :: Scientific/Engineering :: Robotics
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: cliffs-delta
+Requires-Dist: dash
+Requires-Dist: jsonpickle
+Requires-Dist: lxml
+Requires-Dist: pandas
+Requires-Dist: pygad
+Requires-Dist: pymoo
+Requires-Dist: pygame
+Requires-Dist: pyswarms
+Requires-Dist: pyyaml
+Requires-Dist: scipy
+Requires-Dist: seaborn
+Requires-Dist: tkfilebrowser
+Requires-Dist: scenic
+Requires-Dist: matplotlib
+Requires-Dist: mypy
+Requires-Dist: docker
+Requires-Dist: paho-mqtt
+Requires-Dist: haversine
+Requires-Dist: paramiko
+Requires-Dist: shapely
+Requires-Dist: numpy
+Requires-Dist: uvicorn
+Requires-Dist: fastapi
+Requires-Dist: omegaconf
+Requires-Dist: flake8
+Requires-Dist: black
+Requires-Dist: isort
+Requires-Dist: pytest
+Requires-Dist: pytest-cov
+Requires-Dist: pre-commit
+Requires-Dist: portion
+Requires-Dist: svgpath2mpl
+Requires-Dist: uvicorn[standard]
+Requires-Dist: pyproj
+Provides-Extra: windows
+Requires-Dist: pywin32; extra == "windows"
+
+
+# Automated Scene Generation for Testing COLREGS-Compliance of Autonomous Surface Vehicles by Multi-Step Refinement
+
+A Python 3.12 project for generating and evaluating initial scenes for Autonomous Surface Vehicle (ASV) scenario-based testing. This repository includes utilities for genetic algorithms and rejection sampling for scene generation using the **MSR** and **DC** approaches with detailed visualization and evaluation tools.
+
+This project serves as supplementary material for our research paper **Automated Scene Generation for Testing COLREGS-Compliance of Autonomous Surface Vehicles by Multi-Step Refinement**.
+
+![](./assets/figures/v2/msr_overview.png)
+
+## Table of Contents
+- [Project Structure](#project-structure)
+- [Requirements](#requirements)
+- [Setup Instructions](#setup-instructions)
+- [Usage](#usage)
+
+## Project Structure
+The following tree provides an overview of the project structure:
+
+```
+├── SceneGEMS
+│   ├── assets/ # Stores figures and measurement data
+│   │   ├── gen_data/
+│   │   │   ├── parameter_test_base/
+│   │   │   ├── parameter_test_msr/
+│   │   ├── images/
+│   │   ├── scenic/
+│   │   │   ├── scenic_scenario.scenic
+│   │   ├── functional_models/
+│   ├── refinery_functional_models/
+│   ├── src/ # Source code directory
+│   │   ├── concrete_level/
+│   │   │   ├── models/
+│   │   │   │   ├── actor_state.py
+│   │   │   │   ├── concrete_actors.py
+│   │   │   │   ├── concrete_scene.py
+│   │   │   │   ├── multi_level_scenario.py
+│   │   │   │   ├── rrt_models.py
+│   │   │   │   ├── trajectories.py
+│   │   │   │   ├── trajectory_manager.py
+│   │   │   │   ├── vessel_order_graph.py
+│   │   │   ├── concrete_scene_abstractor.py
+│   │   │   ├── data_parser.py
+│   │   ├── evaluation/
+│   │   │   ├── chi_square_kl_div.py
+│   │   │   ├── fishers_exact_odds_ratio.py
+│   │   │   ├── mann_whitney_u_cliff_delta.py
+│   │   │   ├── permutation_evenness_test.py
+│   │   │   ├── risk_evaluation.py
+│   │   │   ├── vessel_type_sampler.py
+│   │   ├── functional_level/
+│   │   │   ├── metamodels/
+│   │   │   │   ├── functional_object.py
+│   │   │   │   ├── functional_scenario.py
+│   │   │   │   ├── interpretation.py
+│   │   │   ├── models/
+│   │   │   │   ├── functional_model_manager.py
+│   │   │   │   ├── functional_scenario_builder.py
+│   │   │   │   ├── model_parser.py
+│   │   │   │   ├── object_generator.py
+│   │   ├── logical_level/
+│   │   │   ├── constraint_satisfaction/
+│   │   │   │   ├── csp_evaluation/
+│   │   │   │   │   ├── csp_evaluator.py
+│   │   │   │   │   ├── csp_scheduler.py
+│   │   │   │   │   ├── csp_solver.py
+│   │   │   │   │   ├── csp_solver_factory.py
+│   │   │   │   ├── evolutionary_computation/
+│   │   │   │   │   ├── pygad_ga_algorithm.py
+│   │   │   │   │   ├── pymoo_nsga2_algorithm.py
+│   │   │   │   │   ├── pymoo_nsga3_algorithm.py
+│   │   │   │   │   ├── pymoo_nsga_algorithm.py
+│   │   │   │   │   ├── pyswarm_pso_algorithm.py
+│   │   │   │   │   ├── scipy_de_algorithm.py
+│   │   │   │   ├── rejection_sampling/
+│   │   │   │   │   ├── rejection_sampling_pipeline.py
+│   │   │   │   │   ├── scenic_utils.py
+│   │   │   │   ├── aggregates.py
+│   │   │   │   ├── assignments.py
+│   │   │   │   ├── evaluation_cache.py
+│   │   │   │   ├── evaluation_data.py
+│   │   │   ├── mapping/
+│   │   │   │   ├── instance_initializer.py
+│   │   │   │   ├── logical_scenario_builder.py
+│   │   │   ├── models/
+│   │   │   │   ├── relation_constraints_concept/
+│   │   │   │   │   ├── composites.py
+│   │   │   │   │   ├── literals.py
+│   │   │   │   │   ├── predicates.py
+│   │   │   │   ├── actor_variable.py
+│   │   │   │   ├── logical_model_manager.py
+│   │   │   │   ├── logical_scenario.py
+│   │   │   │   ├── penalty.py
+│   │   │   │   ├── values.py
+│   │   ├── scripts/
+│   │   │   ├── annotate_hash.py
+│   │   │   ├── compress_eval_data.py
+│   │   │   ├── eval_vis.py
+│   │   │   ├── evaluate_hyperparameters.py
+│   │   │   ├── evaluation_main.py
+│   │   │   ├── hyperparam_test.py
+│   │   │   ├── table_browser.py
+│   │   ├── utils/
+│   │   │   ├── cached_property.py
+│   │   │   ├── colors.py
+│   │   │   ├── evaluation_config.py
+│   │   │   ├── file_system_utils.py
+│   │   │   ├── general_utils.py
+│   │   │   ├── math_utils.py
+│   │   │   ├── scenario.py
+│   │   │   ├── serializable.py
+│   │   │   ├── static_obstacle_types.py
+│   │   │   ├── vessel_types.py
+│   │   ├── visualization/
+│   │   │   ├── colreg_scenarios/
+│   │   │   │   ├── plot_components/
+│   │   │   │   │   ├── main_plot_components/
+│   │   │   ├── evaluation_plots/
+│   │   │   ├── dash_thread.py
+│   │   │   ├── plotting_utils.py
+│   │   │   ├── trajectory_visualizer.py
+│   │   ├── global_config.py
+│   ├── requirements.txt
+│   ├── requirements_exclude_from_ubuntu.txt
+```
+
+### Detailed Description
+Here the most important components are discussed from the research's perspective.
+
+#### `assets/`
+Contains images and plot exports used in the project. Also generated scene and trajectory descriptions are saved here.
+
+- `gen_data/`: All the evaluation data generated to showcase the results of scene generation **the measurements are deleted from the repo due to large size. They can be unpacked with scripts/list_measurements.py from compressed_for_plotting.pkl.gz which is provided as supplementary material**.
+  - `Base_test_X_vessel_0_obstacle_scenarios/`: X-vessel scenarios generated by the baseline.
+  - `MSR_test_X_vessel_0_obstacle_scenarios/`: X-vessel scenarios generated by MSR.
+  - `parameter_test_base/`: Hyper-parameter optimization data for the search-based baseline
+  - `parameter_test_msr/`: Hyper-parameter optimization data for the search-based MSR
+- `figures/`: All the figures used to showcase the results of scene generation.
+- `functional_models/`: All possible functional unique relevant equivalence classes generated by Refinery: https://refinery.services/.
+- `scenic/`: Contains the base scenic scenario that is used to define sampling regions.
+
+
+#### `refinery_functional_models/`
+Contains experimental `.problem` files with functional COLREGS scenario specifications in Refinery DSL:  https://refinery.services/.
+
+#### `src/evaluation/`
+Modules related to risk and performance evaluation.
+
+- `eqv_class_calculator.py`: Calculates equivalence classes for risk.
+- `risk_evaluation.py`: Evaluates risk vectors for OS based on a concrete scene.
+- `mann_whitney_u_cliff_delta.py`: Evaluates p-values and effect size for floating point samples.
+- `fishers_exact_odds_ratio.py`: Evaluates p-values and effect size for dichotomous samples.
+- `chi_square_kl_div.py`: Evaluates Chi-Square p values and KL Divergence effect size.
+- `permutation_evenness_test.py`: Evaluates the evenness score of a distribution.
+
+
+#### `src/concrete_level/`
+Scenario representation and trajectory synthesis on the concrete level.
+
+- `concrete_scene_abstractor.py`: Abstracts concrete scenes to logical and functional scenarios.
+- `data_parser.py`: Parses evaluation data models.
+- `models/`: Object model representations for concrete scenes and trajectories.
+
+#### `src/logical_level/`
+Scenario representation and scenario synthesis on the logical level.
+
+- `models/`: Object model representations for logical scenarios and variables.
+  - `relation_constraints.py`: Defines constraints based on relationship types between vessels.
+  - `actor_variable.py`: Data model for representing an actor variable.
+
+- `constraint_satisfaction/`: Object model representations for logical scenarios and variables.
+  - `evolutionary_computation/`: Implements different optimization algorithms such as NSGAII, NSGAIII, Genetic Algorithm, Swarm Optimization, Differential Evolution.
+  - `aggregates.py`: Implements aggregate strategies for calculating fitness functions (Category, Actor, Global aggregates).
+  - `evaluation_data.py`: A data model class for storing and loading evaluation results. These files are used to visualize concretization performance and COLREGS scenarios.
+
+- `mapping/`: The mapping of functional models to logical constraints.
+  - `logical_scenario_builder.py`: Builds up a logical scenario from a functional one.
+  - `instance_initializer.py`: Initializes a population of random or deterministic individuals for evolutionary algorithms.
+
+
+#### `src/functional_level/`
+Abstract metamodel, scenario representation and scenario parsing on the functional level.
+
+- `models/`: Code for parsing functional models from `.problem` files.
+- `metamodels/`: Object model representations for functional scenarios and objects.
+
+
+#### `src/visualizations/`
+Utilities for generating visualizations and animations.
+
+- `evaluation_plots/`: Evaluation plots for algorithm performance visualizations (success rate, runtime, risk metrics).
+- `colreg_scenarios/`: Visualizations of concrete scenes/scenarios.
+
+#### `src/scripts/`
+Tools for conducting the scene generation research in the form of python scripts. See Usage.
+
+#### `src/utils/`
+General helper functions and constant definitions.
+
+#### `src/global_config.py`
+Contains maritime specific invariant properties like speed and length boundaries. 
+
+## Requirements
+The measurements are conducted on an Ubuntu 24.04 machine with an Intel Core Processor (Haswell, model: 60, family: 6) and 32 GB of RAM using Python 3.12.
+
+## Setup Instructions
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/[username]/SceneGEMS.git
+cd SceneGEMS
+```
+
+### 2. Set Up a Virtual Environment
+
+For isolated project dependencies, work from the `backend/` directory:
+
+```bash
+cd backend
+python3.12 -m venv env
+source env/bin/activate  # On Windows, use `env\Scripts\activate`
+```
+
+### Docker-first development
+
+From the **repository root**, run `./start.sh` to start the containerized frontend, MQTT broker, and WebSocket backend. Host Python tooling below is optional for lint/tests without Docker.
+
+### 3. Install Dependencies
+
+This project uses modern Python packaging with `pyproject.toml`. Install dependencies using pip:
+
+```bash
+# Install main dependencies (works on both Windows and Ubuntu)
+pip install -e .
+
+# For Windows systems (includes Windows-specific packages like pywin32)
+pip install -e ".[windows]"
+
+```
+
+### 4. Code Quality Tools
+
+The project includes several code quality tools configured in `pyproject.toml`:
+
+- **Flake8**: Linting with custom rules for this codebase
+- **Black**: Code formatting (88 character line length)
+- **isort**: Import sorting
+- **mypy**: Type checking
+
+#### Running Linting
+
+```bash
+# Run flake8 linting
+flake8 src/
+
+# Run all code quality tools
+black src/
+isort src/
+flake8 src/
+mypy src/
+```
+
+#### Using Make Commands (Recommended)
+
+The project includes a Makefile for common development tasks:
+
+```bash
+# See all available commands
+make help
+
+# Install dependencies
+make install              # Main dependencies
+make install-windows      # Windows-specific dependencies (pywin32)
+
+# Code quality
+make lint                 # Run flake8 linting
+make format               # Format code with black and isort
+make check                # Run all quality checks
+
+# Maintenance
+make clean                # Clean up cache files
+make test                 # Run tests
+make setup-precommit      # Install pre-commit hooks
+```
+
+#### Pre-commit Hooks (Optional)
+
+Install pre-commit hooks for automatic code quality checks:
+
+```bash
+pre-commit install
+```
+
+This will automatically run flake8, black, isort, and mypy before each commit.
+
+## Usage
+
+Instructions on how to run the main scripts, such as evaluation and visualization tools. You can run these scripts directly in your terminal or use the provided configurations in Visual Studio Code for debugging.
+
+### Running from the Terminal
+
+You can execute any of the following Python scripts from the terminal:
+
+```bash
+
+# The measurements are deleted from the repo due to large size. They can be unpacked with scripts/list_measurements.py from compressed_for_plotting.pkl.gz which is provided as supplementary material.
+python src/scripts/list_measurements.py
+
+# Runs hyper-parameter tuning for evolutionary algorithms
+python src/scripts/hyperparam_test.py
+
+# Runs hyper-parameter evaluation to find the pest parameters for search-based algorithms after the tuning finished
+python src/scripts/evaluate_hyperparameters.py
+
+# This is the file with which the evaluation is run.
+python src/scripts/evaluation_main.py
+
+# Loads folders containing evaluation data and visualizes them in a Dash table on local server. Good for debuging and browsing the data.
+python src/scripts/table_browser.py
+
+# Runs a script that annotates each measurement with a functional shape hash identifying a unique equivalence class.
+python src/scripts/annotate_hash.py
+
+# Runs a script that compresses the evaluation results to consume less time to load them for plotting.
+python src/scripts/compress_eval_data.py
+
+# Runs the evaluation visualization script where all the plots are generated for the evaluation data used in the research. Before running this script compress_eval_data.py has to be run to create a compressed_for_plotting.pkl.gz file that is the input of eval_vis.py
+python src/scripts/eval_vis.py

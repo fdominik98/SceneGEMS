@@ -1,0 +1,1 @@
+docker build -f scenario_generation/Dockerfile -t scenegems-scenario-generation-subsystem:latest .

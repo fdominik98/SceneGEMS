@@ -1,0 +1,111 @@
+enum VesselType {CargoShip, Tanker, OSPassengerShip,
+                 ContainerShip, PassengerShip,
+                 FishingShip, MotorVessel,
+                 SailingVessel, MilitaryVessel, MiniUSV}
+
+
+//enum StaticObstacleType {Small, Medium, Large}
+
+abstract class Vessel {
+    Vessel[0..*] overtakingToPort
+    Vessel[0..*] overtakingToStarboard
+    Vessel[0..*] crossingFromPort
+    Vessel[0..*] headOn opposite headOn
+}
+
+class OS extends Vessel {
+    VesselType[1] vesselType
+}
+
+class TS extends Vessel.
+
+class StaticObstacle {
+    //StaticObstacleType[1] staticObstacleType
+    OS[1] atDangerousHeadOnSectorOf
+}
+
+pred overtaking(Vessel v1, Vessel v2) <->
+    overtakingToPort(v1, v2); overtakingToStarboard(v1, v2).
+
+pred giveWay(Vessel v1) <->
+    overtaking(v1, _);
+    crossingFromPort(v1, _);
+    headOn(_, v1).
+
+pred standOn(Vessel v1) <->
+    overtaking(_, v1);
+    crossingFromPort(_, v1).
+
+pred ambiguous(Vessel v) <->
+    giveWay(v), standOn(v).
+
+pred inCOLREGSSituationWith(Vessel v1, Vessel v2) <->
+    headOn(v2, v1);
+    crossingFromPort(v1, v2);
+    crossingFromPort(v2, v1);
+    overtaking(v1, v2);
+    overtaking(v2, v1).
+
+//------------------------------------------------------------------------
+
+error selfCOLREGSRelation(Vessel v) <->
+    inCOLREGSSituationWith(v, v).
+
+
+error doubleCOLREGSRelation(Vessel v1, Vessel v2) <->
+    headOn(v1, v2), crossingFromPort(v1, v2);
+    headOn(v1, v2), overtaking(v1, v2);
+    overtaking(v1, v2), crossingFromPort(v1, v2);
+
+    headOn(v1, v2), crossingFromPort(v2, v1);
+    headOn(v1, v2), overtaking(v2, v1);
+    overtaking(v1, v2), crossingFromPort(v2, v1);
+
+    crossingFromPort(v1, v2), crossingFromPort(v2, v1);
+    overtaking(v1, v2), overtaking(v2, v1);
+
+    overtakingToPort(v1, v2), overtakingToStarboard(v1, v2).
+
+
+//----------------------------------------------------------------
+error notInCOLREGSSituationWithOS(TS ts, OS os) <->
+    !inCOLREGSSituationWith(ts, os).
+
+error twoTSInCOLREGSSituation(TS ts1, TS ts2) <->
+    inCOLREGSSituationWith(ts1, ts2).
+
+error notDangerousHeadOnWithOS(StaticObstacle o, OS os) <->
+    !atDangerousHeadOnSectorOf(o, os).
+
+error moreThanOneOS(OS v1, OS v2) <->
+    v1 != v2.
+
+error noOS() <->
+    !OS(_).
+
+declare os, ts1, ts2, ts3, ts4, ts5.
+!exists(OS::new).
+!exists(TS::new).
+!exists(StaticObstacle::new).
+OS(os).
+vesselType(os, OSPassengerShip).
+
+TS(ts1).
+TS(ts2).
+TS(ts3).
+TS(ts4).
+TS(ts5).
+default !overtakingToPort(*, *).
+default !overtakingToStarboard(*, *).
+overtakingToStarboard(os, ts2).
+overtakingToStarboard(os, ts4).
+default !crossingFromPort(*, *).
+crossingFromPort(os, ts1).
+default !vesselType(*, *).
+
+default !atDangerousHeadOnSectorOf(*, *).
+default !headOn(*, *).
+headOn(os, ts3).
+headOn(os, ts5).
+headOn(ts3, os).
+headOn(ts5, os).

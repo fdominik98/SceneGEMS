@@ -1,0 +1,299 @@
+
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="OS_0_MiniUSV1_SIM">
+    <self_collide>false</self_collide>
+    <!-- Avoid links auto-disabling mid-run (can destabilize coupled buoyancy/hydro). -->
+    <allow_auto_disable>false</allow_auto_disable>
+    <static>false</static>
+    <!-- pose units: x,y,z [m], roll,pitch,yaw [rad] — small debug hull (~3.2 m). -->
+    <pose>0.0 0.0 0 0 0 1.5707963267948966</pose>
+
+    <link name="base_link">
+      <inertial>
+        <!-- CoM slightly below geometric center for roll stability (scaled from large vessel). -->
+        <pose>0 0 -2.700000000005435  0 0 0</pose>
+        <mass>345915.3600020888</mass>
+        <inertia>
+          <!-- kg*m^2; izz lowered for snappier yaw; iyy chosen so ixx+izz >= iyy (valid rigid body). -->
+          <ixx>3761829.5400378597</ixx>
+          <iyy>26527384.17026698</iyy>
+          <izz>29121749.37029309</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <collision name="collision_hull">
+        <pose>0 0 -0.9000000000018116 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>30.000000000060385 10.500000000021135 1.8000000000036231</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="visual_hull">
+        <pose>0 0 0.4500000000009057 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>30.000000000060385 10.500000000021135 4.500000000009058</size>
+          </box>
+        </geometry>
+      </visual>
+
+      <visual name="visual_keel">
+        <pose>0 0 -2.700000000005435 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>25.500000000051326 1.5750000000031703 1.8000000000036231</size>
+          </box>
+        </geometry>
+      </visual>
+      
+      <sensor name="imu_sensor" type="imu">
+        <pose degrees="true">0 0 0 180 0 0</pose>
+        <always_on>1</always_on>
+        <update_rate>100.0</update_rate>
+      </sensor>
+      <sensor name="navsat_sensor" type="navsat">
+        <pose>0 0 0 0 0 0</pose>
+        <always_on>1</always_on>
+        <update_rate>10.0</update_rate>
+      </sensor>
+  </link>
+ 
+   <!-- MOTOR -->
+  <link name="motor_stbd_link">
+      <pose degrees="true">-11.250000000022645 2.8875000000058124 -1.9800000000039857 -90 0 90</pose>
+      <inertial>
+        <mass>1394.8200000084228</mass>
+        <inertia>
+          <ixx>203.36475600204673</ixx>
+          <iyy>406.72951200409346</iyy>
+          <izz>406.72951200409346</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      
+      <collision name="prop_collision">
+        <geometry> <!-- This tag is required -->
+          <cylinder>
+            <radius>0.5400000000010869</radius> 
+            <length>0.09000000000018116</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      
+      <visual name="prop_visual">
+        <geometry>
+          <mesh>
+            <uri>models://meshes/blueboat_prop_stbd.dae</uri>
+            <!-- Scales the original 0.112m mesh to match your new parameterized diameter -->
+            <scale>21.600000000043476 21.600000000043476 21.600000000043476</scale>
+          </mesh>
+        </geometry>
+        <material>
+          <diffuse>0.01 0.01 0.01 1</diffuse>
+          <ambient>0.01 0.01 0.01 1</ambient>
+          <specular>0.7 0.7 0.7 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0.5</metalness>
+              <roughness>0.5</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+  </link>
+
+
+  <joint name="motor_stbd_joint" type="revolute">
+    <parent>base_link</parent>
+    <child>motor_stbd_link</child>
+    <axis>
+      <xyz>0 0 -1</xyz>
+      <limit>
+        <lower>-1e16</lower>
+        <upper>1e16</upper>
+      </limit>
+      <dynamics>
+        <damping>0.02</damping>
+      </dynamics>
+    </axis>
+  </joint>
+
+
+  <link name="motor_port_link">
+    <pose degrees="true">-11.250000000022645 -2.8875000000058124 -1.9800000000039857 -90 0 90</pose>
+    <inertial>
+      <mass>1394.8200000084228</mass>
+      <inertia>
+        <ixx>203.36475600204673</ixx>
+        <iyy>406.72951200409346</iyy>
+        <izz>406.72951200409346</izz>
+        <ixy>0</ixy>
+        <ixz>0</ixz>
+        <iyz>0</iyz>
+      </inertia>
+    </inertial>
+    <collision name="prop_collision">
+        <geometry> <!-- This tag is required -->
+          <cylinder>
+            <radius>0.5400000000010869</radius> 
+            <length>0.09000000000018116</length>
+          </cylinder>
+        </geometry>
+      </collision>
+      
+      <visual name="prop_visual">
+        <geometry>
+          <!--<mesh>
+            <uri>models://meshes/blueboat_prop_stbd.dae</uri>
+            <scale>21.600000000043476 21.600000000043476 21.600000000043476</scale>
+          </mesh>
+          -->
+          <cylinder>
+            <radius>0.5400000000010869</radius> 
+            <length>0.09000000000018116</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.01 0.01 0.01 1</diffuse>
+          <ambient>0.01 0.01 0.01 1</ambient>
+          <specular>0.7 0.7 0.7 1</specular>
+          <pbr>
+            <metal>
+              <metalness>0.5</metalness>
+              <roughness>0.5</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+  </link>
+
+  <joint name="motor_port_joint" type="revolute">
+    <parent>base_link</parent>
+    <child>motor_port_link</child>
+    <axis>
+      <xyz>0 0 -1</xyz>
+      <limit>
+        <lower>-1e16</lower>
+        <upper>1e16</upper>
+      </limit>
+      <dynamics>
+        <damping>0.02</damping>
+      </dynamics>
+    </axis>
+  </joint>
+
+  <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
+    <link_name>base_link</link_name>
+    <enable>base_link</enable>
+     <!-- <hydrodynamics>
+          <damping_on>1</damping_on>
+          <viscous_drag_on>1</viscous_drag_on>
+          <pressure_drag_on>1</pressure_drag_on>
+    </hydrodynamics>  use only if we want gazebo to automatically calculate Fossen matrix-->
+    <!-- Added mass -->
+    <xDotU>-17295.768000104443</xDotU>
+    <yDotV>-156498.43803952055</yDotV>
+    <zDotW>-172957.6800010444</zDotW>
+    <nDotR>-14560874.685146544</nDotR>
+
+    <!-- Linear damping -->
+    <xU>-3459.1536000208885</xU>
+    <yV>-17295.768000104443</yV>
+    <zW>-34591.536000208886</zW>
+    <nR>-2912174.937029309</nR>
+
+    <!-- Quadratic damping -->
+    <xUabsU>-2905.8750000116984</xUabsU>
+   <yVabsV>-27675.000000111413</yVabsV>
+   <zWabsW>-193725.0000007799</zWabsW>
+   <nRabsR>-2075625.0000167114</nRabsR>
+  </plugin>
+
+
+  <plugin name="gz::sim::systems::JointStatePublisher"
+      filename="gz-sim-joint-state-publisher-system">
+  </plugin>
+
+  <plugin name="gz::sim::systems::OdometryPublisher"
+      filename="gz-sim-odometry-publisher-system">
+      <odom_frame>odom</odom_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+      <dimensions>3</dimensions>
+  </plugin>
+
+    <plugin filename="gz-sim-thruster-system" name="gz::sim::systems::Thruster">
+      <joint_name>motor_port_joint</joint_name>
+      <thrust_coefficient>0.18668467871647582</thrust_coefficient>
+      <fluid_density>1025</fluid_density>
+      <propeller_diameter>1.0800000000021739</propeller_diameter>
+      <velocity_control>0</velocity_control>
+      <use_angvel_cmd>0</use_angvel_cmd>
+    </plugin>
+
+  <plugin filename="gz-sim-thruster-system" name="gz::sim::systems::Thruster">
+    <joint_name>motor_stbd_joint</joint_name>
+    <thrust_coefficient>0.18668467871647582</thrust_coefficient>
+    <fluid_density>1025</fluid_density>
+    <propeller_diameter>1.0800000000021739</propeller_diameter>
+    <velocity_control>0</velocity_control>
+    <use_angvel_cmd>0</use_angvel_cmd>
+  </plugin>
+
+  <plugin filename="ArduPilotPlugin" name="ArduPilotPlugin">
+    <robotNamespace>OS_0_MiniUSV1_SIM</robotNamespace>
+    <connectionTimeoutMaxCount>5</connectionTimeoutMaxCount>
+    <lock_step>1</lock_step>
+    <fdm_addr>0.0.0.0</fdm_addr>
+    <fdm_port_in>9002</fdm_port_in>
+    <!-- Match ardupilot_gazebo iris: ENU world + FLU hull → NED / aircraft body. -->
+    <modelXYZToAirplaneXForwardZDown>0 0 0 3.141592653589793 0 0</modelXYZToAirplaneXForwardZDown>
+    <gazeboXYZToNED>0 0 0 3.141592653589793 0 1.5707963267948966</gazeboXYZToNED>
+    <imuName>imu_sensor</imuName>
+
+    <!--
+      port motor cw
+
+      SERVO1_FUNCTION 73 (ThrottleLeft)
+      SERVO1_MAX 2000
+      SERVO1_MIN 1000
+    -->
+    <control channel="0">
+      <jointName>motor_port_joint</jointName>
+      <type>COMMAND</type>
+      <cmd_topic>/model/OS_0_MiniUSV1_SIM/joint/motor_port_joint/cmd_thrust</cmd_topic>
+      <multiplier>1952490.041301609</multiplier>
+      <offset>-0.5</offset>
+      <servo_min>1000</servo_min>
+      <servo_max>2000</servo_max>
+    </control>
+
+    <!--
+      stbd motor ccw
+
+      SERVO3_FUNCTION 74 (ThrottleRight)
+      SERVO3_MAX 2000
+      SERVO3_MIN 1000
+    -->
+    <control channel="2">
+      <jointName>motor_stbd_joint</jointName>
+      <type>COMMAND</type>
+      <cmd_topic>/model/OS_0_MiniUSV1_SIM/joint/motor_stbd_joint/cmd_thrust</cmd_topic>
+      <multiplier>1952490.041301609</multiplier>
+      <offset>-0.5</offset>
+      <servo_min>1000</servo_min>
+      <servo_max>2000</servo_max>
+    </control>
+  </plugin>
+
+  </model>
+</sdf>
+
+    

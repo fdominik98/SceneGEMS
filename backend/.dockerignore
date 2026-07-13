@@ -1,0 +1,8 @@
+env
+.git
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+assets/gen_data
+assets/images/exported_plots
+assets/runtime_assets/**/gen_tmp

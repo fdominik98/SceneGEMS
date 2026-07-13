@@ -1,0 +1,128 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scenegems-logic-scene-generation"
+version = "0.1.0"
+description = "Automated Scene Generation for Testing COLREGS-Compliance of Autonomous Surface Vehicles by Multi-Step Refinement"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Research Team", email = "contact@example.com"}
+]
+keywords = ["autonomous vehicles", "COLREGS", "scene generation", "testing", "marine robotics"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Researchers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Robotics",
+]
+
+dependencies = [
+    "cliffs-delta",
+    "dash",
+    "jsonpickle",
+    "lxml",
+    "pandas",
+    "pygad",
+    "pymoo",
+    "pygame",
+    "pyswarms",
+    "pyyaml",
+    "scipy",
+    "seaborn",
+    "tkfilebrowser",
+    "scenic",
+    "matplotlib",
+    "mypy",
+    "docker",
+    "paho-mqtt",
+    "haversine",
+    "paramiko",
+    "shapely",
+    "numpy",
+    "uvicorn",
+    "fastapi",
+    "omegaconf",
+    "flake8",
+    "black",
+    "isort",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "portion",
+    "svgpath2mpl",
+    "uvicorn[standard]",
+    "pyproj",
+]
+
+[project.optional-dependencies]
+windows = [
+    "pywin32",
+]
+
+[project.urls]
+Homepage = "https://github.com/[username]/SceneGEMS"
+Repository = "https://github.com/[username]/SceneGEMS.git"
+Documentation = "https://github.com/[username]/SceneGEMS#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.md", "*.yml", "*.yaml", "*.xml", "*.scenic", "*.problem"]
+
+# Flake8 configuration
+[tool.flake8]
+max-line-length = 200
+extend-ignore = [
+    "E203",  # whitespace before ':'
+    "W503",  # line break before binary operator
+    "E501",  # line too long (handled by black)
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "env",
+    "venv",
+    "build",
+    "dist",
+    "*.egg-info",
+]
+per-file-ignores = [
+    "__init__.py:F401",  # imported but unused
+    "tests/*:E501",      # allow long lines in tests
+]
+
+# Black configuration (optional, for code formatting)
+[tool.black]
+line-length = 200
+target-version = ['py310', 'py311', 'py312']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+# isort configuration (optional, for import sorting)
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 200
+known_first_party = ["src"]
+known_third_party = ["pandas", "numpy", "matplotlib", "scipy", "seaborn"]

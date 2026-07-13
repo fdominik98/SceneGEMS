@@ -1,0 +1,31 @@
+{
+    "cSpell.words": [
+        "arccos",
+        "arcsin",
+        "ardu",
+        "ardupilot",
+        "blit",
+        "Colreg",
+        "colregs",
+        "Crossingbear",
+        "datas",
+        "dcpa",
+        "descs",
+        "Disj",
+        "Evaluationdata",
+        "geofence",
+        "indicies",
+        "lightsim",
+        "linestyle",
+        "metamodels",
+        "MMSI",
+        "mqtt",
+        "ndarray",
+        "obst",
+        "strat",
+        "tcpa",
+        "timespan",
+        "WARAPS"
+    ],
+    "makefile.configureOnOpen": false
+}

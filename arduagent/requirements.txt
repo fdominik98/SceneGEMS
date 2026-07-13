@@ -1,0 +1,12 @@
+pyserial
+paho-mqtt
+geographiclib
+numpy>=2.1.0
+pymavlink
+protobuf>=5.0.0
+grpcio
+events
+shapely
+netifaces
+future
+git+https://github.com/dronekit/dronekit-python.git@master

@@ -1,0 +1,7 @@
+# Runtime dependencies for scenegems-scenario-execution-subsystem (see scenario_execution/Dockerfile).
+paho-mqtt
+pyyaml
+numpy
+scipy
+pyproj
+haversine

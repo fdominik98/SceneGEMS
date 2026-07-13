@@ -1,0 +1,20 @@
+.docker-stamps/
+
+# MQTT broker runtime data
+mqtt_broker/data/broker/
+
+# Frontend
+frontend/.env
+frontend/node_modules/
+frontend/website/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/public/docs/
+frontend/website/build/
+frontend/website/static/scenegems-ui-documentation.pdf
+frontend/*.local
+
+# Editor
+.DS_Store
+
+**/assets/figures/tool_paper/screen_captures

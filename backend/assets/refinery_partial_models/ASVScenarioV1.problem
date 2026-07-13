@@ -1,0 +1,69 @@
+
+abstract class Vessel {
+    Vessel[0..*] overtaking
+    Vessel[0..*] crossingFromPort
+    Vessel[0..*] headOn opposite headOn
+}
+
+class OS extends Vessel {
+    VesselType[1] vesselType
+}
+
+class TS extends Vessel.
+
+
+
+pred giveWay(Vessel v1) <-> overtaking(v1, _);
+                            crossingFromPort(v1, _);
+                            headOn(_, v1).
+
+pred standOn(Vessel v1) <->
+    overtaking(_, v1); crossingFromPort(_, v1).
+
+pred ambiguous(Vessel v) <->
+    giveWay(v), standOn(v).
+
+pred isInSituationWith(Vessel v1, Vessel v2) <->
+    headOn(v2, v1) ; crossingFromPort(v1, v2) ; crossingFromPort(v2, v1) ; overtaking(v1, v2) ; overtaking(v2, v1).
+
+
+error selfCOLREGSRelation(Vessel v) <->
+    overtaking(v, v); crossingFromPort(v, v); headOn(v, v).
+
+
+error doubleCOLREGSRelation(Vessel v1, Vessel v2) <->
+    headOn(v1, v2), crossingFromPort(v1, v2);
+    headOn(v1, v2), overtaking(v1, v2);
+    overtaking(v1, v2), crossingFromPort(v1, v2);
+
+    headOn(v1, v2), crossingFromPort(v2, v1);
+    headOn(v1, v2), overtaking(v2, v1);
+    overtaking(v1, v2), crossingFromPort(v2, v1);
+
+    crossingFromPort(v1, v2), crossingFromPort(v2, v1);
+    overtaking(v1, v2), overtaking(v2, v1).
+
+
+error notInCOLREGSSituationWithOS(TS v1) <->
+    !isInSituationWith(v1, v2), OS(v2).
+
+error twoTSInCOLREGSSituation(TS v1, TS v2) <->
+    isInSituationWith(v1, v2).
+
+error moreThanOneOS(OS v1, OS v2) <->
+    v1 != v2.
+
+error noOS() <->
+    !OS(_).
+
+
+OS(os).
+vesselType(os, OSPassengerShip).
+
+
+TS(TS1).
+TS(TS2).
+TS(TS3).
+TS(TS4).
+TS(TS5).
+scope OS = 1, TS=5.

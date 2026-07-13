@@ -1,0 +1,63 @@
+class COLREGSScenario {
+    contains Vessel[] vessels
+    contains COLREGSSituation[] situations
+}
+
+class Vessel {}
+
+class COLREGSSituation {
+    SituationType[1] type
+    Vessel[1] source
+    Vessel[1] target
+}
+
+enum SituationType {overtaking, crossingFromPort, headOn}
+
+error pred dualSituation(COLREGSSituation s1, COLREGSSituation s2) <-> 
+    source(s1, v), target(s1, t), 
+    source(s2, v), target(s2, t),
+    s1 != s2.
+
+error pred crossDualSituation(COLREGSSituation s1, COLREGSSituation s2) <-> 
+    source(s1, v), target(s1, t), 
+    source(s2, t), target(s2, v),
+    s1 != s2.
+
+pred overtaking(Vessel v, Vessel t) <->
+    source(s, v), target(s, t), type(s, type), type == overtaking.
+
+pred crossingFromPort(Vessel v, Vessel t) <->
+    source(s, v), target(s, t), type(s, type), type == crossingFromPort.
+
+pred headOn(Vessel v, Vessel t) <->
+    source(s, v), target(s, t), type(s, type), type == headOn.
+
+pred giveWay(Vessel v) <-> source(_, v); headOn(_, v).
+
+pred standOn(Vessel t) <->
+    overtaking(_, t) ; crossingFromPort(_, t).
+
+pred ambigious(Vessel v) <->
+    giveWay(v), standOn(v).
+
+pred isInSituationWith(Vessel v1, Vessel v2) <->
+    target(s, v1), source(s, v2);
+    target(s, v2), source(s, v1).
+
+atom OS.
+Vessel(OS).
+
+error pred notInSituationWithOS(Vessel v1) <->
+    !isInSituationWith(v1, OS), v1 != OS.
+
+error pred twoNonOSInSituation(Vessel v1, Vessel v2) <->
+    v1 != OS, v2 != OS, isInSituationWith(v1, v2).
+
+error pred inSituationWithSelf(Vessel v1, Vessel v2) <->
+    isInSituationWith(v1, v2),
+    v1 == v2.    
+
+default !ambigious(*).
+ambigious(OS).
+
+scope Vessel = 4, COLREGSSituation = 3, COLREGSScenario = 1.

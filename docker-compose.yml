@@ -1,0 +1,50 @@
+name: scenegems
+
+services:
+  frontend:
+    image: scenegems-frontend:dev
+    container_name: scenegems_frontend
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_WS_URL: ws://127.0.0.1:8000/ws/scenegems_backend_service
+
+  broker:
+    image: nanomq_otg
+    container_name: local_broker
+    labels:
+      - group=Services
+    restart: unless-stopped
+    ports:
+      - "1882:1883"
+      - "8082:8083"
+    volumes:
+      - scenegems_broker_data:/data/broker/
+
+  backend:
+    image: scenegems-backend:latest
+    container_name: scenegems_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - broker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - scenegems_runtime_assets:/app/assets/runtime_assets
+    environment:
+      PYTHONPATH: /app/src
+      MQTT_BROKER_HOST: broker
+      MQTT_BROKER_PORT: "1883"
+      SCENEGEMS_RUNTIME_VOLUME: scenegems_runtime_assets
+      SCENEGEMS_DOCKER_NETWORK: scenegems_default
+      MONITORING_DEV_MOUNT: "0"
+      SCENARIO_GENERATION_DEV_MOUNT: "0"
+      SCENARIO_EXECUTION_DEV_MOUNT: "0"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  scenegems_runtime_assets:
+    name: scenegems_runtime_assets
+  scenegems_broker_data:
+    name: scenegems_broker_data

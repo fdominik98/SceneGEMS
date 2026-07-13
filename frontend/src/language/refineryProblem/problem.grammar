@@ -1,0 +1,291 @@
+/*
+ * SPDX-FileCopyrightText: 2021-2024 The Refinery Authors <https://refinery.tools/>
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ */
+
+@detectDelim
+
+@external prop implicitCompletion from './props'
+
+@precedence {
+  cast,
+  prefix,
+  range @left,
+  exponential @right,
+  multiplicative @left,
+  additive @left,
+  lattice @left,
+  comparison @left,
+  boolean @left,
+  assignment,
+  feature @cut
+}
+
+@top Problem { statement* }
+
+statement {
+  ImportStatement {
+    kw<"import"> ModuleName (ckw<"as"> ModuleName)? "."
+  } |
+  Assertion {
+    kw<"default">? (NotOp | UnknownOp)? RelationName
+    ParameterList<AssertionArgument>
+    (":" Expr)? "."
+  } |
+  ProblemDeclaration {
+    (ckw<"module"> | kw<"problem">) ModuleName "."
+  } |
+  ClassDefinition {
+    kw<"abstract">? kw<"class"> RelationName
+    (kw<"extends"> sep<",", RelationName>)?
+    (ClassBody {  "{" FeatureDeclaration* "}" } | ".")
+  } |
+  EnumDefinition {
+    kw<"enum"> RelationName
+    (EnumBody { "{" sep<",", EnumLiteral> "}" } | ".")
+  } |
+  DatatypeDeclaration {
+    AnnotationKeyword ckw<"datatype"> DatatypeName "."
+  } |
+  AggregatorDeclaration {
+    AnnotationKeyword ckw<"aggregator"> AggregatorName "."
+  } |
+  OverloadedDeclaration {
+    AnnotationKeyword ckw<"primitive"> RelationName ParameterList<Parameter> "."
+  } |
+  PredicateDefinition {
+    ((kw<"error"> | kw<"partial"> | ckw<"shadow">)* kw<"pred"> | kw<"error">)
+    RelationName ParameterList<Parameter>?
+    (ckw<"subsets"> sep1<",", RelationName>)*
+    PredicateBody { ("<->" sep<OrOp, Conjunction>)? "." }
+  } |
+  FunctionDefinition {
+    ckw<"shadow">? RelationName RelationName ParameterList<Parameter>?
+    FunctionBody { ("=" sep<OrOp, Case>)? "." }
+  } |
+  RuleDefinition {
+    (ckw<"decision"> | ckw<"propagation"> | ckw<"concretization">)? kw<"rule">
+    RuleName ParameterList<Parameter>?
+    RuleBody { ("<->" sep<OrOp, Conjunction>)? ("==>" sep<OrOp, Consequent>)? "." }
+  } |
+  AtomDeclaration {
+    kw<"declare">? ckw<"atom"> sep<",", EnumLiteral> "."
+  } |
+  NodeDeclaration {
+    (kw<"declare"> | kw<"declare">? ckw<"multi">) sep<",", AnnotatedNodeName> "."
+  } |
+  ScopeDeclaration {
+    kw<"scope"> sep<",", ScopeElement> "."
+  } |
+  AnnotationDeclaration {
+    AnnotationKeyword kw<"pred"> AnnotationName ParameterList<Parameter> "."
+  } |
+  Annotation "."?
+}
+
+Annotation {
+  ("@" | "#") AnnotationName
+  ("(" sep<",", AnnotationArgument> ")")?
+}
+
+FeatureDeclaration {
+  Annotation*
+  // Prefer parsing `contains` as a contextual keyword.
+  (
+    FeatureDeclarationHeadWithKind[@dynamicPrecedence=1] {
+      (kw<"refers"> | ckw<"contains">) !feature ~featureHead
+    } |
+    FeatureDeclarationHeadWithContainerKind[@dynamicPrecedence=2] {
+      ckw<"container"> !feature ~featureHead
+    } |
+    FeatureDeclarationHeadWithoutKind {
+      ~featureHead
+    }
+  )
+  RelationName
+  ("[" Multiplicity? "]")?
+  RelationName
+  (
+    !feature RelationOptions[@dynamicPrecedence=1] {
+      ckw<"opposite"> RelationName |
+      ckw<"subsets"> sep1<",", RelationName>
+    }
+  )*
+  ";"?
+}
+
+EnumLiteral {
+  Annotation* AtomNodeName
+}
+
+AnnotatedNodeName {
+  Annotation* NodeName
+}
+
+Parameter {
+  Annotation*
+  kw<"pred">?
+  RelationName?
+  VariableName
+}
+
+// Use @dynamicPrecedence to prevent a(b) from being parsed as Expr { a } Expr { b }
+// instead of Atom { a(b) }
+// Being looser with token sequencing enables more consistent syntactic highlighting.
+Conjunction { ("," | NextConjunction[@dynamicPrecedence=-10] { Expr })+ }
+
+Case { Conjunction ("->" Expr)? }
+
+OrOp { ";" }
+
+Expr {
+  AssignmentExpr | UnaryExpr | BinaryExpr | Aggregation |
+  VariableName | Atom | Constant | "(" Expr ")"
+}
+
+AssignmentExpr { !assignment VariableName kw<"is"> Expr }
+
+BinaryExpr {
+  Expr !boolean ("&&" | "||" | "^^") Expr |
+  Expr !comparison ComparisonOp Expr |
+  Expr !lattice (LatticeMeet | "\\/") Expr |
+  Expr !additive ("+" | "-") Expr |
+  Expr !multiplicative (Star | Divide) Expr |
+  Expr !exponential "**" Expr |
+  Expr !range ".." Expr
+}
+
+UnaryExpr {
+  !prefix
+  (
+    "+" | "-" | "!" |
+    kw<"candidate"> kw<"partial"> | kw<"may"> | kw<"must">
+  )
+  Expr
+}
+
+Aggregation {
+  AggregatorName "{" Expr ("|" Expr)? "}"
+}
+
+Atom { RelationName "+"? ParameterList<Expr> }
+
+Consequent { ("," | Action)+ }
+
+Action {
+  (NotOp | UnknownOp)? RelationName
+  ParameterList<AssertionActionArgument>
+  (":" Expr)?
+}
+
+AssertionArgument { NodeName | StarArgument }
+
+AssertionActionArgument { VariableName | StarArgument }
+
+Constant { Real | String | StarMult | LogicValue }
+
+LogicValue {
+  kw<"true"> | kw<"false"> | kw<"unknown"> | kw<"error">
+}
+
+ComparisonOp { SymbolicComparisonOp }
+
+ScopeElement { RelationName ("=" | "+=") Multiplicity }
+
+Multiplicity { (IntMult "..")? (IntMult | StarMult)}
+
+AnnotationArgument { (VariableName "=")? Expr }
+
+// The ~name handles the ambiguity between transitve closure a+(b, c) and addition a+(b)
+// in the grammar. We prefer the addition interpretation by applying @dynamicPrecedence=1
+// to the VariableName rule,
+// but will go with the transtive closure (and highlight `a` as a relation) if forced.
+RelationName { QualifiedName ~name }
+
+DatatypeName { QualifiedName }
+
+RuleName { QualifiedName }
+
+AtomNodeName { QualifiedName }
+
+VariableName[@dynamicPrecedence=5] { QualifiedName ~name }
+
+NodeName { QualifiedName }
+
+ModuleName { QualifiedName }
+
+AggregatorName { QualifiedName }
+
+AnnotationName { QualifiedName }
+
+ID { identifier | QuotedID }
+
+QualifiedName[implicitCompletion=true] { "::"? ID (QualifiedNameSeparator "::" ID)* }
+
+StarMult { Star }
+
+AnnotationKeyword { "#" }
+
+kw<term> { @specialize[@name={term},implicitCompletion=true]<identifier, term> }
+
+ckw<term> { @extend[@name={term},implicitCompletion=true]<identifier, term> }
+
+ParameterList<content> { "(" sep<",", content> ")" }
+
+sep<separator, content> { sep1<separator, content>? }
+
+sep1<separator, content> { content (separator content)* }
+
+@skip { LineComment | BlockComment | whitespace }
+
+@external tokens qualifiedNameSeparator from "./tokens" {
+  QualifiedNameSeparator
+}
+
+@tokens {
+  whitespace { std.whitespace+ }
+
+  LineComment { ("//" | "%") ![\n]* }
+
+  BlockComment { "/*" blockCommentRest }
+
+  blockCommentRest { ![*] blockCommentRest | "*" blockCommentAfterStar }
+
+  blockCommentAfterStar { "/" | "*" blockCommentAfterStar | ![/*] blockCommentRest }
+
+  Divide { "/" }
+
+  LatticeMeet { "/\\" }
+
+  @precedence { BlockComment, LineComment, LatticeMeet, Divide }
+
+  identifier { $[A-Za-z_] $[a-zA-Z0-9_]* }
+
+  int { $[0-9]+ }
+
+  IntMult { int }
+
+  Star { "*" }
+
+  Real { (exponential | int ("." (int | exponential))?) }
+
+  exponential { int ("e" | "E") ("+" | "-")? int }
+
+  String { "\"" (![\\"\n] | "\\" (![\n] | "\n"))* "\"" }
+
+  QuotedID { "'" (![\\'\n] | "\\" ![\n] | "\\\n")+ "'" }
+
+  SymbolicComparisonOp {
+    ">" | ">=" | "<" | "<=" | "==" | "!=" |
+    "===" | "!=="
+  }
+
+  NotOp { "!" }
+
+  UnknownOp { "?" }
+
+  StarArgument { "*" }
+
+  "{" "}" "(" ")" "[" "]" "." ".." "," ";" ":" "->" "<->" "==>" "+" "-" "**" "=" "+=" "@" "#"
+}

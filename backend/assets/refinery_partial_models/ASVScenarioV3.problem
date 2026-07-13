@@ -1,0 +1,144 @@
+enum VesselType {CargoShip, Tanker, OSPassengerShip,
+                 ContainerShip, PassengerShip,
+                 FishingShip, MotorVessel,
+                 SailingVessel, MilitaryVessel, MiniUSV}
+
+enum StaticObstacleType {Small, Medium, Large}
+
+abstract class SeaObject {
+    SeaObject[0..*] onCollisionCourseWith opposite onCollisionCourseWith
+    Vessel[0..*] inTheWayOf
+}
+
+class StaticObstacle extends SeaObject {
+    StaticObstacleType[1] staticObstacleType
+}
+
+abstract class Vessel extends SeaObject {
+    VesselType[1] vesselType
+}
+
+class OS extends Vessel {
+    VesselType[1] vesselType
+}
+
+class TS extends Vessel.
+
+enum VisibilityRelationType {AtVisibilityEdge, InVisibility, OutOfVisibility}
+class VisibilityRelation{
+    SeaObject[1] visO1
+    Vessel[1] visO2
+    VisibilityRelationType[1] visibilityType
+}
+pred inVisibilityRelationWith(SeaObject o1, Vessel o2, VisibilityRelationType type) <->
+    VisibilityRelation(r), visO1(r, o1), visO2(r, o2), visibilityType(r, type).
+
+
+enum SectorRelationType {InSternSector, InPortSideSector, InStarboardSideSector, InBowSector}
+class SectorRelation{
+    SeaObject[1] secO1
+    Vessel[1] secO2
+    SectorRelationType[1] sectorType
+}
+pred inSectorRelationWith(SeaObject o, Vessel v, SectorRelationType type) <->
+    SectorRelation(r), secO1(r, o), secO2(r, v), sectorType(r, type).
+
+pred inMastheadSectorOf(SeaObject o, Vessel v) <->
+    inSectorRelationWith(o, v, InPortSideSector);
+    inSectorRelationWith(o, v, InStarboardSideSector).
+
+pred inBowSectorOf(SeaObject o1, Vessel o2) <->
+    inSectorRelationWith(o1, o2, InBowSector).
+
+pred InPortSideSectorOf(SeaObject o1, Vessel o2) <->
+    inSectorRelationWith(o1, o2, InPortSideSector).
+
+pred InStarboardSideSectorOf(SeaObject o1, Vessel o2) <->
+    inSectorRelationWith(o1, o2, InStarboardSideSector).
+
+pred InSternSectorOf(SeaObject o1, Vessel o2) <->
+    inSectorRelationWith(o1, o2, InSternSector).
+
+
+//-----------------------------------------------------------------------
+// HELPER PREDICATES
+
+pred atVisibilityEdgeAndMayCollide(SeaObject v1, SeaObject v2) <->
+    inVisibilityRelationWith(v2, v1, AtVisibilityEdge), onCollisionCourseWith(v1, v2).
+
+pred inBowSectorOrCrossingCourse(SeaObject o1, Vessel o2) <->
+    inBowSectorOf(o1, o2); inTheWayOf(o1, o2).
+
+pred headOn(Vessel v1, Vessel v2) <->
+    inBowSectorOrCrossingCourse(v1, v2), inBowSectorOrCrossingCourse(v2, v1), atVisibilityEdgeAndMayCollide(v1, v2).
+
+pred crossingFromPort(Vessel v1, Vessel v2) <->
+    inSectorRelationWith(v1, v2, InPortSideSector), inSectorRelationWith(v2, v1, InStarboardSideSector), atVisibilityEdgeAndMayCollide(v1, v2), !headOn(v1, v2).
+
+pred overtaking(Vessel v1, Vessel v2) <->
+    inSectorRelationWith(v1, v2, InSternSector), inMastheadSectorOf(v2, v1), atVisibilityEdgeAndMayCollide(v1, v2).
+
+pred inDangerousSituationWith(Vessel v, StaticObstacle o) <->
+    atVisibilityEdgeAndMayCollide(v, o), inSectorRelationWith(o, v, _).
+
+pred inCOLREGSSituationWith(Vessel v1, Vessel v2) <->
+    headOn(v2, v1);
+    crossingFromPort(v1, v2);
+    crossingFromPort(v2, v1);
+    overtaking(v1, v2);
+    overtaking(v2, v1).
+
+pred inGiveWayRole(Vessel v1) <->
+    overtaking(v1, _);
+    crossingFromPort(v1, _);
+    headOn(_, v1).
+
+pred inStandOnRole(Vessel v1) <->
+    overtaking(_, v1);
+    crossingFromPort(_, v1).
+
+pred inAmbiguousSituation(Vessel v) <->
+    inGiveWayRole(v), inStandOnRole(v).
+
+//----------------------------------------------------------------------------
+// WELL-FORMED PREDICATES (CONSISTENT CASES)
+
+// No self-loops are allowed.
+error selfLoopRules(o) <->
+    inTheWayOf(o, o);
+    onCollisionCourseWith(o, o);
+    inVisibilityRelationWith(o, o, _);
+    inSectorRelationWith(o, o, _).
+
+// If a sea object is in the:
+//   - stern sector of a vessel, it cannot be in the masthead sector,
+//   - port sector of a vessel, it cannot be in the starboard sector,
+//   - head on sector of a vessel, it must be in the masthead sector as well.
+// A sea object is either in the stern or masthead sector of a vessel.
+error sectorRules(SeaObject o, Vessel v) <->
+    inBowSectorOf(o, v), !inMastheadSectorOf(o, v).
+
+// Two static obstacles cannot collide with each other.
+error staticObstacleCollisionRule(StaticObstacle o1, StaticObstacle o2) <->
+    onCollisionCourseWith(o1, o2).
+
+error vesselCrossingCourseWithObstacleButNotCollisionCourse(StaticObstacle o1, Vessel o2) <->
+    inTheWayOf(o1, o2), !onCollisionCourseWith(o1, o2).
+
+error missingRelations(SeaObject o1, Vessel o2) <->
+    !inSectorRelationWith(o1, o2, _), o1 != o2;
+    !inVisibilityRelationWith(o1, o2, _), o1!=o2.
+
+
+OS(os).
+vesselType(os, OSPassengerShip).
+
+
+
+StaticObstacle(obst1).
+TS(ts).
+
+
+scope OS=1,
+      StaticObstacle = 1,
+      TS=1.

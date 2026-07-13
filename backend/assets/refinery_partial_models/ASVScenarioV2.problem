@@ -1,0 +1,108 @@
+enum VesselType {CargoShip, Tanker, OSPassengerShip,
+                 ContainerShip, PassengerShip,
+                 FishingShip, MotorVessel,
+                 SailingVessel, MilitaryVessel, MiniUSV}
+
+abstract class Vessel {
+    //VesselType[1] vesselType
+    Vessel[0..*] inSternSectorOf
+    Vessel[0..*] inPortSideSectorOf
+    Vessel[0..*] inStarboardSideSectorOf
+    Vessel[0..*] inBowSectorOf opposite inBowSectorOf
+    Vessel[0..*] atVisibilityDistance opposite atVisibilityDistance
+    Vessel[0..*] mayCollide opposite mayCollide
+}
+
+class OS extends Vessel {
+    VesselType[1] vesselType
+}
+
+class TS extends Vessel.
+
+//-----------------------------------------------------------------------
+// HELPER PREDICATES
+pred inMastheadSectorOf(Vessel o, Vessel v) <->
+    inPortSideSectorOf(o, v);
+    inStarboardSideSectorOf(o, v).
+
+pred bothAtVisibilityDistanceAndMayCollide(Vessel v1, Vessel v2) <->
+    atVisibilityDistance(v1, v2), mayCollide(v1, v2).
+
+pred inSectorOf(Vessel v1, Vessel v2) <->
+    inSternSectorOf(v1, v2);
+    inPortSideSectorOf(v1, v2);
+    inStarboardSideSectorOf(v1, v2).
+
+pred inDangerousEncounterWith(Vessel v1, Vessel v2) <->
+    mayCollide(v1, v2), atVisibilityDistance(v1,v2), inSectorOf(v1, v2), inSectorOf(v2, v1).
+
+pred inRelativeBearingRelationWith(Vessel o, Vessel v) <->
+    inMastheadSectorOf(o, v);
+    inSternSectorOf(o, v).
+
+
+//----------------------------------------------------------------------------
+// WELL-FORMED PREDICATES (CONSISTENT CASES) 
+
+// No self loops are allowed.
+error selfLoopRules(Vessel o) <->
+    inSternSectorOf(o, o);
+    inPortSideSectorOf(o, o);
+    inStarboardSideSectorOf(o, o);
+    inBowSectorOf(o, o);
+    atVisibilityDistance(o, o);
+    mayCollide(o, o).
+
+// If a sea object is in the:
+//   - stern sector of a vessel, it cannot be in the masthead sector,
+//   - port sector of a vessel, it cannot be in the starboard sector,
+//   - head on sector of a vessel, it must be in the masthead sector as well.
+// A sea object is either in the stern or masthead sector of a vessel.
+error sectorRules(Vessel o, Vessel v) <->
+    inSternSectorOf(o, v), inMastheadSectorOf(o, v);
+    inPortSideSectorOf(o, v), inStarboardSideSectorOf(o, v);
+    inBowSectorOf(o, v), inSternSectorOf(o, v).
+
+error mayCollideInStern(Vessel v1, Vessel v2) <->
+    mayCollide(v1, v2), inSternSectorOf(v1, v2), inSternSectorOf(v2,v1).
+
+
+
+//----------------------------------------------------------------------------
+// TESTING PREDICATES (RELEVANT CASES) 
+
+// There has to be an OS.
+error noOS() <->
+    !OS(_).
+
+// There is only one OS.
+error moreThanOneOS(OS v1, OS v2) <->
+    v1 != v2.
+
+// A TS must be in a COLREGS situation with the OS.
+error TSNotInDangerousEncounterSituationWithOS(TS ts, OS os) <->
+    !inDangerousEncounterWith(ts, os).
+
+
+error TSTS(TS ts1, TS ts2) <->
+    inSectorOf(ts1, ts2); inBowSectorOf(ts1, ts2);
+    atVisibilityDistance(ts1, ts2); mayCollide(ts1, ts2).
+
+
+//--------------------------------------------------------------------------------
+
+OS(os).
+vesselType(os, OSPassengerShip).
+
+
+
+TS(ts1).
+TS(ts2).
+TS(ts3).
+TS(ts4).
+TS(ts5).
+//default !inAmbiguousSituation(*).
+//inAmbiguousSituation(os).
+
+
+scope OS = 1, TS = 5.

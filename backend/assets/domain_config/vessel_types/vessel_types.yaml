@@ -1,0 +1,107 @@
+UnspecifiedVesselType:
+    min_length: 10.0 # Minimum vessel length in meters
+    max_length: 400.0 # Maximum vessel length in meters
+    min_beam: 2.0 # Minimum vessel beam (width) in meters
+    max_beam: 80.0 # Maximum vessel beam (width) in meters
+    max_speed: 25.722235 # Maximum vessel speed: 50.0 knots in m/s
+    max_angular_speed: 0.03   # ~1.7 deg/s. Maximum angular speed in radians per second
+    max_acceleration: 0.3  # generic upper bound. Maximum acceleration in meters per second squared
+
+
+OSPassengerShip:
+    min_length: 30.0
+    max_length: 30.0
+    max_speed: 20.57778
+    min_beam: 10.0
+    max_beam: 10.0
+    max_angular_speed: 0.05      # ~2.9 deg/s
+    max_acceleration: 0.4
+
+
+MiniUSV:
+    min_length: 1.0
+    max_length: 1.0
+    max_speed: 1.028889
+    min_beam: 0.5
+    max_beam: 0.5
+    max_angular_speed: 1.2       # ~69 deg/s
+    max_acceleration: 1.5
+
+
+CargoShip:
+    min_length: 50
+    max_length: 400
+    max_speed: 12.8611175
+    min_beam: 10
+    max_beam: 60
+    max_angular_speed: 0.008     # ~0.46 deg/s
+    max_acceleration: 0.05
+
+
+Tanker:
+    min_length: 60
+    max_length: 350
+    max_speed: 10.28889
+    min_beam: 10
+    max_beam: 60
+    max_angular_speed: 0.006     # ~0.34 deg/s
+    max_acceleration: 0.04
+
+
+ContainerShip:
+    min_length: 100
+    max_length: 400
+    max_speed: 12.8611175
+    min_beam: 15
+    max_beam: 65
+    max_angular_speed: 0.007     # ~0.40 deg/s
+    max_acceleration: 0.06
+
+PassengerShip:
+    min_length: 20
+    max_length: 350
+    max_speed: 20.57778
+    min_beam: 5
+    max_beam: 50
+    max_angular_speed: 0.03      # ~1.7 deg/s
+    max_acceleration: 0.3
+
+
+FishingShip:
+    min_length: 2
+    max_length: 100
+    max_speed: 7.544445
+    min_beam: 2
+    max_beam: 20
+    max_angular_speed: 0.08      # ~4.6 deg/s
+    max_acceleration: 0.5
+
+
+MotorVessel:
+    min_length: 10
+    max_length: 370
+    max_speed: 15.28889
+    min_beam: 3
+    max_beam: 80
+    max_angular_speed: 0.04      # ~2.3 deg/s
+    max_acceleration: 0.35
+
+
+SailingVessel:
+    min_length: 5
+    max_length: 60
+    max_speed: 10.28889
+    min_beam: 2
+    max_beam: 12
+    max_angular_speed: 0.06 # ~3.4 deg/s
+    max_acceleration: 0.2
+
+
+MilitaryVessel:
+    min_length: 20
+    max_length: 300
+    max_speed: 25.722235
+    min_beam: 5
+    max_beam: 40
+    max_angular_speed: 0.10  # ~5.7 deg/s
+    max_acceleration: 0.8

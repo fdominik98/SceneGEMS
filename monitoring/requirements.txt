@@ -1,0 +1,7 @@
+# Runtime dependencies for scenegems-monitoring-subsystem (see monitoring/Dockerfile).
+paho-mqtt
+pyyaml
+numpy
+portion
+pyproj
+haversine
