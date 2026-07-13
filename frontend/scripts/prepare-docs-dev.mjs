@@ -9,7 +9,7 @@ if (existsSync(docsDir)) {
 
 const pdfPath = resolve('website/static/scenegems-ui-documentation.pdf');
 if (!existsSync(pdfPath)) {
-  console.log('Documentation PDF missing — generating (first run only)…');
+  console.log('Documentation PDF missing: generating (first run only)…');
   const result = spawnSync('node', ['scripts/generate-docs-pdf.mjs'], {
     stdio: 'inherit',
     cwd: resolve('.'),

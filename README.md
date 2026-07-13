@@ -15,9 +15,9 @@ Monorepo for automated COLREGS scene generation, simulation orchestration, and t
 ## Prerequisites
 
 - **Docker** with Compose v2 (`docker compose`) or legacy `docker-compose`
-- **Docker socket access** — the backend mounts `/var/run/docker.sock` to spawn subsystem and simulation containers
+- **Docker socket access**: the backend mounts `/var/run/docker.sock` to spawn subsystem and simulation containers
 - **Git Bash or WSL** on Windows (the root scripts are Bash)
-- **Disk space** — a full image build (Gazebo, SITL, subsystems) can take several GB
+- **Disk space**: a full image build (Gazebo, SITL, subsystems) can take several GB
 
 Optional for host-side development (without Docker):
 
@@ -92,10 +92,10 @@ Simulation images are **not** required to run the web console, scene generation,
 Typical workflow after `./start.sh`:
 
 1. Open http://localhost:5173
-2. **Domain Configuration** — presets load from `frontend/public/domain_config/` (COLREGS constants, vessel types, obstacles).
-3. **Scene Generation** — search functional presets (`.problem` files), load one, click **Generate Initial Scene**.
-4. **Initialize Scenario** — loads the scene and streams preview trajectory chunks over WebSocket.
-5. **Simulation** — configure agents, wind/waves, and run dual-stream playback with COLREGS metrics and exports.
+2. **Domain Configuration**: presets load from `frontend/public/domain_config/` (COLREGS constants, vessel types, obstacles).
+3. **Scene Generation**: search functional presets (`.problem` files), load one, click **Generate Initial Scene**.
+4. **Initialize Scenario**: loads the scene and streams preview trajectory chunks over WebSocket.
+5. **Simulation**: configure agents, wind/waves, and run dual-stream playback with COLREGS metrics and exports.
 
 **Tips:**
 
@@ -216,6 +216,6 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 
 ## Further reading
 
-- [`backend/README.md`](backend/README.md) — Python setup, project structure, evaluation scripts
-- [`frontend/README.md`](frontend/README.md) — UI scripts, docs, static assets
-- [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md) — Frontend domain layout and protocol
+- [`backend/README.md`](backend/README.md): Python setup, project structure, evaluation scripts
+- [`frontend/README.md`](frontend/README.md): UI scripts, docs, static assets
+- [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md): Frontend domain layout and protocol

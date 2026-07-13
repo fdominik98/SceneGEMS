@@ -10,8 +10,8 @@ services:
       VITE_WS_URL: ws://127.0.0.1:8000/ws/scenegems_backend_service
 
   broker:
-    image: nanomq_otg
-    container_name: local_broker
+    image: scenegems-mqtt-broker
+    container_name: scenegems_local_mqtt_broker
     labels:
       - group=Services
     restart: unless-stopped

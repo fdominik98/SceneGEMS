@@ -9,7 +9,7 @@ const docsDir = resolve(root, 'website/docs');
 const pdfCss = resolve(__dirname, 'docs-pdf.css');
 const outputPath = resolve(root, 'website/static/scenegems-ui-documentation.pdf');
 
-/** Sidebar order — keep in sync with website/sidebars.ts */
+/** Sidebar order: keep in sync with website/sidebars.ts */
 const DOC_IDS = [
   'intro',
   'layout',

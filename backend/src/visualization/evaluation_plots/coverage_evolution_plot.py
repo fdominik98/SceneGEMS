@@ -192,7 +192,7 @@ class CoverageEvolutionPlot(EvalPlot, ABC):
 
                 self.set_xticks(axi, timestamps, unit='s', tick_number=3)
 
-        # Get handles and labels from the last axis (or any axis — all are the same here)
+        # Get handles and labels from the last axis (or any axis: all are the same here)
         handles, labels = axes[0][0].get_legend_handles_labels()
         # Add one legend to the figure (outside bottom)
         ax_bottom.legend(handles, labels, ncol=len(self.comparison_groups), fontsize=10, loc='lower center')

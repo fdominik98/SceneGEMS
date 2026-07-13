@@ -77,7 +77,7 @@ def ensure_directories() -> None:
         try:
             Path(folder).mkdir(parents=True, exist_ok=True)
         except OSError as error:
-            if error.errno == 30:  # EROFS — read-only mount (e.g. subsystem containers)
+            if error.errno == 30:  # EROFS: read-only mount (e.g. subsystem containers)
                 continue
             raise
 

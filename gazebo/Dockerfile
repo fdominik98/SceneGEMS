@@ -66,7 +66,7 @@ RUN git clone https://github.com/ArduPilot/ardupilot_gazebo.git && \
     cmake --install build
 
 # 5. ASV Sim2 system plugins (ocean.sdf: asv_sim2-anemometer-system, asv_sim2-wind-system)
-# https://github.com/srmainwaring/asv_sim — build the Harmonic plugin stack (GZ_VERSION selects gz-sim8).
+# https://github.com/srmainwaring/asv_sim: build the Harmonic plugin stack (GZ_VERSION selects gz-sim8).
 WORKDIR /opt
 RUN git clone --depth 1 https://github.com/srmainwaring/asv_sim.git && \
     cd asv_sim/asv_sim_gazebo_plugins && \

@@ -3,7 +3,7 @@
 
 A Python 3.12 project for generating and evaluating initial scenes for Autonomous Surface Vehicle (ASV) scenario-based testing. This repository includes utilities for genetic algorithms and rejection sampling for scene generation using the **MSR** and **DC** approaches with detailed visualization and evaluation tools.
 
-This project serves as supplementary material for our research paper **Automated Scene Generation for Testing COLREGS-Compliance of Autonomous Surface Vehicles by Multi-Step Refinement**.
+This project serves as supplementary material for our research paper **Automated Generation of Functionally Complete Assurance Suites for COLREGS-Compliance of Autonomous Surface Vehicles**.
 
 ![](./assets/figures/v2/msr_overview.png)
 

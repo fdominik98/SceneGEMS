@@ -10,20 +10,20 @@ field (thrust command as published by the plugin). Other topics use ``[gz]``.
 
 Environment:
 
-  ``GZ_PARTITION`` — must match the running Gazebo sim (same as compose).
+  ``GZ_PARTITION``: must match the running Gazebo sim (same as compose).
 
-  ``GZ_BRIDGE_TOPIC_POLL_SEC`` — how often to scan for new topics (default ``2``).
+  ``GZ_BRIDGE_TOPIC_POLL_SEC``: how often to scan for new topics (default ``2``).
 
-  ``GZ_BRIDGE_LOG_INTERVAL_SEC`` — minimum seconds between log lines **per topic**
+  ``GZ_BRIDGE_LOG_INTERVAL_SEC``: minimum seconds between log lines **per topic**
   for **non**-ArduPilotPlugin topics (default ``0`` = every message).
 
-  ``GZ_BRIDGE_ARDUPLUGIN_LOG_INTERVAL_SEC`` — same, but only for
+  ``GZ_BRIDGE_ARDUPLUGIN_LOG_INTERVAL_SEC``: same, but only for
   ArduPilotPlugin-related topics (default ``0``).
 
-  ``GZ_BRIDGE_ARDUPLUGIN_TOPIC_SUBSTR`` — extra comma-separated case-insensitive
+  ``GZ_BRIDGE_ARDUPLUGIN_TOPIC_SUBSTR``: extra comma-separated case-insensitive
   substrings; if any appear in the topic name, the topic is treated as plugin-related.
 
-  ``GZ_BRIDGE_HEX_PREVIEW`` — max bytes to append as hex (default ``48``; ``0`` = off).
+  ``GZ_BRIDGE_HEX_PREVIEW``: max bytes to append as hex (default ``48``; ``0`` = off).
   Hex is omitted for successfully decoded ``gz.msgs.Double`` on plugin topics unless
   preview is forced positive and you want both (we skip hex when ``Double.data`` is printed).
 """
@@ -124,7 +124,7 @@ def main() -> None:
         return _cb
 
     print(
-        "Gazebo transport sniffer — subscribe_raw on all advertised topics; "
+        "Gazebo transport sniffer: subscribe_raw on all advertised topics; "
         "ArduPilotPlugin-related topics logged with [ArduPilotPlugin]. "
         f"GZ_PARTITION={PARTITION!r} poll_s={POLL_INTERVAL} "
         f"log_interval_s={LOG_INTERVAL} ardu_log_interval_s={ARDU_LOG_INTERVAL} "

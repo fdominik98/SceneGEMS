@@ -9,7 +9,7 @@ import threading
 _logger = logging.getLogger(__name__)
 
 _MQTT_BROKER_COMPOSE_PROJECT = "mqtt_broker"
-_MQTT_BROKER_CONTAINER_NAME = "local_broker"
+_MQTT_BROKER_CONTAINER_NAME = "scenegems_local_mqtt_broker"
 _SCENARIO_GENERATION_COMPOSE_PROJECT = "scenegems-scenario-generation-subsystem"
 
 _shutdown_lock = threading.Lock()

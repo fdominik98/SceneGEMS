@@ -112,7 +112,7 @@ build_arduagent_image() {
 
 build_broker_image() {
     echo "== MQTT broker =="
-    build_if_stale "nanomq_otg" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq/Dockerfile" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq"
+    build_if_stale "scenegems-mqtt-broker" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq/Dockerfile" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq"
 }
 
 build_backend_stack_images() {

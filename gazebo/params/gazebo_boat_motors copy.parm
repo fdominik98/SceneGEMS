@@ -4,7 +4,7 @@ FRAME_CLASS	2
 # SITL default geofence (“fence present”) rejects many Guided / Fly-Here targets → set_desired_location fails silently in MP.
 FENCE_ENABLE	0
 FENCE_TYPE	0
-# JSON SITL often exposes two IMUs; slight mismatch trips “Accels inconsistent” — use primary IMU only in sim.
+# JSON SITL often exposes two IMUs; slight mismatch trips “Accels inconsistent”: use primary IMU only in sim.
 INS_USE2	0
 SERVO1_FUNCTION	74
 SERVO2_FUNCTION	0

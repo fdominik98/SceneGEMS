@@ -5,7 +5,7 @@
     <!-- Avoid links auto-disabling mid-run (can destabilize coupled buoyancy/hydro). -->
     <allow_auto_disable>false</allow_auto_disable>
     <static>false</static>
-    <!-- pose units: x,y,z [m], roll,pitch,yaw [rad] — small debug hull (~3.2 m). -->
+    <!-- pose units: x,y,z [m], roll,pitch,yaw [rad]: small debug hull (~3.2 m). -->
     <pose>0 0 0.2 0 0 0</pose>
 
     <link name="base_link">
