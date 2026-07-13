@@ -16,5 +16,6 @@ frontend/*.local
 
 # Editor
 .DS_Store
+.cursor/
 
 **/assets/figures/tool_paper/screen_captures
