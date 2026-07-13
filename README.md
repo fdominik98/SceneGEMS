@@ -64,7 +64,7 @@ Press **Ctrl+C** while `start.sh` is tailing backend logs to stop the stack. Shu
 | `-3`, `--stack` | Backend + frontend (no simulation images) |
 | `-4`, `--arduagent` | `scenegems-arduagent:latest` |
 | `--simulation` | `scenegems-gazebo-harmonic`, `scenegems-ardupilot-sitl`, `scenegems-mavproxy` |
-| `--no-check` | Skip stale checks; always `docker build` selected images |
+| `--no-check` | Skip stale checks; always `docker build` (with no other flags: same targets as `--all`) |
 
 **Examples:**
 
@@ -81,8 +81,11 @@ Press **Ctrl+C** while `start.sh` is tailing backend logs to stop the stack. Shu
 # Full stack including simulation runtime (needed for Gazebo/ArduPilot execution)
 ./build.sh --all
 
-# Force rebuild everything
+# Force rebuild everything (same as ./build.sh --no-check)
 ./build.sh --all --no-check
+
+# Force rebuild app stack only (backend + frontend, skip Gazebo/SITL)
+./build.sh --stack --no-check
 ```
 
 Simulation images are **not** required to run the web console, scene generation, or trajectory preview. Build them when you use **Simulation** with Gazebo or ArduPilot agents.

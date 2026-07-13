@@ -13,7 +13,7 @@ from scenegems_tool.backend_service.protocol import (
 )
 from scenegems_tool.backend_service.scenario_session import ScenarioSession
 from scenegems_tool.monitoring.monitor_session import MonitorSession, iter_scene_batches
-from scenegems_tool.simulators.scenegems-scenario-execution-subsystem_container import (
+from scenegems_tool.simulators.scenario_execution_subsystem_container import (
     ScenarioExecutionSubsystemContainer,
 )
 from scenegems_tool.simulators.simulation_config import SimulationConfig

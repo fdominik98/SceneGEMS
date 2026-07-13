@@ -18,4 +18,6 @@ frontend/*.local
 .DS_Store
 .cursor/
 
+/assets/
+
 **/assets/figures/tool_paper/screen_captures

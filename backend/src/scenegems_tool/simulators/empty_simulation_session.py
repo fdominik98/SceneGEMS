@@ -1,7 +1,7 @@
 from typing import Callable
 
 from scenegems_tool.backend_service.protocol import ServerMessage, SimulationStatus, make_error_message
-from scenegems_tool.simulators.scenegems-scenario-execution-subsystem_container import (
+from scenegems_tool.simulators.scenario_execution_subsystem_container import (
     claim_stack_ownership,
     schedule_force_destroy_scenario_execution_stack,
 )

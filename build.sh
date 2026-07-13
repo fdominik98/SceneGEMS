@@ -40,7 +40,9 @@ Options:
   --no-check              Skip stale/fingerprint checks; always run docker build
                           for the selected images (stamps updated after build).
                           With no other options, builds every image (same as
-                          ./build.sh --all --no-check).
+                          ./build.sh --all --no-check). Full builds run the
+                          application stack (broker, backend, frontend) before
+                          simulation images.
 
 Examples:
   ./build.sh                      # full build
@@ -157,20 +159,54 @@ if [ "$BUILD_ALL" -eq 1 ]; then
     BUILD_FRONTEND=1
     BUILD_SIMULATION=1
     BUILD_ARDUAGENT=1
-    build_broker_image
 fi
 
-if [ "$BUILD_SIMULATION" -eq 1 ]; then
-    build_simulation_images
-fi
-if [ "$BUILD_ARDUAGENT" -eq 1 ]; then
-    build_arduagent_image
+print_selected_build_targets() {
+    local targets=()
+    if [ "$BUILD_ALL" -eq 1 ]; then
+        targets+=("mqtt-broker")
+    fi
+    if [ "$BUILD_BACKEND" -eq 1 ]; then
+        targets+=("backend-stack")
+    fi
+    if [ "$BUILD_FRONTEND" -eq 1 ]; then
+        targets+=("frontend")
+    fi
+    if [ "$BUILD_SIMULATION" -eq 1 ]; then
+        targets+=("simulation")
+    fi
+    if [ "$BUILD_ARDUAGENT" -eq 1 ]; then
+        targets+=("arduagent")
+    fi
+    if [ "${#targets[@]}" -eq 0 ]; then
+        echo "No build targets selected." >&2
+        exit 1
+    fi
+    local mode="stale-aware"
+    if [ "$BUILD_NO_CHECK" -eq 1 ]; then
+        mode="force rebuild (--no-check)"
+    fi
+    echo "SceneGEMS image build ($mode): ${targets[*]}"
+    echo ""
+}
+
+print_selected_build_targets
+
+# Application stack first (broker, backend, frontend), then optional simulation images.
+if [ "$BUILD_ALL" -eq 1 ]; then
+    build_broker_image
 fi
 if [ "$BUILD_BACKEND" -eq 1 ]; then
     build_backend_stack_images
 fi
 if [ "$BUILD_FRONTEND" -eq 1 ]; then
     build_frontend_image
+fi
+if [ "$BUILD_SIMULATION" -eq 1 ]; then
+    build_simulation_images
+fi
+if [ "$BUILD_ARDUAGENT" -eq 1 ]; then
+    build_arduagent_image
 fi
 
 if [ "$BUILD_BACKEND" -eq 1 ] || [ "$BUILD_FRONTEND" -eq 1 ] || [ "$BUILD_ALL" -eq 1 ]; then

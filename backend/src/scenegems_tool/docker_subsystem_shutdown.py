@@ -69,7 +69,7 @@ def shutdown_all_docker_subsystems() -> None:
         from scenegems_tool.scenario_generation.scenario_generation_container import (
             force_destroy_scenario_generation_stack,
         )
-        from scenegems_tool.simulators.scenegems-scenario-execution-subsystem_container import (
+        from scenegems_tool.simulators.scenario_execution_subsystem_container import (
             force_destroy_scenario_execution_stack,
         )
 
