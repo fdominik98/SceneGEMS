@@ -37,9 +37,6 @@ services:
       MQTT_BROKER_PORT: "1883"
       SCENEGEMS_RUNTIME_VOLUME: scenegems_runtime_assets
       SCENEGEMS_DOCKER_NETWORK: scenegems_default
-      MONITORING_DEV_MOUNT: "0"
-      SCENARIO_GENERATION_DEV_MOUNT: "0"
-      SCENARIO_EXECUTION_DEV_MOUNT: "0"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

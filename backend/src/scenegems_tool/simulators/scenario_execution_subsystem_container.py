@@ -26,7 +26,7 @@ from utils.file_system_utils import (
     runtime_assets_volume_mount,
 )
 
-COMPOSE_PROJECT = "scenario_execution_subsystem"
+COMPOSE_PROJECT = "scenegems-scenario-execution-subsystem"
 SERVICE_NAME = "scenario_execution"
 DEFAULT_IMAGE = "scenegems-scenario-execution-subsystem:latest"
 SERVICE_CPU = 2

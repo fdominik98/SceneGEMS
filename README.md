@@ -111,9 +111,9 @@ Browser (frontend :5173)
     ▼
 Backend (scenegems-backend :8000)
     │  MQTT  broker:1883
-    ├── scenario_generation_subsystem   (scene generation workers)
+    ├── scenegems-scenario-generation-subsystem   (scene generation workers)
     ├── scenegems-monitoring-subsystem               (COLREGS monitoring)
-    └── scenario_execution_subsystem    (Gazebo / SITL / arduagent per scenario)
+    └── scenegems-scenario-execution-subsystem    (Gazebo / SITL / arduagent per scenario)
 ```
 
 Runtime-generated assets (SDF models, compose files, trajectories) are stored in the Docker named volume **`scenegems_runtime_assets`**, shared between the backend and subsystem containers.
@@ -166,9 +166,7 @@ npm run dev
 
 See [`frontend/README.md`](frontend/README.md) and [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md) for UI structure and WebSocket message flow.
 
-### Live-reload in subsystem containers
-
-By default, compose sets `MONITORING_DEV_MOUNT`, `SCENARIO_GENERATION_DEV_MOUNT`, and `SCENARIO_EXECUTION_DEV_MOUNT` to `"0"` (image-only). For backend development with bind-mounted `src`, set these to `"1"` in [`docker-compose.yml`](docker-compose.yml) and restart the backend so Python edits apply after subsystem container restart (no image rebuild for code-only changes).
+Subsystem containers (monitoring, scenario generation, scenario execution) run from pre-built images only. After backend or subsystem code changes, rebuild with `./build.sh --backend` (or the relevant target) before restarting the stack.
 
 ## Research and batch evaluation
 

@@ -130,7 +130,7 @@ src/scenegems_tool/scenario_generation/scene_generation_worker.py
 src/scenegems_tool/simulators/empty_simulation_session.py
 src/scenegems_tool/simulators/live_simulation_session.py
 src/scenegems_tool/simulators/scenario_execution_service_main.py
-src/scenegems_tool/simulators/scenario_execution_subsystem_container.py
+src/scenegems_tool/simulators/scenegems-scenario-execution-subsystem_container.py
 src/scenegems_tool/simulators/scenario_execution_worker.py
 src/scenegems_tool/simulators/simulation_config.py
 src/scenegems_tool/simulators/simulation_docker_stack.py

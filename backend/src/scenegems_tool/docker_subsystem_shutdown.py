@@ -10,7 +10,7 @@ _logger = logging.getLogger(__name__)
 
 _MQTT_BROKER_COMPOSE_PROJECT = "mqtt_broker"
 _MQTT_BROKER_CONTAINER_NAME = "local_broker"
-_SCENARIO_GENERATION_COMPOSE_PROJECT = "scenario_generation_subsystem"
+_SCENARIO_GENERATION_COMPOSE_PROJECT = "scenegems-scenario-generation-subsystem"
 
 _shutdown_lock = threading.Lock()
 _shutdown_done = False
@@ -69,7 +69,7 @@ def shutdown_all_docker_subsystems() -> None:
         from scenegems_tool.scenario_generation.scenario_generation_container import (
             force_destroy_scenario_generation_stack,
         )
-        from scenegems_tool.simulators.scenario_execution_subsystem_container import (
+        from scenegems_tool.simulators.scenegems-scenario-execution-subsystem_container import (
             force_destroy_scenario_execution_stack,
         )
 

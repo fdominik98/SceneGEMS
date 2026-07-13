@@ -12,7 +12,7 @@ from scenegems_tool.waraps_integration.sim_utils import Geofence
 from utils.docker_compose_network import attach_broker_network_to_compose
 from utils.file_system_utils import SCENARIO_GENERATION_GEN_FOLDER, merge_compose_volumes
 
-_COMPOSE_PROJECT = "scenario_generation_subsystem"
+_COMPOSE_PROJECT = "scenegems-scenario-generation-subsystem"
 _SERVICE_NAME = "scenario_generation"
 _DEFAULT_IMAGE = "scenegems-scenario-generation-subsystem:latest"
 _MAX_WORKER_CPUS = 5
