@@ -54,7 +54,7 @@ class Penalty:
 
     def pretty_info(self, actors: Optional[Tuple[ActorVariable, ActorVariable]] = None) -> str:
         if actors is None:
-            return "\n".join([f"{key[0].name} → {key[1].name} : {json.dumps(value, indent=3)}" for key, value in self.info.items()])
+            return "\n".join([f"{key[0].name} -> {key[1].name} : {json.dumps(value, indent=3)}" for key, value in self.info.items()])
         if actors not in self.info:
             return ""
         return json.dumps(self.info[actors], indent=3)

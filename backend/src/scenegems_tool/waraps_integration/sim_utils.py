@@ -60,7 +60,7 @@ def to_true_north(heading: float, unit=Unit.RADIANS) -> float:
 def from_true_north(true_north: float, unit=Unit.RADIANS) -> float:
     angle = math.degrees(true_north) if unit == Unit.RADIANS else true_north
 
-    # Normalize 360 → 0 BEFORE conversion
+    # Normalize 360 -> 0 BEFORE conversion
     if angle == 360:
         angle = 0
 

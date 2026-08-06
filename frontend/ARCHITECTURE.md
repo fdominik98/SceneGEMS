@@ -25,10 +25,10 @@ flowchart LR
 ## WebSocket lifecycle
 
 1. **Connect**: `BackendWsClient` to `VITE_WS_URL`
-2. **Generate scene**: `generate_scene` with functional spec + domain YAML → `generated_scene`
-3. **Load scenario**: `load_scenario_file` → `preview_trajectory_chunk`(s)
-4. **Initialize simulation**: `initialize_simulation` → `initial_state`
-5. **Run**: `start_simulation` → `simulation_trajectory_chunk`(s) and live `frame` pushes
+2. **Generate scene**: `generate_scene` with functional spec + domain YAML -> `generated_scene`
+3. **Load scenario**: `load_scenario_file` -> `preview_trajectory_chunk`(s)
+4. **Initialize simulation**: `initialize_simulation` -> `initial_state`
+5. **Run**: `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
 
 Preview and simulation trajectories are stored separately in `playbackStore` for side-by-side analysis.
 

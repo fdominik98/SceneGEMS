@@ -320,7 +320,7 @@ def generate_vessel_model(vessel: ConcreteVessel, agent_name: str) -> str:
     <lock_step>1</lock_step>
     <fdm_addr>0.0.0.0</fdm_addr>
     <fdm_port_in>{fdm_port_in}</fdm_port_in>
-    <!-- Match ardupilot_gazebo iris: ENU world + FLU hull → NED / aircraft body. -->
+    <!-- Match ardupilot_gazebo iris: ENU world + FLU hull -> NED / aircraft body. -->
     <modelXYZToAirplaneXForwardZDown>0 0 0 3.141592653589793 0 0</modelXYZToAirplaneXForwardZDown>
     <gazeboXYZToNED>0 0 0 3.141592653589793 0 1.5707963267948966</gazeboXYZToNED>
     <imuName>imu_sensor</imuName>

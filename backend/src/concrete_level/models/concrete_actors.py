@@ -339,7 +339,7 @@ class ConcreteVessel(ConcreteActor):
                 # convert to speed reference
                 speed_ref = v0 + a * dt
             else:
-                # edge case: no acceleration → cannot adjust speed
+                # edge case: no acceleration -> cannot adjust speed
                 speed_ref = v0
 
             # clamp to valid range

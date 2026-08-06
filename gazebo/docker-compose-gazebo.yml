@@ -71,7 +71,7 @@ services:
   #     - sitl2
 
   # JSON physics: bridge hostname must become a numeric IPv4 for SITL (ArduPilot Socket uses inet_pton, not DNS).
-  # Protocol order is still servo → bridge → JSON reply; bridge binds before sitl (depends_on + delay).
+  # Protocol order is still servo -> bridge -> JSON reply; bridge binds before sitl (depends_on + delay).
   sitl1:
     image: ${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}
     container_name: sitl1

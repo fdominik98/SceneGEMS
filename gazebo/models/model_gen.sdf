@@ -64,7 +64,7 @@
 
   <!-- Thruster joints: revolute (1 DOF) required for velocity_control + JointVelocityCmd.
         Prop visuals live on child links so they spin with the shaft (axis +x). -->
-  <!-- Stern thrusters: wider Y → larger yaw moment from differential thrust (sim maneuverability). -->
+  <!-- Stern thrusters: wider Y -> larger yaw moment from differential thrust (sim maneuverability). -->
   <!-- <link name="left_thruster">
     <pose>-1.5 -0.5 -0.3 0.0 0.0 0.0</pose>
     <inertial>
@@ -360,7 +360,7 @@
     <!-- Bind address inside Gazebo; use 0.0.0.0 (not SITL hostname) for Docker. -->
     <fdm_addr>0.0.0.0</fdm_addr>
     <fdm_port_in>9002</fdm_port_in>
-    <!-- Match ardupilot_gazebo iris: ENU world + FLU hull → NED / aircraft body. -->
+    <!-- Match ardupilot_gazebo iris: ENU world + FLU hull -> NED / aircraft body. -->
     <modelXYZToAirplaneXForwardZDown>0 0 0 3.141592653589793 0 0</modelXYZToAirplaneXForwardZDown>
     <gazeboXYZToNED>0 0 0 3.141592653589793 0 1.5707963267948966</gazeboXYZToNED>
     <imuName>imu_sensor</imuName>

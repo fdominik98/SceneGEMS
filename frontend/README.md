@@ -54,7 +54,7 @@ During `npm run dev`, Docusaurus starts **only when you open** **Documentation**
 |---------|-------------|
 | `npm run dev` | Vite + Docusaurus dev servers (app and `/docs/`) |
 | `npm run build` | Build docs, regenerate preset manifest, typecheck, production build |
-| `npm run presets:manifest` | Scan `public/generated_functional_models/` → `presets-manifest.json` |
+| `npm run presets:manifest` | Scan `public/generated_functional_models/` -> `presets-manifest.json` |
 | `npm test` | Unit tests (Vitest) |
 | `npm run lint` | ESLint |
 
