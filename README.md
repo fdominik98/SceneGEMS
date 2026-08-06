@@ -12,17 +12,29 @@ Monorepo for automated COLREGS scene generation, simulation orchestration, and t
 | **Simulation images** | `gazebo/`, `sitl/`, `mavproxy/`, `arduagent/` | Gazebo Harmonic + ArduPilot SITL Docker images |
 | **Subsystems** | `monitoring/`, `scenario_generation/`, `scenario_execution/` | Containerized worker images spawned by the backend |
 
-## Prerequisites
+## System requirements
 
-- **Docker** with Compose v2 (`docker compose`) or legacy `docker-compose`
-- **Docker socket access**: the backend mounts `/var/run/docker.sock` to spawn subsystem and simulation containers
-- **Git Bash or WSL** on Windows (the root scripts are Bash)
-- **Disk space**: a full image build (Gazebo, SITL, subsystems) can take several GB
+### Runtime (Docker stack)
 
-Optional for host-side development (without Docker):
+| Requirement | Details |
+|-------------|---------|
+| **OS** | Linux, macOS, or Windows 10/11 |
+| **Docker** | Docker Engine with Compose v2 (`docker compose`) or legacy `docker-compose` |
+| **Docker socket** | Backend mounts `/var/run/docker.sock` to spawn subsystem and simulation containers |
+| **Shell on Windows** | Git Bash or WSL (root scripts are Bash) |
+| **Disk space** | Several GB for a full image build (Gazebo, SITL, subsystems); less for `--stack` only |
+| **RAM** | 8 GB recommended for the web console and scene generation; 16 GB+ recommended when running Gazebo / ArduPilot simulation |
+| **CPU** | Multi-core recommended; scenario-generation workers use multiple processes |
 
-- Python **3.12** (≥ 3.10 supported)
-- Node.js **18+** and npm (frontend)
+### Host-side development (optional, without Docker)
+
+| Requirement | Details |
+|-------------|---------|
+| **Python** | 3.12 recommended (requires ≥ 3.10); virtual environment under `backend/env/` |
+| **Node.js** | 18+ and npm (frontend Vite app and docs) |
+| **MQTT broker** | Required when running the backend locally outside compose (e.g. NanoMQ) |
+
+Simulation with Gazebo also needs a working Docker setup with enough resources for the Gazebo Harmonic and ArduPilot SITL images.
 
 ## Quick start (Docker)
 
@@ -192,7 +204,7 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `VITE_WS_URL` | `ws://127.0.0.1:8000/ws/scenegems_backend_service` | Frontend → backend WebSocket (set in frontend service env) |
+| `VITE_WS_URL` | `ws://127.0.0.1:8000/ws/scenegems_backend_service` | Frontend -> backend WebSocket (set in frontend service env) |
 | `MQTT_BROKER_HOST` | `broker` | Backend MQTT hostname inside compose |
 | `SCENEGEMS_DOCKER_NETWORK` | `scenegems_default` | Network attached to spawned subsystem containers |
 | `SCENEGEMS_RUNTIME_VOLUME` | `scenegems_runtime_assets` | Named volume for generated simulation assets |
@@ -203,8 +215,8 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 |------|---------|
 | 5173 | Frontend (Vite) |
 | 8000 | Backend HTTP + WebSocket |
-| 1882 | MQTT (host → broker 1883) |
-| 8082 | MQTT WebSocket (host → broker 8083) |
+| 1882 | MQTT (host -> broker 1883) |
+| 8082 | MQTT WebSocket (host -> broker 8083) |
 
 ## Troubleshooting
 
@@ -222,3 +234,7 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 - [`backend/README.md`](backend/README.md): Python setup, project structure, evaluation scripts
 - [`frontend/README.md`](frontend/README.md): UI scripts, docs, static assets
 - [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md): Frontend domain layout and protocol
+
+## License
+
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for the full text.

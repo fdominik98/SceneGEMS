@@ -12,7 +12,7 @@ SUBSCRIPT_TRANSLATION = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈
 
 
 class MonitorInfoComponent:
-    """Component responsible for displaying COLREG monitor state and results for each vessel pair."""
+    """Component responsible for displaying COLREGS monitor state and results for each vessel pair."""
 
     def __init__(self, parent_frame: tk.Frame, trajectory_manager: TrajectoryManager, colreg_plot: ScenarioPlot):
         self.parent_frame = parent_frame
@@ -65,7 +65,7 @@ class MonitorInfoComponent:
         def cell_factory(row_idx: int, column_idx: int, parent: tk.Frame, bg: str) -> tk.Label:
             label = tk.Label(
                 parent,
-                text="—",
+                text="-",
                 font=("Segoe UI", 10),
                 background=bg,
                 foreground="#111827",
@@ -73,7 +73,7 @@ class MonitorInfoComponent:
                 justify="center",
             )
             label.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-            tooltip = ToolTip(label, text="—")
+            tooltip = ToolTip(label, text="-")
             self.tooltips[column_idx].append(tooltip)
             return label
 
@@ -209,7 +209,7 @@ class MonitorInfoComponent:
     def _format_relation_header(self, relation: Relation) -> str:
         actor1 = self._format_actor_name(self.trajectory_manager.scenario.get_actor_name(relation.actor1))
         actor2 = self._format_actor_name(self.trajectory_manager.scenario.get_actor_name(relation.actor2))
-        return f"{actor1} → {actor2}"
+        return f"{actor1} -> {actor2}"
 
     @property
     def num_rows(self) -> int:

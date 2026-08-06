@@ -28,7 +28,7 @@ export function ScenarioDiffPanel() {
     <div className="scenario-diff-panel">
       <h4 className="scenario-diff-title">Preview vs simulation</h4>
       <p className="meta">
-        Preview t={diff.previewTimestamp ?? "—"} · Simulation t={diff.simulationTimestamp ?? "—"}
+        Preview t={diff.previewTimestamp ?? "-"} · Simulation t={diff.simulationTimestamp ?? ":"}
         {diff.ruleMismatchCount > 0 ? ` · ${diff.ruleMismatchCount} rule status mismatch(es)` : ""}
       </p>
       <div className="scenario-diff-table-wrap">
@@ -45,14 +45,14 @@ export function ScenarioDiffPanel() {
             {diff.actorDeltas.map((row) => (
               <tr key={row.actorId}>
                 <td>{row.actorName}</td>
-                <td>{row.distanceM !== null ? row.distanceM.toFixed(1) : "—"}</td>
+                <td>{row.distanceM !== null ? row.distanceM.toFixed(1) : "-"}</td>
                 <td>
-                  {row.preview ? `${row.preview.x.toFixed(0)}, ${row.preview.y.toFixed(0)}` : "—"}
+                  {row.preview ? `${row.preview.x.toFixed(0)}, ${row.preview.y.toFixed(0)}` : "-"}
                 </td>
                 <td>
                   {row.simulation
                     ? `${row.simulation.x.toFixed(0)}, ${row.simulation.y.toFixed(0)}`
-                    : "—"}
+                    : "-"}
                 </td>
               </tr>
             ))}

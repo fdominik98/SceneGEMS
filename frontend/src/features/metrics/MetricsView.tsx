@@ -89,19 +89,19 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
         <tbody>
           <tr>
             <td>Distance</td>
-            <td>{metrics?.distanceByRelationId?.[activeRelation]?.toFixed(1) ?? "—"}</td>
+            <td>{metrics?.distanceByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
           </tr>
           <tr>
             <td>DCPA</td>
-            <td>{metrics?.dcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "—"}</td>
+            <td>{metrics?.dcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
           </tr>
           <tr>
             <td>TCPA</td>
-            <td>{metrics?.tcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "—"}</td>
+            <td>{metrics?.tcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
           </tr>
           <tr>
             <td>DS index</td>
-            <td>{metrics?.dsIndexByRelationId?.[activeRelation]?.toFixed(3) ?? "—"}</td>
+            <td>{metrics?.dsIndexByRelationId?.[activeRelation]?.toFixed(3) ?? "-"}</td>
           </tr>
         </tbody>
       </table>

@@ -1,5 +1,5 @@
 """
-Metric components package for COLREG scenario visualization.
+Metric components package for COLREGS scenario visualization.
 
 This package contains components for displaying evaluation metrics.
 """

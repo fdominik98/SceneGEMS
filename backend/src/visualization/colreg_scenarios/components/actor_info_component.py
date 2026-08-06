@@ -52,7 +52,7 @@ class ActorInfoComponent:
         def cell_factory(row_index: int, column_index: int, parent: tk.Frame, bg: str) -> tk.Label:
             label = tk.Label(
                 parent,
-                text="—",
+                text=":",
                 font=("Segoe UI", 10),
                 background=bg,
                 foreground="#111827",

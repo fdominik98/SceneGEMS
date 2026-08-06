@@ -26,7 +26,7 @@ class ScenarioPlotManager:
         self.root.resizable(True, True)
 
         self.root.option_add("*Font", ("Times New Roman", 14))
-        self.root.title("COLREG situation visualizer")
+        self.root.title("COLREGS situation visualizer")
 
         # CANVAS FRAME
         self.canvas_frame = tk.Frame(master=self.root)
@@ -367,9 +367,9 @@ class ScenarioPlotManager:
         self.actor_control_component = ActorControlComponent(actor_control_wrapper, self.trajectory_manger, self.colreg_plot)
         print("Actor control component created")
 
-        # COLREG control component
+        # COLREGS control component
         self.colreg_control_component = ColregControlComponent(colreg_control_wrapper, self.trajectory_manger, self.colreg_plot)
-        print("COLREG control component created")
+        print("COLREGS control component created")
 
         # Update scroll region after components are created
         self.root.after(100, lambda: self.left_canvas.configure(scrollregion=self.left_canvas.bbox("all")))

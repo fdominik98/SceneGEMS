@@ -75,7 +75,7 @@ class ManeuverMonitorInfoComponent:
         def cell_factory(row_idx: int, column_idx: int, parent: tk.Frame, bg: str) -> tk.Label:
             label = tk.Label(
                 parent,
-                text="—",
+                text="-",
                 font=("Segoe UI", 10),
                 background=bg,
                 foreground="#111827",
@@ -83,7 +83,7 @@ class ManeuverMonitorInfoComponent:
                 justify="center",
             )
             label.pack(fill=tk.BOTH, expand=True, padx=6, pady=6)
-            tooltip = ToolTip(label, text="—")
+            tooltip = ToolTip(label, text="-")
             self.tooltips[column_idx].append(tooltip)
             return label
 

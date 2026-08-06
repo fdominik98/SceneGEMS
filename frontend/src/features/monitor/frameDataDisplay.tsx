@@ -83,7 +83,7 @@ function formatNumber(n: number): string {
 
 export function formatScalar(value: unknown): string {
   if (value === null || value === undefined) {
-    return "—";
+    return "-";
   }
   if (typeof value === "boolean") {
     return value ? "Yes" : "No";
@@ -111,7 +111,7 @@ interface DynamicValueProps {
 
 export function DynamicValue({ value, depth }: DynamicValueProps): ReactNode {
   if (value === null || value === undefined) {
-    return <span className="frame-dyn-empty">—</span>;
+    return <span className="frame-dyn-empty">:</span>;
   }
   if (typeof value === "string" && value.includes("->")) {
     return <span className="frame-dyn-scalar">{renderRelationId(value)}</span>;

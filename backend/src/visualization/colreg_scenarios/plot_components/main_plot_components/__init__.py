@@ -1,5 +1,5 @@
 """
-Main plot components package for COLREG scenario visualization.
+Main plot components package for COLREGS scenario visualization.
 
 This package contains the primary plot components for scenario display.
 """

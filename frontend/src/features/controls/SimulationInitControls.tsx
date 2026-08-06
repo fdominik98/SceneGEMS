@@ -434,7 +434,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                         />
                       ) : (
                         <span className="meta" title="Port is not used for real context">
-                          —
+                          -
                         </span>
                       )}
                     </td>

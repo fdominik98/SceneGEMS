@@ -54,7 +54,7 @@ export function buildNiceScale(
 
 export function formatAxisTick(value: number, decimals = 1): string {
   if (!Number.isFinite(value)) {
-    return "—";
+    return "-";
   }
   if (Math.abs(value) >= 1e5 || (Math.abs(value) > 0 && Math.abs(value) < 0.001)) {
     return value.toExponential(1);

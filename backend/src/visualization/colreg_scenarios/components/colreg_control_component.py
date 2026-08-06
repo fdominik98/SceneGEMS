@@ -13,19 +13,19 @@ SUBSCRIPT_TRANSLATION = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈
 
 
 class ColregControlComponent:
-    """Component responsible for COLREG relationship controls and checkboxes."""
+    """Component responsible for COLREGS relationship controls and checkboxes."""
 
     def __init__(self, parent_frame: tk.Frame, trajectory_manager: TrajectoryManager, colreg_plot: ScenarioPlot):
         self.parent_frame = parent_frame
         self.trajectory_manager = trajectory_manager
         self.colreg_plot = colreg_plot
 
-        # COLREG control outer frame
+        # COLREGS control outer frame
         self.rel_control_outer_frame = tk.Frame(self.parent_frame, background="white", relief=tk.RAISED, bd=1)
         self.rel_control_outer_frame.pack(side=tk.TOP, fill=tk.X, pady=(5, 5), padx=5)
 
         # Add title
-        title_label = tk.Label(self.rel_control_outer_frame, text="COLREG Controls", font=("Arial", 10, "bold"), background="white")
+        title_label = tk.Label(self.rel_control_outer_frame, text="COLREGS Controls", font=("Arial", 10, "bold"), background="white")
         title_label.pack(side=tk.TOP, pady=(5, 5))
 
         # Modern table layout
@@ -173,7 +173,7 @@ class ColregControlComponent:
     def _format_relation_header(self, relation: Relation) -> str:
         actor1 = self._format_actor(relation.actor1)
         actor2 = self._format_actor(relation.actor2)
-        return f"{actor1} → {actor2}"
+        return f"{actor1} -> {actor2}"
 
     def _on_rel_control_frame_configure(self, event=None):
         """Keep the canvas scroll region in sync with the inner frame."""
