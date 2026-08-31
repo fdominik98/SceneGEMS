@@ -279,3 +279,39 @@ export function formatScenarioJsonForExport(
   return JSON.stringify(buildScenarioJsonForServer(evaluationData, scene), null, 2);
 }
 
+/**
+ * Builds a preview trajectory (one `SimulationFrame` per scene, timestamps spaced
+ * by `time_step`) from a serialized `TrajectoryData` payload emitted by the
+ * trajectory generation subsystem. Monitor fields are empty: full COLREGS
+ * analysis is only produced once the scenario is loaded for simulation.
+ */
+export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
+  if (!isRecord(raw)) {
+    return [];
+  }
+  const trajectories = raw.trajectories;
+  if (!isRecord(trajectories) || !Array.isArray(trajectories.scene_list)) {
+    return [];
+  }
+  const timeStepRaw = Number(trajectories.time_step);
+  const timeStep = Number.isFinite(timeStepRaw) && timeStepRaw > 0 ? timeStepRaw : 1;
+  const frames: SimulationFrame[] = [];
+  trajectories.scene_list.forEach((scene, index) => {
+    if (!isRecord(scene)) {
+      return;
+    }
+    const payload = bestSceneDataToFramePayload(scene);
+    if (!isRecord(payload)) {
+      return;
+    }
+    frames.push(
+      parseFrame({
+        ...payload,
+        timestamp: index * timeStep,
+        timeStep,
+      })
+    );
+  });
+  return frames;
+}
+

@@ -6,7 +6,7 @@ docker_common_init
 
 require_image "scenegems-frontend:dev"
 require_image "scenegems-backend:latest"
-require_image "scenegems-mqtt-broker"
+require_image "scenegems-mqtt-broker:latest"
 
 ensure_compose_volumes
 

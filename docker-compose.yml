@@ -10,7 +10,7 @@ services:
       VITE_WS_URL: ws://127.0.0.1:8000/ws/scenegems_backend_service
 
   broker:
-    image: scenegems-mqtt-broker
+    image: scenegems-mqtt-broker:latest
     container_name: scenegems_local_mqtt_broker
     labels:
       - group=Services

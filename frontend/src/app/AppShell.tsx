@@ -20,7 +20,9 @@ import {
 } from "../features/controls/domainConfigPresets";
 import { SceneGenerationSidebar } from "../features/controls/SceneGenerationSidebar";
 import { runBatchGeneration } from "../features/controls/runBatchGeneration";
+import { TrajectoryGenerationControls } from "../features/controls/TrajectoryGenerationControls";
 import { TrajectoryMonitorSidebar } from "../features/controls/TrajectoryMonitorSidebar";
+import { useTrajectoryGenerationStore } from "../domain/trajectoryGeneration/trajectoryGenerationStore";
 import { WarapsConnectionPanel } from "../features/connection/WarapsConnectionPanel";
 import { SceneCanvas } from "../features/scene/SceneCanvas";
 import { waitForSceneGeneration } from "../domain/playback/waitForSceneGeneration";
@@ -63,6 +65,7 @@ export function AppShell() {
   const activeSceneGenerationRequestId = usePlaybackStore((s) => s.activeSceneGenerationRequestId);
   const batchGenerationRunning = useBatchGenerationStore((s) => s.running);
   const selectedBatchPaths = useBatchGenerationStore((s) => s.selectedPaths);
+  const setTrajectoryHandoffScene = useTrajectoryGenerationStore((s) => s.setHandoffScene);
   const sceneGenerationTab = useUiStore((s) => s.sceneGenerationTab);
   const sceneGenerationLivePreview = useUiStore((s) => s.sceneGenerationLivePreview);
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
@@ -316,6 +319,7 @@ export function AppShell() {
 
   const showRightPane =
     activeView === "sceneGeneration" ||
+    activeView === "trajectoryGeneration" ||
     (activeView === "simulation" && rightPaneVisible);
 
   const simulationRightPaneGridColumns =
@@ -328,6 +332,18 @@ export function AppShell() {
       ? `minmax(0, 1fr) ${RIGHT_PANE_RESIZER_WIDTH}px ${sceneGenPaneWidth}px`
       : simulationRightPaneGridColumns
     : "minmax(0, 1fr)";
+
+  const loadForTrajectoryGeneration = useCallback(() => {
+    const visualized = usePlaybackStore.getState().latestGeneratedScene;
+    if (!visualized?.valid || !visualized.evaluationData) {
+      return;
+    }
+    setTrajectoryHandoffScene(
+      { scene: visualized.scene, evaluationData: visualized.evaluationData, valid: true },
+      scenarioSourceName ?? null
+    );
+    setActiveView("trajectoryGeneration");
+  }, [scenarioSourceName, setActiveView, setTrajectoryHandoffScene]);
 
   const runSceneGeneration = useCallback(
     async (specText: string) => {
@@ -727,6 +743,17 @@ export function AppShell() {
                         <button
                           type="button"
                           disabled={
+                            isSceneGenerationBusy ||
+                            !latestGeneratedScene?.valid ||
+                            !latestGeneratedScene.evaluationData
+                          }
+                          onClick={loadForTrajectoryGeneration}
+                        >
+                          Load for Trajectory Generation
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
                             simulationInitializing ||
                             streamStatus !== "connected" ||
                             !latestGeneratedScene?.valid ||
@@ -736,7 +763,7 @@ export function AppShell() {
                             void initializeVisualizedScenario();
                           }}
                         >
-                          Initialize Scenario
+                          Load for Simulation
                         </button>
                         <button
                           type="button"
@@ -779,6 +806,35 @@ export function AppShell() {
                       Backend socket: <span className={`status-text ${streamStatus}`}>{streamStatus}</span>
                     </p>
                   </div>
+                </footer>
+              </div>
+            ) : activeView === "trajectoryGeneration" ? (
+              <div
+                ref={simulationCenterRef}
+                className={`simulation-center-layout${isResizingBottomPanel ? " is-resizing-bottom" : ""}`}
+                style={{ gridTemplateRows: simulationBottomPanelGridRows }}
+              >
+                <div className="simulation-center-stage">
+                  <div className="scene-host">
+                    <SceneCanvas />
+                  </div>
+                </div>
+                <div
+                  className="bottom-pane-resizer"
+                  onPointerDown={onBottomPaneResizeStart}
+                  role="separator"
+                  aria-orientation="horizontal"
+                  aria-label="Resize bottom trajectory generation panel"
+                />
+                <footer className="bottom-toolbar bottom-toolbar-compact bottom-toolbar-single">
+                  <TrajectoryGenerationControls
+                    streamControls={streamControls}
+                    colregsConstraintsContent={colregsConstraintsText}
+                    onNavigateToSimulation={() => {
+                      requestAutoFit();
+                      setActiveView("simulation");
+                    }}
+                  />
                 </footer>
               </div>
             ) : (
@@ -835,7 +891,7 @@ export function AppShell() {
                 aria-orientation="vertical"
                 aria-label="Resize right panel"
               />
-              {activeView === "simulation" ? (
+              {activeView === "simulation" || activeView === "trajectoryGeneration" ? (
                 <TrajectoryMonitorSidebar />
               ) : (
                 <SceneGenerationSidebar

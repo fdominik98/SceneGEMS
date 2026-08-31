@@ -9,6 +9,8 @@ from scenegems_tool.monitoring.live_monitor_session import LiveMonitorSession
 from scenegems_tool.scenario_generation.scenario_generation_session import ScenarioGenerationSession
 from scenegems_tool.simulators.live_simulation_session import LiveSimulationSession
 from scenegems_tool.simulators.simulation_config import SimulationConfig
+from scenegems_tool.trajectory_generation.trajectory_generation_session import TrajectoryGenerationSession
+from scenegems_tool.trajectory_generation.trajectory_generation_types import TrajectoryGenerationParams
 from scenegems_tool.waraps_integration.mqtt_client import MQttConnectionInfo
 from scenegems_tool.waraps_integration.mqtt_scenegems_client import MqttSceneGEMSClient
 from scenegems_tool.waraps_integration.mqtt_scenegems_service import MqttSceneGEMSService
@@ -38,6 +40,7 @@ class LiveWARAPSSession(WARAPSSession):
         self.heartbeat_and_info_task = asyncio.create_task(self._heartbeat_and_info_loop())
 
         self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
+        self.trajectory_generation_session = TrajectoryGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
 
     async def _heartbeat_and_info_loop(self) -> None:
         tick_interval_sec = 1.0 / self.mqtt_service.info_update_rate
@@ -80,6 +83,7 @@ class LiveWARAPSSession(WARAPSSession):
     def _cancel(self) -> None:
         self.heartbeat_and_info_task.cancel()
         self.scenario_generation_session.destroy()
+        self.trajectory_generation_session.destroy()
         self.mqtt_service.disconnect()
         self.mqtt_client.disconnect()
 
@@ -106,3 +110,14 @@ class LiveWARAPSSession(WARAPSSession):
     async def stop_scene_generation(self) -> None:
         await self.scenario_generation_session.destroy_async()
         self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
+
+    def generate_trajectories(self, request_id: str, scenario_content: str, colregs_constraints_content: str, params: dict) -> None:
+        self.trajectory_generation_session.publish_generate_trajectories_command(
+            request_id,
+            scenario_content,
+            colregs_constraints_content,
+            TrajectoryGenerationParams.from_wire(params or {}),
+        )
+
+    async def stop_trajectory_generation(self) -> None:
+        self.trajectory_generation_session.publish_cancel_command()

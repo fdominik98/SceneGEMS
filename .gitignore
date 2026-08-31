@@ -17,6 +17,8 @@ frontend/*.local
 # Editor
 .DS_Store
 .cursor/
+.claude/
+CLAUDE.md
 
 /assets/
 

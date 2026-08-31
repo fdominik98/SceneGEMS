@@ -12,6 +12,9 @@ import {
 } from "../playback/mergeFramesInWorker";
 import { useRecordingStore } from "../playback/recordingStore";
 import { useBatchGenerationStore } from "../sceneGeneration/batchGenerationStore";
+import { buildFramesFromTrajectoryData } from "../sceneGeneration/parseEvaluationDataFile";
+import { useTrajectoryGenerationStore } from "../trajectoryGeneration/trajectoryGenerationStore";
+import type { TrajectoryGenerationParamsWire } from "./wireTypes";
 
 let previewTrajectoryChunkQueue = Promise.resolve();
 let simulationTrajectoryChunkQueue = Promise.resolve();
@@ -206,6 +209,52 @@ export function useSimulationWorkflow() {
             if (message.valid) {
               setActiveSceneGenerationRequestId(null);
             }
+          }
+          break;
+        }
+        case "trajectory_generation_preview": {
+          const tgStore = useTrajectoryGenerationStore.getState();
+          if (
+            tgStore.activeRequestId !== null &&
+            message.requestId !== null &&
+            message.requestId !== tgStore.activeRequestId
+          ) {
+            break;
+          }
+          const frames = buildFramesFromTrajectoryData(message.trajectoryData);
+          if (frames.length > 0) {
+            usePlaybackStore.getState().setTrajectoryPreviewFrames(frames);
+          }
+          const iterNumbers = (message.trajectoryData?.iter_numbers ?? {}) as Record<string, number>;
+          const iteration = Object.values(iterNumbers)[0] ?? tgStore.iteration;
+          tgStore.markPreview(iteration);
+          break;
+        }
+        case "trajectory_generation_result": {
+          const tgStore = useTrajectoryGenerationStore.getState();
+          if (
+            tgStore.activeRequestId !== null &&
+            message.requestId !== null &&
+            message.requestId !== tgStore.activeRequestId
+          ) {
+            break;
+          }
+          if (message.trajectoryData) {
+            const frames = buildFramesFromTrajectoryData(message.trajectoryData);
+            if (frames.length > 0) {
+              usePlaybackStore.getState().setTrajectoryPreviewFrames(frames);
+            }
+          }
+          tgStore.markResult({
+            valid: message.valid,
+            scenarioJson:
+              message.valid && message.trajectoryData
+                ? JSON.stringify(message.trajectoryData)
+                : null,
+            errorMessage: message.errorMessage ?? null,
+          });
+          if (message.errorMessage) {
+            setError(message.errorMessage);
           }
           break;
         }
@@ -412,6 +461,26 @@ export function useSimulationWorkflow() {
       usePlaybackStore.getState().cancelSceneGeneration();
       useBatchGenerationStore.getState().markAllBatchStopped();
       clientRef.current?.send({ type: "stop_scene_generation" });
+    },
+    generateTrajectories: (
+      requestId: string,
+      scenarioContent: string,
+      colregsConstraintsContent: string,
+      params: TrajectoryGenerationParamsWire
+    ) => {
+      usePlaybackStore.getState().clearPreviewFrames();
+      useTrajectoryGenerationStore.getState().startRun(requestId);
+      clientRef.current?.send({
+        type: "generate_trajectories",
+        requestId,
+        scenarioContent,
+        colregsConstraintsContent,
+        params,
+      });
+    },
+    stopTrajectoryGeneration: () => {
+      useTrajectoryGenerationStore.getState().markStopped();
+      clientRef.current?.send({ type: "stop_trajectory_generation" });
     },
   };
 }

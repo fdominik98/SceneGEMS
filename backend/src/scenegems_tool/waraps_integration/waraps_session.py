@@ -58,3 +58,11 @@ class WARAPSSession(ABC):
     @abstractmethod
     async def stop_scene_generation(self) -> None:
         pass
+
+    @abstractmethod
+    def generate_trajectories(self, request_id: str, scenario_content: str, colregs_constraints_content: str, params: dict) -> None:
+        pass
+
+    @abstractmethod
+    async def stop_trajectory_generation(self) -> None:
+        pass

@@ -1,0 +1,8 @@
+# Runtime dependencies for scenegems-trajectory-generation-subsystem (see trajectory_generation/Dockerfile).
+paho-mqtt
+pyyaml
+numpy
+portion
+scipy
+pyproj
+haversine

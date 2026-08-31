@@ -263,6 +263,14 @@ class MqttClient(ABC):
     @property
     def generated_scene_topic(self) -> str:
         return f"{self.sensor_topic}/generated_scene"
+
+    @property
+    def planned_trajectory_topic(self) -> str:
+        return f"{self.sensor_topic}/planned_trajectory"
+
+    @property
+    def planned_trajectory_preview_topic(self) -> str:
+        return f"{self.sensor_topic}/planned_trajectory_preview"
     
     @property
     def obstacle_distances_topic(self) -> str:

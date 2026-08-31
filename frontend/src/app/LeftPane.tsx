@@ -1,4 +1,9 @@
-export type AppView = "simulation" | "waraps" | "domainConfig" | "sceneGeneration";
+export type AppView =
+  | "simulation"
+  | "waraps"
+  | "domainConfig"
+  | "sceneGeneration"
+  | "trajectoryGeneration";
 export type MenuActive = AppView;
 
 const APP_TITLE = "SceneGEMS";
@@ -6,6 +11,7 @@ const APP_TITLE = "SceneGEMS";
 const MENU_ITEMS: { view: AppView; label: string }[] = [
   { view: "domainConfig", label: "Domain Configuration" },
   { view: "sceneGeneration", label: "Scene Generation" },
+  { view: "trajectoryGeneration", label: "Trajectory Generation" },
   { view: "simulation", label: "Simulation" },
   { view: "waraps", label: "Connect to WARA-PS" },
 ];

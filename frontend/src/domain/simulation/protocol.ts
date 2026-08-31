@@ -372,6 +372,18 @@ export type ParsedServerMessage =
       evaluationData: EvaluationData | null;
     }
   | {
+      kind: "trajectory_generation_preview";
+      requestId: string | null;
+      trajectoryData: Record<string, unknown>;
+    }
+  | {
+      kind: "trajectory_generation_result";
+      requestId: string | null;
+      trajectoryData: Record<string, unknown> | null;
+      valid: boolean;
+      errorMessage: string | null;
+    }
+  | {
       kind: "simulation_status";
       status:
         | "running"
@@ -588,6 +600,30 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       valid: parsed.valid,
       scene: parseFrame(parsed.scene),
       evaluationData: parsed.evaluationData ?? null,
+    };
+  }
+  if (msgType === "trajectory_generation_preview" || msgType === "trajectoryGenerationPreview") {
+    const trajectoryData = payload.trajectoryData ?? payload.trajectory_data ?? {};
+    return {
+      kind: "trajectory_generation_preview",
+      requestId: (payload.requestId ?? payload.request_id ?? null) as string | null,
+      trajectoryData:
+        typeof trajectoryData === "object" && trajectoryData !== null
+          ? (trajectoryData as Record<string, unknown>)
+          : {},
+    };
+  }
+  if (msgType === "trajectory_generation_result" || msgType === "trajectoryGenerationResult") {
+    const trajectoryData = payload.trajectoryData ?? payload.trajectory_data ?? null;
+    return {
+      kind: "trajectory_generation_result",
+      requestId: (payload.requestId ?? payload.request_id ?? null) as string | null,
+      trajectoryData:
+        typeof trajectoryData === "object" && trajectoryData !== null
+          ? (trajectoryData as Record<string, unknown>)
+          : null,
+      valid: Boolean(payload.valid ?? false),
+      errorMessage: (payload.errorMessage ?? payload.error_message ?? null) as string | null,
     };
   }
   if (msgType === "frame") {

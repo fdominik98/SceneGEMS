@@ -1,7 +1,7 @@
 # pyright: reportMissingImports=false
 import random
 from time import sleep
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from concrete_level.colregs_monitoring.colregs_monitor import COLREGSMonitor
 from concrete_level.models.concrete_scene import ConcreteScene
@@ -25,12 +25,48 @@ class MonitorDrivenRRTSearch:
         start_scene: ConcreteScene,
         other_trajectories: Trajectories,
         colregs_constants: COLREGSConstraints,
+        *,
+        observer: Optional[Callable[[Trajectories, int], None]] = None,
+        termination_signal: Optional[Callable[[], bool]] = None,
+        max_iterations: Optional[int] = None,
+        goal_sample_rate: Optional[int] = None,
+        best_leaf_sample_rate: Optional[int] = None,
+        max_leafs: Optional[int] = None,
+        anim_update_interval: Optional[int] = None,
+        direction_threshold: Optional[float] = None,
+        best_random_nodes_k: Optional[int] = None,
+        verbose: Optional[bool] = None,
+        show_animation: Optional[bool] = None,
     ) -> None:
         self.start_scene = start_scene
         self.other_trajectories = other_trajectories
         self.time_step = other_trajectories.time_step
         self.monitor = COLREGSMonitor(self.start_scene, colregs_constants)
         self.trajectory_tree_builder = TrajectoryTreeBuilder(self.start_scene, self.time_step, self.monitor)
+
+        # Optional per-instance overrides for the class-level tuning constants. When a
+        # value is left as ``None`` the class attribute is used unchanged (headless
+        # subsystem callers pass explicit values; the matplotlib script path does not).
+        if goal_sample_rate is not None:
+            self.GOAL_SAMPLE_RATE = goal_sample_rate
+        if best_leaf_sample_rate is not None:
+            self.BEST_LEAF_SAMPLE_RATE = best_leaf_sample_rate
+        if max_leafs is not None:
+            self.MAX_LEAFS = max_leafs
+        if anim_update_interval is not None:
+            self.ANIM_UPDATE_INTERVAL = max(1, anim_update_interval)
+        if direction_threshold is not None:
+            self.DIRECTION_THRESHOLD = direction_threshold
+        if best_random_nodes_k is not None:
+            self.BEST_RANDOM_NODES_K = best_random_nodes_k
+        if verbose is not None:
+            self.VERBOSE = verbose
+        if show_animation is not None:
+            self.SHOW_ANIMATION = show_animation
+
+        self._observer = observer
+        self._termination_signal = termination_signal
+        self._max_iterations = max_iterations
 
         # Internal state
         self._iteration_count = 0
@@ -54,8 +90,26 @@ class MonitorDrivenRRTSearch:
                 trajectory_objective_set=self.trajectory_objective_set,
             )
 
+    @property
+    def iteration_count(self) -> int:
+        return self._iteration_count
+
+    def _should_stop(self) -> bool:
+        if self.stop:
+            return True
+        if self._max_iterations is not None and self._iteration_count >= self._max_iterations:
+            return True
+        if self._termination_signal is not None and self._termination_signal():
+            return True
+        return False
+
+    def current_best_trajectories(self) -> Optional[Trajectories]:
+        last_node = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
+        trajectories, _ = self.trajectory_tree_builder.get_path_trajectories(last_node)
+        return trajectories
+
     def do_plan(self) -> Optional[Trajectories]:
-        while not self.stop:
+        while not self._should_stop():
             if self.VERBOSE and self._iteration_count % 100 == 0:
                 print(self._iteration_count)
 
@@ -141,6 +195,19 @@ class MonitorDrivenRRTSearch:
         self.trajectory_objective_set.push_out_goal_positions(best_node)
 
         self._iteration_count += 1
+        self._notify_observer()
+
+    def _notify_observer(self) -> None:
+        if self._observer is None:
+            return
+        if self._iteration_count % self.ANIM_UPDATE_INTERVAL != 0:
+            return
+        try:
+            best = self.current_best_trajectories()
+        except Exception:
+            return
+        if best is not None:
+            self._observer(best, self._iteration_count)
 
     def update_anim(self) -> None:
         if self._iteration_count % self.ANIM_UPDATE_INTERVAL == 0:

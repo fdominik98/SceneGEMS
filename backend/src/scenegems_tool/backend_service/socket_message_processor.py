@@ -81,6 +81,19 @@ class SocketMessageProcessor:
                             print(f"Failed to generate scene: {str(exc)}")
                     case "stop_scene_generation":
                         asyncio.create_task(self._handle_stop_scene_generation())
+                    case "generate_trajectories":
+                        try:
+                            self.session.waraps_session.generate_trajectories(
+                                request_id=message["requestId"],
+                                scenario_content=message["scenarioContent"],
+                                colregs_constraints_content=message["colregsConstraintsContent"],
+                                params=message.get("params", {}),
+                            )
+                        except Exception as exc:
+                            self.session.send_runtime_error(f"Failed to generate trajectories: {str(exc)}")
+                            print(f"Failed to generate trajectories: {str(exc)}")
+                    case "stop_trajectory_generation":
+                        asyncio.create_task(self._handle_stop_trajectory_generation())
                     case _:
                         self.session.send_runtime_error(f"Unknown message type: {message['type']}")
                         print(f"Unknown message: {message}")
@@ -92,6 +105,12 @@ class SocketMessageProcessor:
             await self.session.waraps_session.stop_scene_generation()
         except Exception as exc:
             self.session.send_runtime_error(f"Failed to stop scene generation: {str(exc)}")
+
+    async def _handle_stop_trajectory_generation(self) -> None:
+        try:
+            await self.session.waraps_session.stop_trajectory_generation()
+        except Exception as exc:
+            self.session.send_runtime_error(f"Failed to stop trajectory generation: {str(exc)}")
 
     async def _handle_reset_simulation(self) -> None:
         try:

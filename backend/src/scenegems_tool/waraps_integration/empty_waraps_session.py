@@ -28,3 +28,9 @@ class EmptyWARAPSSession(WARAPSSession):
 
     async def stop_scene_generation(self) -> None:
         self.send_payload(make_error_message(message="WARAPS is not connected"))
+
+    def generate_trajectories(self, request_id: str, scenario_content: str, colregs_constraints_content: str, params: dict) -> None:
+        self.send_payload(make_error_message(message="WARAPS is not connected"))
+
+    async def stop_trajectory_generation(self) -> None:
+        self.send_payload(make_error_message(message="WARAPS is not connected"))

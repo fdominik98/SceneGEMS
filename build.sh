@@ -23,7 +23,8 @@ Options:
   -h, --help              Show this help and exit
 
   -1, --backend           scenegems-backend and Python subsystems (monitor,
-                          scenario-generation, scenario-execution)
+                          scenario-generation, trajectory-generation,
+                          scenario-execution)
 
   -2, --frontend          Frontend only (scenegems-frontend:dev)
 
@@ -114,7 +115,7 @@ build_arduagent_image() {
 
 build_broker_image() {
     echo "== MQTT broker =="
-    build_if_stale "scenegems-mqtt-broker" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq/Dockerfile" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq"
+    build_if_stale "scenegems-mqtt-broker:latest" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq/Dockerfile" "$SCRIPT_DIR/mqtt_broker/Dockerfiles/nanomq"
 }
 
 build_backend_stack_images() {
@@ -131,6 +132,10 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/scenario_generation/requirements.txt" "$SCRIPT_DIR/scenario_generation/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/runtime_assets/scenario_generation"
+    build_subsystem_if_stale "scenegems-trajectory-generation-subsystem:latest" "$SCRIPT_DIR/trajectory_generation/Dockerfile" \
+        "$SCRIPT_DIR/trajectory_generation/requirements.txt" "$SCRIPT_DIR/trajectory_generation/Dockerfile" \
+        "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
+        "$SCRIPT_DIR/backend/assets/domain_config"
     build_subsystem_if_stale "scenegems-backend:latest" "$SCRIPT_DIR/backend/Dockerfile" \
         "$SCRIPT_DIR/backend/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"

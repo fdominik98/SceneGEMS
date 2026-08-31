@@ -53,6 +53,19 @@ export interface SimulationModelsPayload {
   connectionsByAgentId: Record<string, SimulationConnectionInfo>;
 }
 
+/** Advanced RRT tuning values sent with `generate_trajectories`. All optional. */
+export interface TrajectoryGenerationParamsWire {
+  timeStep?: number;
+  timeout?: number;
+  maxIterations?: number;
+  goalSampleRate?: number;
+  bestLeafSampleRate?: number;
+  maxLeafs?: number;
+  directionThreshold?: number;
+  bestRandomNodesK?: number;
+  previewInterval?: number;
+}
+
 export type ClientToServerMessage =
   | {
       type: "load_scenario_file";
@@ -85,6 +98,16 @@ export type ClientToServerMessage =
       timeout: number;
     }
   | { type: "stop_scene_generation" }
+  | {
+      type: "generate_trajectories";
+      requestId: string;
+      /** Initial-scene scenario JSON (evaluation-data shape with `best_scene`). */
+      scenarioContent: string;
+      colregsConstraintsContent: string;
+      /** Advanced RRT parameters; omitted keys fall back to backend defaults. */
+      params: TrajectoryGenerationParamsWire;
+    }
+  | { type: "stop_trajectory_generation" }
   | {
       type: "connect_to_waraps";
       user: string;
@@ -137,6 +160,19 @@ export type ServerToClientMessage =
       requestId?: string | null;
       valid: boolean;
     } & GeneratedSceneData)
+  | {
+      type: "trajectory_generation_preview";
+      requestId: string;
+      /** Serialized `TrajectoryData` with a full `trajectories.scene_list`. */
+      trajectoryData: Record<string, unknown>;
+    }
+  | {
+      type: "trajectory_generation_result";
+      requestId: string;
+      trajectoryData: Record<string, unknown> | null;
+      valid: boolean;
+      errorMessage?: string | null;
+    }
   | {
       type: "simulation_status";
       status:

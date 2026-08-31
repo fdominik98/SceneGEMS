@@ -53,6 +53,18 @@ class StopSceneGenerationMessage(TypedDict):
     type: Literal["stop_scene_generation"]
 
 
+class GenerateTrajectoriesMessage(TypedDict):
+    type: Literal["generate_trajectories"]
+    requestId: str
+    scenarioContent: str
+    colregsConstraintsContent: str
+    params: Dict[str, Any]
+
+
+class StopTrajectoryGenerationMessage(TypedDict):
+    type: Literal["stop_trajectory_generation"]
+
+
 class DisconnectFromWARAPSMessage(TypedDict):
     type: Literal["disconnect_from_waraps"]
 
@@ -129,6 +141,8 @@ ClientMessage = Union[
     InitializeMonitorMessage,
     GenerateSceneMessage,
     StopSceneGenerationMessage,
+    GenerateTrajectoriesMessage,
+    StopTrajectoryGenerationMessage,
     ShutDownMonitorMessage,
     GenerateSimulationModelsMessage,
 ]
@@ -165,6 +179,20 @@ class GeneratedSceneMessage(TypedDict):
     scene: Dict[str, Any]
     evaluationData: Dict[str, Any]
     valid: bool
+
+
+class TrajectoryGenerationPreviewMessage(TypedDict):
+    type: Literal["trajectory_generation_preview"]
+    requestId: str
+    trajectoryData: Dict[str, Any]
+
+
+class TrajectoryGenerationResultMessage(TypedDict, total=False):
+    type: Literal["trajectory_generation_result"]
+    requestId: str
+    trajectoryData: Optional[Dict[str, Any]]
+    valid: bool
+    errorMessage: Optional[str]
 
 
 class ErrorMessage(TypedDict):
@@ -205,6 +233,8 @@ ServerMessage = Union[
     SimulationStatusMessage,
     MonitorStatusMessage,
     GeneratedSceneMessage,
+    TrajectoryGenerationPreviewMessage,
+    TrajectoryGenerationResultMessage,
     SimulationModelsMessage,
 ]
 
@@ -241,6 +271,29 @@ def make_generated_scene_message(request_id: str, scene: Dict[str, Any], evaluat
 
 def make_monitor_status_message(*, status: str) -> MonitorStatusMessage:
     return MonitorStatusMessage(type="monitor_status", status=status)
+
+
+def make_trajectory_generation_preview_message(request_id: str, trajectory_data: Dict[str, Any]) -> TrajectoryGenerationPreviewMessage:
+    return TrajectoryGenerationPreviewMessage(
+        type="trajectory_generation_preview",
+        requestId=request_id,
+        trajectoryData=trajectory_data,
+    )
+
+
+def make_trajectory_generation_result_message(
+    request_id: str,
+    trajectory_data: Optional[Dict[str, Any]],
+    valid: bool,
+    error_message: Optional[str],
+) -> TrajectoryGenerationResultMessage:
+    return TrajectoryGenerationResultMessage(
+        type="trajectory_generation_result",
+        requestId=request_id,
+        trajectoryData=trajectory_data,
+        valid=bool(valid),
+        errorMessage=error_message,
+    )
 
 
 def _parse_agent_port(connection: SimulationConnectionInfo) -> Optional[int]:

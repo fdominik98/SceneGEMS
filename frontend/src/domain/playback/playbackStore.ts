@@ -164,6 +164,10 @@ export interface PlaybackState {
   applyMergedPreviewFrames: (merged: SimulationFrame[]) => void;
   ingestSimulationFrames: (frames: SimulationFrame[]) => void;
   applyMergedSimulationFrames: (merged: SimulationFrame[]) => void;
+  /** Replace the preview trajectory wholesale (trajectory generation previews/results). */
+  setTrajectoryPreviewFrames: (frames: SimulationFrame[]) => void;
+  /** Drop the preview trajectory without touching simulation/scene-generation state. */
+  clearPreviewFrames: () => void;
   ingestPushFrame: (frame: SimulationFrame) => void;
   clearSimulationTrajectories: () => void;
   markSimulationInitialized: () => void;
@@ -290,6 +294,39 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
         return state;
       }
       return applySimulationMergeResult(state, merged);
+    }),
+  setTrajectoryPreviewFrames: (incoming) =>
+    set((state) => {
+      if (incoming.length === 0) {
+        return state;
+      }
+      const frames = [...incoming].sort((a, b) => a.timestamp - b.timestamp);
+      const first = frames[0]!.timestamp;
+      const last = frames[frames.length - 1]!.timestamp;
+      const wasEmpty = state.frames.length === 0;
+      const hasCurrent = frames.some((f) => f.timestamp === state.currentTimestamp);
+      const nextCurrent = hasCurrent ? state.currentTimestamp : first;
+      return {
+        frames,
+        frameIndexByTimestamp: rebuildIndex(frames),
+        latestTimestamp: last,
+        currentTimestamp: nextCurrent,
+        playbackCursor: hasCurrent
+          ? Math.min(Math.max(state.playbackCursor, first), last)
+          : first,
+        hasTrajectoryChunk: true,
+        simulationInitializing: false,
+        autoFitPending: wasEmpty ? true : state.autoFitPending,
+      };
+    }),
+  clearPreviewFrames: () =>
+    set({
+      frames: [],
+      frameIndexByTimestamp: {},
+      hasTrajectoryChunk: false,
+      currentTimestamp: 0,
+      playbackCursor: 0,
+      latestTimestamp: 0,
     }),
   ingestPushFrame: (frame) =>
     set((state) => {

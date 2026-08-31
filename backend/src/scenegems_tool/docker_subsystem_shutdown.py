@@ -11,6 +11,7 @@ _logger = logging.getLogger(__name__)
 _MQTT_BROKER_COMPOSE_PROJECT = "mqtt_broker"
 _MQTT_BROKER_CONTAINER_NAME = "scenegems_local_mqtt_broker"
 _SCENARIO_GENERATION_COMPOSE_PROJECT = "scenegems-scenario-generation-subsystem"
+_TRAJECTORY_GENERATION_COMPOSE_PROJECT = "scenegems-trajectory-generation-subsystem"
 
 _shutdown_lock = threading.Lock()
 _shutdown_done = False
@@ -54,6 +55,11 @@ def force_destroy_scenario_generation_stack() -> None:
     _force_remove_container_ids(_container_ids_for_compose_project(_SCENARIO_GENERATION_COMPOSE_PROJECT))
 
 
+def force_destroy_trajectory_generation_stack() -> None:
+    """Fast teardown: force-remove trajectory-generation subsystem containers."""
+    _force_remove_container_ids(_container_ids_for_compose_project(_TRAJECTORY_GENERATION_COMPOSE_PROJECT))
+
+
 def shutdown_all_docker_subsystems() -> None:
     """Tear down subsystem containers on backend process exit."""
     global _shutdown_done
@@ -72,9 +78,13 @@ def shutdown_all_docker_subsystems() -> None:
         from scenegems_tool.simulators.scenario_execution_subsystem_container import (
             force_destroy_scenario_execution_stack,
         )
+        from scenegems_tool.trajectory_generation.trajectory_generation_container import (
+            force_destroy_trajectory_generation_stack,
+        )
 
         force_destroy_scenario_execution_stack()
         force_destroy_scenario_generation_stack()
+        force_destroy_trajectory_generation_stack()
         force_destroy_monitor_subsystem_stack()
     except BaseException:
         _logger.exception("Docker subsystem shutdown failed")

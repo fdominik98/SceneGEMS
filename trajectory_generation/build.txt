@@ -1,0 +1,1 @@
+docker build -f trajectory_generation/Dockerfile -t scenegems-trajectory-generation-subsystem:latest .
