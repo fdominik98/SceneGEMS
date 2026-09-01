@@ -175,9 +175,6 @@ const DEFAULT_WAVE: WaveParamDraft = {
   north: 0,
 };
 
-/** Avoid re-applying the same server `simulation_models` payload when the init panel remounts. */
-let lastAppliedSimulationModelsToken: number | null = null;
-
 const LEGACY_VESSEL_DRAFTS_WITH_MODELS_KEY = "scenegems:sim-init-vessel-drafts";
 
 function removeLegacyVesselDraftsWithModels(): void {
@@ -218,6 +215,10 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     ...DEFAULT_WAVE,
   }));
   const receivedSimulationModels = usePlaybackStore((s) => s.receivedSimulationModels);
+  // Per-instance guard against re-applying the same server `simulation_models`
+  // payload. A component-scoped ref (not a module global) so navigating away and
+  // back re-applies the still-present models onto freshly rebuilt drafts.
+  const lastAppliedSimulationModelsTokenRef = useRef<number | null>(null);
 
   useImperativeHandle(
     ref,
@@ -229,9 +230,12 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
           simulationSpeed: Math.round(
             clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)
           ),
-          windVector: [round2(windEast), round2(windNorth), round2(windUp)],
+          windVector: [round2(windEast), round2(windNorth), round2(windUp)] as [
+            number,
+            number,
+            number,
+          ],
           wave: waveWire,
-          waves: [waveWire] as [WaveInfoWire],
           connectionsByAgentId:
             buildInitializeSimulationConnectionsByAgentIdMap(vesselConnectionDrafts),
         };
@@ -276,13 +280,13 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
 
   useEffect(() => {
     if (!receivedSimulationModels) {
-      lastAppliedSimulationModelsToken = null;
+      lastAppliedSimulationModelsTokenRef.current = null;
       return;
     }
-    if (lastAppliedSimulationModelsToken === receivedSimulationModels.receivedToken) {
+    if (lastAppliedSimulationModelsTokenRef.current === receivedSimulationModels.receivedToken) {
       return;
     }
-    lastAppliedSimulationModelsToken = receivedSimulationModels.receivedToken;
+    lastAppliedSimulationModelsTokenRef.current = receivedSimulationModels.receivedToken;
     const { vesselModelsByAgentId } = receivedSimulationModels;
     setVesselConnectionDrafts((drafts) =>
       drafts.map((draft) => {

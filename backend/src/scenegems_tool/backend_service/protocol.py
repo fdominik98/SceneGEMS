@@ -8,7 +8,7 @@ Copy this package into your FastAPI project and extend `SimulationSession` to ca
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Dict, List, Literal, Optional, Required, TypedDict, Union
 
 import numpy as np
 
@@ -33,6 +33,18 @@ class GenerateSceneMessage(TypedDict):
     timeout: int
 
 
+class GeofencePayload(TypedDict):
+    """Circular reference geofence: WGS84 center and radius in meters.
+
+    Matches the frontend `wireTypes.ts` `connect_to_waraps.geofence` shape and the
+    keys read in `socket_message_processor.py`.
+    """
+
+    latitude: float
+    longitude: float
+    radius_meters: float
+
+
 class ConnectToWARAPSMessage(TypedDict):
     type: Literal["connect_to_waraps"]
     user: str
@@ -42,6 +54,7 @@ class ConnectToWARAPSMessage(TypedDict):
     port: int
     tls_connection: bool
     allow_certificates: bool
+    geofence: GeofencePayload
 
 
 class SimulationStatusMessage(TypedDict):
@@ -67,14 +80,6 @@ class StopTrajectoryGenerationMessage(TypedDict):
 
 class DisconnectFromWARAPSMessage(TypedDict):
     type: Literal["disconnect_from_waraps"]
-
-
-class ReferenceGeofencePayload(TypedDict):
-    """Circular geofence: WGS84 center and radius in meters."""
-
-    latitude: float
-    longitude: float
-    radius: float
 
 
 class StartSimulationMessage(TypedDict):
@@ -105,8 +110,10 @@ class SimulationModelsBody(TypedDict):
     """Shared body for initialize_simulation / generate_simulation_models / simulation_models."""
 
     simulatorType: str
+    # [east, north, up] in m/s; exactly 3 components (validated in simulation_config_from_body).
     windVector: List[float]
     wave: WaveInfo
+    # Integer physics speed-up factor (1 = real-time); sub-real-time is not supported.
     simulationSpeed: int
     connectionsByAgentId: Dict[str, SimulationConnectionInfo]
 
@@ -149,12 +156,13 @@ ClientMessage = Union[
 
 
 class InitialStateMessage(TypedDict, total=False):
-    type: Literal["initial_state"]
-    sessionId: str
-    scenarioId: str
+    # `type` and `scenarioId` are always sent (see make_initial_state_message);
+    # the frontend relies on `scenarioId` to route the trajectory chunks that
+    # immediately follow this message.
+    type: Required[Literal["initial_state"]]
+    scenarioId: Required[str]
     timeStep: int
     trajectoryLength: int
-    frame: Dict[str, Any]
 
 
 class PreviewTrajectoryChunkMessage(TypedDict):
@@ -311,9 +319,12 @@ def simulation_config_from_body(body: SimulationModelsBody) -> SimulationConfig:
     """Convert an inbound simulation-models body (initialize_simulation /
     generate_simulation_models / simulation_models) into a domain SimulationConfig."""
     wave = body["wave"]
+    wind_vector = list(body["windVector"])
+    if len(wind_vector) != 3:
+        raise ValueError(f"windVector must have 3 components [east, north, up]; got {len(wind_vector)}.")
     return SimulationConfig(
         simulator_type=body["simulatorType"],
-        wind_vector=np.array(body["windVector"]),
+        wind_vector=np.array(wind_vector, dtype=float),
         wave=WaveConfig(
             amplitude=float(wave["amplitude"]),
             period=float(wave["period"]),

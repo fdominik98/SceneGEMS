@@ -43,13 +43,15 @@ export interface WaveInfoWire {
  */
 export interface SimulationModelsPayload {
   simulatorType: string;
-  /** Physics time multiplier sent to the simulator (1 = real-time). */
+  /**
+   * Integer physics speed-up factor (1 = real-time). The backend casts this to
+   * `int`; sub-real-time values are not supported.
+   */
   simulationSpeed: number;
-  windVector: number[];
+  /** Wind velocity [east, north, up] in m/s. The backend requires exactly 3 components. */
+  windVector: [number, number, number];
   /** Sea-state wave parameters (single component). */
   wave: WaveInfoWire;
-  /** Same as `wave`, wrapped for backends that expect a list. */
-  waves: [WaveInfoWire];
   connectionsByAgentId: Record<string, SimulationConnectionInfo>;
 }
 
@@ -130,9 +132,11 @@ export type ServerToClientMessage =
       type: "initial_state";
       /**
        * Reset/start signal; may include trajectory horizon for playback UI.
-       * When set, `scenarioId` is the authoritative scenario id for this session (may replace client-proposed id).
+       * Always present: the authoritative scenario id for this session (echoes the
+       * client-proposed id from `load_scenario_file`). The trajectory chunks that
+       * follow are routed against it.
        */
-      scenarioId?: string;
+      scenarioId: string;
       timeStep?: number;
       totalTrajectoryLength?: number;
     }

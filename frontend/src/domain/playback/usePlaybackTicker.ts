@@ -27,9 +27,18 @@ export function usePlaybackTicker() {
       const last = lastTickRef.current ?? now;
       const elapsedSec = (now - last) / 1000;
       lastTickRef.current = now;
+      const minT = state.frames[0]!.timestamp;
       const maxT = state.frames[state.frames.length - 1]!.timestamp;
       const next = Math.min(state.playbackCursor + state.speed * elapsedSec, maxT);
       state.advancePlayback(next);
+      // Stop at the end of the buffered trajectory instead of spinning RAF forever
+      // (which also left the Play/Pause button stuck showing "Pause").
+      if (maxT > minT && next >= maxT) {
+        state.setPlaying(false);
+        lastTickRef.current = null;
+        rafRef.current = null;
+        return;
+      }
       rafRef.current = requestAnimationFrame(loop);
     };
 

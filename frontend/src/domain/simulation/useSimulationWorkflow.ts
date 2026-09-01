@@ -90,10 +90,16 @@ export function useSimulationWorkflow() {
   const ingestPreviewChunk = useCallback(
     async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
       if (shouldMergeFramesInWorker(incoming.length)) {
-        const merged = await mergeFramesInWorker(existing, incoming);
-        applyMergedPreviewFrames(merged);
-        recordPreviewFrames(incoming);
-        return;
+        try {
+          const merged = await mergeFramesInWorker(existing, incoming);
+          applyMergedPreviewFrames(merged);
+          recordPreviewFrames(incoming);
+          return;
+        } catch (error) {
+          // Never drop a chunk on a worker failure: fall back to the equivalent
+          // synchronous store merge instead of losing these frames silently.
+          console.error("[SimulationWorkflow] preview merge worker failed; using main-thread merge", error);
+        }
       }
       ingestFrames(incoming);
       recordPreviewFrames(incoming);
@@ -105,12 +111,16 @@ export function useSimulationWorkflow() {
     async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
       const recording = useRecordingStore.getState();
       if (shouldMergeFramesInWorker(incoming.length)) {
-        const merged = await mergeFramesInWorker(existing, incoming);
-        applyMergedSimulationFrames(merged);
-        if (recording.isRecording) {
-          for (const frame of incoming) recording.appendSimulationFrame(frame);
+        try {
+          const merged = await mergeFramesInWorker(existing, incoming);
+          applyMergedSimulationFrames(merged);
+          if (recording.isRecording) {
+            for (const frame of incoming) recording.appendSimulationFrame(frame);
+          }
+          return;
+        } catch (error) {
+          console.error("[SimulationWorkflow] simulation merge worker failed; using main-thread merge", error);
         }
-        return;
       }
       ingestSimulationFrames(incoming);
       if (recording.isRecording) {
@@ -123,18 +133,21 @@ export function useSimulationWorkflow() {
   const dispatchMessage = useCallback(
     (message: ParsedServerMessage) => {
       switch (message.kind) {
-        case "initial_state":
+        case "initial_state": {
+          // `scenarioId` is contractually always present and drives routing of the
+          // trajectory chunks that follow; fall back to the client-proposed id
+          // (captured before the reset) if a message ever omits it.
+          const priorScenarioId = usePlaybackStore.getState().activeScenarioId;
           resetForNewScene();
           setControlPanelMode("simulation");
-          if (message.scenarioId !== null) {
-            setActiveScenarioId(message.scenarioId);
-          }
+          setActiveScenarioId(message.scenarioId ?? priorScenarioId);
           markSimulationInitialized();
           setPlaying(false);
           if (message.totalTrajectoryLength !== null) {
             setLatestTimestamp(message.totalTrajectoryLength);
           }
           break;
+        }
         case "preview_trajectory_chunk": {
           const store = usePlaybackStore.getState();
           if (!trajectoryChunkMatchesActiveScenario(store.activeScenarioId, message.scenarioId)) {
@@ -343,7 +356,20 @@ export function useSimulationWorkflow() {
         setWarapsStatus("disconnected");
         setMonitorStatus("disconnected");
         if (status === "disconnected" || status === "error") {
-          usePlaybackStore.getState().setActiveScenarioId(null);
+          const playback = usePlaybackStore.getState();
+          playback.setActiveScenarioId(null);
+          // Terminate in-flight long-running workflows whose completion depends on
+          // backend messages that will no longer arrive, so their waiters resolve
+          // instead of hanging until the user hits Stop.
+          if (playback.activeSceneGenerationRequestId !== null) {
+            setError("Backend socket disconnected during scene generation.");
+          }
+          if (useBatchGenerationStore.getState().running) {
+            useBatchGenerationStore.getState().markAllBatchStopped();
+          }
+          if (useTrajectoryGenerationStore.getState().status === "running") {
+            useTrajectoryGenerationStore.getState().markStopped();
+          }
         }
       },
       onError: handleTransportError,
@@ -417,6 +443,9 @@ export function useSimulationWorkflow() {
     sendMessage: (message: ClientToServerMessage) => {
       if (message.type === "initialize_simulation") {
         prepareForSimulationReset();
+        // Enter the local "initializing" state so the UI reflects the in-flight
+        // request until the backend reports a concrete simulation_status.
+        usePlaybackStore.getState().beginSimulationInitialization();
       }
       clientRef.current?.send(message);
     },

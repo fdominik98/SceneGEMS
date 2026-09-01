@@ -19,6 +19,13 @@ export interface ConnectionFormState {
   allowCertificates: boolean;
   selectedPreset: MqttConnectionPresetKey | "";
   geofence: ReferenceGeofence;
+  /**
+   * True once the user explicitly clicked Disconnect. Not persisted: it suppresses
+   * the hands-free auto-connect (including after a transient backend-socket
+   * reconnect) until the user clicks Connect again.
+   */
+  userDisconnectedWaraps: boolean;
+  setUserDisconnectedWaraps: (value: boolean) => void;
   setUser: (value: string) => void;
   setPassword: (value: string) => void;
   setAgentBroker: (value: string) => void;
@@ -48,6 +55,8 @@ export const useConnectionStore = create<ConnectionFormState>()(
       allowCertificates: local_mqtt_connection.allow_certificates ?? false,
       selectedPreset: DEFAULT_PRESET,
       geofence: defaultReferenceGeofence,
+      userDisconnectedWaraps: false,
+      setUserDisconnectedWaraps: (userDisconnectedWaraps) => set({ userDisconnectedWaraps }),
       setUser: (user) => set({ user }),
       setPassword: (password) => set({ password }),
       setAgentBroker: (agentBroker) => set({ agentBroker }),

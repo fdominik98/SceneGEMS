@@ -197,16 +197,18 @@ describe("parseServerMessage", () => {
     }
   });
 
-  it("parses init_scene as initial_state alias", () => {
+  it("parses initial_state from a payload envelope", () => {
     const msg = parseServerMessage({
-      type: "init_scene",
+      type: "initial_state",
       payload: {
+        scenarioId: "scenario-1",
         timeStep: 1,
-        totalTrajectoryLength: 240,
+        trajectoryLength: 240,
       },
     });
     expect(msg.kind).toBe("initial_state");
     if (msg.kind === "initial_state") {
+      expect(msg.scenarioId).toBe("scenario-1");
       expect(msg.totalTrajectoryLength).toBe(240);
     }
   });
@@ -278,28 +280,6 @@ describe("parseServerMessage", () => {
     expect(msg.kind).toBe("simulation_status");
     if (msg.kind === "simulation_status") {
       expect(msg.status).toBe("offline");
-    }
-  });
-
-  it("normalizes legacy no-simulator string to offline", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "No simulator is connected",
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.status).toBe("offline");
-    }
-  });
-
-  it("normalizes ready to run to ready to start", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "ready to run",
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.status).toBe("ready to start");
     }
   });
 

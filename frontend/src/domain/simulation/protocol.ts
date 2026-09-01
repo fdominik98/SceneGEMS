@@ -542,12 +542,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
   const msgType = typeof obj.type === "string" ? obj.type : "";
   const payload = (obj.payload as Record<string, unknown> | undefined) ?? obj;
 
-  if (
-    msgType === "initial_state" ||
-    msgType === "initialState" ||
-    msgType === "init_scene" ||
-    msgType === "initScene"
-  ) {
+  if (msgType === "initial_state") {
     const initialCandidate = {
       type: "initial_state" as const,
       scenarioId: payload.scenarioId ?? payload.scenario_id ?? null,
@@ -569,14 +564,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       totalTrajectoryLength: parsed.totalTrajectoryLength ?? null,
     };
   }
-  if (
-    msgType === "preview_trajectory_chunk" ||
-    msgType === "previewTrajectoryChunk" ||
-    msgType === "animation_trajectory_chunk" ||
-    msgType === "animationTrajectoryChunk" ||
-    msgType === "trajectory_chunk" ||
-    msgType === "trajectoryChunk"
-  ) {
+  if (msgType === "preview_trajectory_chunk") {
     const chunkCandidate = {
       type: "preview_trajectory_chunk" as const,
       scenarioId: payload.scenarioId ?? payload.scenario_id ?? null,
@@ -599,7 +587,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       frames: parsed.frames.map((frame) => parseFrame(frame)),
     };
   }
-  if (msgType === "simulation_trajectory_chunk" || msgType === "simulationTrajectoryChunk") {
+  if (msgType === "simulation_trajectory_chunk") {
     const chunkCandidate = {
       type: "simulation_trajectory_chunk" as const,
       scenarioId: payload.scenarioId ?? payload.scenario_id ?? null,
@@ -622,7 +610,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       frames: parsed.frames.map((frame) => parseFrame(frame)),
     };
   }
-  if (msgType === "generated_scene" || msgType === "generatedScene") {
+  if (msgType === "generated_scene") {
     const rawEvaluationData = payload.evaluationData ?? payload.evaluation_data ?? null;
     const sceneCandidate = {
       type: "generated_scene" as const,
@@ -645,7 +633,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       evaluationData: parsed.evaluationData ?? null,
     };
   }
-  if (msgType === "trajectory_generation_preview" || msgType === "trajectoryGenerationPreview") {
+  if (msgType === "trajectory_generation_preview") {
     const trajectoryData = payload.trajectoryData ?? payload.trajectory_data ?? {};
     return {
       kind: "trajectory_generation_preview",
@@ -656,7 +644,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
           : {},
     };
   }
-  if (msgType === "trajectory_generation_result" || msgType === "trajectoryGenerationResult") {
+  if (msgType === "trajectory_generation_result") {
     const trajectoryData = payload.trajectoryData ?? payload.trajectory_data ?? null;
     return {
       kind: "trajectory_generation_result",
@@ -693,7 +681,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       status: monitorStatusSchema.parse(raw).status,
     };
   }
-  if (msgType === "simulation_models" || msgType === "simulationModels") {
+  if (msgType === "simulation_models") {
     const parsed = simulationModelsSchema.parse({
       type: "simulation_models" as const,
       connectionsByAgentId:
@@ -716,20 +704,11 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
     };
   }
   if (msgType === "simulation_status") {
-    const rawStatus = payload.status ?? obj.status;
-    const normalizedStatus =
-      rawStatus === "No simulator is connected"
-        ? "offline"
-        : rawStatus === "not_initialized"
-          ? "not initialized"
-        : rawStatus === "ready to run"
-          ? "ready to start"
-          : rawStatus;
     return {
       kind: "simulation_status",
       status: simulationStatusSchema.parse({
         type: "simulation_status",
-        status: normalizedStatus,
+        status: payload.status ?? obj.status,
       }).status,
     };
   }

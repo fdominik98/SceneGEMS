@@ -183,6 +183,11 @@ export function AppShell() {
       if (usePlaybackStore.getState().warapsStatus === "connected") {
         return;
       }
+      // Honour an explicit user Disconnect: do not silently reconnect on a
+      // transient backend-socket blip.
+      if (conn.userDisconnectedWaraps) {
+        return;
+      }
       if (!connectionFormIsValid(conn)) {
         return;
       }

@@ -36,6 +36,7 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
   const setAllowCertificates = useConnectionStore((s) => s.setAllowCertificates);
   const setSelectedPreset = useConnectionStore((s) => s.setSelectedPreset);
   const setGeofence = useConnectionStore((s) => s.setGeofence);
+  const setUserDisconnectedWaraps = useConnectionStore((s) => s.setUserDisconnectedWaraps);
   const applyConnection = useConnectionStore((s) => s.applyConnection);
 
   const setReferenceGeofence = useUiStore((s) => s.setReferenceGeofence);
@@ -159,7 +160,8 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
           <button
             className="primary-btn accent"
             disabled={!canSubmit}
-            onClick={() =>
+            onClick={() => {
+              setUserDisconnectedWaraps(false);
               sendMessage({
                 type: "connect_to_waraps",
                 user: user.trim(),
@@ -170,14 +172,17 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
                 tls_connection: tlsConnection,
                 allow_certificates: allowCertificates,
                 geofence,
-              })
-            }
+              });
+            }}
           >
             Connect
           </button>
           <button
             disabled={streamStatus !== "connected" || warapsStatus !== "connected"}
-            onClick={() => sendMessage({ type: "disconnect_from_waraps" })}
+            onClick={() => {
+              setUserDisconnectedWaraps(true);
+              sendMessage({ type: "disconnect_from_waraps" });
+            }}
           >
             Disconnect
           </button>

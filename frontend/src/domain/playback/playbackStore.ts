@@ -67,6 +67,7 @@ const clearedLoadedPlaybackState = {
   playbackCursor: 0,
   latestTimestamp: 0,
   simulationInitialized: false,
+  simulationInitializing: false,
   hasTrajectoryChunk: false,
   autoFitPending: false,
   serverTimeStep: null,
@@ -370,7 +371,14 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
       };
     }),
   markSimulationInitialized: () => set({ simulationInitialized: true }),
-  setSimulationStatus: (status) => set({ simulationStatus: status }),
+  setSimulationStatus: (status) =>
+    set((state) => ({
+      simulationStatus: status,
+      // Any concrete status report from the backend ends the local "initializing"
+      // spinner state started by beginSimulationInitialization().
+      simulationInitializing:
+        status === "initializing" ? state.simulationInitializing : false,
+    })),
   setActiveSceneGenerationRequestId: (requestId) =>
     set((state) => ({
       activeSceneGenerationRequestId: requestId,

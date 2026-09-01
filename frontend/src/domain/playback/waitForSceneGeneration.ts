@@ -24,10 +24,25 @@ export function waitForSceneGeneration(
         return;
       }
       settled = true;
+      window.clearTimeout(hardTimer);
       watcher.cleanup();
       unsubscribe();
       resolve(result);
     };
+
+    // Wall-clock safety net: the evaluation-time watcher only trips while the
+    // backend keeps streaming progress. If it stalls silently (no error, no
+    // socket close), fall back to a hard deadline so callers never hang forever.
+    const hardTimer = window.setTimeout(
+      () => {
+        timedOut = true;
+        watcher.evaluate();
+        if (!settled) {
+          settle({ ok: false, message: "Scene generation timed out." });
+        }
+      },
+      Math.max(1, timeoutSeconds + 30) * 1000
+    );
 
     const isSuperseded = () =>
       usePlaybackStore.getState().sceneGenerationWaitEpoch !== waitEpoch;

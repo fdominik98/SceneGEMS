@@ -44,8 +44,17 @@ export class BackendWsClient {
         this.handlers.onServerMessage(message);
       } catch (error) {
         console.error("[BackendWsClient] PARSE_ERROR", error, event.data);
-        this.handlers.onStatus("error");
-        this.handlers.onError(error instanceof Error ? error.message : "Invalid frame payload.");
+        // A single unparseable message must not tear down the session: only flag a
+        // transport "error" when the socket is actually gone. While the socket is
+        // still OPEN, surface the message but keep streamStatus === "connected" so
+        // subsequent valid frames (and the active scenario id) keep flowing.
+        const socketOpen = this.socket?.readyState === WebSocket.OPEN;
+        if (!socketOpen) {
+          this.handlers.onStatus("error");
+        }
+        this.handlers.onError(
+          error instanceof Error ? error.message : "Invalid frame payload."
+        );
       }
     };
 
