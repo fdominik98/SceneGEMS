@@ -27,6 +27,8 @@ export type TrajectoryGenerationParams = {
 
 export type TrajectoryGenerationStatus = "idle" | "running" | "done" | "error";
 
+export type TrajectoryGenerationTab = "generate" | "advanced" | "preview";
+
 interface TrajectoryGenerationState {
   /** Initial scene handed over from the Scene Generation page (or loaded here). */
   handoffScene: GeneratedSceneData | null;
@@ -36,10 +38,13 @@ interface TrajectoryGenerationState {
   status: TrajectoryGenerationStatus;
   activeRequestId: string | null;
   iteration: number;
-  /** Full-trajectory scenario JSON of the final result (for "Load for Simulation"). */
+  /** Full-trajectory scenario JSON of the last result (persisted; drives the preview). */
   resultScenarioJson: string | null;
   resultValid: boolean;
   errorMessage: string | null;
+  /** Which bottom-panel tab is shown on the trajectory generation page. */
+  activeTab: TrajectoryGenerationTab;
+  setActiveTab: (tab: TrajectoryGenerationTab) => void;
   setHandoffScene: (scene: GeneratedSceneData | null, sourceName: string | null) => void;
   setParam: (key: keyof TrajectoryGenerationParams, value: number) => void;
   resetParams: () => void;
@@ -66,6 +71,8 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
       resultScenarioJson: null,
       resultValid: false,
       errorMessage: null,
+      activeTab: "generate",
+      setActiveTab: (activeTab) => set({ activeTab }),
       setHandoffScene: (scene, sourceName) =>
         set({
           handoffScene: scene,
@@ -114,9 +121,22 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
     }),
     {
       name: "scenegems:trajectory-generation",
-      version: 1,
-      // Persist only the advanced parameter form; run state is transient.
-      partialize: (state) => ({ params: state.params }),
+      version: 2,
+      // Persist the advanced-parameter form, the selected tab, the handoff scene and
+      // the last generated trajectory so the page restores on reload. A run that was
+      // still in flight is downgraded to "idle" (there is no live request to resume).
+      partialize: (state) => ({
+        params: state.params,
+        activeTab: state.activeTab,
+        handoffScene: state.handoffScene,
+        handoffSourceName: state.handoffSourceName,
+        status: state.status === "running" ? ("idle" as const) : state.status,
+        iteration: state.iteration,
+        resultScenarioJson: state.resultScenarioJson,
+        resultValid: state.resultValid,
+        errorMessage: state.status === "running" ? null : state.errorMessage,
+      }),
+      migrate: (persisted) => persisted as Partial<TrajectoryGenerationState>,
     }
   )
 );

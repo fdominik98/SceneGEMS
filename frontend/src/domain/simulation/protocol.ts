@@ -72,7 +72,12 @@ const colregsStateSchema = z
 const ruleEvaluationSchema = z
   .object({
     ruleName: z.string(),
+    title: z.string(),
+    ruleNumber: z.string(),
+    kind: z.enum(["rule", "suggestion"]),
     description: z.string(),
+    subjectActorId: z.string().nullable(),
+    subjectActorName: z.string(),
     result: z.enum(["PASSED", "FAILED", "UNKNOWN"]),
   })
   .passthrough();
@@ -89,6 +94,7 @@ const ruleResultSchema = z
 const maneuverStateSchema = z
   .object({
     actorId: z.string(),
+    relationId: z.string().optional(),
     maneuverType: z.string(),
     previousManeuverType: z.string(),
     suggestedManeuvers: z.array(z.string()),
@@ -100,6 +106,9 @@ const maneuverStateSchema = z
     headingDiffSincePreviousDeg: z.number(),
     headingDiffSinceStartDeg: z.number(),
     headingDiffSinceReadilyApparentDeg: z.number(),
+    speedDiffSincePrevious: z.number().optional(),
+    speedDiffSinceStart: z.number().optional(),
+    speedDiffSinceReadilyApparent: z.number().optional(),
     startTimestamp: z.number(),
     currentTimestamp: z.number(),
     justStarted: z.boolean(),
@@ -123,10 +132,10 @@ const frameSchema = z
     actors: z.array(actorSchema),
     statesByActorId: z.record(z.string(), stateSchema),
     trajectoriesByActorId: z.record(z.string(), z.array(stateSchema)).optional(),
-    situationContexts: z.array(situationContextSchema),
-    colregsStates: z.array(colregsStateSchema),
-    ruleResults: z.array(ruleResultSchema),
-    maneuverStates: z.array(maneuverStateSchema),
+    situationContexts: z.array(situationContextSchema).default([]),
+    colregsStates: z.array(colregsStateSchema).default([]),
+    ruleResults: z.array(ruleResultSchema).default([]),
+    maneuverStates: z.array(maneuverStateSchema).default([]),
     metrics: metricsSchema.optional(),
   })
   .passthrough();
@@ -228,9 +237,31 @@ function normalizeFramePayload(raw: unknown): unknown {
             return evaluation;
           }
           const e = evaluation as Record<string, unknown>;
+          const ruleName = (e.ruleName ?? e.name ?? "Unknown Rule") as string;
+          const ruleNumber = ((e.ruleNumber as string | undefined) ||
+            ruleName.match(/^Rule\s+([^:]+):/i)?.[1] ||
+            "") as string;
+          const kind =
+            e.kind === "suggestion" || e.kind === "rule"
+              ? e.kind
+              : ruleNumber === "" || /^suggestion:/i.test(ruleName)
+                ? "suggestion"
+                : "rule";
+          const title =
+            (e.title as string | undefined) ??
+            ruleName.replace(/^(Rule\s+[^:]+|Suggestion):\s*/i, "");
+          const subjectActorIdRaw = e.subjectActorId ?? e.subject_actor_id ?? null;
           return {
             ...e,
-            ruleName: e.ruleName ?? e.name ?? "Unknown Rule",
+            ruleName,
+            title,
+            ruleNumber,
+            kind,
+            subjectActorId:
+              subjectActorIdRaw === null || subjectActorIdRaw === undefined
+                ? null
+                : String(subjectActorIdRaw),
+            subjectActorName: (e.subjectActorName ?? e.subject_actor_name ?? "") as string,
           };
         });
         return {
@@ -258,9 +289,18 @@ function normalizeFramePayload(raw: unknown): unknown {
           typeof s.headingChange === "object" && s.headingChange !== null
             ? (s.headingChange as Record<string, unknown>)
             : {};
+        const speedChange =
+          typeof s.speedChange === "object" && s.speedChange !== null
+            ? (s.speedChange as Record<string, unknown>)
+            : {};
+        const speedPrev = s.speedDiffSincePrevious ?? speedChange.speedDiffSincePrevious;
+        const speedStart = s.speedDiffSinceStart ?? speedChange.speedDiffSinceStart;
+        const speedRa =
+          s.speedDiffSinceReadilyApparent ?? speedChange.speedDiffSinceReadilyApparentTime;
         return {
           ...s,
           actorId: s.actorId ?? actorIdFromRelation ?? "",
+          ...(relationId ? { relationId } : {}),
           previousManeuverType: s.previousManeuverType ?? s.maneuverType ?? "UNDETECTED",
           suggestedManeuvers: s.suggestedManeuvers ?? [],
           headingChangeDirection:
@@ -273,6 +313,9 @@ function normalizeFramePayload(raw: unknown): unknown {
             s.headingDiffSinceReadilyApparentDeg ??
             headingChange.headingDiffSinceReadilyApparentTimeDeg ??
             0,
+          ...(speedPrev !== undefined ? { speedDiffSincePrevious: speedPrev } : {}),
+          ...(speedStart !== undefined ? { speedDiffSinceStart: speedStart } : {}),
+          ...(speedRa !== undefined ? { speedDiffSinceReadilyApparent: speedRa } : {}),
         };
       })
     : frame.maneuverStates;

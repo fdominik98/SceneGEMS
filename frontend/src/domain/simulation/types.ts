@@ -63,9 +63,22 @@ export interface ColregsMonitorStateData {
   inFrontOfPotentialCollisionDomainByActorId: Record<string, boolean>;
 }
 
+export type RuleKind = "rule" | "suggestion";
+
 export interface RuleEvaluation {
+  /** Full display label, e.g. "Rule 16: Give-Way Vessel Takes Early and Substantial Action". */
   ruleName: string;
+  /** Short title without the rule-number prefix. */
+  title: string;
+  /** COLREGS rule number ("8", "16", "17"); empty for advisory suggestions. */
+  ruleNumber: string;
+  /** "rule" (a compliance failure matters) or "suggestion" (advisory only). */
+  kind: RuleKind;
   description: string;
+  /** Id of the vessel the rule constrains, or null when it applies to the encounter. */
+  subjectActorId: string | null;
+  /** Display name of the subject vessel, e.g. "OS_0"; empty when encounter-scoped. */
+  subjectActorName: string;
   result: RuleResult;
 }
 
@@ -78,6 +91,8 @@ export interface RuleResultData {
 
 export interface ManeuverStateData {
   actorId: string;
+  /** Relation this maneuver state was monitored under, e.g. "0->1". */
+  relationId?: string;
   maneuverType: string;
   previousManeuverType: string;
   suggestedManeuvers: string[];
@@ -89,6 +104,10 @@ export interface ManeuverStateData {
   headingDiffSincePreviousDeg: number;
   headingDiffSinceStartDeg: number;
   headingDiffSinceReadilyApparentDeg: number;
+  /** Speed deltas in m/s; present when the monitor reports a speed change. */
+  speedDiffSincePrevious?: number;
+  speedDiffSinceStart?: number;
+  speedDiffSinceReadilyApparent?: number;
   startTimestamp: number;
   currentTimestamp: number;
   justStarted: boolean;
@@ -100,6 +119,10 @@ export interface ScenarioMetrics {
   dcpaByRelationId?: Record<string, number>;
   tcpaByRelationId?: Record<string, number>;
   dsIndexByRelationId?: Record<string, number>;
+  /** Raw scene-level metrics passed through from the backend serializer. */
+  scene?: Record<string, number>;
+  /** Raw per-relation metrics (distance, dcpa, tcpa, safetyDistance, visibilityDistance). */
+  relations?: Record<string, Record<string, number>>;
 }
 
 export interface SimulationFrame {

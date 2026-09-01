@@ -104,7 +104,12 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
             rules.append(
                 {
                     "name": rule.name,
+                    "title": rule.title,
+                    "ruleNumber": rule.rule_number,
+                    "kind": rule.kind,
                     "description": rule.description,
+                    "subjectActorId": None if rule.subject_actor_id < 0 else str(rule.subject_actor_id),
+                    "subjectActorName": rule.subject_actor_name,
                     "result": result.name,
                 }
             )
@@ -178,14 +183,15 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
     return _to_json_safe(payload)
 
 
-def serialize_monitored_frame(scenario_id : str, monitored_scene: MonitoredSceneWithResults, timestamp: int, time_step: int) -> Dict[str, Any]:
+def serialize_monitored_frame(scenario_id: str, monitored_scene: MonitoredSceneWithResults, timestamp: int, time_step: int) -> Dict[str, Any]:
     base_frame = serialize_frame(scenario_id=scenario_id, scene=monitored_scene.scene, timestamp=timestamp, time_step=time_step)
     monitor_payload = monitor_payload_from_scene(monitored_scene)
     for key, value in monitor_payload.items():
         base_frame[key] = value
     return base_frame
 
-def serialize_frame(scenario_id : str, scene: ConcreteScene, timestamp: int, time_step: int) -> Dict[str, Any]:
+
+def serialize_frame(scenario_id: str, scene: ConcreteScene, timestamp: int, time_step: int) -> Dict[str, Any]:
     actors: List[Dict[str, Any]] = []
     states: Dict[str, Dict[str, float]] = {}
 
@@ -232,7 +238,7 @@ def serialize_frame(scenario_id : str, scene: ConcreteScene, timestamp: int, tim
         "timestamp": timestamp,
         "timeStep": time_step,
         "actors": actors,
-        "statesByActorId": states,  
+        "statesByActorId": states,
         "situationContexts": [],
         "colregsStates": [],
         "ruleResults": [],

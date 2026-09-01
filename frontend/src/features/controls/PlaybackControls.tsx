@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { useUiStore } from "../../app/uiStore";
 import { usePlaybackStore } from "../../domain/playback/playbackStore";
 import type { SimulationStreamControls } from "./types";
-import { handleResetPlayback } from "./resetPlayback";
+import { AnimationPlaybackControls } from "./AnimationPlaybackControls";
 import {
   activateLiveMode,
   getLatestSimulationTimestamp,
@@ -65,13 +65,8 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
   const setControlPanelMode = useUiStore((s) => s.setControlPanelMode);
 
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const speed = usePlaybackStore((s) => s.speed);
-  const currentTimestamp = usePlaybackStore((s) => s.currentTimestamp);
-  const latestTimestamp = usePlaybackStore((s) => s.latestTimestamp);
-  const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const followLatestPush = usePlaybackStore((s) => s.followLatestPush);
   const followSimulationLive = usePlaybackStore((s) => s.followSimulationLive);
-  const stepBy = usePlaybackStore((s) => s.stepBy);
   const simulationStatus = usePlaybackStore((s) => s.simulationStatus);
   const simulationFrames = usePlaybackStore((s) => s.simulationFrames);
   const simulationInitialized = usePlaybackStore((s) => s.simulationInitialized);
@@ -85,8 +80,6 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
   const canStartSimulation =
     simulationStatus === "ready to start" && !isSimulationStatusUnknownOrOffline;
   const areSimulationControlsDisabled = isSimulationStatusUnknownOrOffline;
-
-  const stepFrameCount = Math.max(1, Math.round(speed));
 
   const simInitRef = useRef<SimulationInitControlsHandle>(null);
   const [simInitVesselCount, setSimInitVesselCount] = useState(0);
@@ -148,57 +141,10 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
 
       {controlPanelMode === "animation" ? (
         <div className="animation-control-stack">
-          <section className="animation-control-group" aria-label="Animation playback controls">
-            <h4 className="animation-control-group-title">Playback</h4>
-            <div className="toolbar-row">
-              <button onClick={() => stepBy(-stepFrameCount)}>Step Back</button>
-              <button
-                onClick={() => {
-                  if (isPlaying) {
-                    setPlaying(false);
-                  } else {
-                    setPlaying(true);
-                  }
-                }}
-              >
-                {isPlaying ? "Pause" : "Play"}
-              </button>
-              <button
-                onClick={() => {
-                  handleResetPlayback(setPlaying, streamControls.seek);
-                }}
-              >
-                Reset
-              </button>
-              <button onClick={() => stepBy(stepFrameCount)}>Step Forward</button>
-            </div>
-
-            <label className="field">
-              <span>Animation Time</span>
-              <input
-                type="range"
-                min={0}
-                max={Math.max(1, latestTimestamp, currentTimestamp)}
-                value={Math.min(currentTimestamp, Math.max(latestTimestamp, currentTimestamp))}
-                onChange={(e) => streamControls.seek(Number(e.target.value))}
-              />
-            </label>
-
-            <label className="field">
-              <span>Speed ({speed.toFixed(1)}x)</span>
-              <input
-                type="range"
-                min={0.5}
-                max={240}
-                step={0.5}
-                value={speed}
-                onChange={(e) => streamControls.setSpeed(Number(e.target.value))}
-              />
-            </label>
-            <p className="meta animation-control-meta">
-              Animation time: {currentTimestamp}s | Latest: {latestTimestamp}s
-            </p>
-          </section>
+          <AnimationPlaybackControls
+            seek={streamControls.seek}
+            setSpeed={streamControls.setSpeed}
+          />
 
           <section className="animation-control-group" aria-label="Record and replay controls">
             <RecordingControls />

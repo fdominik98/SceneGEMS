@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { useUiStore } from "../../app/uiStore";
 import {
   getCurrentFrame,
@@ -42,6 +42,13 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
   useEffect(() => {
     setReferenceGeofence(geofence);
   }, [geofence, setReferenceGeofence]);
+
+  const handleGeofenceChange = useCallback(
+    (nextGeofence: typeof geofence) => {
+      setGeofence(nextGeofence);
+    },
+    [setGeofence]
+  );
 
   const canSubmit =
     streamStatus === "connected" &&
@@ -190,10 +197,7 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
       <div className="waraps-layout__map">
         <ReferenceGeofenceMap
           geofence={geofence}
-          onGeofenceChange={(nextGeofence) => {
-            setGeofence(nextGeofence);
-            setReferenceGeofence(nextGeofence);
-          }}
+          onGeofenceChange={handleGeofenceChange}
         />
       </div>
     </div>

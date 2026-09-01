@@ -4,7 +4,7 @@ function buildFrame(timestamp: number): SimulationFrame {
   const ownX = 50 + timestamp * 0.8;
   const tgtX = 250 - timestamp * 0.6;
   const tgtY = 160 + Math.sin(timestamp / 8) * 20;
-  const relationId = "own_ship:target_1";
+  const relationId = "own_ship->target_1";
 
   return {
     timestamp,
@@ -81,18 +81,37 @@ function buildFrame(timestamp: number): SimulationFrame {
         relationId,
         evaluations: [
           {
-            ruleName: "Rule 15",
-            description: "Crossing situation give-way action.",
+            ruleName: "Rule 16: Give-Way Vessel Takes Early and Substantial Action",
+            title: "Give-Way Vessel Takes Early and Substantial Action",
+            ruleNumber: "16",
+            kind: "rule",
+            description:
+              "A vessel directed to keep out of the way should take early and substantial action to keep well clear.",
+            subjectActorId: "own_ship",
+            subjectActorName: "OS_0",
             result: timestamp > 150 ? "FAILED" : "PASSED",
           },
+          {
+            ruleName: "Rule 8: Passing at a Safe Distance",
+            title: "Passing at a Safe Distance",
+            ruleNumber: "8",
+            kind: "rule",
+            description:
+              "Action taken to avoid collision should result in the vessels passing at a safe distance.",
+            subjectActorId: null,
+            subjectActorName: "",
+            result: timestamp > 120 ? "UNKNOWN" : "PASSED",
+          },
         ],
-        failedRules: timestamp > 150 ? ["Rule 15"] : [],
+        failedRules:
+          timestamp > 150 ? ["Rule 16: Give-Way Vessel Takes Early and Substantial Action"] : [],
         overallStatus: timestamp > 150 ? "FAILED" : "NOT_FAILED",
       },
     ],
     maneuverStates: [
       {
         actorId: "own_ship",
+        relationId,
         maneuverType: timestamp > 90 ? "TURNING_RIGHT" : "KEEP_COURSE",
         previousManeuverType: "KEEP_COURSE",
         suggestedManeuvers: ["TURNING_RIGHT"],
@@ -104,6 +123,9 @@ function buildFrame(timestamp: number): SimulationFrame {
         headingDiffSincePreviousDeg: timestamp > 90 ? 4.5 : 0,
         headingDiffSinceStartDeg: timestamp > 90 ? 8.4 : 0,
         headingDiffSinceReadilyApparentDeg: timestamp > 90 ? 6.2 : 0,
+        speedDiffSincePrevious: 0,
+        speedDiffSinceStart: 0,
+        speedDiffSinceReadilyApparent: 0,
         startTimestamp: 0,
         currentTimestamp: timestamp,
         justStarted: timestamp === 90,
@@ -115,6 +137,21 @@ function buildFrame(timestamp: number): SimulationFrame {
       dcpaByRelationId: { [relationId]: Math.max(5, 40 - timestamp / 6) },
       tcpaByRelationId: { [relationId]: Math.max(0, 120 - timestamp) },
       dsIndexByRelationId: { [relationId]: Math.min(1, timestamp / 180) },
+      scene: {
+        dcpa: Math.max(5, 40 - timestamp / 6),
+        tcpa: Math.max(0, 120 - timestamp),
+        dangerSector: Math.min(1, timestamp / 180),
+        proximityIndex: Math.min(1, timestamp / 200),
+      },
+      relations: {
+        [relationId]: {
+          distance: Math.max(10, 220 - timestamp),
+          dcpa: Math.max(5, 40 - timestamp / 6),
+          tcpa: Math.max(0, 120 - timestamp),
+          safetyDistance: 30,
+          visibilityDistance: 120,
+        },
+      },
     },
   };
 }

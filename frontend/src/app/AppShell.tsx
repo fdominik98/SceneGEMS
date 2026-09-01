@@ -827,14 +827,16 @@ export function AppShell() {
                   aria-label="Resize bottom trajectory generation panel"
                 />
                 <footer className="bottom-toolbar bottom-toolbar-compact bottom-toolbar-single">
-                  <TrajectoryGenerationControls
-                    streamControls={streamControls}
-                    colregsConstraintsContent={colregsConstraintsText}
-                    onNavigateToSimulation={() => {
-                      requestAutoFit();
-                      setActiveView("simulation");
-                    }}
-                  />
+                  <div className="bottom-slot bottom-slot-controls">
+                    <TrajectoryGenerationControls
+                      streamControls={streamControls}
+                      colregsConstraintsContent={colregsConstraintsText}
+                      onNavigateToSimulation={() => {
+                        requestAutoFit();
+                        setActiveView("simulation");
+                      }}
+                    />
+                  </div>
                 </footer>
               </div>
             ) : (

@@ -1,0 +1,6 @@
+taj gen advanced params should alway s be visible
+
+allow loading any trajecotry not just valid and complete ones
+
+rule names and descriptions are not consistent for colregs monitor. where are these comming from?
+rule visualization should be more intuitive

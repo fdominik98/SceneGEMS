@@ -2,7 +2,9 @@ import { Fragment } from "react";
 import type { TrajectoryStream } from "../../app/uiStore";
 import type { SimulationFrame } from "../../domain/simulation/types";
 import { getActorPanelDotColor } from "../scene/shipColors";
-import { renderActorName, renderRelationId } from "./actorNameFormat";
+import { renderActorName } from "./actorNameFormat";
+import { ColregsMonitorStateSection } from "./ColregsMonitorStateSection";
+import { EncounterSummaryCard } from "./EncounterSummaryCard";
 import {
   ACTOR_FIELD_PRIORITY,
   asRecord,
@@ -12,6 +14,10 @@ import {
   humanizeKey,
   KINEMATIC_FIELD_PRIORITY,
 } from "./frameDataDisplay";
+import { ManeuversSection } from "./ManeuversSection";
+import { MonitorMetricsSection } from "./MonitorMetricsSection";
+import { RuleResultsPanel } from "./RuleResultsPanel";
+import { SituationContextsSection } from "./SituationContextsSection";
 import { useMonitorFrameForKind } from "./useMonitorFrame";
 
 interface BasicActorInfoPanelProps {
@@ -98,109 +104,26 @@ export function BasicActorInfoPanel({ stream }: BasicActorInfoPanelProps) {
           </div>
         </details>
 
-        {frame.situationContexts.length > 0 ? (
-          <details className="frame-subpanel">
-            <summary className="frame-subpanel-summary">
-              <span>Situation contexts</span>
-              <span className="frame-subpanel-badge">{frame.situationContexts.length}</span>
-            </summary>
-            <div className="frame-list-stack">
-              {frame.situationContexts.map((ctx, i) => {
-                const rec = asRecord(ctx) ?? {};
-                return (
-                  <details key={`${ctx.relationId}-${i}`} className="frame-item-card">
-                    <summary className="frame-item-summary">
-                      Relation {renderRelationId(ctx.relationId)}
-                      <span className="meta"> · {ctx.situationLabel}</span>
-                    </summary>
-                    <DynamicFieldGrid data={rec} />
-                  </details>
-                );
-              })}
-            </div>
-          </details>
-        ) : null}
+        <EncounterSummaryCard
+          situationContexts={frame.situationContexts}
+          colregsStates={frame.colregsStates}
+          ruleResults={frame.ruleResults}
+          maneuverStates={frame.maneuverStates}
+          actors={frame.actors}
+        />
 
-        {frame.colregsStates.length > 0 ? (
-          <details className="frame-subpanel">
-            <summary className="frame-subpanel-summary">
-              <span>COLREGS monitor</span>
-              <span className="frame-subpanel-badge">{frame.colregsStates.length}</span>
-            </summary>
-            <div className="frame-list-stack">
-              {frame.colregsStates.map((row, i) => {
-                const rec = asRecord(row) ?? {};
-                return (
-                  <details key={`${row.relationId}-col-${i}`} className="frame-item-card">
-                    <summary className="frame-item-summary">{renderRelationId(row.relationId)}</summary>
-                    <DynamicFieldGrid data={rec} />
-                  </details>
-                );
-              })}
-            </div>
-          </details>
-        ) : null}
+        <SituationContextsSection contexts={frame.situationContexts} actors={frame.actors} />
 
-        {frame.ruleResults.length > 0 ? (
-          <details className="frame-subpanel">
-            <summary className="frame-subpanel-summary">
-              <span>Rule results</span>
-              <span className="frame-subpanel-badge">{frame.ruleResults.length}</span>
-            </summary>
-            <div className="frame-list-stack">
-              {frame.ruleResults.map((row, i) => {
-                const rec = asRecord(row) ?? {};
-                return (
-                  <details key={`${row.relationId}-rules-${i}`} className="frame-item-card">
-                    <summary className="frame-item-summary">
-                      {renderRelationId(row.relationId)}{" "}
-                      <span
-                        className={
-                          row.overallStatus === "FAILED" ? "status-bad" : "status-ok"
-                        }
-                      >
-                        {row.overallStatus}
-                      </span>
-                    </summary>
-                    <DynamicFieldGrid data={rec} />
-                  </details>
-                );
-              })}
-            </div>
-          </details>
-        ) : null}
+        <ColregsMonitorStateSection states={frame.colregsStates} actors={frame.actors} />
 
-        {frame.maneuverStates.length > 0 ? (
-          <details className="frame-subpanel">
-            <summary className="frame-subpanel-summary">
-              <span>Maneuvers</span>
-              <span className="frame-subpanel-badge">{frame.maneuverStates.length}</span>
-            </summary>
-            <div className="frame-list-stack">
-              {frame.maneuverStates.map((row, i) => {
-                const rec = asRecord(row) ?? {};
-                return (
-                  <details key={`${row.actorId}-man-${i}`} className="frame-item-card">
-                    <summary className="frame-item-summary">
-                      {row.actorId} · {row.maneuverType}
-                    </summary>
-                    <DynamicFieldGrid data={rec} />
-                  </details>
-                );
-              })}
-            </div>
-          </details>
-        ) : null}
+        <RuleResultsPanel
+          ruleResults={frame.ruleResults}
+          situationContexts={frame.situationContexts}
+        />
 
-        {frame.metrics && Object.keys(frame.metrics).length > 0 ? (
-          <details className="frame-subpanel">
-            <summary className="frame-subpanel-summary">
-              <span>Metrics</span>
-              <span className="frame-subpanel-badge">{Object.keys(frame.metrics).length}</span>
-            </summary>
-            <DynamicFieldGrid data={asRecord(frame.metrics) ?? {}} />
-          </details>
-        ) : null}
+        <ManeuversSection maneuvers={frame.maneuverStates} actors={frame.actors} />
+
+        <MonitorMetricsSection metrics={frame.metrics} />
 
         {frame.trajectoriesByActorId && Object.keys(frame.trajectoriesByActorId).length > 0 ? (
           <details className="frame-subpanel">
