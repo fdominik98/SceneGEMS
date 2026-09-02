@@ -1,0 +1,1 @@
+check how could we have a distributed system entirelly. kube?

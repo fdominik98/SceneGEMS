@@ -193,7 +193,7 @@ export function DomainConfigurationPanel({
           aria-selected={activeTab === "colregs"}
           onClick={() => setActiveTab("colregs")}
         >
-          COLREGS Constants
+          COLREGS Constraints
         </button>
         <button
           className={`scene-gen-tab${activeTab === "vesselObstacleTypes" ? " active" : ""}`}
@@ -202,13 +202,13 @@ export function DomainConfigurationPanel({
           aria-selected={activeTab === "vesselObstacleTypes"}
           onClick={() => setActiveTab("vesselObstacleTypes")}
         >
-          Vessel and Obstacle types
+          Vessel and Obstacle constraints
         </button>
       </div>
 
       {activeTab === "colregs" ? (
         <div className="scene-editor-panel">
-          <h3>COLREGS Constants (.yaml)</h3>
+          <h3>COLREGS Constraints (.yaml)</h3>
           <div className="toolbar-row">
             <select
               onChange={(event) => {
@@ -259,7 +259,7 @@ export function DomainConfigurationPanel({
         </div>
       ) : (
         <div className="scene-editor-panel domain-config-dual-panel">
-          <h3>Vessel and Obstacle types (.yaml)</h3>
+          <h3>Vessel and Obstacle constraints (.yaml)</h3>
           <div
             ref={dualColumnsRef}
             className={`domain-config-dual-columns${isResizingDualColumns ? " is-resizing" : ""}`}
