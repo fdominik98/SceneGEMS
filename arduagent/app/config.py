@@ -61,6 +61,12 @@ class AgentConfig:
         str(os.getenv("MINIMUM_MISSION_ALTITUDE_RELATIVE", "10.0"))
     )
 
+    # Per-waypoint acceptance radius (meters) written into NAV_WAYPOINT param2.
+    # 0.0 keeps the flight controller default (its WP_RADIUS parameter).
+    WAYPOINT_ACCEPTANCE_RADIUS_M: float = float(
+        str(os.getenv("WAYPOINT_ACCEPTANCE_RADIUS_M", "0.0"))
+    )
+
     os_BASE_TOPIC = os.getenv("BASE_TOPIC")
     os_OTHER_POSITIONS_TOPIC = os.getenv("OTHER_POSITIONS_TOPIC")
     os_UUID = os.getenv("UUID")

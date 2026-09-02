@@ -30,6 +30,14 @@ def generate_ardu_params(vessel: ConcreteVessel, cruise_speed: float, wind: np.n
     calculated_g = (physical_max_speed**2) / (turning_radius * 9.81)
     turn_max_g = max(calculated_g, 1.0)
 
+    # Waypoint capture geometry. ConcreteVessel.waypoint_radius is length * 4.0;
+    # clamp so tiny USVs still get a usable radius and very long vessels do not
+    # get an absurd one relative to the thinned mission leg length.
+    wp_radius = float(np.clip(vessel.waypoint_radius, 3.0, 150.0))
+    # Let the hull overshoot a tight corner and re-intercept the leg instead of
+    # looping back to the missed point.
+    wp_overshoot = float(np.clip(turning_radius * 0.5, wp_radius, 200.0))
+
     params = {
         # ----------------------------------------
         # Base Frame & Mode Setup
@@ -39,10 +47,13 @@ def generate_ardu_params(vessel: ConcreteVessel, cruise_speed: float, wind: np.n
         # ----------------------------------------
         # Navigation & Waypoint Behavior
         # ----------------------------------------
-        "PIVOT_TURN_ANGLE": 0,
-        "WP_PIVOT_ANGLE": 45,
+        # Skid-steer boats stop and rotate in place when the heading error to the
+        # next waypoint exceeds WP_PIVOT_ANGLE. 0 disables pivot turns so the hull
+        # arcs through corners instead of pivoting at every waypoint.
+        "WP_PIVOT_ANGLE": 0,
         # Directly utilizing properties from ConcreteVessel
-        "WP_RADIUS": vessel.waypoint_radius,  # Your model sets this to length * 2.0
+        "WP_RADIUS": wp_radius,  # ConcreteVessel.waypoint_radius (length * 4.0), clamped
+        "WP_OVERSHOOT": wp_overshoot,
         # "TURN_RADIUS": turning_radius,
         # --- Speed Distinctions ---
         # Navigation targets use the desired mission speed
@@ -70,9 +81,15 @@ def generate_ardu_params(vessel: ConcreteVessel, cruise_speed: float, wind: np.n
         # ----------------------------------------
         # Lateral Control (Steering & Turn Rate)
         # ----------------------------------------
-        # Limits define what the controller is ALLOWED to ask of the hull
-        # "TURN_MAX_G": turn_max_g,
-        # "ATC_STR_RAT_MAX": max_turn_rate_deg_s,
+        # Limits define what the controller is ALLOWED to ask of the hull.
+        # Apply the cornering-G limit derived from the real turn radius so corner
+        # speed is bounded by hull capability rather than left at firmware default.
+        "TURN_MAX_G": turn_max_g,
+        # Cap commanded turn rate at the vessel's physical max_angular_speed.
+        "ATC_STR_RAT_MAX": max_turn_rate_deg_s,
+        # Fast yaw-acceleration ramp so heading corrections do not stall forward
+        # progress (firmware default ramp is very sluggish).
+        "ATC_STR_ACC_MAX": max_turn_rate_deg_s * 3.0,
         # # CRITICAL FIX 2: L1 Controller Damping for Water
         # # 0.75 is default. Lowering it to 0.65 makes the L1 navigation controller
         # # more aggressive at correcting cross-track error (sliding sideways).

@@ -50,6 +50,9 @@ class Mavlink:
         self.minimum_mission_altitude_relative: float = (
             AgentConfig.MINIMUM_MISSION_ALTITUDE_RELATIVE
         )
+        self.waypoint_acceptance_radius_m: float = (
+            AgentConfig.WAYPOINT_ACCEPTANCE_RADIUS_M
+        )
 
         self.home_altitude_global = None
 
@@ -120,6 +123,32 @@ class Mavlink:
             0,
         )
 
+    def _make_home_placeholder_cmd(
+        self, mission_frame: int, lat: float, lon: float, alt: float
+    ) -> Command:
+        """First uploaded mission item is consumed as HOME by the flight
+        controller and never executed. Prepend this throwaway NAV_WAYPOINT so no
+        real command lands on sequence 0. Its coordinates are ignored by the FC
+        (it uses its own HOME); the first real waypoint's position is reused so
+        the item is always geographically valid, even without a GPS fix.
+        """
+        return Command(
+            0,  # target system
+            0,  # target component
+            0,  # sequence
+            mission_frame,
+            mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
+            0,  # current
+            0,  # autocontinue
+            0,  # param1: hold time
+            0,  # param2: acceptance radius
+            0,  # param3: pass radius
+            0,  # param4: yaw
+            lat,  # latitude
+            lon,  # longitude
+            alt,  # altitude
+        )
+
     def _supports_spline_waypoints(self) -> bool:
         # ArduPilot documents spline missions for Copter only (not Rover/Plane).
         return self.is_rotary()
@@ -144,6 +173,15 @@ class Mavlink:
 
         if waypoints is not None and len(waypoints) > 0:
             mission_frame = self._global_mission_frame()
+            # Sequence 0 is consumed as HOME by the FC; keep real commands off it.
+            self.vehicle.commands.add(
+                self._make_home_placeholder_cmd(
+                    mission_frame,
+                    waypoints[0][0],
+                    waypoints[0][1],
+                    waypoints[0][2],
+                )
+            )
             if self.speed_override_mps is not None:
                 self.vehicle.commands.add(
                     self._make_do_change_speed_cmd(self.speed_override_mps)
@@ -163,13 +201,13 @@ class Mavlink:
                     self._global_nav_command(waypoint_index, waypoint_count),
                     0,  # current
                     0,  # autucontinue
-                    0,  # param1: Speed type (0=Airspeed, 1=Ground Speed)
-                    0,  # param2: Speed in m/s
-                    0,  # param3: Throttle (ignored)
-                    0,  # param4: Absolute or relative (ignored)
+                    0,  # param1: hold time (s)
+                    self.waypoint_acceptance_radius_m,  # param2: acceptance radius (m); 0 => FC WP_RADIUS
+                    0,  # param3: pass radius (m); 0 => stop-at behaviour uses WP_RADIUS
+                    0,  # param4: yaw (ignored)
                     lat,  # 11: latitude in degrees
                     lon,  # 12: longitude in degrees
-                    alt,  # 13: altigutde in meters
+                    alt,  # 13: altitude in meters
                 )
                 self.vehicle.commands.add(wp_cmd)
 
@@ -203,6 +241,16 @@ class Mavlink:
         if waypoints is not None and len(waypoints) > 0:
             print(f"ALT={waypoints[0][2]}")
 
+            mission_frame = mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT
+            # Sequence 0 is consumed as HOME by the FC; keep real commands off it.
+            self.vehicle.commands.add(
+                self._make_home_placeholder_cmd(
+                    mission_frame,
+                    waypoints[0][0],
+                    waypoints[0][1],
+                    waypoints[0][2],
+                )
+            )
             if self.speed_override_mps is not None:
                 self.vehicle.commands.add(
                     self._make_do_change_speed_cmd(self.speed_override_mps)
@@ -217,14 +265,14 @@ class Mavlink:
                     0,  # target system
                     0,  # target component
                     0,  # sequence
-                    mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,  # frame
+                    mission_frame,  # frame
                     mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,  # command
                     0,  # current
                     0,  # autocontinue
-                    0,  # param1: Speed type (0=Airspeed, 1=Ground Speed)
-                    0,  # param2: Speed in m/s
-                    0,  # param3: Throttle (ignored)
-                    0,  # param4: Yaw angle (ignored)
+                    0,  # param1: hold time (s)
+                    self.waypoint_acceptance_radius_m,  # param2: acceptance radius (m); 0 => FC WP_RADIUS
+                    0,  # param3: pass radius (m); 0 => stop-at behaviour uses WP_RADIUS
+                    0,  # param4: yaw angle (ignored)
                     lat,  # param5: latitude in degrees
                     lon,  # param6: longitude in degrees
                     alt,  # param7: altitude in meters (relative to home position)

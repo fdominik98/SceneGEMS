@@ -517,14 +517,23 @@ class Agent:
                         # DO PLANNING HERE
 
                         wps: list = []
+                        surface_vehicle = (
+                            self.mav.is_ground() or self.mav.is_surface()
+                        )
                         for point in msg_json["task"]["params"]["waypoints"]:
                             lat = point["latitude"]
                             lon = point["longitude"]
                             alt = point["altitude"]
 
-                            alt = max(
-                                alt, self.mav.minimum_mission_altitude_relative
-                            )
+                            if surface_vehicle:
+                                # Rovers and boats ignore mission altitude; do not
+                                # clamp it up to the takeoff minimum.
+                                alt = 0.0
+                            else:
+                                alt = max(
+                                    alt,
+                                    self.mav.minimum_mission_altitude_relative,
+                                )
 
                             wps.append([lat, lon, alt])
 

@@ -7,6 +7,7 @@ from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
+from scenegems_tool.simulators.path_simplification import simplify_state_path
 from scenegems_tool.simulators.simulation_config import SimulationConfig
 from scenegems_tool.simulators.simulation_docker_stack import (
     _STANDALONE_COMPOSE_FILENAME,
@@ -74,7 +75,16 @@ class SimulationParser:
 
             state_list = builder.build().state_list(vessel)
             first_index_with_max_speed = next((i for i, s in enumerate(state_list) if s.speed > max_speed * 0.9), 0)
-            mission_waypoints = [waypoint_from_state(s, parent_client.reference_geofence) for s in state_list[first_index_with_max_speed:]]
+            path_states = state_list[first_index_with_max_speed:]
+
+            # Thin the densely sampled path so ArduPilot waypoint navigation can
+            # build smooth legs instead of treating every 1-2 s sample as a
+            # corner (which makes skid-steer hulls pivot and crawl). Straight
+            # runs collapse to their endpoints; real corners are kept.
+            epsilon_m = max(vessel.length * 0.5, 1.0)
+            path_states = simplify_state_path(path_states, epsilon_m=epsilon_m)
+
+            mission_waypoints = [waypoint_from_state(s, parent_client.reference_geofence) for s in path_states]
 
             client = MqttAgentClient(
                 vessel=vessel,
