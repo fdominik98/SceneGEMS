@@ -1,1 +1,9 @@
-check how could we have a distributed system entirelly. kube?
+check how could we have a distributed system entirely. kube?
+
+trajectory preview with the connected monitor
+can we visualize the safety domains and avoidance domains as obstacles for the planning on the trajectory planning page?
+
+domain edge should be a magnet as a soft constraint but allow deviations due to hard constraints.
+this enforces optimal turns and also if the ship is already in the domain it takes it out of it. the challenge is to properly identify domain boundaries and fit a curve on it that the ship can follow
+
+

@@ -91,7 +91,14 @@ class SpeedChange:
         return sum(self.speed_diff_time_window)
 
     def reset(self) -> "SpeedChange":
-        return SpeedChange(speed_diff_since_previous=0, speed_diff_since_start=0, speed_diff_time_window=[], colregs_constants=self.colregs_constants)
+        # A reset starts a new maneuver, and the step that triggered the transition is the
+        # new maneuver's first step, so its diff is carried over (mirrors HeadingChange.reset).
+        return SpeedChange(
+            speed_diff_since_previous=self.speed_diff_since_previous,
+            speed_diff_since_start=self.speed_diff_since_previous,
+            speed_diff_time_window=[self.speed_diff_since_previous],
+            colregs_constants=self.colregs_constants,
+        )
 
     def step(self, speed_diff_since_previous: float, slide_time_window: bool = True) -> "SpeedChange":
         if slide_time_window:
@@ -135,7 +142,7 @@ class HeadingChange:
 
     @property
     def change_detected(self) -> bool:
-        return abs(self.heading_diff_since_previous) < self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
+        return abs(self.heading_diff_since_previous) > self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
 
     @property
     def change_detected_since_start_to_left(self) -> bool:
@@ -147,7 +154,7 @@ class HeadingChange:
 
     @property
     def change_detected_since_start(self) -> bool:
-        return abs(self.heading_diff_since_start) < self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
+        return abs(self.heading_diff_since_start) > self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
 
     @property
     def is_readily_apparent_since_start_to_left(self) -> bool:
@@ -328,7 +335,9 @@ class CourseChangeToTheRightManeuver(ManeuverState):
         return PersistingCourseManeuver(
             maneuver_context,
             maneuver_count=self.maneuver_count + 1,
-            distance_made=self.distance_made,
+            # A new maneuver starts here, so its distance is this step's distance, not the
+            # distance accumulated by the course change that just ended.
+            distance_made=distance_made,
             start_timestamp=self.current_timestamp,
             current_timestamp=next_timestamp,
             heading_change=hc.reset(),

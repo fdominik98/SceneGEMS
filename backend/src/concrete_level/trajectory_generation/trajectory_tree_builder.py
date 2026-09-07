@@ -26,6 +26,13 @@ class SceneNode:
         self.id = -1
         self.parent: Optional[int] = None
         self.children: Set[int] = set()
+        # Set when steering produced no successor at all: the node is a sampling dead
+        # end, not a COLREGS failure, so it stays on the tree (it may still be the best
+        # path found) but is skipped when picking nodes to expand.
+        self.is_dead_end = False
+        # Per-actor memo of TrajectoryObjective.calculate_bounding_rect. The inputs are
+        # all frozen on the node, so the union is computed once instead of on every sort.
+        self.potential_collision_domain_cache: Dict[ConcreteActor, DomainCollection] = {}
 
     @property
     def scene(self) -> ConcreteScene:
@@ -78,6 +85,9 @@ class TrajectoryObjective:
         self.goal_position = self.actor.simulate_distance(self.start_state, self.start_goal_distance).p
 
     def calculate_bounding_rect(self, node: SceneNode) -> DomainCollection:
+        cached = node.potential_collision_domain_cache.get(self.actor)
+        if cached is not None:
+            return cached
         domains = DomainCollection()
         for situation_context, colregs_state in node.monitored_scene_with_results.colregs_states_with_context:
             if not situation_context.is_give_way_actor(self.actor):
@@ -85,6 +95,7 @@ class TrajectoryObjective:
             if any(colregs_state.actors_in_front_of_potential_collision_domain.values()):
                 continue
             domains = domains.union(situation_context.start_potential_collision_domains[self.actor])
+        node.potential_collision_domain_cache[self.actor] = domains
         return domains
 
     def calculate_cost(self, node: SceneNode) -> float:
@@ -145,7 +156,9 @@ class TrajectoryObjective:
 
 class TrajectoryObjectiveSet(Dict[ConcreteActor, TrajectoryObjective]):
     def __init__(self, root: SceneNode, time_step: int, goal_sample_rate: int, verbose: bool = False):
-        super().__init__({actor: TrajectoryObjective(actor, root, time_step, verbose) for actor in root.scene.actors})
+        # Only vessels are steerable and only vessels have maneuver states; static
+        # obstacles stay in the scene untouched (see TrajectoryTreeBuilder.steer_actors).
+        super().__init__({actor: TrajectoryObjective(actor, root, time_step, verbose) for actor in root.scene.vessels})
         self.goal_sample_rate = goal_sample_rate
 
     def calculate_cost(self, node: SceneNode) -> float:
@@ -178,13 +191,19 @@ class TrajectoryObjectiveSet(Dict[ConcreteActor, TrajectoryObjective]):
             if self.goal_sample_rate > random.randint(0, 100):
                 to_goal_heading = calculate_heading(trajectory_objective.goal_position - state.p)
                 to_goal_heading_diff = heading_diff(to_goal_heading, state.heading)
-                to_goal_heading_change_interval = Interval.closed(0, to_goal_heading_diff)
+                # The bounds must be ordered: a goal to starboard gives a negative diff and
+                # Interval.closed(0, negative) is empty, which silently turned every
+                # starboard-biased sample into "hold course exactly".
+                to_goal_heading_change_interval = Interval.closed(min(0.0, to_goal_heading_diff), max(0.0, to_goal_heading_diff))
                 if to_goal_heading_change_interval.empty:
                     to_goal_heading_change_interval = Interval.closed(-EPSILON, EPSILON)
-                random_heading_changes = suggested_ranges.intersection(to_goal_heading_change_interval).sample_from_all()
+                goal_ranges = suggested_ranges.intersection(to_goal_heading_change_interval)
+                # Goal biasing is a heuristic: when no suggested manoeuvre points at the
+                # goal, fall back to the unbiased suggestion instead of yielding nothing.
+                random_heading_changes = (suggested_ranges if goal_ranges.empty else goal_ranges).sample_from_all()
                 if trajectory_objective.verbose and False:
                     print(f"{actor.name}: To goal heading change interval: {to_goal_heading_change_interval}")
-                    print(f"{actor.name}: Suggested ranges after goal sample: {suggested_ranges}")
+                    print(f"{actor.name}: Suggested ranges after goal sample: {goal_ranges}")
             else:
                 random_heading_changes = suggested_ranges.sample_from_all()
 
@@ -235,6 +254,14 @@ class TrajectoryTreeBuilder:
     @property
     def nodes(self) -> List[SceneNode]:
         return list(self.node_list.values())
+
+    @property
+    def expandable_leaves(self) -> List[SceneNode]:
+        return [node for node in self.leaves if not node.is_dead_end]
+
+    @property
+    def expandable_nodes(self) -> List[SceneNode]:
+        return [node for node in self.nodes if not node.is_dead_end]
 
     def __len__(self):
         return len(self.node_list)
@@ -353,7 +380,9 @@ class TrajectoryTreeBuilder:
         suggested_headings = trajectory_objective_set.get_suggested_headings(nearest_node)
         new_nodes = []
         for headings in suggested_headings:
-            next_scene = SceneBuilder()
+            # Seed from the current scene so actors that are not steered (static
+            # obstacles) stay in the scene; only the steered actors are overwritten.
+            next_scene = SceneBuilder(nearest_node.scene)
             for actor, heading in headings.items():
                 actor_state = nearest_node.scene[actor]
                 next_state = actor.simulate(actor_state, (heading, actor_state.speed), self.time_step)
@@ -419,4 +448,16 @@ class TrajectoryTreeBuilder:
     def get_worst_nodes_global(self, trajectory_objective_set: TrajectoryObjectiveSet, k: int) -> List[SceneNode]:
         nodes = self.nodes
         nodes.sort(key=lambda node: trajectory_objective_set.calculate_cost(node), reverse=True)
+        return nodes[:k]
+
+    def get_best_expandable_leafs_global(self, trajectory_objective_set: TrajectoryObjectiveSet, k: int) -> List[SceneNode]:
+        """Best leaves that can still be steered from. Dead ends stay on the tree for
+        path extraction but are never handed back for expansion."""
+        nodes = self.expandable_leaves
+        nodes.sort(key=lambda node: trajectory_objective_set.calculate_cost(node))
+        return nodes[:k]
+
+    def get_best_expandable_nodes_global(self, trajectory_objective_set: TrajectoryObjectiveSet, k: int) -> List[SceneNode]:
+        nodes = self.expandable_nodes
+        nodes.sort(key=lambda node: trajectory_objective_set.calculate_cost(node))
         return nodes[:k]

@@ -17,7 +17,11 @@ class ReadilyApparentCourseChangeCondition(RuleCondition):
         if not next_maneuver_state.is_course_change:
             return COLREGSRuleResult.UNKNOWN
 
-        if next_maneuver_state.readily_apparent_time_passed and next_maneuver_state.heading_change.is_readily_apparent_since_readily_apparent_time:
+        # Rule 8: a course change made to avoid collision must be large enough to be
+        # readily apparent. Once the readily apparent window has elapsed the accumulated
+        # heading change over that window must exceed the threshold, so the failure case
+        # is the change NOT being readily apparent (mirrors ReadilyApparentSpeedChangeCondition).
+        if next_maneuver_state.readily_apparent_time_passed and not next_maneuver_state.heading_change.is_readily_apparent_since_readily_apparent_time:
             return COLREGSRuleResult.FAILED
 
         return COLREGSRuleResult.UNKNOWN

@@ -114,9 +114,15 @@ class MonitorDrivenRRTSearch:
                 print(self._iteration_count)
 
             if random.randint(0, 100) < self.BEST_LEAF_SAMPLE_RATE:
-                best_nodes = self.trajectory_tree_builder.get_best_leafs_global(self.trajectory_objective_set, self.BEST_RANDOM_NODES_K)
+                best_nodes = self.trajectory_tree_builder.get_best_expandable_leafs_global(self.trajectory_objective_set, self.BEST_RANDOM_NODES_K)
             else:
-                best_nodes = self.trajectory_tree_builder.get_best_nodes_global(self.trajectory_objective_set, self.BEST_RANDOM_NODES_K)
+                best_nodes = self.trajectory_tree_builder.get_best_expandable_nodes_global(self.trajectory_objective_set, self.BEST_RANDOM_NODES_K)
+
+            if len(best_nodes) == 0:
+                # Every node on the tree is a dead end: no further expansion is possible.
+                if self.VERBOSE:
+                    print("No expandable node left, stopping the search")
+                break
 
             for parent_node in best_nodes:
                 if parent_node.id not in self.trajectory_tree_builder.node_list:
@@ -125,7 +131,17 @@ class MonitorDrivenRRTSearch:
                 new_nodes = self.trajectory_tree_builder.steer_actors(parent_node, self.trajectory_objective_set)
                 if self.VERBOSE:
                     print(f"New nodes: {len(new_nodes)}")
-                if all(new_node.monitor_result_map_set.is_failed() for new_node in new_nodes):  # or len(new_nodes) == 0:
+
+                if len(new_nodes) == 0:
+                    # No successor could even be sampled. That is a sampling dead end, not
+                    # a COLREGS violation, so the branch is kept (it may still be the best
+                    # path found) and only excluded from further expansion.
+                    if self.VERBOSE:
+                        print(f"Dead end, no successor could be sampled from node {parent_node.id}")
+                    parent_node.is_dead_end = True
+                    continue
+
+                if all(new_node.monitor_result_map_set.is_failed() for new_node in new_nodes):
                     # print(f"Removed branch until parent with multiple children: {parent_node.id}")
                     if self.VERBOSE:
                         for new_node in new_nodes:

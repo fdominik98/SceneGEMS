@@ -53,13 +53,19 @@ class ManeuverSuggestions(Dict[ConcreteActor, Set[ManeuverType]]):
         return self[actor].difference({ManeuverType.UNDETECTED})
 
     def get_info(self, actor: ConcreteActor) -> str:
-        if actor not in self:
-            # print(f"WARNING:{actor.name} is not in the maneuver suggestions")
-            return ""
-        return self.info_data[actor]
+        # info_data is not guaranteed to cover every actor in the suggestion map (union
+        # does not carry it), so a missing entry means "no info", not an error.
+        return self.info_data.get(actor, "")
 
     def union(self, other: "ManeuverSuggestions") -> "ManeuverSuggestions":
-        return ManeuverSuggestions({actor: self.get(actor, set()).union(other.get(actor, set())) for actor in self.keys() | other.keys()})
+        info_data: Dict[ConcreteActor, str] = {}
+        for actor in self.keys() | other.keys():
+            texts = [text for text in (self.info_data.get(actor, ""), other.info_data.get(actor, "")) if text]
+            info_data[actor] = "\n".join(texts)
+        return ManeuverSuggestions(
+            {actor: self.get(actor, set()).union(other.get(actor, set())) for actor in self.keys() | other.keys()},
+            info_data,
+        )
 
     def get_suggested_range_of_heading_change(self, actor: ConcreteActor, dt: float, colregs_constants: COLREGSConstraints) -> Interval:
         # return the union of the suggested ranges of the maneuvers for the actor

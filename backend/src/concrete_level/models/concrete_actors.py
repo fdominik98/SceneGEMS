@@ -373,7 +373,10 @@ class ConcreteVessel(ConcreteActor):
         return rotate_heading(state.heading, heading_change)
 
     def simulate_distance(self, state: ActorState, distance: float) -> ActorState:
-        return self.simulate(state, (state.heading, state.speed), distance / state.speed)
+        # Equivalent to simulate(state, (heading, speed), distance / speed): holding the
+        # current heading and speed makes the displacement exactly ``distance`` along the
+        # heading. Written directly so a stopped vessel does not divide by zero.
+        return state.modify_copy(x=state.x + np.cos(state.heading) * distance, y=state.y + np.sin(state.heading) * distance)
 
 
     @property

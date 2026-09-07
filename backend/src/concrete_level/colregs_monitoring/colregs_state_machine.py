@@ -88,6 +88,9 @@ class COLREGSStateMachine:
     def get_actors_have_been_in_right_maneuver(situation_context: SituationContext, current_state: COLREGSMonitorState, next_maneuver_state_set: ManeuverStateSet) -> Dict[ConcreteActor, bool]:
         actors_have_been_in_right_maneuver = {actor: current_state.actors_have_been_in_right_maneuver[actor] for actor in situation_context.actors}
         for actor in situation_context.actors:
+            # Only vessels have a maneuver state; a static obstacle never maneuvers.
+            if not actor.is_vessel:
+                continue
             actors_have_been_in_right_maneuver[actor] = current_state.actors_have_been_in_right_maneuver[actor] or next_maneuver_state_set[Relation(actor, actor)].is_course_change_to_the_right
         return actors_have_been_in_right_maneuver
 
@@ -95,5 +98,8 @@ class COLREGSStateMachine:
     def get_actors_have_been_in_left_maneuver(situation_context: SituationContext, current_state: COLREGSMonitorState, next_maneuver_state_set: ManeuverStateSet) -> Dict[ConcreteActor, bool]:
         actors_have_been_in_left_maneuver = {actor: current_state.actors_have_been_in_left_maneuver[actor] for actor in situation_context.actors}
         for actor in situation_context.actors:
+            # Only vessels have a maneuver state; a static obstacle never maneuvers.
+            if not actor.is_vessel:
+                continue
             actors_have_been_in_left_maneuver[actor] = current_state.actors_have_been_in_left_maneuver[actor] or next_maneuver_state_set[Relation(actor, actor)].is_course_change_to_the_left
         return actors_have_been_in_left_maneuver
