@@ -279,11 +279,25 @@ export function formatScenarioJsonForExport(
   return JSON.stringify(buildScenarioJsonForServer(evaluationData, scene), null, 2);
 }
 
+/** Monitor keys the trajectory generation subsystem sends alongside the scene list. */
+const MONITOR_FRAME_KEYS = [
+  "situationContexts",
+  "colregsStates",
+  "ruleResults",
+  "maneuverStates",
+  "metrics",
+] as const;
+
 /**
  * Builds a preview trajectory (one `SimulationFrame` per scene, timestamps spaced
  * by `time_step`) from a serialized `TrajectoryData` payload emitted by the
- * trajectory generation subsystem. Monitor fields are empty: full COLREGS
- * analysis is only produced once the scenario is loaded for simulation.
+ * trajectory generation subsystem.
+ *
+ * When the payload carries `monitor_frames` (index-aligned with
+ * `trajectories.scene_list`), the COLREGS monitor output the planner recorded for
+ * each scene is merged in, so the preview stream carries the same monitor data as a
+ * simulated run. Older payloads without the key still parse, with empty monitor
+ * fields.
  */
 export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
   if (!isRecord(raw)) {
@@ -293,6 +307,7 @@ export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
   if (!isRecord(trajectories) || !Array.isArray(trajectories.scene_list)) {
     return [];
   }
+  const monitorFrames = Array.isArray(raw.monitor_frames) ? raw.monitor_frames : null;
   const timeStepRaw = Number(trajectories.time_step);
   const timeStep = Number.isFinite(timeStepRaw) && timeStepRaw > 0 ? timeStepRaw : 1;
   const frames: SimulationFrame[] = [];
@@ -304,9 +319,19 @@ export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
     if (!isRecord(payload)) {
       return;
     }
+    const monitor = monitorFrames?.[index];
+    const monitorFields: Record<string, unknown> = {};
+    if (isRecord(monitor)) {
+      for (const key of MONITOR_FRAME_KEYS) {
+        if (monitor[key] !== undefined) {
+          monitorFields[key] = monitor[key];
+        }
+      }
+    }
     frames.push(
       parseFrame({
         ...payload,
+        ...monitorFields,
         timestamp: index * timeStep,
         timeStep,
       })

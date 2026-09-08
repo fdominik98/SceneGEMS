@@ -6,6 +6,8 @@ from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredScen
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.relation import Relation
 from utils.colregs_approximations import COLREGSConstraints
+
+
 class ReadilyApparentCoursePersistenceCondition(RuleCondition):
     def __init__(self, relation: Relation, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(relation, actor, colregs_constants)

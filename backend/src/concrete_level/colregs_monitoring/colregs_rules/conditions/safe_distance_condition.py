@@ -12,8 +12,24 @@ class SafeDistanceCondition(RuleCondition):
         super().__init__(relation, relation.actor1, colregs_constants)
 
     def condition(self, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        current_colregs_state = current_monitored_scene.colregs_state_set[self.relation]
         next_colregs_state = next_monitored_scene.colregs_state_set[self.relation]
-        if next_colregs_state.actors_violate_safety_domain:
+
+        # Checking only the scene endpoints lets a fast relative motion pass clean
+        # through the domain between two samples, so the whole step is tested.
+        min_step_clearance = next_colregs_state.min_step_clearance
+
+        if current_colregs_state.actors_violate_safety_domain:
+            # Already inside at the start of the step. Demanding positive clearance here
+            # would fail every successor and leave the search with nothing, so the
+            # obligation becomes "get out": the clearance has to improve.
+            current_clearance = min(current_colregs_state.actors_clearance.values(), default=0.0)
+            next_clearance = min(next_colregs_state.actors_clearance.values(), default=0.0)
+            if next_clearance <= current_clearance:
+                return COLREGSRuleResult.FAILED
+            return COLREGSRuleResult.UNKNOWN
+
+        if next_colregs_state.actors_violate_safety_domain or min_step_clearance < 0.0:
             return COLREGSRuleResult.FAILED
         return COLREGSRuleResult.UNKNOWN
 

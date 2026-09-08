@@ -16,6 +16,7 @@ import {
 } from "../../domain/playback/playbackStore";
 import { useUiStore } from "../../app/uiStore";
 import { DomainsLayer } from "./layers/DomainsLayer";
+import { SafetyDomainsLayer } from "./layers/SafetyDomainsLayer";
 import { TrajectoriesLayer } from "./layers/TrajectoriesLayer";
 import { VelocityVectorsLayer } from "./layers/VelocityVectorsLayer";
 import { VesselMarkerLayer } from "./layers/VesselMarkerLayer";
@@ -105,6 +106,14 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const actors = useMemo(() => previewFrame?.actors ?? [], [previewFrame]);
   const statesByActorId = useMemo(() => previewFrame?.statesByActorId ?? {}, [previewFrame]);
   const simActors = useMemo(() => simulationFrame?.actors ?? [], [simulationFrame]);
+  const situationContexts = useMemo(
+    () => previewFrame?.situationContexts ?? [],
+    [previewFrame]
+  );
+  const simSituationContexts = useMemo(
+    () => simulationFrame?.situationContexts ?? [],
+    [simulationFrame]
+  );
   const simStatesByActorId = useMemo(
     () => simulationFrame?.statesByActorId ?? {},
     [simulationFrame]
@@ -396,13 +405,23 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                   zoomScale={viewInfo.zoomScale}
                 />
               )}
-              {(previewOverlays.safetyDomain || previewOverlays.safetyRadius) && (
+              {previewOverlays.safetyRadius && (
                 <DomainsLayer
                   stream="animation"
                   actors={actors}
                   statesByActorId={statesByActorId}
                   origin={previewOrigin}
                   colorByActorId={colorByActorId}
+                />
+              )}
+              {(previewOverlays.safetyDomain || previewOverlays.staticAvoidanceDomain) && (
+                <SafetyDomainsLayer
+                  stream="animation"
+                  situationContexts={situationContexts}
+                  origin={previewOrigin}
+                  colorByActorId={colorByActorId}
+                  showSafetyDomains={previewOverlays.safetyDomain}
+                  showStaticAvoidanceDomains={previewOverlays.staticAvoidanceDomain}
                 />
               )}
               {previewOverlays.dot && (
@@ -439,13 +458,23 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                   zoomScale={viewInfo.zoomScale}
                 />
               )}
-              {(simulationOverlays.safetyDomain || simulationOverlays.safetyRadius) && (
+              {simulationOverlays.safetyRadius && (
                 <DomainsLayer
                   stream="simulation"
                   actors={simActors}
                   statesByActorId={simStatesByActorId}
                   origin={simulationOrigin}
                   colorByActorId={simulationStreamColorByActorId}
+                />
+              )}
+              {(simulationOverlays.safetyDomain || simulationOverlays.staticAvoidanceDomain) && (
+                <SafetyDomainsLayer
+                  stream="simulation"
+                  situationContexts={simSituationContexts}
+                  origin={simulationOrigin}
+                  colorByActorId={simulationStreamColorByActorId}
+                  showSafetyDomains={simulationOverlays.safetyDomain}
+                  showStaticAvoidanceDomains={simulationOverlays.staticAvoidanceDomain}
                 />
               )}
               {simulationOverlays.dot && (

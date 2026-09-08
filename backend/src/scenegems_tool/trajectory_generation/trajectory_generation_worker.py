@@ -7,13 +7,15 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredTrajectory
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from concrete_level.trajectory_generation.trajectory_data import TrajectoryData
+from concrete_level.trajectory_generation.trajectory_data import MONITOR_FRAMES_KEY, TrajectoryData
 from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP as DEFAULT_TIME_STEP
 from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
+from scenegems_tool.backend_service.serialization import serialize_monitored_trajectory
 from scenegems_tool.trajectory_generation.trajectory_generation_types import MqttTrajectoryGenerationTask
 from utils.colregs_approximations import COLREGSConstraints
 from utils.global_constants import ONE_HOUR_IN_SEC
@@ -70,12 +72,30 @@ def _make_trajectory_data_factory(scenario_content: str, start_time: datetime) -
     return _factory
 
 
+def _trajectory_payload(trajectory_data: TrajectoryData, monitored: Optional[MonitoredTrajectory]) -> dict:
+    """Serialized trajectory plus the monitor output recorded for each of its scenes.
+
+    `monitor_frames` is index-aligned with `trajectories.scene_list`. It is omitted
+    when the run disabled monitor results or the monitored path could not be
+    serialized, and consumers treat it as optional.
+    """
+    payload = trajectory_data.to_dict()
+    if monitored is None:
+        return payload
+    try:
+        monitor_frames = serialize_monitored_trajectory(monitored)
+    except Exception:
+        return payload
+    payload[MONITOR_FRAMES_KEY] = monitor_frames
+    return payload
+
+
 def _build_rrt(
     task: MqttTrajectoryGenerationTask,
     initial_scene: ConcreteScene,
     other_trajectories: Trajectories,
     colregs_constants: COLREGSConstraints,
-    observer: Callable[[Trajectories, int], None],
+    observer: Callable[[Trajectories, MonitoredTrajectory, int], None],
     termination_signal: Callable[[], bool],
 ) -> MonitorDrivenRRTSearch:
     params = task.params
@@ -97,16 +117,27 @@ def _build_rrt(
     )
 
 
+def _current_monitored_trajectory(rrt: MonitorDrivenRRTSearch, include_monitor_results: bool) -> Optional[MonitoredTrajectory]:
+    if not include_monitor_results:
+        return None
+    try:
+        return rrt.current_best_monitored_trajectory()
+    except Exception:
+        return None
+
+
 def _emit_result(
     result_queue,
     task: MqttTrajectoryGenerationTask,
     rrt: MonitorDrivenRRTSearch,
     factory: TrajectoryDataFactory,
 ) -> None:
+    include_monitor_results = task.params.monitor_results_enabled
     try:
         trajectories, iter_number = rrt.plan_trajectory()
         valid = trajectories is not None and len(trajectories) > 1
-        result_queue.put((task, factory(trajectories, iter_number).to_dict(), valid, None))
+        payload = _trajectory_payload(factory(trajectories, iter_number), _current_monitored_trajectory(rrt, include_monitor_results))
+        result_queue.put((task, payload, valid, None))
         return
     except Exception as exc:
         error = str(exc)
@@ -117,7 +148,8 @@ def _emit_result(
     except Exception:
         partial = None
     if partial is not None and len(partial) > 1:
-        result_queue.put((task, factory(partial, rrt.iteration_count).to_dict(), True, None))
+        payload = _trajectory_payload(factory(partial, rrt.iteration_count), _current_monitored_trajectory(rrt, include_monitor_results))
+        result_queue.put((task, payload, True, None))
     else:
         result_queue.put((task, None, False, f"No trajectory could be planned: {error}"))
 
@@ -151,13 +183,15 @@ def run_trajectory_generation_worker(
     def _termination_signal() -> bool:
         return terminate_event.is_set() or (deadline is not None and time.monotonic() >= deadline)
 
-    def _observer(trajectories: Trajectories, iteration: int) -> None:
+    include_monitor_results = params.monitor_results_enabled
+
+    def _observer(trajectories: Trajectories, monitored: MonitoredTrajectory, iteration: int) -> None:
         nonlocal last_preview_mono
         now = time.monotonic()
         if now - last_preview_mono < _MIN_PREVIEW_INTERVAL_SEC:
             return
         last_preview_mono = now
-        preview_queue.put((task, factory(trajectories, iteration).to_dict()))
+        preview_queue.put((task, _trajectory_payload(factory(trajectories, iteration), monitored if include_monitor_results else None)))
 
     rrt = _build_rrt(task, initial_scene, other_trajectories, colregs_constants, _observer, _termination_signal)
     _emit_result(result_queue, task, rrt, factory)

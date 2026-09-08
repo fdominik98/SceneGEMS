@@ -1,6 +1,7 @@
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import (
     GiveWayEarlyActionRule,
     GoAroundCollisionDomainSuggestion,
+    HoldAvoidanceCourseRule,
     OverturningSuggestion,
     PersistingCourseAfterCourseChangeRule,
     ReadilyApparentCourseChangeRule,
@@ -11,6 +12,7 @@ from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import (
 )
 from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import GiveWayEarlyActionCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.go_around_collision_domain_condition import GoAroundCollisionDomainCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.hold_avoidance_course_condition import HoldAvoidanceCourseCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.overturning_condition import OverturningCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.persisting_course_after_course_change_condition import PersistingCourseAfterCourseChangeCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.readily_apparent_course_change_condition import ReadilyApparentCourseChangeCondition
@@ -50,8 +52,10 @@ def make_head_on_situation_default_rules(situation_context: SituationContext) ->
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
             GiveWayEarlyActionRule(actor2, colregs_constants): GiveWayEarlyActionCondition(relation, actor2, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor2, colregs_constants): GoAroundCollisionDomainCondition(relation, actor2, colregs_constants),
+            HoldAvoidanceCourseRule(actor2, colregs_constants): HoldAvoidanceCourseCondition(relation, actor2, colregs_constants),
         }
     )
 
@@ -65,6 +69,7 @@ def make_overtaking_to_port_situation_default_rules(situation_context: Situation
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
         }
     )
 
@@ -78,6 +83,7 @@ def make_overtaking_to_starboard_situation_default_rules(situation_context: Situ
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
         }
     )
 
@@ -91,6 +97,7 @@ def make_crossing_from_port_situation_default_rules(situation_context: Situation
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
         }
     )
 
@@ -114,8 +121,10 @@ def make_two_way_crossing_from_port_situation_default_rules(situation_context: S
             SafeDistanceRule(situation_context.relation, colregs_constants): SafeDistanceCondition(situation_context.relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
             GiveWayEarlyActionRule(actor2, colregs_constants): GiveWayEarlyActionCondition(relation, actor2, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor2, colregs_constants): GoAroundCollisionDomainCondition(relation, actor2, colregs_constants),
+            HoldAvoidanceCourseRule(actor2, colregs_constants): HoldAvoidanceCourseCondition(relation, actor2, colregs_constants),
         }
     )
 
@@ -130,8 +139,10 @@ def make_two_way_crossing_from_starboard_situation_default_rules(situation_conte
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
+            HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
             GiveWayEarlyActionRule(actor2, colregs_constants): GiveWayEarlyActionCondition(relation, actor2, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor2, colregs_constants): GoAroundCollisionDomainCondition(relation, actor2, colregs_constants),
+            HoldAvoidanceCourseRule(actor2, colregs_constants): HoldAvoidanceCourseCondition(relation, actor2, colregs_constants),
         }
     )
 

@@ -70,9 +70,6 @@ class ManeuverSuggestions(Dict[ConcreteActor, Set[ManeuverType]]):
     def get_suggested_range_of_heading_change(self, actor: ConcreteActor, dt: float, colregs_constants: COLREGSConstraints) -> Interval:
         # return the union of the suggested ranges of the maneuvers for the actor
         max_heading_step = actor.get_max_heading_step(dt)
-        intervals = [
-            MANEUVER_TYPE_HEADING_CHANGE_MAP[maneuver](max_heading_step, colregs_constants)
-            for maneuver in self.get_all_maneuvers(actor)
-        ]
+        intervals = [MANEUVER_TYPE_HEADING_CHANGE_MAP[maneuver](max_heading_step, dt, colregs_constants) for maneuver in self.get_all_maneuvers(actor)]
 
         return Interval(*intervals)

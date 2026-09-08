@@ -14,11 +14,16 @@ from utils.global_constants import ONE_HOUR_IN_SEC, ONE_SECOND
 
 class LiveScenarioSession(ScenarioSession):
     def __init__(self, scenario_id: str, file_name: str, file_path: str, file_content: str, monitor_session: MonitorSession, send_payload: Callable[[ServerMessage], None]) -> None:
-        try:
-            trajectory_data: TrajectoryData = TrajectoryData.from_dict(json.loads(file_content))
+        raw_data = json.loads(file_content)
+        # Dispatch on the payload shape rather than try/except. A bare "except Exception" here
+        # used to swallow the real deserialization error and surface the EvaluationData
+        # fallback's complaint about the TrajectoryData-only "scene_path" field instead, which
+        # hid the actual cause of every failed scenario load.
+        if isinstance(raw_data, dict) and raw_data.get("trajectories") is not None:
+            trajectory_data: TrajectoryData = TrajectoryData.from_payload(raw_data)
             trajectory_builder = TrajectoryBuilder(trajectory_data.trajectories.time_step, trajectory_data.trajectories.scene_list).convert_to_time_step(ONE_SECOND)
-        except Exception:
-            eval_data: EvaluationData = EvaluationData.from_dict(json.loads(file_content))
+        else:
+            eval_data: EvaluationData = EvaluationData.from_dict(raw_data)
             trajectory_builder = TrajectoryBuilder.default_builder_from_scene(eval_data.best_scene, ONE_SECOND, ONE_HOUR_IN_SEC)
 
         trajectories = trajectory_builder.simulate_acceleration_from_zero().shift_positions_to_zero().build()

@@ -2,7 +2,7 @@ from typing import Dict
 
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredScene
 from concrete_level.colregs_monitoring.situation_context import SituationContext, SituationContextSet
-from concrete_level.colregs_monitoring.situation_context_state_machine import SituationContextStateMachine
+from concrete_level.colregs_monitoring.situation_context_state_machine import SituationContextStateMachine, StepSamples
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
@@ -32,10 +32,13 @@ class SituationContextSetStateMachine:
     ) -> SituationContextSet:
         """Calculate the next situation context set without mutating the current one."""
         current_situation_context_set = current_monitored_scene.situation_context_set
+        # Shared by every relation and built only if one of them has to look inside
+        # the step, so a step where nothing changes costs nothing extra.
+        step_samples = StepSamples(current_monitored_scene.scene, current_monitored_scene.timestamp, next_scene, next_timestamp)
         next_situation_contexts = {}
         for relation in current_situation_context_set.relations:
             current_context = current_situation_context_set[relation]
-            next_situation_contexts[relation] = SituationContextStateMachine.step(current_context, next_scene, next_timestamp, colregs_constants)
+            next_situation_contexts[relation] = SituationContextStateMachine.step(current_context, step_samples, next_scene, next_timestamp, colregs_constants)
         return SituationContextSetStateMachine.from_situation_contexts(next_situation_contexts, next_scene)
 
     @staticmethod

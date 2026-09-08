@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { useSimulationWorkflow } from "../../domain/simulation/useSimulationWorkflow";
 import { usePlaybackStore } from "../../domain/playback/playbackStore";
 import {
@@ -13,7 +13,13 @@ import {
   type TrajectoryGenerationParams,
   type TrajectoryGenerationTab,
 } from "../../domain/trajectoryGeneration/trajectoryGenerationStore";
+import {
+  describeTrajectoryRun,
+  summarizeTrajectoryResult,
+  warnAboutTrajectoryRun,
+} from "../../domain/trajectoryGeneration/summarizeTrajectoryResult";
 import { AnimationPlaybackControls } from "./AnimationPlaybackControls";
+import { MonitorControls } from "./MonitorControls";
 
 interface TrajectoryGenerationControlsProps {
   streamControls: ReturnType<typeof useSimulationWorkflow>;
@@ -37,6 +43,7 @@ const TABS: { id: TrajectoryGenerationTab; label: string }[] = [
   { id: "generate", label: "Generate" },
   { id: "advanced", label: "Advanced settings" },
   { id: "preview", label: "Preview" },
+  { id: "monitor", label: "Monitor" },
 ];
 
 function downloadJson(text: string, fileName: string) {
@@ -61,6 +68,7 @@ export function TrajectoryGenerationControls({
   const handoffScene = useTrajectoryGenerationStore((s) => s.handoffScene);
   const handoffSourceName = useTrajectoryGenerationStore((s) => s.handoffSourceName);
   const params = useTrajectoryGenerationStore((s) => s.params);
+  const includeMonitorResults = useTrajectoryGenerationStore((s) => s.includeMonitorResults);
   const status = useTrajectoryGenerationStore((s) => s.status);
   const iteration = useTrajectoryGenerationStore((s) => s.iteration);
   const errorMessage = useTrajectoryGenerationStore((s) => s.errorMessage);
@@ -69,6 +77,9 @@ export function TrajectoryGenerationControls({
   const activeTab = useTrajectoryGenerationStore((s) => s.activeTab);
   const setActiveTab = useTrajectoryGenerationStore((s) => s.setActiveTab);
   const setParam = useTrajectoryGenerationStore((s) => s.setParam);
+  const setIncludeMonitorResults = useTrajectoryGenerationStore(
+    (s) => s.setIncludeMonitorResults
+  );
   const resetParams = useTrajectoryGenerationStore((s) => s.resetParams);
   const setHandoffScene = useTrajectoryGenerationStore((s) => s.setHandoffScene);
 
@@ -98,6 +109,34 @@ export function TrajectoryGenerationControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Draw the loaded initial scene on the canvas, so loading one is visible rather than
+  // only being announced in the text below. A single scene is a one-frame preview.
+  // Skipped while a run is in flight and whenever there is a generated trajectory to
+  // show, since either of those owns the canvas and is the more informative picture.
+  useEffect(() => {
+    if (running || resultScenarioJson || !handoffScene?.scene) {
+      return;
+    }
+    setTrajectoryPreviewFrames([handoffScene.scene]);
+  }, [handoffScene, resultScenarioJson, running, setTrajectoryPreviewFrames]);
+
+  // What the finished run actually produced. The backend calls any run of more than one
+  // scene valid, so this is what distinguishes a completed plan from one that stopped
+  // after two steps.
+  const runSummary = useMemo(() => {
+    if (running || !resultScenarioJson) {
+      return null;
+    }
+    try {
+      const raw = JSON.parse(resultScenarioJson);
+      return summarizeTrajectoryResult(raw, buildFramesFromTrajectoryData(raw));
+    } catch {
+      return null;
+    }
+  }, [resultScenarioJson, running]);
+
+  const runWarning = runSummary ? warnAboutTrajectoryRun(runSummary) : null;
+
   const handleGenerate = useCallback(() => {
     if (!handoffScene?.valid) {
       return;
@@ -111,9 +150,15 @@ export function TrajectoryGenerationControls({
       crypto.randomUUID(),
       scenarioContent,
       colregsConstraintsContent,
-      toParamsWire(params)
+      toParamsWire(params, includeMonitorResults)
     );
-  }, [colregsConstraintsContent, handoffScene, params, streamControls]);
+  }, [
+    colregsConstraintsContent,
+    handoffScene,
+    includeMonitorResults,
+    params,
+    streamControls,
+  ]);
 
   const handleSceneFileSelected = useCallback(
     async (file: File) => {
@@ -160,7 +205,9 @@ export function TrajectoryGenerationControls({
     ? `Planning… iteration ${iteration}`
     : status === "done"
       ? resultValid
-        ? "Planned trajectory ready"
+        ? runWarning
+          ? "Stopped early - partial trajectory"
+          : "Planned trajectory ready"
         : "Finished without a usable trajectory"
       : status === "error"
         ? "Trajectory generation failed"
@@ -213,10 +260,27 @@ export function TrajectoryGenerationControls({
               Initial scene:{" "}
               {handoffScene
                 ? handoffSourceName
-                  ? `from file (${handoffSourceName})`
-                  : "from Scene Generation"
+                  ? `from file (${handoffSourceName}), shown on the canvas`
+                  : "from Scene Generation, shown on the canvas"
                 : "none - load a valid scene on the Scene Generation page, or load a scenario file here"}
             </p>
+
+            {status === "done" && runSummary && (
+              <div className="trajectory-run-report" role="status">
+                <p className="meta">{describeTrajectoryRun(runSummary)}</p>
+                {runWarning && (
+                  <p className="meta warning" role="alert">
+                    {runWarning}
+                  </p>
+                )}
+              </div>
+            )}
+            {status === "done" && !resultValid && (
+              <p className="meta warning" role="alert">
+                The planner returned no usable trajectory. It could not find a single
+                compliant step from this scene.
+              </p>
+            )}
             <div className="toolbar-row">
               <input
                 ref={sceneFileInputRef}
@@ -266,7 +330,9 @@ export function TrajectoryGenerationControls({
             </div>
             <p className="meta">
               {hasResult
-                ? "The last generated trajectory is restored here and shown on the canvas."
+                ? runWarning
+                  ? "The partial trajectory is shown on the canvas and can still be simulated and exported, with the COLREGS monitor results the planner recorded for it."
+                  : "The last generated trajectory is restored here and shown on the canvas, with the COLREGS monitor results the planner recorded for it."
                 : "Generate or load a trajectory to enable simulation and export."}
             </p>
           </section>
@@ -306,6 +372,21 @@ export function TrajectoryGenerationControls({
                 </label>
               ))}
             </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={includeMonitorResults}
+                disabled={running}
+                onChange={(e) => setIncludeMonitorResults(e.target.checked)}
+              />
+              Include monitor results in previews
+            </label>
+            <p className="meta">
+              On, the planner attaches the COLREGS monitor output it recorded for every
+              scene, which fills the side panel and draws the domains on the canvas while
+              planning. Off keeps previews small on long runs with many encounters: the
+              canvas still shows the trajectory, but without monitor data.
+            </p>
             <div className="toolbar-row">
               <button type="button" disabled={running} onClick={resetParams}>
                 Reset to defaults ({TRAJECTORY_GENERATION_PARAM_DEFAULTS.timeStep}s step)
@@ -316,6 +397,16 @@ export function TrajectoryGenerationControls({
               comes first. Preview interval controls how often the best-so-far
               trajectory is streamed to the canvas.
             </p>
+          </section>
+        </div>
+      ) : activeTab === "monitor" ? (
+        <div className="animation-control-stack">
+          <section className="animation-control-group" aria-label="Monitor connection">
+            <h4 className="animation-control-group-title">Monitor connection</h4>
+            <MonitorControls
+              streamControls={streamControls}
+              colregsConstraintsContent={colregsConstraintsContent}
+            />
           </section>
         </div>
       ) : (
@@ -329,7 +420,7 @@ export function TrajectoryGenerationControls({
             {running
               ? `Previewing the best trajectory so far (iteration ${iteration}).`
               : hasResult
-                ? "Previewing the last generated trajectory. COLREGS metrics in the side panel populate after Load for Simulation."
+                ? "Previewing the last generated trajectory."
                 : "No trajectory to preview yet."}
           </p>
         </div>

@@ -1,13 +1,16 @@
-from abc import ABC, abstractmethod
 import math
+from abc import ABC, abstractmethod
 from re import T
 from typing import List, Optional
 
 import numpy as np
 
-from concrete_level.models import actor_state
 from concrete_level.models.actor_state import ActorState
+from utils.global_constants import EPSILON
 from utils.math_utils import Direction, calculate_heading, distance, rotate_heading
+
+# How finely a step is sampled when a domain has no closed-form segment clearance.
+SEGMENT_CLEARANCE_SAMPLES = 16
 
 
 class SafetyDomain(ABC):
@@ -51,6 +54,55 @@ class SafetyDomain(ABC):
 
     def intersection_distance_from_center(self, line_direction: float) -> float:
         return distance(self.intersection_of_line_from_center(line_direction), self.center)
+
+    def signed_clearance(self, point: np.ndarray) -> float:
+        """Signed distance from ``point`` to this domain's boundary.
+
+        Negative inside the domain, zero on the boundary, positive outside. The
+        generic implementation measures along the ray from the center, which is exact
+        on that ray and always sign-correct for a convex domain. Shapes with a cheap
+        closed form override it.
+        """
+        delta = point - self.center
+        radial_distance = float(np.linalg.norm(delta))
+        if radial_distance < EPSILON:
+            return -self.intersection_distance_from_center(self.heading)
+        boundary_distance = self.intersection_distance_from_center(calculate_heading(delta))
+        return radial_distance - boundary_distance
+
+    def direction_normal(self, direction: Direction) -> np.ndarray:
+        if direction == Direction.RIGHT:
+            return self.v_perp_right
+        if direction == Direction.LEFT:
+            return self.v_perp_left
+        if direction == Direction.FORWARD:
+            return self.v
+        if direction == Direction.BACKWARD:
+            return -self.v
+        raise ValueError(f"Invalid direction: {direction}")
+
+    def signed_side_offset(self, point: np.ndarray, direction: Direction) -> float:
+        """How far ``point`` lies beyond the domain boundary on the given side.
+
+        Positive means the point is clear of the domain on that side, zero means it is
+        level with the boundary there, negative means it has not cleared it. Unlike
+        ``distance_from_direction`` this carries a sign, so passing on the wrong side is
+        distinguishable from passing on the right one.
+        """
+        normal = self.direction_normal(direction)
+        extent = self.intersection_distance_from_center(calculate_heading(normal))
+        return float(np.dot(point - self.center, normal)) - extent
+
+    def min_signed_clearance_over_segment(self, p_start: np.ndarray, p_end: np.ndarray, samples: int = SEGMENT_CLEARANCE_SAMPLES) -> float:
+        """Smallest ``signed_clearance`` anywhere on the segment from p_start to p_end.
+
+        This is what makes the domain check sound between two sampled scenes: testing
+        only the endpoints lets a fast relative motion tunnel straight through the
+        domain. The generic implementation samples the segment; ``CircularSafetyDomain``
+        solves it exactly.
+        """
+        steps = max(1, samples)
+        return min(self.signed_clearance(p_start + (p_end - p_start) * (i / steps)) for i in range(steps + 1))
 
     @abstractmethod
     def shift(self, distance: float, direction: float) -> "SafetyDomain":
@@ -139,6 +191,19 @@ class CircularSafetyDomain(SafetyDomain):
     def contains_point(self, point: np.ndarray) -> bool:
         return distance(point, self.center) <= self.radius
 
+    def signed_clearance(self, point: np.ndarray) -> float:
+        return distance(point, self.center) - self.radius
+
+    def min_signed_clearance_over_segment(self, p_start: np.ndarray, p_end: np.ndarray, samples: int = SEGMENT_CLEARANCE_SAMPLES) -> float:
+        # Exact: the closest point of a segment to the center, minus the radius.
+        segment = p_end - p_start
+        segment_length_sq = float(np.dot(segment, segment))
+        if segment_length_sq < EPSILON:
+            return self.signed_clearance(p_start)
+        t = float(np.dot(self.center - p_start, segment)) / segment_length_sq
+        t = min(1.0, max(0.0, t))
+        return distance(p_start + segment * t, self.center) - self.radius
+
     @property
     def back_point(self) -> np.ndarray:
         return self.center - self.radius * self.v
@@ -165,7 +230,9 @@ class CircularSafetyDomain(SafetyDomain):
 
     @property
     def bounding_rectangle(self) -> "RectangularSafetyDomain":
-        return RectangularSafetyDomain(self.center, self.heading, 2 * self.radius, 2 * self.radius)
+        # a and b are HALF extents, so the square circumscribing the circle has both
+        # half extents equal to the radius (2 * radius made the box twice too large).
+        return RectangularSafetyDomain(self.center, self.heading, self.radius, self.radius)
 
     @property
     def v(self) -> np.ndarray:
@@ -180,50 +247,45 @@ class CircularSafetyDomain(SafetyDomain):
         # Create parameter t for the circle
         t = np.linspace(0, 2 * np.pi, 100)
         return self.center + self.radius * np.column_stack([np.cos(t), np.sin(t)])
-    
-    
-    def get_ray_distances(self, 
-                          other_domains: List['CircularSafetyDomain'], 
-                          increment: int,
-                          min_distance: float,
-                          max_distance: float) -> List[float]:
+
+    def get_ray_distances(self, other_domains: List["CircularSafetyDomain"], increment: int, min_distance: float, max_distance: float) -> List[float]:
         """
-        Casts rays from the edge of this domain to find the closest edge 
+        Casts rays from the edge of this domain to find the closest edge
         among a list of other safety domains, bounded by min and max distances.
-        
+
         :param other_domains: A list of CircularSafetyDomain objects to check against.
         :param increment: Degree step for the rays (integer).
         :param min_distance: The minimum distance threshold (blind spot limit).
         :param max_distance: The maximum distance threshold (sensor range limit).
-        :return: A list of distances for each angle step, bounded by min_distance 
+        :return: A list of distances for each angle step, bounded by min_distance
                  and max_distance. Returns max_distance if no collision occurs.
         """
         x1, y1 = self.center
         distances = []
-        
+
         # ==========================================
         # BROAD PHASE: Calculate active angle intervals
         # ==========================================
         active_intervals = []
         check_all_angles = False
-        
+
         for other in other_domains:
             x2, y2 = other.center
             r2 = other.radius
-            
+
             dx_center = x2 - x1
             dy_center = y2 - y1
             distance_to_center = math.hypot(dx_center, dy_center)
-            
+
             # If the ego center is inside the target circle, we must check all angles
             if distance_to_center <= r2:
                 check_all_angles = True
                 break
-                
+
             # Calculate angle to the target and the width of its bounding cone
             phi = math.degrees(math.atan2(dy_center, dx_center)) % 360
             alpha = math.degrees(math.asin(r2 / distance_to_center))
-            
+
             # Wrap angles to 0-360 to handle intervals crossing the 0-degree line
             start_angle = (phi - alpha) % 360
             end_angle = (phi + alpha) % 360
@@ -235,7 +297,7 @@ class CircularSafetyDomain(SafetyDomain):
         for angle_deg in range(0, 360, increment):
             # Normalize the ray angle to 0-360 for our interval checks
             theta_deg = (angle_deg + 0) % 360
-            
+
             # 1. Culling Check: Is this angle near any safety domain?
             needs_check = check_all_angles
             if not needs_check:
@@ -250,56 +312,57 @@ class CircularSafetyDomain(SafetyDomain):
                         if theta_deg >= start or theta_deg <= end:
                             needs_check = True
                             break
-            
+
             # If it's outside all bounding cones, it hits nothing
             if not needs_check:
                 distances.append(float(max_distance))
                 continue
-                
+
             # 2. Exact Intersection Math (Only runs if a domain is in the ray's path)
             theta_rad = math.radians(theta_deg)
             dx = math.cos(theta_rad)
             dy = math.sin(theta_rad)
-            
+
             px = x1 + self.radius * dx
             py = y1 + self.radius * dy
-            
-            shortest_distance = float('inf')
+
+            shortest_distance = float("inf")
             hit_found = False
-            
+
             for other in other_domains:
                 x2, y2 = other.center
                 r2 = other.radius
-                
+
                 vx = px - x2
                 vy = py - y2
-                
+
                 b = 2 * (vx * dx + vy * dy)
                 c = (vx * vx + vy * vy) - (r2 * r2)
-                
+
                 discriminant = (b * b) - (4 * c)
-                
+
                 if discriminant >= 0:
                     sqrt_disc = math.sqrt(discriminant)
                     t1 = (-b - sqrt_disc) / 2
                     t2 = (-b + sqrt_disc) / 2
-                    
+
                     valid_distances = [t for t in (t1, t2) if t >= 0]
-                    
+
                     if valid_distances:
                         closest_to_this_other = min(valid_distances)
                         if closest_to_this_other < shortest_distance:
                             shortest_distance = closest_to_this_other
                             hit_found = True
-            
+
             # Apply Min/Max constraints
             if not hit_found or shortest_distance >= max_distance:
                 distances.append(float(max_distance))
             else:
                 clamped_distance = max(min_distance, shortest_distance)
                 distances.append(float(clamped_distance))
-            
+
         return distances
+
 
 class EllipticalSafetyDomain(SafetyDomain):
     def __init__(self, center: np.ndarray, heading: float, a: float, b: float):
@@ -404,11 +467,13 @@ class EllipticalSafetyDomain(SafetyDomain):
 
     @property
     def bounding_rectangle(self) -> "RectangularSafetyDomain":
-        return RectangularSafetyDomain(self.center, self.heading, self.b, self.a)
+        # a is the along-heading semi axis and b the cross-heading one, matching
+        # RectangularSafetyDomain's own a/b convention (they were swapped here).
+        return RectangularSafetyDomain(self.center, self.heading, self.a, self.b)
 
     @property
     def bounding_circle(self) -> "CircularSafetyDomain":
-        return CircularSafetyDomain(self.center, self.heading, self.a)
+        return CircularSafetyDomain(self.center, self.heading, max(self.a, self.b))
 
     @property
     def points_for_plotting(self) -> List[np.ndarray]:
@@ -445,7 +510,7 @@ class RectangularSafetyDomain(SafetyDomain):
         return left_pseudo_state.point_distance_from_course(point)
 
     def distance_from_front_side(self, point: np.ndarray) -> float:
-        front_pseudo_state = self.back_pseudo_state
+        front_pseudo_state = self.front_pseudo_state
         return front_pseudo_state.point_distance_from_course(point)
 
     def distance_from_back_side(self, point: np.ndarray) -> float:
@@ -577,6 +642,14 @@ class RectangularSafetyDomain(SafetyDomain):
         # Check within bounds
         return abs(local_x) <= self.a and abs(local_y) <= self.b
 
+    def signed_clearance(self, point: np.ndarray) -> float:
+        # Exact signed distance to an oriented box.
+        local = self.rotation_matrix_inv @ (point - self.center)
+        outside = np.array([abs(local[0]) - self.a, abs(local[1]) - self.b])
+        outside_distance = float(np.linalg.norm(np.maximum(outside, 0.0)))
+        inside_distance = min(float(np.max(outside)), 0.0)
+        return outside_distance + inside_distance
+
     def shift(self, distance: float, direction: float) -> "RectangularSafetyDomain":
         direction_vector = np.array([np.cos(direction), np.sin(direction)])
         shifted_center = self.center + distance * direction_vector
@@ -612,72 +685,81 @@ class RectangularSafetyDomain(SafetyDomain):
 
     @property
     def bounding_circle(self) -> "CircularSafetyDomain":
-        return CircularSafetyDomain(self.center, self.heading, self.a)
+        # The circumscribing circle has to reach the corners, not just the front edge.
+        return CircularSafetyDomain(self.center, self.heading, float(math.hypot(self.a, self.b)))
 
     @staticmethod
-    def bound_domains(safety_domains: List[SafetyDomain]) -> "RectangularSafetyDomain":
-        """
-        Compute the minimal bounding oriented rectangle that encloses all given oriented rectangles.
-        The resulting rectangle has heading = average heading (by unit vector averaging).
+    def bound_domains(safety_domains: List[SafetyDomain], heading: Optional[float] = None) -> "RectangularSafetyDomain":
+        """The smallest oriented rectangle enclosing every one of ``safety_domains``.
 
-        Args:
-            circular_safety_domains: list of CircularSafetyDomain objects
-                where center = (x, y), a = half height, b = half width, heading in degrees
+        ``heading`` fixes the frame the rectangle is measured in. Pass the course the
+        result will be read against; leave it out and the frame is the domains' average
+        heading, which only means something when they roughly agree. Two domains pointing
+        opposite ways average to nothing, and the frame then comes out of an arbitrary
+        arctangent of numerical noise: a head-on pair, whose domains are by definition
+        reciprocal, produced a rectangle whose "along" axis lay across both tracks.
 
-        Returns:
-            A tuple: (center, a, b, heading)
+        Each domain is enclosed by its own outline projected into that frame, not by its
+        circumscribed circle. The circle throws away the shape it was built from, which
+        is the whole point of having shapes: it gives an elongated head-on domain the
+        beam of its own length, and a vessel told to go around that is sent half as far
+        again as the encounter asks for.
         """
 
         if len(safety_domains) == 0:
             return RectangularSafetyDomain(np.array([0.0, 0.0]), 0.0, 0.0, 0.0)
 
-        # --- Step 1: Compute average heading via unit vector averaging
-        heading_vectors = np.array([c.v for c in safety_domains])
-        avg_vec = np.mean(heading_vectors, axis=0)
-        avg_heading = calculate_heading(avg_vec)
+        if heading is None:
+            heading_vectors = np.array([c.v for c in safety_domains])
+            avg_vec = np.mean(heading_vectors, axis=0)
+            heading = calculate_heading(avg_vec)
 
-        # get circle intersections from center towards avg_heading
-        # --- Step 2: Rotation matrix for average heading
-        R = np.array([[np.cos(avg_heading), -np.sin(avg_heading)], [np.sin(avg_heading), np.cos(avg_heading)]])
-        R_inv = R.T  # rotate points into average-heading frame
+        R = np.array([[np.cos(heading), -np.sin(heading)], [np.sin(heading), np.cos(heading)]])
+        R_inv = R.T  # rotate points into the reference frame
 
-        # --- Step 3: Compute bounding extents considering each circle's radius
         all_min = []
         all_max = []
 
         for c in safety_domains:
-            cx, cy = c.center[0], c.center[1]
-            r = c.bounding_circle.radius
-
-            # Transform center into avg-heading frame
-            transformed_center = np.dot(R_inv, np.array([cx, cy]))
-            all_min.append(transformed_center - np.array([r, r]))
-            all_max.append(transformed_center + np.array([r, r]))
+            outline = np.asarray(c.points_for_plotting)
+            if outline.size == 0:
+                # Nothing to project: fall back to the circumscribed circle so the
+                # domain is still bounded rather than silently skipped.
+                transformed_center = np.dot(R_inv, c.center)
+                r = c.bounding_circle.radius
+                all_min.append(transformed_center - np.array([r, r]))
+                all_max.append(transformed_center + np.array([r, r]))
+                continue
+            transformed = outline @ R_inv.T
+            all_min.append(np.min(transformed, axis=0))
+            all_max.append(np.max(transformed, axis=0))
 
         all_min = np.min(np.vstack(all_min), axis=0)
         all_max = np.max(np.vstack(all_max), axis=0)
 
-        # --- Step 4: Compute bounding rectangle parameters in local frame
         center_local = (all_min + all_max) / 2
-        width = (all_max[0] - all_min[0]) / 2  # b
-        height = (all_max[1] - all_min[1]) / 2  # a
+        along_half = (all_max[0] - all_min[0]) / 2  # a: extent along the reference heading
+        across_half = (all_max[1] - all_min[1]) / 2  # b: extent across it
 
-        # --- Step 5: Transform center back to world coordinates
         center_world = np.dot(R, center_local)
 
-        return RectangularSafetyDomain(center_world, avg_heading, width, height)
+        return RectangularSafetyDomain(center_world, heading, along_half, across_half)
 
 
 class DomainCollection:
-    def __init__(self):
+    def __init__(self, reference_heading: Optional[float] = None):
         self.domains: List[SafetyDomain] = list()
+        # The course this collection is read against, which is what has_passed and
+        # in_front_of ask about. Without it the bounding rectangle falls back to the
+        # domains' average heading, and domains that disagree leave it with no frame.
+        self.reference_heading = reference_heading
         self.__has_changed = True
         self.__bounding_rectangle = None
 
     @property
     def bounding_rectangle(self) -> RectangularSafetyDomain:
         if self.__has_changed or self.__bounding_rectangle is None:
-            self.__bounding_rectangle = RectangularSafetyDomain.bound_domains(self.domains)
+            self.__bounding_rectangle = RectangularSafetyDomain.bound_domains(self.domains, self.reference_heading)
             self.__has_changed = False
         return self.__bounding_rectangle
 
@@ -689,16 +771,26 @@ class DomainCollection:
         return domain_collection
 
     @staticmethod
-    def from_domains(domains: List[SafetyDomain]) -> "DomainCollection":
-        domain_collection = DomainCollection()
+    def from_domains(domains: List[SafetyDomain], reference_heading: Optional[float] = None) -> "DomainCollection":
+        # Keep the domains as they are. Rebuilding each one as a circle of radius
+        # center_end_distance threw away the cross-heading extent, so a union was
+        # lossy and an ellipse or rectangle silently became a circle.
+        domain_collection = DomainCollection(reference_heading)
         for domain in domains:
-            domain_collection.add_domain(domain.center, domain.heading, domain.center_end_distance)
+            domain_collection.add_safety_domain(domain)
         return domain_collection
+
+    def add_safety_domain(self, domain: SafetyDomain):
+        if domain.bounding_circle.radius <= 0:
+            return
+        self.domains.append(domain)
+        self.__has_changed = True
 
     def add_domain(self, point: np.ndarray, heading: float, radius: float):
         if radius <= 0:
             return
         self.domains.append(CircularSafetyDomain(point, heading, radius))
+        self.__has_changed = True
 
     def has_passed(self, actor_state: ActorState) -> bool:
         if self.empty:
@@ -717,7 +809,11 @@ class DomainCollection:
         return self.bounding_rectangle.heading
 
     def union(self, other: "DomainCollection") -> "DomainCollection":
-        return DomainCollection.from_domains(self.domains + other.domains)
+        # The frame belongs to the actor the collection is about, and a union is only
+        # ever taken across that one actor's encounters, so either operand's frame is
+        # the right one: the first that has one wins.
+        reference_heading = self.reference_heading if self.reference_heading is not None else other.reference_heading
+        return DomainCollection.from_domains(self.domains + other.domains, reference_heading)
 
     @property
     def empty(self) -> bool:

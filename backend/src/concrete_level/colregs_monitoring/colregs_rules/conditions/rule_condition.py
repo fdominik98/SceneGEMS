@@ -33,6 +33,28 @@ class RuleCondition(ABC):
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
         pass
 
+    def effective_avoidance_direction(self, monitored_scene: MonitoredScene) -> Direction:
+        """Which side this actor should pass on, for the encounter this instance judges.
+
+        Read from the monitor state, where it was decided when the encounter began and
+        has been carried unchanged ever since. It must not be recomputed here. The value
+        depends on which OTHER encounters the actor is in at the moment it is asked for,
+        because encounters that ask for opposite sides are jointly unsatisfiable and have
+        to be collapsed to one side. Recomputed per scene, an unrelated encounter ending
+        silently flips this one: measured on a vessel overtaking two ships at once, both
+        encounters collapsed to starboard, the vessel turned starboard, and 400 s later
+        the first encounter cleared, the second reverted to its own port direction, and
+        Rule 16 failed retroactively against the turn the monitor itself had demanded.
+        Every successor was rejected and the search could not pass that step.
+
+        See ``COLREGSStateMachine.get_actors_avoidance_direction`` for how it is seeded.
+        """
+        colregs_state = monitored_scene.colregs_state_set.get(self.relation)
+        if colregs_state is None:
+            # No state for this relation yet, which happens only before the first step.
+            return monitored_scene.situation_context_set.resolved_avoidance_direction(self.relation, self.actor)
+        return colregs_state.actors_avoidance_direction.get(self.actor, Direction.FORWARD)
+
     def __str__(self) -> str:
         return f"{self.__class__.__name__} : ({self.relation}, {self.actor})"
 

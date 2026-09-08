@@ -31,6 +31,7 @@ function ContextCard({
           <tr>
             <th>Vessel</th>
             <th>Avoidance</th>
+            <th>Judged</th>
             <th>Role</th>
             <th>Global avoid.</th>
             <th>Global role</th>
@@ -44,6 +45,14 @@ function ContextCard({
               </td>
               <td>
                 <DirectionBadge dir={ctx.avoidanceDirectionByActorId?.[id]} />
+              </td>
+              <td>
+                <DirectionBadge
+                  dir={
+                    ctx.effectiveAvoidanceDirectionByActorId?.[id] ??
+                    ctx.avoidanceDirectionByActorId?.[id]
+                  }
+                />
               </td>
               <td>
                 <RoleChip giveWay={Boolean(ctx.isGiveWayByActorId?.[id])} />

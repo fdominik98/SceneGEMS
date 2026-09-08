@@ -56,7 +56,8 @@ export function ActorVisibilityPanel({ stream }: ActorVisibilityPanelProps) {
           ["velocity", "Velocity"],
           ["safetyRadius", "Safety radius ring"],
           ["trajectory", "Trajectory"],
-          ["safetyDomain", "Safety Domains"],
+          ["safetyDomain", "Safety domains"],
+          ["staticAvoidanceDomain", "Static avoidance domains"],
         ] as const
       ).map(([key, label]) => (
         <label className="check" key={key}>

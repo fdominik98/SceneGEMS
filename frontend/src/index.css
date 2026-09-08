@@ -2464,6 +2464,33 @@ input[type="range"] {
   margin: 6px 0;
 }
 
+/* A finished run that did not do what it was asked. Not an error: the trajectory is
+   there and can still be inspected, exported and simulated. */
+.meta.warning {
+  color: #fcd34d;
+}
+
+.trajectory-run-report {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-left: 3px solid #475569;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.trajectory-run-report > .meta {
+  margin: 0;
+}
+
+.trajectory-run-report > .meta + .meta {
+  margin-top: 6px;
+}
+
+.trajectory-run-report:has(.meta.warning) {
+  border-left-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
+
 .global-error-bar {
   flex-shrink: 0;
   width: 100%;

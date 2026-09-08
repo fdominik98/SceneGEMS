@@ -34,6 +34,27 @@ export interface ActorKinematicState {
   heading: number;
 }
 
+/**
+ * Parametric description of a COLREGS safety domain. The backend sends shape
+ * parameters rather than a polygon (see `_safety_domain_payload` in
+ * `backend/src/scenegems_tool/backend_service/serialization.py`); the canvas draws
+ * the curve. `radius` is set for circles, `a`/`b` for ellipses and rectangles.
+ */
+export interface SafetyDomainShape {
+  shape: "circle" | "ellipse" | "rectangle";
+  center: [number, number];
+  heading: number;
+  radius?: number;
+  a?: number;
+  b?: number;
+}
+
+/** One circle of a static avoidance domain (a frozen potential collision domain). */
+export interface StaticAvoidanceDomain {
+  center: [number, number];
+  radius: number;
+}
+
 export interface SituationContextData {
   relationId: string;
   actor1Id: string;
@@ -45,7 +66,17 @@ export interface SituationContextData {
   avoidanceDirectionByActorId: Record<string, string>;
   isGiveWayByActorId: Record<string, boolean>;
   globalAvoidanceDirectionByActorId: Record<string, string>;
+  /**
+   * The side the rules actually judge each actor against, fixed when the encounter
+   * began. The two fields above are recomputed per scene, so they can differ once a
+   * concurrent encounter ends. Absent on older payloads.
+   */
+  effectiveAvoidanceDirectionByActorId?: Record<string, string>;
   globalGiveWayByActorId: Record<string, boolean>;
+  /** Safety domain each actor must keep clear in this encounter. Absent on older payloads. */
+  safetyDomainsByActorId?: Record<string, SafetyDomainShape>;
+  /** Domains frozen when the encounter started, which each actor has to go around. */
+  staticAvoidanceDomainsByActorId?: Record<string, StaticAvoidanceDomain[]>;
 }
 
 export interface ColregsMonitorStateData {

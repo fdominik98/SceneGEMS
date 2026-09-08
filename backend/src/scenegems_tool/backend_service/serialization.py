@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults
-from concrete_level.models.concrete_actors import ConcreteVessel
+from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults, MonitoredTrajectory
+from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
+from utils.safety_domains import CircularSafetyDomain, DomainCollection, EllipticalSafetyDomain, RectangularSafetyDomain, SafetyDomain
 
 
 def _relation_key(relation: Relation) -> str:
@@ -36,6 +37,63 @@ def _actor_bool_map(values: Dict[Any, bool]) -> Dict[str, bool]:
     return {str(actor.id): bool(value) for actor, value in values.items()}
 
 
+def _safety_domain_payload(domain: SafetyDomain) -> Dict[str, Any]:
+    """Parametric description of a safety domain.
+
+    The domain classes are all closed-form (circle, ellipse, rectangle), so the wire
+    carries the parameters and the client draws the curve. Sending
+    `points_for_plotting` instead would be 100 to 200 points per actor per scene.
+    """
+    payload: Dict[str, Any] = {
+        "center": [float(domain.center[0]), float(domain.center[1])],
+        "heading": float(domain.heading),
+    }
+    if isinstance(domain, CircularSafetyDomain):
+        payload["shape"] = "circle"
+        payload["radius"] = float(domain.radius)
+    elif isinstance(domain, EllipticalSafetyDomain):
+        payload["shape"] = "ellipse"
+        payload["a"] = float(domain.a)
+        payload["b"] = float(domain.b)
+    elif isinstance(domain, RectangularSafetyDomain):
+        payload["shape"] = "rectangle"
+        payload["a"] = float(domain.a)
+        payload["b"] = float(domain.b)
+    else:
+        # Unknown subclass: fall back to the bounding circle so something is drawn.
+        bounding = domain.bounding_circle
+        payload["shape"] = "circle"
+        payload["radius"] = float(bounding.radius)
+    return payload
+
+
+def _domain_collection_payload(collection: DomainCollection) -> List[Dict[str, Any]]:
+    """Static avoidance domains as circles, matching PotentialCollisionDomainComponent."""
+    return [
+        {
+            "center": [float(domain.center[0]), float(domain.center[1])],
+            "radius": float(domain.center_end_distance),
+        }
+        for domain in collection.domains
+    ]
+
+
+def _effective_avoidance_direction(monitored_scene: MonitoredSceneWithResults, relation: Relation, actor: ConcreteActor) -> str:
+    """The side this encounter judges ``actor`` against, as the rules see it.
+
+    Read from the monitor state, where it was fixed when the encounter began. Falls back
+    to resolving it from the context set when no state exists for the relation yet, which
+    happens only before the first monitored step.
+    """
+    state = monitored_scene.colregs_state_set.get(relation)
+    if state is None:
+        return monitored_scene.situation_context_set.resolved_avoidance_direction(relation, actor).name
+    direction = state.actors_avoidance_direction.get(actor)
+    if direction is None:
+        return monitored_scene.situation_context_set.resolved_avoidance_direction(relation, actor).name
+    return direction.name
+
+
 def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Dict[str, Any]:
     situation_contexts: List[Dict[str, Any]] = []
     colregs_states: List[Dict[str, Any]] = []
@@ -48,6 +106,8 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
         relation_id = _relation_key(relation)
         actor1_id = str(relation.actor1.id)
         actor2_id = str(relation.actor2.id)
+        safety_domains = context.get_safety_domains(scene)
+        state = monitored_scene.colregs_state_set.get(relation)
 
         situation_contexts.append(
             {
@@ -65,6 +125,15 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
                     actor1_id: monitored_scene.situation_context_set.actor_avoidance_direction(relation.actor1).name,
                     actor2_id: monitored_scene.situation_context_set.actor_avoidance_direction(relation.actor2).name,
                 },
+                # The side the rules actually judge each actor against. The two fields
+                # above are recomputed from the current context set, so once a concurrent
+                # encounter ends they revert to this encounter's own direction while the
+                # rules keep judging against the side committed to when it began. Without
+                # this on the wire the console contradicts the verdicts beside it.
+                "effectiveAvoidanceDirectionByActorId": {
+                    actor1_id: _effective_avoidance_direction(monitored_scene, relation, relation.actor1),
+                    actor2_id: _effective_avoidance_direction(monitored_scene, relation, relation.actor2),
+                },
                 "giveWayByActorId": {
                     actor1_id: context.is_give_way_actor(relation.actor1),
                     actor2_id: context.is_give_way_actor(relation.actor2),
@@ -74,10 +143,17 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
                     actor2_id: monitored_scene.situation_context_set.actor_has_to_give_way(relation.actor2),
                 },
                 "timeSpentInCurrentContext": monitored_scene.timestamp - context.start_timestamp,
+                "safetyDomainsByActorId": {
+                    actor1_id: _safety_domain_payload(safety_domains[0]),
+                    actor2_id: _safety_domain_payload(safety_domains[1]),
+                },
+                "staticAvoidanceDomainsByActorId": {
+                    actor1_id: _domain_collection_payload(context.start_potential_collision_domains[relation.actor1]),
+                    actor2_id: _domain_collection_payload(context.start_potential_collision_domains[relation.actor2]),
+                },
             }
         )
 
-        state = monitored_scene.colregs_state_set.get(relation)
         if state is not None:
             colregs_states.append(
                 {
@@ -181,6 +257,11 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
         "metrics": metrics,
     }
     return _to_json_safe(payload)
+
+
+def serialize_monitored_trajectory(monitored_trajectory: MonitoredTrajectory) -> List[Dict[str, Any]]:
+    """One monitor payload per scene, index-aligned with `trajectories.scene_list`."""
+    return [monitor_payload_from_scene(monitored_scene) for monitored_scene in monitored_trajectory.monitored_scenes_with_results]
 
 
 def serialize_monitored_frame(scenario_id: str, monitored_scene: MonitoredSceneWithResults, timestamp: int, time_step: int) -> Dict[str, Any]:

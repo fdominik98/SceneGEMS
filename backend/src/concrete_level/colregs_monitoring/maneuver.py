@@ -37,33 +37,81 @@ class ManeuverType(Enum):
         return set(ManeuverType).difference({ManeuverType.UNDETECTED})
 
 
+# Headroom on the readily-apparent turn rate when proposing a course change, so a
+# manoeuvre planned at exactly the rule's bound is not failed by accumulated rounding.
+READILY_APPARENT_PLANNING_MARGIN = 1.02
+
+
+def _detectable_heading_step(time_step: float, colregs_constants: COLREGSConstraints) -> float:
+    """Smallest heading change per step worth proposing as a course change.
+
+    Merely exceeding the undetectable band is not enough: Rule 8 also requires the
+    change to become readily apparent within READILY_APPARENT_COURSE_CHANGE_TIME, so a
+    turn slower than that rate enters the course-change state and is then failed for not
+    being readily apparent. Proposing those wastes the search on manoeuvres the rules
+    cannot accept, so the floor is whichever of the two bounds is higher.
+    """
+    # Both bounds are compared strictly (">") by the rules, so a step sitting exactly on
+    # a bound fails: sustaining precisely READILY_APPARENT_HEADING_CHANGE over
+    # READILY_APPARENT_COURSE_CHANGE_TIME is not "more than" it. Offer the first
+    # magnitude that actually clears each bound, with a small planning margin on the
+    # readily apparent rate so a turn does not sit on the knife edge for its whole
+    # duration and fail on rounding.
+    return max(
+        colregs_constants.undetectable_heading_change(time_step) + EPSILON,
+        colregs_constants.readily_apparent_heading_change(time_step) * READILY_APPARENT_PLANNING_MARGIN,
+    )
+
+
 def get_suggested_range_of_heading_change_for_course_change_to_the_right(
     max_heading_step: float,
+    time_step: float,
     colregs_constants: COLREGSConstraints,
 ) -> Interval:
-    min_range = colregs_constants.UNDETECTABLE_HEADING_CHANGE + EPSILON
+    min_range = _detectable_heading_step(time_step, colregs_constants)
     if max_heading_step < min_range:
-        raise ValueError(f"max_heading_step ({max_heading_step}) is less than min_range ({min_range})")
+        # The vessel cannot make a detectable course change within a single step at this
+        # time step. That is not an error: the turn has to be built up through the
+        # undetectable band instead, so offer no single-step course change here.
+        return Interval()
     return Interval.closed(-max_heading_step, -min_range)
 
 
-def get_suggested_range_of_heading_change_for_course_change_to_the_left(max_heading_step: float, colregs_constants: COLREGSConstraints) -> Interval:
-    min_range = colregs_constants.UNDETECTABLE_HEADING_CHANGE + EPSILON
+def get_suggested_range_of_heading_change_for_course_change_to_the_left(max_heading_step: float, time_step: float, colregs_constants: COLREGSConstraints) -> Interval:
+    min_range = _detectable_heading_step(time_step, colregs_constants)
     if max_heading_step < min_range:
-        raise ValueError(f"max_heading_step ({max_heading_step}) is less than min_range ({min_range})")
+        return Interval()
     return Interval.closed(min_range, max_heading_step)
 
 
-def get_suggested_range_of_heading_change_for_persisting_course(max_heading_step: float, colregs_constants: COLREGSConstraints) -> Interval:
-    # range = min(max_heading_step, GlobalConfig.UNDETECTABLE_COURSE_CHANGE_ANGLE - GlobalConfig.EPSILON)
-    return Interval.closed(-EPSILON, EPSILON)
+def get_suggested_range_of_heading_change_for_persisting_course(max_heading_step: float, time_step: float, colregs_constants: COLREGSConstraints) -> Interval:
+    # Holding course does not mean holding the heading to machine precision. Anything
+    # inside the undetectable band still reads as "persisting" to the other vessel, and
+    # this band is what lets the planner draw a gentle arc: with +/-EPSILON the only
+    # options were a perfectly straight leg or a fully detectable corner.
+    #
+    # The band is capped by UNDETECTABLE_HEADING_CHANGE as well as by the rate, because
+    # the maneuver state machine also watches the change accumulated SINCE the manoeuvre
+    # started against that same angle. Without the cap a single "hold course" step could
+    # exceed the cumulative threshold on its own and be reclassified as a course change,
+    # which then fails Rule 8 for not being readily apparent.
+    band = min(
+        colregs_constants.undetectable_heading_change(time_step),
+        colregs_constants.UNDETECTABLE_HEADING_CHANGE,
+        max_heading_step,
+    )
+    # Stay strictly inside the band: the detectors compare with ">", and the heading a
+    # step actually achieves passes through atan2, so a request sitting exactly on the
+    # bound can land a fraction above it and be classified as a course change.
+    band = max(band - EPSILON, 0.0)
+    return Interval.closed(-band, band)
 
 
-def get_suggested_range_of_heading_change_for_undetected(max_heading_step: float, colregs_constants: COLREGSConstraints) -> Interval:
+def get_suggested_range_of_heading_change_for_undetected(max_heading_step: float, time_step: float, colregs_constants: COLREGSConstraints) -> Interval:
     return Interval.closed(-max_heading_step, max_heading_step)
 
 
-MANEUVER_TYPE_HEADING_CHANGE_MAP: Dict[ManeuverType, Callable[[float, COLREGSConstraints], Interval]] = {
+MANEUVER_TYPE_HEADING_CHANGE_MAP: Dict[ManeuverType, Callable[[float, float, COLREGSConstraints], Interval]] = {
     ManeuverType.COURSE_CHANGE_TO_THE_RIGHT: get_suggested_range_of_heading_change_for_course_change_to_the_right,
     ManeuverType.COURSE_CHANGE_TO_THE_LEFT: get_suggested_range_of_heading_change_for_course_change_to_the_left,
     ManeuverType.PERSISTING_COURSE: get_suggested_range_of_heading_change_for_persisting_course,
@@ -77,10 +125,17 @@ class SpeedChange:
     speed_diff_since_start: float
     speed_diff_time_window: List[float]
     colregs_constants: COLREGSConstraints
+    # Seconds covered by speed_diff_since_previous. Detection is a rate comparison, so
+    # the verdict does not change when the same path is sampled at a different rate.
+    time_step: float = 0.0
+
+    @property
+    def undetectable_step(self) -> float:
+        return self.colregs_constants.undetectable_speed_change(self.time_step)
 
     @property
     def speed_change_detected(self) -> bool:
-        return abs(self.speed_diff_since_previous) > self.colregs_constants.UNDETECTABLE_SPEED_CHANGE
+        return abs(self.speed_diff_since_previous) > self.undetectable_step
 
     @property
     def speed_change_detected_since_start(self) -> bool:
@@ -98,14 +153,16 @@ class SpeedChange:
             speed_diff_since_start=self.speed_diff_since_previous,
             speed_diff_time_window=[self.speed_diff_since_previous],
             colregs_constants=self.colregs_constants,
+            time_step=self.time_step,
         )
 
-    def step(self, speed_diff_since_previous: float, slide_time_window: bool = True) -> "SpeedChange":
+    def step(self, speed_diff_since_previous: float, time_step: float, slide_time_window: bool = True) -> "SpeedChange":
         if slide_time_window:
             speed_diff_time_window = self.speed_diff_time_window[1:] + [speed_diff_since_previous]
         else:
             speed_diff_time_window = self.speed_diff_time_window + [speed_diff_since_previous]
         return SpeedChange(
+            time_step=time_step,
             speed_diff_since_previous=speed_diff_since_previous,
             speed_diff_since_start=self.speed_diff_since_start + speed_diff_since_previous,
             speed_diff_time_window=speed_diff_time_window,
@@ -123,7 +180,15 @@ class HeadingChange:
     heading_diff_since_start: float
     heading_diff_time_window: List[float]
     colregs_constants: COLREGSConstraints
-    
+    # Seconds covered by heading_diff_since_previous. Detection compares a rate rather
+    # than a raw per-sample angle, so the same physical turn is classified identically
+    # whether the path is sampled every 15 s by the planner or every 1 s by the console.
+    time_step: float = 0.0
+
+    @property
+    def undetectable_step(self) -> float:
+        return self.colregs_constants.undetectable_heading_change(self.time_step)
+
     @property
     def detected_heading_direction(self) -> str:
         if self.change_detected_to_left:
@@ -134,15 +199,15 @@ class HeadingChange:
 
     @property
     def change_detected_to_left(self) -> bool:
-        return self.heading_diff_since_previous > self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
+        return self.heading_diff_since_previous > self.undetectable_step
 
     @property
     def change_detected_to_right(self) -> bool:
-        return self.heading_diff_since_previous < -self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
+        return self.heading_diff_since_previous < -self.undetectable_step
 
     @property
     def change_detected(self) -> bool:
-        return abs(self.heading_diff_since_previous) > self.colregs_constants.UNDETECTABLE_HEADING_CHANGE
+        return abs(self.heading_diff_since_previous) > self.undetectable_step
 
     @property
     def change_detected_since_start_to_left(self) -> bool:
@@ -194,14 +259,16 @@ class HeadingChange:
             heading_diff_since_start=self.heading_diff_since_previous,
             heading_diff_time_window=[self.heading_diff_since_previous],
             colregs_constants=self.colregs_constants,
+            time_step=self.time_step,
         )
 
-    def step(self, heading_diff_since_previous: float, slide_time_window: bool = True) -> "HeadingChange":
+    def step(self, heading_diff_since_previous: float, time_step: float, slide_time_window: bool = True) -> "HeadingChange":
         if slide_time_window:
             heading_diff_time_window = self.heading_diff_time_window[1:] + [heading_diff_since_previous]
         else:
             heading_diff_time_window = self.heading_diff_time_window + [heading_diff_since_previous]
         return HeadingChange(
+            time_step=time_step,
             heading_diff_since_previous=heading_diff_since_previous,
             heading_diff_since_start=self.heading_diff_since_start + heading_diff_since_previous,
             heading_diff_time_window=heading_diff_time_window,
@@ -230,7 +297,7 @@ class ManeuverState(ABC):
     distance_made: float
     total_distance_made: float
     colregs_constants: COLREGSConstraints
-    
+
     @abstractmethod
     def do_step(self, maneuver_context: ManeuverContext, hc: HeadingChange, sc: SpeedChange, next_timestamp: int, distance_made: float) -> "ManeuverState":
         pass
@@ -254,8 +321,8 @@ class ManeuverState(ABC):
         speed_diff_since_previous = next_state.speed - current_state.speed
 
         slide_time_window = self.readily_apparent_time_passed
-        next_hc = self.heading_change.step(heading_diff_since_previous, slide_time_window)
-        next_sc = self.speed_change.step(speed_diff_since_previous, slide_time_window)
+        next_hc = self.heading_change.step(heading_diff_since_previous, time_step, slide_time_window)
+        next_sc = self.speed_change.step(speed_diff_since_previous, time_step, slide_time_window)
         next_timestamp = self.current_timestamp + time_step
         distance_made = distance(current_state.p, next_state.p)
         return self.do_step(maneuver_context, next_hc, next_sc, next_timestamp, distance_made)
@@ -511,7 +578,7 @@ class UndetectedManeuver(ManeuverState):
                 heading_change=hc,
                 speed_change=sc,
                 previous_maneuver_type=self.previous_maneuver_type,
-                total_distance_made=self.total_distance_made + distance_made,   
+                total_distance_made=self.total_distance_made + distance_made,
                 colregs_constants=self.colregs_constants,
             )
         # No change detected

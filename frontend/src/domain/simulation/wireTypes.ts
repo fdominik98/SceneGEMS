@@ -66,6 +66,8 @@ export interface TrajectoryGenerationParamsWire {
   directionThreshold?: number;
   bestRandomNodesK?: number;
   previewInterval?: number;
+  /** When false, previews and the result omit `monitor_frames`. */
+  includeMonitorResults?: boolean;
 }
 
 export type ClientToServerMessage =

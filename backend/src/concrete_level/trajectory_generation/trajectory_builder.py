@@ -9,7 +9,7 @@ from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from utils.global_constants import ONE_HOUR_IN_SEC, ONE_SECOND
-from utils.math_utils import compute_start_point, distance
+from utils.math_utils import compute_start_point, distance, heading_diff, rotate_heading
 
 
 class TrajectoryBuilder:
@@ -141,11 +141,28 @@ class TrajectoryBuilder:
     def __len__(self) -> int:
         return len(self.scene_list)
 
-    def convert_to_one_second_step_with_interpolation(self, kind: str = "cubic") -> "TrajectoryBuilder":
-        # use scene builder interpolate_to to create a new scene list
+    def convert_to_one_second_step_with_interpolation(self, kind: str = "resimulate") -> "TrajectoryBuilder":
+        """Resample to one second steps by re-simulating the vessel between waypoints.
+
+        A spline through waypoints spaced a whole time step apart is not a path any
+        vessel can sail: it overshoots at every corner, and because heading is splined
+        as independent sine and cosine it no longer matches the direction of travel of
+        the splined position. Those ripples are large enough to cross the manoeuvre
+        detection threshold, so resampling alone manufactured COLREGS violations on a
+        path that was compliant as planned.
+
+        Re-simulating instead drives each vessel toward the next waypoint through its
+        own kinematics, so every intermediate state is one the vessel could actually
+        reach and the heading always agrees with the motion. Passing an interp1d kind
+        ("linear", "cubic", ...) still selects the old behaviour.
+        """
         if len(self.scene_list) <= 1 or self.time_step == ONE_SECOND:
             self.time_step = ONE_SECOND
             return self
+
+        if kind == "resimulate":
+            return self._resample_by_resimulation()
+
         actor_state_dict: Dict[ConcreteActor, List[ActorState]] = {}
         trajectories = self.build()
         times = np.arange(0, len(trajectories) * self.time_step, self.time_step)
@@ -169,6 +186,42 @@ class TrajectoryBuilder:
             new_heading_vals = np.arctan2(heading_sin_spline(new_times), heading_cos_spline(new_times))
             new_states = [ActorState(x=x, y=y, speed=speed, heading=heading) for x, y, speed, heading in zip(new_x_vals, new_y_vals, new_speed_vals, new_heading_vals)]
             actor_state_dict[actor] = new_states
+
+        new_trajectory = TrajectoryBuilder.trajectory_from_actor_state_dict(actor_state_dict, ONE_SECOND)
+        self.scene_list = new_trajectory.scene_list
+        self.time_step = ONE_SECOND
+        return self
+
+    def _resample_by_resimulation(self) -> "TrajectoryBuilder":
+        """One second states produced by steering each vessel to the next waypoint.
+
+        Heading and speed references are spread evenly over the sub-steps of a leg, so
+        a leg that turns 15 degrees over 15 seconds turns one degree per second rather
+        than snapping and then holding.
+        """
+        sub_steps = max(1, int(round(self.time_step / ONE_SECOND)))
+        trajectories = self.build()
+        actor_state_dict: Dict[ConcreteActor, List[ActorState]] = {}
+
+        for actor in trajectories.actors:
+            states = trajectories.actor_states(actor)
+            if not isinstance(actor, ConcreteVessel):
+                # Static actors simply hold their state for every sub-step.
+                actor_state_dict[actor] = [states[0]] * ((len(states) - 1) * sub_steps + 1)
+                continue
+
+            resampled: List[ActorState] = [states[0]]
+            current = states[0]
+            for leg_start, leg_end in zip(states, states[1:]):
+                heading_change = heading_diff(leg_end.heading, leg_start.heading)
+                speed_change = leg_end.speed - leg_start.speed
+                for sub_step in range(1, sub_steps + 1):
+                    fraction = sub_step / sub_steps
+                    heading_ref = rotate_heading(leg_start.heading, heading_change * fraction)
+                    speed_ref = leg_start.speed + speed_change * fraction
+                    current = actor.simulate(current, (heading_ref, speed_ref), ONE_SECOND)
+                    resampled.append(current)
+            actor_state_dict[actor] = resampled
 
         new_trajectory = TrajectoryBuilder.trajectory_from_actor_state_dict(actor_state_dict, ONE_SECOND)
         self.scene_list = new_trajectory.scene_list

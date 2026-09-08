@@ -18,6 +18,14 @@ class TrajectoryGenerationParams:
     direction_threshold: Optional[float] = None
     best_random_nodes_k: Optional[int] = None
     preview_interval: Optional[int] = None
+    # Whether previews and results carry the monitor output the planner recorded for
+    # each scene. Off keeps the payload small on long runs with many encounters.
+    include_monitor_results: Optional[bool] = None
+
+    @property
+    def monitor_results_enabled(self) -> bool:
+        """Default is on; only an explicit ``False`` from the client turns it off."""
+        return self.include_monitor_results is not False
 
     @staticmethod
     def from_wire(params: dict) -> "TrajectoryGenerationParams":
@@ -29,6 +37,10 @@ class TrajectoryGenerationParams:
             value = params.get(key)
             return float(value) if value is not None else None
 
+        def _bool(key: str) -> Optional[bool]:
+            value = params.get(key)
+            return bool(value) if value is not None else None
+
         return TrajectoryGenerationParams(
             time_step=_int("timeStep"),
             timeout=_float("timeout"),
@@ -39,6 +51,7 @@ class TrajectoryGenerationParams:
             direction_threshold=_float("directionThreshold"),
             best_random_nodes_k=_int("bestRandomNodesK"),
             preview_interval=_int("previewInterval"),
+            include_monitor_results=_bool("includeMonitorResults"),
         )
 
     def to_wire(self) -> dict:
@@ -52,6 +65,7 @@ class TrajectoryGenerationParams:
             "direction-threshold": self.direction_threshold,
             "best-random-nodes-k": self.best_random_nodes_k,
             "preview-interval": self.preview_interval,
+            "include-monitor-results": self.include_monitor_results,
         }
 
     @staticmethod
@@ -66,6 +80,7 @@ class TrajectoryGenerationParams:
             direction_threshold=params.get("direction-threshold"),
             best_random_nodes_k=params.get("best-random-nodes-k"),
             preview_interval=params.get("preview-interval"),
+            include_monitor_results=params.get("include-monitor-results"),
         )
 
 

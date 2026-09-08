@@ -57,6 +57,7 @@ function buildFrame(timestamp: number): SimulationFrame {
         avoidanceDirectionByActorId: { own_ship: "RIGHT", target_1: "LEFT" },
         isGiveWayByActorId: { own_ship: true, target_1: false },
         globalAvoidanceDirectionByActorId: { own_ship: "RIGHT", target_1: "LEFT" },
+        effectiveAvoidanceDirectionByActorId: { own_ship: "RIGHT", target_1: "LEFT" },
         globalGiveWayByActorId: { own_ship: true, target_1: false },
       },
     ],

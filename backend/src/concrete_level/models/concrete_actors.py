@@ -17,6 +17,52 @@ from utils.safety_domains import CircularSafetyDomain, EllipticalSafetyDomain, S
 from utils.serializable import Serializable
 
 
+def migrate_legacy_actor_fields(data: Dict[str, Any], is_vessel: bool) -> Dict[str, Any]:
+    """
+    Bring an actor dict from an older export up to the current ConcreteActor schema.
+
+    Legacy scene files (before the hull and propulsion attributes were added) store a single
+    "radius" and none of the height, draft, mass, rudder, propeller or thruster fields. Those
+    values are all derived from length and breadth, so they are recomputed here with exactly
+    the formulas SceneBuilder.build_from_assignments uses when it constructs a fresh actor.
+    Dicts that already carry the current fields are returned unchanged.
+    """
+    migrated = dict(data)
+
+    if "radius" in migrated and "safety_radius" not in migrated:
+        migrated["safety_radius"] = migrated.pop("radius")
+    migrated.pop("radius", None)
+
+    length = float(migrated.get("length", 0.0))
+
+    if not is_vessel:
+        migrated.setdefault("breadth", length)
+        height = migrated.setdefault("height", length * 0.1)
+        migrated.setdefault("draft", float(height) * 0.4)
+        migrated.setdefault("mass", 5.6 * pow(length, 3))
+        return migrated
+
+    breadth = float(migrated.setdefault("breadth", length * 0.4))
+    height = float(migrated.setdefault("height", length * 0.15))
+    draft = float(migrated.setdefault("draft", height * 0.4))
+
+    # Displacement mass estimate: total = rho * C_b * L * B * T, with the two thrusters
+    # accounted for separately. See SceneBuilder.build_from_assignments.
+    block_coefficient = 0.6
+    total_mass = 1025 * block_coefficient * length * breadth * draft
+    thruster_mass = float(migrated.setdefault("_thruster_mass", total_mass * 0.001))
+    migrated.setdefault("mass", total_mass - 2 * thruster_mass)
+
+    migrated.setdefault("_rudder_mass", 0.0)
+    migrated.setdefault("_rudder_length", length * 0.02)
+    migrated.setdefault("_rudder_width", 0.1)
+    migrated.setdefault("_rudder_height", height * 0.8)
+
+    propeller_diameter = float(migrated.setdefault("_propeller_diameter", draft * 0.6))
+    migrated.setdefault("_motor_length", propeller_diameter * 1.5)
+    return migrated
+
+
 @dataclass(frozen=True)
 class ConcreteActor(Serializable, ABC):
     id: int
@@ -33,6 +79,7 @@ class ConcreteActor(Serializable, ABC):
     @classmethod
     def from_dict(cls: Type["ConcreteActor"], data: Dict[str, Any]) -> "ConcreteActor":
         new_data = {k: v for k, v in data.items() if k != "is_vessel"}
+        new_data = migrate_legacy_actor_fields(new_data, is_vessel=bool(data["is_vessel"]))
         if data["is_vessel"]:
             return ConcreteVessel.from_dict(new_data)
         return ConcreteStaticObstacle.from_dict(new_data)
@@ -96,7 +143,7 @@ class ConcreteActor(Serializable, ABC):
     @abstractmethod
     def simulate_to_state(self, state: ActorState, target_state: ActorState, dt: float, max_steps: int = 500) -> list[ActorState]:
         pass
-    
+
     @abstractmethod
     def get_max_heading_step(self, dt: float) -> float:
         pass
@@ -137,12 +184,10 @@ class ConcreteStaticObstacle(ConcreteActor):
     @property
     def max_acceleration(self) -> float:
         return 0.0
-    
+
     @property
     def obstacle_type(self) -> StaticObstacleType:
-        return StaticObstacleType(self.type,
-                          min_radius=self.length,
-                          max_radius=self.length)
+        return StaticObstacleType(self.type, min_radius=self.length, max_radius=self.length)
 
     @property
     def logical_variable(self) -> "StaticObstacleVariable":
@@ -187,12 +232,12 @@ class ConcreteVessel(ConcreteActor):
     _max_speed: float
     _max_angular_speed: float
     _max_acceleration: float
-    
+
     _rudder_mass: float
     _rudder_length: float
     _rudder_width: float
     _rudder_height: float
-    
+
     _propeller_diameter: float
     _thruster_mass: float
     _motor_length: float
@@ -207,39 +252,39 @@ class ConcreteVessel(ConcreteActor):
     @property
     def is_os(self) -> bool:
         return self._is_os
-    
+
     @property
     def propeller_diameter(self) -> float:
         return self._propeller_diameter
-    
+
     @property
     def motor_length(self) -> float:
         return self._motor_length
-    
+
     @property
     def rudder_mass(self) -> float:
         return self._rudder_mass
-    
+
     @property
     def rudder_length(self) -> float:
         return self._rudder_length
-    
+
     @property
     def rudder_width(self) -> float:
         return self._rudder_width
-    
+
     @property
     def rudder_height(self) -> float:
         return self._rudder_height
-    
+
     @property
     def thruster_mass(self) -> float:
         return self._thruster_mass
-    
+
     @property
     def visible_height(self) -> float:
         return self.height - self.draft
-    
+
     @property
     def max_speed(self) -> float:
         return self._max_speed
@@ -251,11 +296,11 @@ class ConcreteVessel(ConcreteActor):
     @property
     def max_acceleration(self) -> float:
         return self._max_acceleration
-    
+
     @property
     def waypoint_radius(self) -> float:
         return self.length * 4.0
-    
+
     # source: https://doi.org/10.1007/s10846-025-02222-7
     def simulate(self, state: ActorState, u_ref: Tuple[float, float], dt: float) -> ActorState:
         """
@@ -298,13 +343,7 @@ class ConcreteVessel(ConcreteActor):
 
         return ActorState(x=x_new, y=y_new, speed=speed_new, heading=heading_new)
 
-    def simulate_to_state(
-        self,
-        state: ActorState,
-        target_state: ActorState,
-        dt: float,
-        max_steps: int = 500
-    ) -> list[ActorState]:
+    def simulate_to_state(self, state: ActorState, target_state: ActorState, dt: float, max_steps: int = 500) -> list[ActorState]:
 
         trajectory = [state]
         current = state
@@ -314,9 +353,7 @@ class ConcreteVessel(ConcreteActor):
             dist = np.linalg.norm(pos_error)
 
             # --- termination ---
-            if dist < EPSILON and \
-            abs(target_state.speed - current.speed) < EPSILON and \
-            abs(heading_diff(target_state.heading, current.heading)) < EPSILON:
+            if dist < EPSILON and abs(target_state.speed - current.speed) < EPSILON and abs(heading_diff(target_state.heading, current.heading)) < EPSILON:
                 break
 
             # --- heading control ---
@@ -378,23 +415,24 @@ class ConcreteVessel(ConcreteActor):
         # heading. Written directly so a stopped vessel does not divide by zero.
         return state.modify_copy(x=state.x + np.cos(state.heading) * distance, y=state.y + np.sin(state.heading) * distance)
 
-
     @property
     def vessel_type(self) -> VesselType:
-        return VesselType(name=self.type,
-                          min_length=self.length,
-                          max_length=self.length,
-                          min_beam=self.breadth,
-                          max_beam=self.breadth,
-                          max_speed=self.max_speed,
-                          max_angular_speed=self.max_angular_speed,
-                          max_acceleration=self.max_acceleration)
+        return VesselType(
+            name=self.type,
+            min_length=self.length,
+            max_length=self.length,
+            min_beam=self.breadth,
+            max_beam=self.breadth,
+            max_speed=self.max_speed,
+            max_angular_speed=self.max_angular_speed,
+            max_acceleration=self.max_acceleration,
+        )
 
     @property
     def logical_variable(self) -> VesselVariable:
         t = self.vessel_type
         return OSVariable(self.id, t) if self.is_os else TSVariable(self.id, t)
-    
+
     @classmethod
     def from_dict(cls: Type["ConcreteVessel"], data: Dict[str, Any]) -> "ConcreteVessel":
         return ConcreteVessel(**data)

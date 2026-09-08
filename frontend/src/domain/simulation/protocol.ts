@@ -36,6 +36,24 @@ const actorSchema = z
   })
   .passthrough();
 
+const safetyDomainShapeSchema = z
+  .object({
+    shape: z.enum(["circle", "ellipse", "rectangle"]),
+    center: z.tuple([z.number(), z.number()]),
+    heading: z.number(),
+    radius: z.number().optional(),
+    a: z.number().optional(),
+    b: z.number().optional(),
+  })
+  .passthrough();
+
+const staticAvoidanceDomainSchema = z
+  .object({
+    center: z.tuple([z.number(), z.number()]),
+    radius: z.number(),
+  })
+  .passthrough();
+
 const situationContextSchema = z
   .object({
     relationId: z.string(),
@@ -48,7 +66,12 @@ const situationContextSchema = z
     avoidanceDirectionByActorId: z.record(z.string(), z.string()),
     isGiveWayByActorId: z.record(z.string(), z.boolean()),
     globalAvoidanceDirectionByActorId: z.record(z.string(), z.string()),
+    effectiveAvoidanceDirectionByActorId: z.record(z.string(), z.string()).optional(),
     globalGiveWayByActorId: z.record(z.string(), z.boolean()),
+    safetyDomainsByActorId: z.record(z.string(), safetyDomainShapeSchema).optional(),
+    staticAvoidanceDomainsByActorId: z
+      .record(z.string(), z.array(staticAvoidanceDomainSchema))
+      .optional(),
   })
   .passthrough();
 

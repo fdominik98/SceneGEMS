@@ -27,7 +27,10 @@ export type TrajectoryGenerationParams = {
 
 export type TrajectoryGenerationStatus = "idle" | "running" | "done" | "error";
 
-export type TrajectoryGenerationTab = "generate" | "advanced" | "preview";
+export type TrajectoryGenerationTab = "generate" | "advanced" | "preview" | "monitor";
+
+/** Monitor results ride along with every preview by default. */
+export const DEFAULT_INCLUDE_MONITOR_RESULTS = true;
 
 interface TrajectoryGenerationState {
   /** Initial scene handed over from the Scene Generation page (or loaded here). */
@@ -35,6 +38,11 @@ interface TrajectoryGenerationState {
   /** Human-readable label for the handoff scene source. */
   handoffSourceName: string | null;
   params: TrajectoryGenerationParams;
+  /**
+   * Whether the planner attaches its COLREGS monitor output to previews and to the
+   * result. Kept apart from `params` because those are all numeric form fields.
+   */
+  includeMonitorResults: boolean;
   status: TrajectoryGenerationStatus;
   activeRequestId: string | null;
   iteration: number;
@@ -47,6 +55,7 @@ interface TrajectoryGenerationState {
   setActiveTab: (tab: TrajectoryGenerationTab) => void;
   setHandoffScene: (scene: GeneratedSceneData | null, sourceName: string | null) => void;
   setParam: (key: keyof TrajectoryGenerationParams, value: number) => void;
+  setIncludeMonitorResults: (value: boolean) => void;
   resetParams: () => void;
   startRun: (requestId: string) => void;
   markPreview: (iteration: number) => void;
@@ -65,6 +74,7 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
       handoffScene: null,
       handoffSourceName: null,
       params: { ...TRAJECTORY_GENERATION_PARAM_DEFAULTS },
+      includeMonitorResults: DEFAULT_INCLUDE_MONITOR_RESULTS,
       status: "idle",
       activeRequestId: null,
       iteration: 0,
@@ -86,7 +96,12 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
         }),
       setParam: (key, value) =>
         set((state) => ({ params: { ...state.params, [key]: value } })),
-      resetParams: () => set({ params: { ...TRAJECTORY_GENERATION_PARAM_DEFAULTS } }),
+      setIncludeMonitorResults: (includeMonitorResults) => set({ includeMonitorResults }),
+      resetParams: () =>
+        set({
+          params: { ...TRAJECTORY_GENERATION_PARAM_DEFAULTS },
+          includeMonitorResults: DEFAULT_INCLUDE_MONITOR_RESULTS,
+        }),
       startRun: (requestId) =>
         set({
           status: "running",
@@ -127,6 +142,7 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
       // still in flight is downgraded to "idle" (there is no live request to resume).
       partialize: (state) => ({
         params: state.params,
+        includeMonitorResults: state.includeMonitorResults,
         activeTab: state.activeTab,
         handoffScene: state.handoffScene,
         handoffSourceName: state.handoffSourceName,
@@ -142,7 +158,8 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
 );
 
 export function toParamsWire(
-  params: TrajectoryGenerationParams
+  params: TrajectoryGenerationParams,
+  includeMonitorResults: boolean = DEFAULT_INCLUDE_MONITOR_RESULTS
 ): TrajectoryGenerationParamsWire {
   return {
     timeStep: params.timeStep,
@@ -154,5 +171,6 @@ export function toParamsWire(
     directionThreshold: params.directionThreshold,
     bestRandomNodesK: params.bestRandomNodesK,
     previewInterval: params.previewInterval,
+    includeMonitorResults,
   };
 }

@@ -9,6 +9,7 @@ from logical_level.constraint_satisfaction.assignments import Assignments
 from logical_level.models.actor_variable import StaticObstacleVariable, VesselVariable
 from logical_level.models.values import ObstacleValues, VesselValues
 
+
 class SceneBuilder(Dict[ConcreteActor, ActorState]):
     def __init__(self, base_scene: Optional[ConcreteScene] = None, *args, **kwargs):
         # Initialize with an empty dict if no existing_dict is provided
@@ -81,7 +82,7 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
                 breadth = values.l * 0.4
                 height = values.l * 0.15
                 draft = height * 0.4
-                
+
                 """
                 A rough naval architecture estimate is:
                 displacement mass: Δ≈ρ * C_b * L * B * T
@@ -103,7 +104,7 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
                 mass = total_mass - 2 * thruster_mass
                 prop_diameter = draft * 0.6
                 motor_length = prop_diameter * 1.5
-                
+
                 builder.set_state(
                     ConcreteVessel(
                         id=actor_var.id,
@@ -140,4 +141,3 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
             else:
                 raise TypeError("Unsupported Actor")
         return builder.build()
-    

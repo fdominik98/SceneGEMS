@@ -180,3 +180,17 @@ class StandOnCoursePersistenceRule(COLREGSRule):
             actor.id,
             actor.name,
         )
+
+
+class HoldAvoidanceCourseRule(COLREGSRule):
+    def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
+        super().__init__(
+            Relation(actor, actor),
+            "8",
+            "Avoidance Course Held Until Clear",
+            "An alteration of course made to keep out of the way should be held until the other vessel is finally past and clear. "
+            "Altering further away is allowed at any time; turning back toward the original course before the encounter is over is not.",
+            RULE_KIND,
+            actor.id,
+            actor.name,
+        )

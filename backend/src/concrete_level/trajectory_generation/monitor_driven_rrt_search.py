@@ -1,13 +1,20 @@
 # pyright: reportMissingImports=false
 import random
-from time import sleep
-from typing import Callable, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
+
+import numpy as np
 
 from concrete_level.colregs_monitoring.colregs_monitor import COLREGSMonitor
+from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredTrajectory
+from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
+from concrete_level.trajectory_generation.scene_builder import SceneBuilder
+from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from concrete_level.trajectory_generation.trajectory_tree_builder import SceneNode, TrajectoryObjectiveSet, TrajectoryTreeBuilder
 from utils.colregs_approximations import COLREGSConstraints
+from utils.global_constants import EPSILON
+from utils.math_utils import calculate_heading, heading_diff, magnitude, rotate_heading
 
 
 class MonitorDrivenRRTSearch:
@@ -19,6 +26,16 @@ class MonitorDrivenRRTSearch:
     SHOW_ANIMATION: bool = True
     DIRECTION_THRESHOLD = 1.0  # meter
     BEST_RANDOM_NODES_K: int = 20
+    # Shortcut-and-re-simulate passes over the finished path. Each round applies at most
+    # one accepted shortcut, so a few rounds straighten the worst corners without the
+    # cost of a full rewiring search.
+    SMOOTHING_ROUNDS: int = 6
+    # Shortcut candidates tried per round, and the longest stretch one may replace.
+    SMOOTHING_ATTEMPTS: int = 24
+    MAX_SHORTCUT_SPAN: int = 8
+    # Consecutive expansions in which every successor is refused by the rejoin filter
+    # before a node is treated as a dead end.
+    REJOIN_REJECTION_STREAK_LIMIT: int = 4
 
     def __init__(
         self,
@@ -26,7 +43,7 @@ class MonitorDrivenRRTSearch:
         other_trajectories: Trajectories,
         colregs_constants: COLREGSConstraints,
         *,
-        observer: Optional[Callable[[Trajectories, int], None]] = None,
+        observer: Optional[Callable[[Trajectories, MonitoredTrajectory, int], None]] = None,
         termination_signal: Optional[Callable[[], bool]] = None,
         max_iterations: Optional[int] = None,
         goal_sample_rate: Optional[int] = None,
@@ -71,6 +88,7 @@ class MonitorDrivenRRTSearch:
         # Internal state
         self._iteration_count = 0
         self.stop = False
+        self._best_leaf: Optional[SceneNode] = None
 
         # # Calculate X and Y distances
         # shifted_points_x = [line.shifted_point[0] for line in bounding_lines]
@@ -80,7 +98,16 @@ class MonitorDrivenRRTSearch:
         # Y_DIST = (min(shifted_points_y), max(shifted_points_y))
         # self.sample_area = [X_DIST, Y_DIST]
 
-        self.trajectory_objective_set = TrajectoryObjectiveSet(self.trajectory_tree_builder.root, self.time_step, self.GOAL_SAMPLE_RATE, self.VERBOSE)
+        # other_trajectories is the constant-course baseline for the whole scene, so its
+        # timespan is the horizon the planner is expected to cover, and that is what
+        # sets how far ahead each vessel's goal sits.
+        self.trajectory_objective_set = TrajectoryObjectiveSet(
+            self.trajectory_tree_builder.root,
+            self.time_step,
+            self.GOAL_SAMPLE_RATE,
+            self.VERBOSE,
+            goal_horizon=float(self.other_trajectories.timespan),
+        )
 
         if self.SHOW_ANIMATION:
             from visualization.trajectory_visualizer import RRTStarVisualizer
@@ -108,6 +135,15 @@ class MonitorDrivenRRTSearch:
         trajectories, _ = self.trajectory_tree_builder.get_path_trajectories(last_node)
         return trajectories
 
+    def current_best_monitored_trajectory(self) -> Optional[MonitoredTrajectory]:
+        """Monitor output along the current best path, scene by scene.
+
+        Every node already carries the monitor result that was computed when it was
+        steered, so this is a walk up the tree, not a second monitoring pass.
+        """
+        last_node = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
+        return self.trajectory_tree_builder.get_monitored_trajectory(last_node)
+
     def do_plan(self) -> Optional[Trajectories]:
         while not self._should_stop():
             if self.VERBOSE and self._iteration_count % 100 == 0:
@@ -127,66 +163,200 @@ class MonitorDrivenRRTSearch:
             for parent_node in best_nodes:
                 if parent_node.id not in self.trajectory_tree_builder.node_list:
                     continue
+                self._expand_node(parent_node)
 
-                new_nodes = self.trajectory_tree_builder.steer_actors(parent_node, self.trajectory_objective_set)
+            self.end_iteration()
+
+            if self._goal_reached():
                 if self.VERBOSE:
-                    print(f"New nodes: {len(new_nodes)}")
-
-                if len(new_nodes) == 0:
-                    # No successor could even be sampled. That is a sampling dead end, not
-                    # a COLREGS violation, so the branch is kept (it may still be the best
-                    # path found) and only excluded from further expansion.
-                    if self.VERBOSE:
-                        print(f"Dead end, no successor could be sampled from node {parent_node.id}")
-                    parent_node.is_dead_end = True
-                    continue
-
-                if all(new_node.monitor_result_map_set.is_failed() for new_node in new_nodes):
-                    # print(f"Removed branch until parent with multiple children: {parent_node.id}")
-                    if self.VERBOSE:
-                        for new_node in new_nodes:
-                            self.print_maneuver_states(new_node)
-                    self.trajectory_tree_builder.remove_branch_until_parent_with_multiple_children(parent_node)
-                    # self.trajectory_tree_builder.remove_branch_until_previous_actor_maneuver(parent_node)
-                    continue
-
-                for new_node in new_nodes:
-                    if new_node.monitor_result_map_set.is_failed():
-                        if self.VERBOSE:
-                            for rel, rules in new_node.monitor_result_map_set.get_failed_rules().items():
-                                print(f"Failed in {rel} context: {rules}")
-                        continue
-                    self.trajectory_tree_builder.add_node(parent_node, new_node)
-                    if self.VERBOSE:
-                        self.print_maneuver_states(new_node)
-
-            self.end_iteration()
-            # sleep(0.5)
-            continue
-            # if it does not collide
-            # find nearest nodes to new_node
-            nearest_indexes = self.find_near_nodes(new_node, radius_multiplier=5)
-            # from those nearest nodes find the best parent to new_node
-            found_parent = self.choose_parent(new_node, nearest_indexes)
-            if not found_parent:
-                self.end_iteration()
-                continue
-
-            # add new_node to node_list
-            new_node_id = self.trajectory_tree_builder.add_node(new_node)
-            # make new_node a parent of another node if necessary
-            self.rewire(new_node_id, new_node, nearest_indexes)
-            self.node_list[new_node.parent].children.add(new_node_id)
-
-            if len(self.trajectory_tree_builder) > self.MAX_NODES:
-                self.trajectory_tree_builder.prune_branches()
-
-            self.end_iteration()
+                    print(f"Goal reached after {self._iteration_count} iterations")
+                break
 
         # generate course
         last_node = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
-        trajectories, node_path = self.trajectory_tree_builder.get_path_trajectories(last_node)
-        return trajectories
+        return self.smooth_path(last_node)
+
+    def _expand_node(self, parent_node: SceneNode) -> None:
+        """Steer one node and attach the successors that survive every admissibility test."""
+        new_nodes = self.trajectory_tree_builder.steer_actors(parent_node, self.trajectory_objective_set)
+        if self.VERBOSE:
+            print(f"New nodes: {len(new_nodes)}")
+
+        if len(new_nodes) == 0:
+            # No successor could even be sampled. That is a sampling dead end, not a
+            # COLREGS violation, so the branch is kept (it may still be the best path
+            # found) and only excluded from further expansion.
+            if self.VERBOSE:
+                print(f"Dead end, no successor could be sampled from node {parent_node.id}")
+            parent_node.is_dead_end = True
+            return
+
+        if all(new_node.monitor_result_map_set.is_failed() for new_node in new_nodes):
+            if self.VERBOSE:
+                for new_node in new_nodes:
+                    self.print_maneuver_states(new_node)
+            self.trajectory_tree_builder.remove_branch_until_parent_with_multiple_children(parent_node)
+            # self.trajectory_tree_builder.remove_branch_until_previous_actor_maneuver(parent_node)
+            return
+
+        if self._attach_successors(parent_node, new_nodes) > 0:
+            parent_node.rejoin_rejection_streak = 0
+            return
+
+        # Every successor was refused. Unlike a monitor failure, that verdict depends on
+        # which heading magnitudes happened to be drawn, so the admissible turn may just
+        # not have come up: retiring the node here starved the tree and ended the search
+        # at 76 of 200 iterations. Give it a few rounds before giving up on it, otherwise
+        # the same node is picked every iteration and the search stalls.
+        parent_node.rejoin_rejection_streak += 1
+        if parent_node.rejoin_rejection_streak >= self.REJOIN_REJECTION_STREAK_LIMIT:
+            parent_node.is_dead_end = True
+
+    def _attach_successors(self, parent_node: SceneNode, new_nodes: List[SceneNode]) -> int:
+        """Add the successors that pass both the monitor and the rejoin filter. Returns how many."""
+        added = 0
+        for new_node in new_nodes:
+            if new_node.monitor_result_map_set.is_failed():
+                if self.VERBOSE:
+                    for rel, rules in new_node.monitor_result_map_set.get_failed_rules().items():
+                        print(f"Failed in {rel} context: {rules}")
+                continue
+            if not self.trajectory_objective_set.rejoin_admissible(parent_node, new_node):
+                # Compliant, but it does not take a vessel that is past its encounters
+                # back toward its track. See TrajectoryObjective.rejoin_admissible.
+                if self.VERBOSE:
+                    print(f"Rejected successor of node {parent_node.id}: not rejoining the original track")
+                continue
+            self.trajectory_tree_builder.add_node(parent_node, new_node)
+            added += 1
+            if self.VERBOSE:
+                self.print_maneuver_states(new_node)
+        return added
+
+    def _goal_reached(self) -> bool:
+        """True once the best leaf has resolved every encounter and reached its goal.
+
+        Before this the search had no goal test at all: it ran until the iteration cap
+        or the timeout and returned whatever leaf was cheapest, and the goal itself was
+        pushed further out every iteration so it could never be reached.
+        """
+        best_node = self._best_leaf
+        if best_node is None or best_node.id not in self.trajectory_tree_builder.node_list:
+            return False
+        if not self.trajectory_objective_set.is_resolved(best_node):
+            return False
+        return self.trajectory_objective_set.reached_goal(best_node)
+
+    def smooth_path(self, last_node: SceneNode) -> Trajectories:
+        """Replace corner sequences on the final path with re-simulated shortcuts.
+
+        Rewiring the tree in place is not sound here: a node's COLREGS state is produced
+        by stepping the monitor from its parent, so re-parenting a node would invalidate
+        its own monitor state and every descendant's. Instead the finished path is
+        smoothed as a post-process and each candidate is re-run through the monitor from
+        the branch point, so a shortcut is only accepted when it is still compliant and
+        actually cheaper.
+        """
+        node_path = self.trajectory_tree_builder.get_path(last_node)
+        if len(node_path) < 3:
+            return self.trajectory_tree_builder.get_path_trajectories(last_node)[0]
+
+        best_path = node_path
+        best_cost = self.trajectory_objective_set.calculate_cost(best_path[-1])
+
+        for _ in range(self.SMOOTHING_ROUNDS):
+            improved = False
+            # Sampled rather than exhaustive: every attempt re-simulates the rest of the
+            # path through the monitor, so trying all (start, span) pairs would be cubic
+            # in the path length and dominate the whole planner.
+            for _attempt in range(self.SMOOTHING_ATTEMPTS):
+                if len(best_path) < 3:
+                    break
+                span = random.randint(2, min(self.MAX_SHORTCUT_SPAN, len(best_path) - 1))
+                start = random.randint(0, len(best_path) - 1 - span)
+                candidate = self._try_shortcut(best_path, start, start + span)
+                if candidate is None:
+                    continue
+                candidate_cost = self.trajectory_objective_set.calculate_cost(candidate[-1])
+                if candidate_cost < best_cost:
+                    best_path, best_cost = candidate, candidate_cost
+                    improved = True
+                    break
+            if not improved:
+                break
+
+        builder = TrajectoryBuilder(scene_list=[node.scene for node in best_path], time_step=self.time_step)
+        return builder.build()
+
+    def _try_shortcut(self, node_path: List[SceneNode], start_index: int, end_index: int) -> Optional[List[SceneNode]]:
+        """Re-steer directly from node_path[start_index] toward node_path[end_index].
+
+        Returns the rebuilt path if every re-simulated scene still passes the monitor,
+        otherwise None. The tail beyond end_index is re-simulated too, since its monitor
+        state depends on everything before it.
+        """
+        start_node = node_path[start_index]
+        target_scene = node_path[end_index].scene
+        steps = end_index - start_index
+
+        rebuilt: List[SceneNode] = list(node_path[: start_index + 1])
+        current = start_node
+        for step in range(steps):
+            remaining = steps - step
+            next_scene_builder = SceneBuilder(current.scene)
+            heading_steps: Dict[ConcreteActor, float] = {}
+            for actor in current.scene.vessels:
+                state = current.scene[actor]
+                # Aim straight at where this actor has to be at the end of the shortcut,
+                # spreading the remaining correction over the remaining steps.
+                to_target = target_scene[actor].p - state.p
+                heading_ref = calculate_heading(to_target) if magnitude(to_target) > EPSILON else state.heading
+                max_step = actor.get_max_heading_step(self.time_step)
+                desired = heading_diff(heading_ref, state.heading) / remaining
+                heading_step = float(np.clip(desired, -max_step, max_step))
+                heading_steps[actor] = heading_step
+                next_scene_builder.set_state(actor, actor.simulate(state, (rotate_heading(state.heading, heading_step), state.speed), self.time_step))
+
+            monitored = self.monitor.step(current.monitored_scene_with_results, next_scene_builder.build(), self.time_step)
+            if monitored.monitor_result_map_set.is_failed():
+                return None
+
+            candidate_node = SceneNode(monitored_scene_with_results=monitored)
+            candidate_node.heading_steps = heading_steps
+            candidate_node.inherit_running_extremes(current)
+            self.trajectory_objective_set.update_path_state(current, candidate_node)
+            if not self.trajectory_objective_set.rejoin_admissible(current, candidate_node):
+                return None
+            candidate_node.path_cost = current.path_cost + self.trajectory_objective_set.calculate_step_cost(current, candidate_node)
+            rebuilt.append(candidate_node)
+            current = candidate_node
+
+        # Re-simulate the untouched tail so its monitor state matches the new prefix.
+        for tail_node in node_path[end_index + 1 :]:
+            next_scene_builder = SceneBuilder(current.scene)
+            heading_steps = {}
+            for actor in current.scene.vessels:
+                state = current.scene[actor]
+                heading_step = heading_diff(tail_node.scene[actor].heading, state.heading)
+                max_step = actor.get_max_heading_step(self.time_step)
+                heading_step = float(np.clip(heading_step, -max_step, max_step))
+                heading_steps[actor] = heading_step
+                next_scene_builder.set_state(actor, actor.simulate(state, (rotate_heading(state.heading, heading_step), state.speed), self.time_step))
+
+            monitored = self.monitor.step(current.monitored_scene_with_results, next_scene_builder.build(), self.time_step)
+            if monitored.monitor_result_map_set.is_failed():
+                return None
+            candidate_node = SceneNode(monitored_scene_with_results=monitored)
+            candidate_node.heading_steps = heading_steps
+            candidate_node.inherit_running_extremes(current)
+            self.trajectory_objective_set.update_path_state(current, candidate_node)
+            if not self.trajectory_objective_set.rejoin_admissible(current, candidate_node):
+                return None
+            candidate_node.path_cost = current.path_cost + self.trajectory_objective_set.calculate_step_cost(current, candidate_node)
+            rebuilt.append(candidate_node)
+            current = candidate_node
+
+        return rebuilt
 
     def print_maneuver_states(self, node: SceneNode) -> None:
         for relation, maneuver_state in node.maneuver_state_set.items():
@@ -207,8 +377,9 @@ class MonitorDrivenRRTSearch:
         if len(self.trajectory_tree_builder.leaves) > self.MAX_LEAFS:
             self.trajectory_tree_builder.prune_worst_leaves_global(self.trajectory_objective_set, self.MAX_LEAFS // 10)
 
-        best_node = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
-        self.trajectory_objective_set.push_out_goal_positions(best_node)
+        # Sorting every leaf by cost is the most expensive thing per iteration, so the
+        # winner is computed once here and reused by the goal test and the observer.
+        self._best_leaf = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
 
         self._iteration_count += 1
         self._notify_observer()
@@ -219,11 +390,13 @@ class MonitorDrivenRRTSearch:
         if self._iteration_count % self.ANIM_UPDATE_INTERVAL != 0:
             return
         try:
-            best = self.current_best_trajectories()
+            last_node = self.trajectory_tree_builder.get_best_leaf_global(self.trajectory_objective_set)
+            best, _ = self.trajectory_tree_builder.get_path_trajectories(last_node)
+            monitored = self.trajectory_tree_builder.get_monitored_trajectory(last_node)
         except Exception:
             return
         if best is not None:
-            self._observer(best, self._iteration_count)
+            self._observer(best, monitored, self._iteration_count)
 
     def update_anim(self) -> None:
         if self._iteration_count % self.ANIM_UPDATE_INTERVAL == 0:

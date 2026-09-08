@@ -7,7 +7,10 @@ export interface OverlayVisibility {
   velocity: boolean;
   safetyRadius: boolean;
   trajectory: boolean;
+  /** Per-encounter COLREGS safety domains reported by the monitor. */
   safetyDomain: boolean;
+  /** Potential collision domains frozen at the start of each encounter. */
+  staticAvoidanceDomain: boolean;
 }
 
 /** Bottom control panel tab (preview animation playback, simulation playback, or monitor). */
@@ -28,6 +31,7 @@ const defaultOverlays: OverlayVisibility = {
   safetyRadius: true,
   trajectory: true,
   safetyDomain: true,
+  staticAvoidanceDomain: true,
 };
 
 interface UiState {

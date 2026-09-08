@@ -48,7 +48,10 @@ class MonitoredSceneWithResults:
 
     @property
     def colregs_states_with_context(self) -> List[Tuple[SituationContext, COLREGSMonitorState]]:
-        return list(zip(self.situation_context_set.values(), self.colregs_state_set.values()))
+        # Pair by relation, not by iteration order. Zipping the two .values() views
+        # happens to line up today but silently mispairs a context with another
+        # relation's state as soon as one of the maps gains or loses a relation.
+        return [(context, self.colregs_state_set[relation]) for relation, context in self.situation_context_set.items() if relation in self.colregs_state_set]
 
 
 class MonitoredTrajectory:
@@ -165,7 +168,9 @@ class MonitoredTrajectory:
         return list(self.initial_monitored_scene_with_results.scene.actors)
 
     def get_monitored_scene_by_time(self, timestamp: int) -> MonitoredSceneWithResults:
-        index = timestamp // self.time_step
+        return self.get_monitored_scene_by_index(timestamp // self.time_step)
+
+    def get_monitored_scene_by_index(self, index: int) -> MonitoredSceneWithResults:
         return MonitoredSceneWithResults(
             monitored_scene=MonitoredScene(
                 scene=self.scene_path[index],
@@ -177,6 +182,11 @@ class MonitoredTrajectory:
             monitor_result_map_set=self.monitor_result_map_set_path[index],
             maneuver_suggestions=self.maneuver_suggestions_path[index],
         )
+
+    @property
+    def monitored_scenes_with_results(self) -> List[MonitoredSceneWithResults]:
+        """Every scene on the path, paired with the monitor output recorded for it."""
+        return [self.get_monitored_scene_by_index(index) for index in range(len(self))]
 
     def add_scene(self, monitored_scene_with_results: MonitoredSceneWithResults):
         self.scene_path.append(monitored_scene_with_results.scene)
