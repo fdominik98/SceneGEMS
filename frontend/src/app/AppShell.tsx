@@ -45,12 +45,12 @@ export function AppShell() {
   const RIGHT_PANE_MIN_WIDTH = 300;
   const RIGHT_PANE_MAX_WIDTH = 900;
   const RIGHT_PANE_MAX_WIDTH_RATIO = 0.85;
-  const RIGHT_PANE_RESIZER_WIDTH = 8;
+  const RIGHT_PANE_RESIZER_WIDTH = 6;
   const RIGHT_PANE_DEFAULT_CENTER_FRACTION = 3;
   const RIGHT_PANE_DEFAULT_RIGHT_FRACTION = 2;
   const BOTTOM_PANEL_MIN_HEIGHT = 140;
   const BOTTOM_PANEL_MAX_HEIGHT_RATIO = 0.85;
-  const BOTTOM_PANEL_RESIZER_HEIGHT = 8;
+  const BOTTOM_PANEL_RESIZER_HEIGHT = 6;
 
   const streamControls = useSimulationWorkflow();
   const streamControlsRef = useRef(streamControls);
@@ -511,7 +511,7 @@ export function AppShell() {
     <div className="app-shell">
       <div
         className="app-body"
-        style={{ gridTemplateColumns: `${isLeftMenuCollapsed ? 56 : 240}px minmax(0, 1fr)` }}
+        style={{ gridTemplateColumns: `${isLeftMenuCollapsed ? 48 : 220}px minmax(0, 1fr)` }}
       >
         <LeftPane
           isCollapsed={isLeftMenuCollapsed}
