@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { formatRelationId, renderRelationId } from "./actorNameFormat";
+import { renderRelationId } from "./actorNameFormat";
 
 /** Top-level frame keys handled in structured sections; anything else is shown under “More”. */
 export const FRAME_STRUCTURE_KEYS = new Set([
@@ -202,7 +202,7 @@ export function DynamicFieldGrid({
       {sorted.map((key) => (
         <Fragment key={key}>
           <dt className="frame-kv-label">
-            {key.includes("->") ? formatRelationId(key) : humanizeKey(key)}
+            {key.includes("->") ? renderRelationId(key) : humanizeKey(key)}
           </dt>
           <dd className="frame-kv-value">
             {key === "relationId" && typeof data[key] === "string" ? (

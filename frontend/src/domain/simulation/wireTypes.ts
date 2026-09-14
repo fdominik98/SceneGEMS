@@ -103,6 +103,13 @@ export type ClientToServerMessage =
     }
   | { type: "stop_scene_generation" }
   | {
+      /** Run a disk-loaded scene through the active monitor; answered with `generated_scene`. */
+      type: "monitor_scene";
+      requestId: string;
+      /** Scenario JSON: evaluation data with `best_scene`, or a `TrajectoryData` payload. */
+      scenarioContent: string;
+    }
+  | {
       type: "generate_trajectories";
       requestId: string;
       /** Initial-scene scenario JSON (evaluation-data shape with `best_scene`). */

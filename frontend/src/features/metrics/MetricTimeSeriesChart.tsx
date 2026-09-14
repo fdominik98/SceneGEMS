@@ -7,7 +7,7 @@ import {
   useState,
   type WheelEvent as ReactWheelEvent,
 } from "react";
-import { formatRelationId } from "../monitor/actorNameFormat";
+import { formatRelationId, useActorNames } from "../monitor/actorNameFormat";
 import { buildNiceScale, formatAxisTick } from "./metricChartScale";
 import {
   computeBaseDomain,
@@ -110,6 +110,7 @@ export function MetricTimeSeriesChart({
   accentColor = "#38bdf8",
 }: MetricTimeSeriesChartProps) {
   const gradientId = useId();
+  const actorNames = useActorNames();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const panRef = useRef<{ pointerId: number; lastX: number; lastY: number } | null>(null);
 
@@ -293,9 +294,9 @@ export function MetricTimeSeriesChart({
         height={CHART_HEIGHT}
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         role="img"
-        aria-label={`${title} over time for relation ${formatRelationId(relationId)}`}
+        aria-label={`${title} over time for relation ${formatRelationId(relationId, actorNames)}`}
       >
-        <title>{`${title}: ${formatRelationId(relationId)}`}</title>
+        <title>{`${title}: ${formatRelationId(relationId, actorNames)}`}</title>
 
         <defs>
           <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

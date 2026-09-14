@@ -39,6 +39,6 @@ RUN pip install --no-cache-dir --no-deps -e .
 
 ENV PYTHONPATH=/app/src
 
-EXPOSE 8000
+EXPOSE 5174
 
-CMD ["uvicorn", "scenegems_tool.backend_service.websocket_app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "scenegems_tool.backend_service.websocket_app:app", "--host", "0.0.0.0", "--port", "5174"]

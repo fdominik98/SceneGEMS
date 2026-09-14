@@ -102,7 +102,8 @@ function MonitorStreamCluster({
   simulationColumn,
 }: {
   previewColumn: ReactNode;
-  simulationColumn: ReactNode;
+  /** `null` drops the simulation column entirely (preview-only pages). */
+  simulationColumn: ReactNode | null;
 }) {
   const previewVisible = useUiStore((s) => s.rightTrajectoryPreviewVisible);
   const simulationVisible = useUiStore((s) => s.rightTrajectorySimulationVisible);
@@ -146,7 +147,8 @@ function MonitorStreamCluster({
     [splitPercent, setSplitPercent]
   );
 
-  const bothVisible = previewVisible && simulationVisible;
+  const hasSimulation = simulationColumn !== null;
+  const bothVisible = previewVisible && hasSimulation && simulationVisible;
 
   return (
     <div
@@ -178,7 +180,7 @@ function MonitorStreamCluster({
         />
       )}
 
-      {simulationVisible ? (
+      {!hasSimulation ? null : simulationVisible ? (
         <div
           className="right-trajectory-column"
           style={
@@ -194,7 +196,7 @@ function MonitorStreamCluster({
   );
 }
 
-export function TrajectoryMonitorSidebar() {
+export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?: boolean }) {
   const monitorPanelView = useUiStore((s) => s.monitorPanelView);
   const setMonitorPanelView = useUiStore((s) => s.setMonitorPanelView);
   const selectedMetricsRelationId = useUiStore((s) => s.selectedMetricsRelationId);
@@ -272,17 +274,19 @@ export function TrajectoryMonitorSidebar() {
             </TrajectoryColumnChrome>
           }
           simulationColumn={
-            <TrajectoryColumnChrome
-              title="Simulation trajectory"
-              subtitle="Monitor and layer controls"
-              onExport={() =>
-                exportTrajectoryFrames("simulation", activeScenarioId, sortedSimulationFrames)
-              }
-              onHide={() => setSimulationVisible(false)}
-            >
-              <ActorVisibilityPanel stream="simulation" />
-              <BasicActorInfoPanel stream="simulation" />
-            </TrajectoryColumnChrome>
+            previewOnly ? null : (
+              <TrajectoryColumnChrome
+                title="Simulation trajectory"
+                subtitle="Monitor and layer controls"
+                onExport={() =>
+                  exportTrajectoryFrames("simulation", activeScenarioId, sortedSimulationFrames)
+                }
+                onHide={() => setSimulationVisible(false)}
+              >
+                <ActorVisibilityPanel stream="simulation" />
+                <BasicActorInfoPanel stream="simulation" />
+              </TrajectoryColumnChrome>
+            )
           }
         />
       ) : (
@@ -302,18 +306,20 @@ export function TrajectoryMonitorSidebar() {
             </TrajectoryColumnChrome>
           }
           simulationColumn={
-            <TrajectoryColumnChrome
-              title="Simulation metrics"
-              subtitle="Distance, DCPA, TCPA, and danger sector"
-              onHide={() => setSimulationVisible(false)}
-              showExport={false}
-            >
-              <MetricsView
-                frames={simulationMetricsFrames}
-                relationId={activeRelation}
-                onRelationIdChange={setSelectedMetricsRelationId}
-              />
-            </TrajectoryColumnChrome>
+            previewOnly ? null : (
+              <TrajectoryColumnChrome
+                title="Simulation metrics"
+                subtitle="Distance, DCPA, TCPA, and danger sector"
+                onHide={() => setSimulationVisible(false)}
+                showExport={false}
+              >
+                <MetricsView
+                  frames={simulationMetricsFrames}
+                  relationId={activeRelation}
+                  onRelationIdChange={setSelectedMetricsRelationId}
+                />
+              </TrajectoryColumnChrome>
+            )
           }
         />
       )}

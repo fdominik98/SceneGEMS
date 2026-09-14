@@ -14,6 +14,7 @@ import {
 } from "./functionalPresets";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { BatchPresetRunner } from "./BatchPresetRunner";
+import { SceneGenerationPaneViewSelect } from "./SceneGenerationPaneViewSelect";
 import type { EvaluationData, SimulationFrame } from "../../domain/simulation/types";
 
 const refineryLikeContentAttributes = EditorView.contentAttributes.of({
@@ -173,6 +174,7 @@ export function SceneGenerationSidebar({
 
   return (
     <aside className="right-pane scene-generation-sidebar">
+      <SceneGenerationPaneViewSelect />
       <div className="scene-editor-panel">
         <h3>Functional Scenario Specification (.problem)</h3>
         {manifestLoading && <LoadingSpinner label="Loading preset catalog…" size="sm" />}

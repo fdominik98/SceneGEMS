@@ -1,7 +1,7 @@
 """
 FastAPI WebSocket entrypoint. Copy `python_backend/` into your project and run:
 
-    uvicorn python_backend.websocket_app:app --reload --port 8000
+    uvicorn python_backend.websocket_app:app --reload --port 5174
 
 Or mount `websocket_router` on your existing app.
 """
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     uvicorn.run(
         "scenegems_tool.backend_service.websocket_app:app",
         host="127.0.0.1",
-        port=8000,
+        port=5174,
         reload=False,
         ws_ping_interval=None,
     )

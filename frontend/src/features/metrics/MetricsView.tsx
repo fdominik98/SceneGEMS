@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import type { SimulationFrame } from "../../domain/simulation/types";
-import { formatRelationId } from "../monitor/actorNameFormat";
+import { ActorNamesProvider, buildActorNameMap, formatRelationId } from "../monitor/actorNameFormat";
 import { MetricTimeSeriesChart } from "./MetricTimeSeriesChart";
 import { collectRelationIds } from "./metricsRelations";
 
@@ -26,6 +26,8 @@ interface MetricsViewProps {
 export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsViewProps) {
 
   const relationOptions = useMemo(() => collectRelationIds(frames), [frames]);
+  const latestActors = frames[frames.length - 1]?.actors;
+  const actorNames = useMemo(() => buildActorNameMap(latestActors), [latestActors]);
   const activeRelation =
     relationId && relationOptions.includes(relationId)
       ? relationId
@@ -73,7 +75,7 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
           >
             {relationOptions.map((id) => (
               <option key={id} value={id}>
-                {formatRelationId(id)}
+                {formatRelationId(id, actorNames)}
               </option>
             ))}
           </select>
@@ -105,6 +107,7 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
           </tr>
         </tbody>
       </table>
+      <ActorNamesProvider actors={latestActors}>
       <div className="metrics-grid metrics-grid--column">
         <MetricTimeSeriesChart
           title="Distance"
@@ -137,6 +140,7 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
           accentColor="#fbbf24"
         />
       </div>
+      </ActorNamesProvider>
     </div>
   );
 }

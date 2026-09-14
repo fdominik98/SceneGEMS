@@ -27,7 +27,7 @@ export type TrajectoryGenerationParams = {
 
 export type TrajectoryGenerationStatus = "idle" | "running" | "done" | "error";
 
-export type TrajectoryGenerationTab = "generate" | "advanced" | "preview" | "monitor";
+export type TrajectoryGenerationTab = "generate" | "advanced" | "preview";
 
 /** Monitor results ride along with every preview by default. */
 export const DEFAULT_INCLUDE_MONITOR_RESULTS = true;

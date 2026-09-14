@@ -3,7 +3,7 @@ import threading
 import time
 from dataclasses import dataclass
 from queue import Queue
-from typing import Any, List, Sequence, Union
+from typing import Any, List, Optional, Sequence, Union
 
 import paho.mqtt.client as mqtt
 
@@ -38,6 +38,8 @@ class MqttMonitoringBatchTask:
     scene_timestamps: Sequence[int]
     time_step: int
     is_simulation_frame: bool
+    # Set for a single generated/loaded scene; echoed back so the client can route it.
+    request_id: Optional[str] = None
 
     @property
     def trajectory_id(self) -> str:
@@ -118,6 +120,7 @@ class MqttMonitorService(MqttClient):
                 scene_timestamps=params["scene-timestamps"],
                 time_step=params["time-step"],
                 is_simulation_frame=bool(params["is-simulation-frame"]),
+                request_id=params.get("request-id"),
             )
         )
 
@@ -155,6 +158,8 @@ class MqttMonitorService(MqttClient):
             "monitored-frames": monitored_frames,
             "is-simulation-frame": batch_task.is_simulation_frame,
         }
+        if batch_task.request_id is not None:
+            monitored_scene_command["request-id"] = batch_task.request_id
         self.client.publish(self.monitored_scene_topic, json.dumps(monitored_scene_command), qos=1)
 
     def publish_heartbeat_and_sensor_info(self, current_tasks: List[MqttMonitoringTask]):

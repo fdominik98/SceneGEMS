@@ -7,7 +7,7 @@ services:
     ports:
       - "5173:5173"
     environment:
-      VITE_WS_URL: ws://127.0.0.1:8000/ws/scenegems_backend_service
+      VITE_WS_URL: ws://127.0.0.1:5174/ws/scenegems_backend_service
 
   broker:
     image: scenegems-mqtt-broker:latest
@@ -25,7 +25,7 @@ services:
     image: scenegems-backend:latest
     container_name: scenegems_backend
     ports:
-      - "8000:8000"
+      - "5174:5174"
     depends_on:
       - broker
     volumes:

@@ -2,14 +2,14 @@ import { usePersistedState } from "../../app/usePersistedState";
 import { usePlaybackStore } from "../../domain/playback/playbackStore";
 import { DEFAULT_MONITOR_NAME, defaultMonitorTopic } from "./monitorTopic";
 import { buildInitializeMonitorMessage } from "./monitorConfig";
-import type { SimulationStreamControls } from "./types";
+import type { ClientToServerMessage } from "../../domain/simulation/wireTypes";
 
 interface Props {
-  streamControls: SimulationStreamControls;
+  sendMessage: (message: ClientToServerMessage) => void;
   colregsConstraintsContent: string;
 }
 
-export function MonitorControls({ streamControls, colregsConstraintsContent }: Props) {
+export function MonitorControls({ sendMessage, colregsConstraintsContent }: Props) {
   const warapsStatus = usePlaybackStore((s) => s.warapsStatus);
   const monitorStatus = usePlaybackStore((s) => s.monitorStatus);
 
@@ -63,14 +63,14 @@ export function MonitorControls({ streamControls, colregsConstraintsContent }: P
           type="button"
           disabled={initializeDisabled}
           onClick={() =>
-            streamControls.sendMessage(
+            sendMessage(
               buildInitializeMonitorMessage(colregsConstraintsContent, { scope, name, topic })
             )
           }
         >
           Initialize Monitor
         </button>
-        <button type="button" disabled={shutDownDisabled} onClick={() => streamControls.sendMessage({ type: "shut_down_monitor" })}>
+        <button type="button" disabled={shutDownDisabled} onClick={() => sendMessage({ type: "shut_down_monitor" })}>
           Shut Down
         </button>
       </div>

@@ -1,7 +1,9 @@
 import asyncio
 import time
-from typing import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Callable, Dict
 
+from concrete_level.models.concrete_scene import ConcreteScene
 from functional_level.models.model_parser import ModelParser
 from scenegems_tool.backend_service.protocol import ServerMessage, make_error_message
 from scenegems_tool.backend_service.scenario_session import ScenarioSession
@@ -17,6 +19,9 @@ from scenegems_tool.waraps_integration.mqtt_scenegems_service import MqttSceneGE
 from scenegems_tool.waraps_integration.sim_utils import Geofence
 from scenegems_tool.waraps_integration.waraps_session import WARAPSSession
 
+_CONNECT_TIMEOUT_SEC = 5.0
+_CONNECT_POLL_INTERVAL_SEC = 0.1
+
 
 class LiveWARAPSSession(WARAPSSession):
     def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, send_payload: Callable[[ServerMessage], None]):
@@ -28,19 +33,57 @@ class LiveWARAPSSession(WARAPSSession):
         self.mqtt_service = MqttSceneGEMSService(self.mqtt_connection, self.reference_geofence)
         self.mqtt_client = MqttSceneGEMSClient(self.mqtt_connection, self.mqtt_service.topic, self.reference_geofence)
 
+        # Assigned by `start()`. They stay None when the handshake never completes, so
+        # `_cancel()` can tear down a half-built session without an AttributeError.
+        self.heartbeat_and_info_task: asyncio.Task | None = None
+        self.scenario_generation_session: ScenarioGenerationSession | None = None
+        self.trajectory_generation_session: TrajectoryGenerationSession | None = None
+        # Generated scenes arrive on the MQTT callback thread; the monitor hand-off runs
+        # here instead, since the live monitor can block waiting for its heartbeat.
+        self._generated_scene_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="generated_scene_monitor")
+
         self.mqtt_client.connect()
         self.mqtt_service.connect()
 
-        # wait until timeout
-        start_time = time.time()
+    async def start(self) -> None:
+        """Wait for the broker handshake, then bring up the dependent sessions.
+
+        Separate from `__init__` so the wait can yield to the event loop: a blocking
+        wait here would freeze every other socket session for its whole duration.
+        """
+        start_time = time.monotonic()
         while not self.is_connected:
-            time.sleep(1)
-            if time.time() - start_time > 5:
-                raise ValueError("Timeout: Failed to connect to WARAPS")
+            await asyncio.sleep(_CONNECT_POLL_INTERVAL_SEC)
+            elapsed = time.monotonic() - start_time
+            if elapsed > _CONNECT_TIMEOUT_SEC:
+                raise TimeoutError(f"No CONNACK from broker {self.mqtt_service.endpoint} after {elapsed:.1f}s: {self._connect_failure_reason()}")
         self.heartbeat_and_info_task = asyncio.create_task(self._heartbeat_and_info_loop())
 
-        self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
+        self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload, self._on_generated_scene)
         self.trajectory_generation_session = TrajectoryGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
+
+    def _on_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        try:
+            self._generated_scene_executor.submit(self._monitor_generated_scene, request_id, scene, evaluation_data, valid)
+        except RuntimeError:
+            # The executor is shut down: this session is being cancelled.
+            return
+
+    def _monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        # Read at run time: the monitor session can be replaced while scenes are queued.
+        try:
+            self.monitor_session.monitor_generated_scene(request_id, scene, evaluation_data, valid)
+        except Exception as exc:
+            print(f"Failed to monitor generated scene {request_id}: {exc}")
+
+    def _connect_failure_reason(self) -> str:
+        """The most specific explanation the MQTT clients managed to capture."""
+        refusal = self.mqtt_service.last_broker_refusal or self.mqtt_client.last_broker_refusal
+        if refusal:
+            return refusal
+        if self.mqtt_connection.tls_connection:
+            return "the TCP connection opened but the broker never completed the MQTT handshake. Check the credentials and whether that port speaks MQTT over TLS"
+        return "the TCP connection opened but the broker never completed the MQTT handshake. Check that the port speaks plain MQTT and does not require TLS"
 
     async def _heartbeat_and_info_loop(self) -> None:
         tick_interval_sec = 1.0 / self.mqtt_service.info_update_rate
@@ -81,9 +124,13 @@ class LiveWARAPSSession(WARAPSSession):
         previous.teardown()
 
     def _cancel(self) -> None:
-        self.heartbeat_and_info_task.cancel()
-        self.scenario_generation_session.destroy()
-        self.trajectory_generation_session.destroy()
+        self._generated_scene_executor.shutdown(wait=False, cancel_futures=True)
+        if self.heartbeat_and_info_task is not None:
+            self.heartbeat_and_info_task.cancel()
+        if self.scenario_generation_session is not None:
+            self.scenario_generation_session.destroy()
+        if self.trajectory_generation_session is not None:
+            self.trajectory_generation_session.destroy()
         self.mqtt_service.disconnect()
         self.mqtt_client.disconnect()
 
@@ -109,7 +156,7 @@ class LiveWARAPSSession(WARAPSSession):
 
     async def stop_scene_generation(self) -> None:
         await self.scenario_generation_session.destroy_async()
-        self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload)
+        self.scenario_generation_session = ScenarioGenerationSession(self.mqtt_connection, self.reference_geofence, self.send_payload, self._on_generated_scene)
 
     def generate_trajectories(self, request_id: str, scenario_content: str, colregs_constraints_content: str, params: dict) -> None:
         self.trajectory_generation_session.publish_generate_trajectories_command(

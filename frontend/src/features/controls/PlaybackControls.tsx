@@ -12,12 +12,10 @@ import {
   SimulationInitControls,
   type SimulationInitControlsHandle,
 } from "./SimulationInitControls";
-import { MonitorControls } from "./MonitorControls";
 import { RecordingControls } from "./RecordingControls";
 
 interface Props {
   streamControls: SimulationStreamControls;
-  colregsConstraintsContent: string;
 }
 
 function getSimulationStatusPresentation(
@@ -60,7 +58,7 @@ function getSimulationStatusPresentation(
   }
 }
 
-export function PlaybackControls({ streamControls, colregsConstraintsContent }: Props) {
+export function PlaybackControls({ streamControls }: Props) {
   const controlPanelMode = useUiStore((s) => s.controlPanelMode);
   const setControlPanelMode = useUiStore((s) => s.setControlPanelMode);
 
@@ -113,15 +111,6 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
         >
           Simulation
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={controlPanelMode === "monitor"}
-          className={`scene-gen-tab${controlPanelMode === "monitor" ? " active" : ""}`}
-          onClick={() => setControlPanelMode("monitor")}
-        >
-          Monitor
-        </button>
       </div>
 
       {controlPanelMode === "simulation" ? (
@@ -150,7 +139,7 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
             <RecordingControls />
           </section>
         </div>
-      ) : controlPanelMode === "simulation" ? (
+      ) : (
         <div className="simulation-control-stack">
           <div className="toolbar-row simulation-actions-toolbar">
             <button
@@ -211,11 +200,6 @@ export function PlaybackControls({ streamControls, colregsConstraintsContent }: 
             onScenarioVesselCount={onSimInitVesselCount}
           />
         </div>
-      ) : (
-        <MonitorControls
-          streamControls={streamControls}
-          colregsConstraintsContent={colregsConstraintsContent}
-        />
       )}
     </div>
   );

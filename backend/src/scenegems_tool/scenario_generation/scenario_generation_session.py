@@ -6,13 +6,19 @@ from typing import Callable
 from scenegems_tool.backend_service.protocol import ServerMessage
 from scenegems_tool.scenario_generation.scenario_generation_container import ScenarioGenerationContainer
 from scenegems_tool.waraps_integration.mqtt_client import MQttConnectionInfo
-from scenegems_tool.waraps_integration.mqtt_scenario_generation_client import MqttScenarioGenerationClient
+from scenegems_tool.waraps_integration.mqtt_scenario_generation_client import GeneratedSceneHandler, MqttScenarioGenerationClient
 from scenegems_tool.waraps_integration.mqtt_scenario_generation_service import SCENARIO_GENERATION_SERVICE_NAME, SCENARIO_GENERATION_SERVICE_TOPIC
 from scenegems_tool.waraps_integration.sim_utils import Geofence
 
 
 class ScenarioGenerationSession:
-    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, send_payload: Callable[[ServerMessage], None]):
+    def __init__(
+        self,
+        mqtt_connection: MQttConnectionInfo,
+        reference_geofence: Geofence,
+        send_payload: Callable[[ServerMessage], None],
+        on_generated_scene: GeneratedSceneHandler,
+    ):
         self.mqtt_connection = mqtt_connection
         self.reference_geofence = reference_geofence
         self.send_payload = send_payload
@@ -25,6 +31,7 @@ class ScenarioGenerationSession:
             reference_geofence=reference_geofence,
             parent_service_name=SCENARIO_GENERATION_SERVICE_NAME,
             send_payload=send_payload,
+            on_generated_scene=on_generated_scene,
         )
         self.client.connect()
 

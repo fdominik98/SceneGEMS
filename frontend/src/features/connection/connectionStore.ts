@@ -9,6 +9,8 @@ import { defaultReferenceGeofence, type ReferenceGeofence } from "./referenceGeo
 
 const DEFAULT_PRESET: MqttConnectionPresetKey = "local_mqtt_connection";
 
+export type WarapsConnectionAttempt = "idle" | "connecting" | "connected" | "failed";
+
 export interface ConnectionFormState {
   user: string;
   password: string;
@@ -26,6 +28,17 @@ export interface ConnectionFormState {
    */
   userDisconnectedWaraps: boolean;
   setUserDisconnectedWaraps: (value: boolean) => void;
+  /**
+   * Outcome of the most recent Connect click. Not persisted: it exists so the panel
+   * can report *why* a connection attempt failed, which the 1 Hz `waraps_status`
+   * heartbeat cannot express (it only ever says connected or disconnected).
+   */
+  connectionAttempt: WarapsConnectionAttempt;
+  connectionError: string | null;
+  beginConnectionAttempt: () => void;
+  markConnectionSucceeded: () => void;
+  markConnectionFailed: (error: string) => void;
+  clearConnectionAttempt: () => void;
   setUser: (value: string) => void;
   setPassword: (value: string) => void;
   setAgentBroker: (value: string) => void;
@@ -57,6 +70,12 @@ export const useConnectionStore = create<ConnectionFormState>()(
       geofence: defaultReferenceGeofence,
       userDisconnectedWaraps: false,
       setUserDisconnectedWaraps: (userDisconnectedWaraps) => set({ userDisconnectedWaraps }),
+      connectionAttempt: "idle",
+      connectionError: null,
+      beginConnectionAttempt: () => set({ connectionAttempt: "connecting", connectionError: null }),
+      markConnectionSucceeded: () => set({ connectionAttempt: "connected", connectionError: null }),
+      markConnectionFailed: (connectionError) => set({ connectionAttempt: "failed", connectionError }),
+      clearConnectionAttempt: () => set({ connectionAttempt: "idle", connectionError: null }),
       setUser: (user) => set({ user }),
       setPassword: (password) => set({ password }),
       setAgentBroker: (agentBroker) => set({ agentBroker }),
@@ -86,12 +105,11 @@ export const useConnectionStore = create<ConnectionFormState>()(
         }
         const envelope = persistedState as { state?: ConnectionFormState };
         const state = envelope.state ?? (persistedState as ConnectionFormState);
-        const staleLocal =
-          state.clientBroker === "localhost" ||
-          state.clientBroker === "host.docker.internal" ||
-          state.agentBroker === "host.docker.internal" ||
-          state.port === 1882;
-        if (!staleLocal && state.selectedPreset !== "local_mqtt_connection") {
+        // Host-local addresses are legitimate again: the backend resolves them to the
+        // Docker host gateway, which is how a broker started by another compose project
+        // (for example the OTG stack) is reached. Only an explicitly selected preset is
+        // refreshed, so a hand-typed address always survives the migration.
+        if (state.selectedPreset !== "local_mqtt_connection") {
           return persistedState as ConnectionFormState;
         }
         const migrated = {

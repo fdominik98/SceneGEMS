@@ -53,7 +53,7 @@ Open:
 | Service | URL |
 |---------|-----|
 | **Web UI** | http://localhost:5173 |
-| **Backend health** | http://localhost:8000/health |
+| **Backend health** | http://localhost:5174/health |
 | **MQTT (host)** | `localhost:1882` (maps to broker port 1883 inside compose) |
 
 Press **Ctrl+C** while `start.sh` is tailing backend logs to stop the stack. Shutdown also tears down subsystem containers (monitoring, scenario generation, scenario execution) started during the session.
@@ -122,9 +122,9 @@ Typical workflow after `./start.sh`:
 
 ```text
 Browser (frontend :5173)
-    │  WebSocket  ws://127.0.0.1:8000/ws/scenegems_backend_service
+    │  WebSocket  ws://127.0.0.1:5174/ws/scenegems_backend_service
     ▼
-Backend (scenegems-backend :8000)
+Backend (scenegems-backend :5174)
     │  MQTT  broker:1883
     ├── scenegems-scenario-generation-subsystem   (scene generation workers)
     ├── scenegems-monitoring-subsystem               (COLREGS monitoring)
@@ -157,7 +157,7 @@ Run the WebSocket server locally (requires MQTT broker and subsystem images if y
 ```bash
 cd backend
 source env/bin/activate
-PYTHONPATH=src uvicorn scenegems_tool.backend_service.websocket_app:app --host 0.0.0.0 --port 8000
+PYTHONPATH=src uvicorn scenegems_tool.backend_service.websocket_app:app --host 0.0.0.0 --port 5174
 ```
 
 See [`backend/README.md`](backend/README.md) for the research evaluation scripts (`evaluation_main.py`, `hyperparam_test.py`, `eval_vis.py`, etc.).
@@ -168,7 +168,7 @@ See [`backend/README.md`](backend/README.md) for the research evaluation scripts
 cd frontend
 npm install
 cp .env.example .env
-# Ensure the backend is running; default VITE_WS_URL points at localhost:8000
+# Ensure the backend is running; default VITE_WS_URL points at localhost:5174
 npm run dev
 ```
 
@@ -204,7 +204,7 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `VITE_WS_URL` | `ws://127.0.0.1:8000/ws/scenegems_backend_service` | Frontend -> backend WebSocket (set in frontend service env) |
+| `VITE_WS_URL` | `ws://127.0.0.1:5174/ws/scenegems_backend_service` | Frontend -> backend WebSocket (set in frontend service env) |
 | `MQTT_BROKER_HOST` | `broker` | Backend MQTT hostname inside compose |
 | `SCENEGEMS_DOCKER_NETWORK` | `scenegems_default` | Network attached to spawned subsystem containers |
 | `SCENEGEMS_RUNTIME_VOLUME` | `scenegems_runtime_assets` | Named volume for generated simulation assets |
@@ -214,7 +214,7 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 | Port | Service |
 |------|---------|
 | 5173 | Frontend (Vite) |
-| 8000 | Backend HTTP + WebSocket |
+| 5174 | Backend HTTP + WebSocket |
 | 1882 | MQTT (host -> broker 1883) |
 | 8082 | MQTT WebSocket (host -> broker 8083) |
 
@@ -223,7 +223,7 @@ Large measurement datasets are not shipped in the repo; see [`backend/README.md`
 | Symptom | What to try |
 |---------|-------------|
 | `Missing image … Run ./build.sh first` | Run `./build.sh` or `./build.sh --stack` before `./start.sh` |
-| UI loads but WebSocket fails | Confirm backend is up at http://localhost:8000/health; check `VITE_WS_URL` in `frontend/.env` |
+| UI loads but WebSocket fails | Confirm backend is up at http://localhost:5174/health; check `VITE_WS_URL` in `frontend/.env` |
 | Scene generation hangs | Ensure `scenegems-scenario-generation-subsystem` image exists (`./build.sh --backend`); inspect `docker logs scenegems_backend` |
 | Simulation / Gazebo errors | Run `./build.sh --simulation` (and `--arduagent` if using ArduPilot agents); backend needs Docker socket access |
 | Stale behavior after code changes | `./build.sh --backend --no-check` (or relevant target with `--no-check`) |

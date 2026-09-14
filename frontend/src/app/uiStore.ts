@@ -13,8 +13,8 @@ export interface OverlayVisibility {
   staticAvoidanceDomain: boolean;
 }
 
-/** Bottom control panel tab (preview animation playback, simulation playback, or monitor). */
-export type ControlPanelMode = "animation" | "simulation" | "monitor";
+/** Bottom control panel tab (preview animation playback or simulation playback). */
+export type ControlPanelMode = "animation" | "simulation";
 
 /** Which trajectory stream the right-hand monitor columns refer to (preview vs simulation). */
 export type TrajectoryStream = "animation" | "simulation";
@@ -24,6 +24,8 @@ export type MonitorPanelView = "runtime_data" | "overall_analysis";
 export type SceneViewMode = "cartesian" | "nautical";
 /** Scene generation panel mode: single editor-driven generation or batch over presets. */
 export type SceneGenerationTab = "single" | "batch";
+/** Scene generation right pane: the specification editor or the monitor preview of the displayed scene. */
+export type SceneGenerationPaneView = "specification" | "monitor";
 
 const defaultOverlays: OverlayVisibility = {
   dot: true,
@@ -71,6 +73,8 @@ interface UiState {
   /** Scene generation panel tab (single vs batch). */
   sceneGenerationTab: SceneGenerationTab;
   setSceneGenerationTab: (tab: SceneGenerationTab) => void;
+  sceneGenerationPaneView: SceneGenerationPaneView;
+  setSceneGenerationPaneView: (view: SceneGenerationPaneView) => void;
   /** When true, every incoming generated scene is shown; when false, only final valid (single) or user-selected (batch) scenes. */
   sceneGenerationLivePreview: boolean;
   setSceneGenerationLivePreview: (value: boolean) => void;
@@ -115,6 +119,8 @@ export const useUiStore = create<UiState>()(
   setSceneViewMode: (mode) => set({ sceneViewMode: mode }),
   sceneGenerationTab: "single",
   setSceneGenerationTab: (tab) => set({ sceneGenerationTab: tab }),
+  sceneGenerationPaneView: "specification",
+  setSceneGenerationPaneView: (view) => set({ sceneGenerationPaneView: view }),
   sceneGenerationLivePreview: true,
   setSceneGenerationLivePreview: (value) => set({ sceneGenerationLivePreview: value }),
   referenceGeofence: defaultReferenceGeofence,
@@ -122,12 +128,21 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "scenegems:ui",
-      version: 1,
+      version: 2,
+      // v2: the monitor tab moved to the Connections page.
+      migrate: (persisted, version) => {
+        const state = (persisted ?? {}) as { controlPanelMode?: string };
+        if (version < 2 && state.controlPanelMode === "monitor") {
+          state.controlPanelMode = "animation";
+        }
+        return state as UiState;
+      },
       // Only persist where the user has navigated (page tabs / scene view), not transient UI state.
       partialize: (state) => ({
         controlPanelMode: state.controlPanelMode,
         sceneViewMode: state.sceneViewMode,
         sceneGenerationTab: state.sceneGenerationTab,
+        sceneGenerationPaneView: state.sceneGenerationPaneView,
         sceneGenerationLivePreview: state.sceneGenerationLivePreview,
       }),
     }

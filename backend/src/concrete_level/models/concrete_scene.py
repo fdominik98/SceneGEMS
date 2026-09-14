@@ -10,12 +10,20 @@ from logical_level.constraint_satisfaction.evaluation_cache import EvaluationCac
 from logical_level.models.actor_variable import ActorVariable
 from logical_level.models.relation_constraints_concept.literals import InBowSectorOf, InSternSectorOf, LowTCPA, OnCollisionCourse, OutVis
 from logical_level.models.relation_constraints_concept.predicates import (
+    AtOrInCrossingFromPortCR,
+    AtOrInHeadOnCR,
+    AtOrInOvertakingToPortCR,
+    AtOrInOvertakingToStarboardCR,
+    AtOrInTwoWayCrossingFromPortCR,
+    AtOrInTwoWayCrossingFromStarboardCR,
     InCrossingFromPortCR,
     InHeadOnCR,
     InOvertakingToPortCR,
     InOvertakingToStarboardCR,
     InTwoWayCrossingFromPortCR,
     InTwoWayCrossingFromStarboardCR,
+    OvertakingToPort,
+    OvertakingToStarboard,
 )
 from utils.colregs_approximations import COLREGSConstraints
 from utils.safety_domains import DomainCollection
@@ -205,7 +213,7 @@ class ConcreteScene(Serializable):
         if vessel is None:
             raise ValueError("No OS in the scene.")
         return vessel
-    
+
     @property
     def os_state(self) -> ActorState:
         return self[self.os]
@@ -217,7 +225,6 @@ class ConcreteScene(Serializable):
     def on_collision_course(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
         return OnCollisionCourse(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
 
-    
     def may_collide_anyone(self, actor: ConcreteActor) -> bool:
         for actor2 in self.actors:
             if actor == actor2:
@@ -238,26 +245,45 @@ class ConcreteScene(Serializable):
     def in_bow_sector_of(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
         return InBowSectorOf(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
 
-    def in_head_on_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InHeadOnCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    # `include_visibility_band` also accepts the pair at the visibility boundary band
+    # (AtOrIn*CR), not only strictly inside visibility (In*CR). See AtOrInHeadOnCR.
 
-    def in_overtaking_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return self.in_overtaking_to_port_cr(actor1, actor2, colregs_constants) or self.in_overtaking_to_starboard_cr(actor1, actor2, colregs_constants)
+    def in_head_on_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInHeadOnCR if include_visibility_band else InHeadOnCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
-    def in_overtaking_to_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InOvertakingToPortCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    def in_overtaking_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        return self.in_overtaking_to_port_cr(actor1, actor2, colregs_constants, include_visibility_band) or self.in_overtaking_to_starboard_cr(
+            actor1, actor2, colregs_constants, include_visibility_band
+        )
 
-    def in_overtaking_to_starboard_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InOvertakingToStarboardCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    def in_overtaking_to_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInOvertakingToPortCR if include_visibility_band else InOvertakingToPortCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
-    def in_crossing_from_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InCrossingFromPortCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    def in_overtaking_to_starboard_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInOvertakingToStarboardCR if include_visibility_band else InOvertakingToStarboardCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
-    def in_two_way_crossing_from_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InTwoWayCrossingFromPortCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    def in_crossing_from_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInCrossingFromPortCR if include_visibility_band else InCrossingFromPortCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
-    def in_two_way_crossing_from_starboard_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
-        return InTwoWayCrossingFromStarboardCR(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+    def in_two_way_crossing_from_port_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInTwoWayCrossingFromPortCR if include_visibility_band else InTwoWayCrossingFromPortCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def in_two_way_crossing_from_starboard_cr(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints, include_visibility_band: bool = False) -> bool:
+        predicate = AtOrInTwoWayCrossingFromStarboardCR if include_visibility_band else InTwoWayCrossingFromStarboardCR
+        return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def overtaking_to_port(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        """Overtaking-to-port bearing geometry only, without visibility or collision risk."""
+        return OvertakingToPort(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def overtaking_to_starboard(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        """Overtaking-to-starboard bearing geometry only, without visibility or collision risk."""
+        return OvertakingToStarboard(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
     def get_geo_props(self, actor1: ConcreteActor, actor2: ConcreteActor) -> GeometricProperties:
         return self.evaluation_cache.get_props(self.vars[actor1], self.vars[actor2])
@@ -280,10 +306,10 @@ class ConcreteScene(Serializable):
             domain_collection1.add_domain(actor1_position, state1.heading, actor1.safety_radius)
 
         return domain_collection1, domain_collection2
-    
+
     def get_tcpa(self, actor1: ConcreteActor, actor2: ConcreteActor) -> float:
         return self.evaluation_cache.get_props(self.vars[actor1], self.vars[actor2]).tcpa
-    
+
     def get_dcpa(self, actor1: ConcreteActor, actor2: ConcreteActor) -> float:
         return self.evaluation_cache.get_props(self.vars[actor1], self.vars[actor2]).dcpa
 

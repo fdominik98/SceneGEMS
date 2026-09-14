@@ -327,6 +327,14 @@ body,
   min-height: 0;
 }
 
+.waraps-layout__map {
+  gap: 14px;
+}
+
+.waraps-layout__map .monitor-connection-panel {
+  flex: 0 0 auto;
+}
+
 .waraps-panel h3,
 .geofence-panel h3 {
   margin: 0 0 10px;
@@ -377,6 +385,30 @@ body,
   min-width: 7rem;
 }
 
+/* Failed connection attempt: the reason from the backend plus the checks that fix it.
+   Sits in the panel rather than the global banner so it stays next to the fields. */
+.waraps-connection-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #7f1d1d;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.15);
+}
+
+.waraps-connection-error .error {
+  margin: 0 0 6px;
+}
+
+.waraps-connection-error ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.waraps-connection-error li {
+  margin: 3px 0;
+}
+
 .waraps-options .check {
   margin: 0;
 }
@@ -423,15 +455,6 @@ body,
   border-radius: 6px;
   background: rgba(15, 23, 42, 0.6);
   border: 1px solid #334155;
-}
-
-@media (min-width: 1025px) {
-  .waraps-layout__map {
-    position: sticky;
-    top: 10px;
-    align-self: start;
-    max-height: calc(100dvh - 5rem);
-  }
 }
 
 @media (max-width: 1024px) {

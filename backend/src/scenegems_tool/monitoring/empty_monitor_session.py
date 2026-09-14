@@ -1,9 +1,9 @@
-from typing import Callable, Sequence
+from typing import Any, Callable, Dict, Sequence
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.monitoring.monitor_session import MonitorSession
 from scenegems_tool.backend_service.protocol import ServerMessage, make_preview_chunk_message, make_simulation_chunk_message
 from scenegems_tool.backend_service.serialization import serialize_frame
+from scenegems_tool.monitoring.monitor_session import MonitorSession
 
 
 class EmptyMonitorSession(MonitorSession):
@@ -45,6 +45,9 @@ class EmptyMonitorSession(MonitorSession):
             frames=frames,
         )
         self.send_payload(payload)
+
+    def monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        self._send_unmonitored_generated_scene(request_id, scene, evaluation_data, valid)
 
     @property
     def is_functioning(self) -> bool:

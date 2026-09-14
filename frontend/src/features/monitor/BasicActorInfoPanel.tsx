@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import type { TrajectoryStream } from "../../app/uiStore";
 import type { SimulationFrame } from "../../domain/simulation/types";
 import { getActorPanelDotColor } from "../scene/shipColors";
-import { renderActorName } from "./actorNameFormat";
+import { ActorNamesProvider, renderActorName } from "./actorNameFormat";
 import { ColregsMonitorStateSection } from "./ColregsMonitorStateSection";
 import { EncounterSummaryCard } from "./EncounterSummaryCard";
 import {
@@ -22,6 +22,8 @@ import { useMonitorFrameForKind } from "./useMonitorFrame";
 
 interface BasicActorInfoPanelProps {
   stream: TrajectoryStream;
+  /** Shown instead of the stream's current playback frame (scene generation monitor preview). */
+  frame?: SimulationFrame | null;
 }
 
 function trajectorySummary(frame: SimulationFrame): string | null {
@@ -34,8 +36,9 @@ function trajectorySummary(frame: SimulationFrame): string | null {
   return `${n} actor${n === 1 ? "" : "s"} · ${pts} points`;
 }
 
-export function BasicActorInfoPanel({ stream }: BasicActorInfoPanelProps) {
-  const { frame, panelKind } = useMonitorFrameForKind(stream);
+export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActorInfoPanelProps) {
+  const { frame: streamFrame, panelKind } = useMonitorFrameForKind(stream);
+  const frame = frameOverride !== undefined ? frameOverride : streamFrame;
 
   if (!frame) {
     return (
@@ -52,6 +55,7 @@ export function BasicActorInfoPanel({ stream }: BasicActorInfoPanelProps) {
   const extraFrameKeys = Object.keys(rawFrame).filter((k) => !FRAME_STRUCTURE_KEYS.has(k));
 
   return (
+    <ActorNamesProvider actors={frame.actors}>
     <details className="panel panel-collapsible frame-data-root" open>
       <summary>
         <h3>Frame data</h3>
@@ -164,5 +168,6 @@ export function BasicActorInfoPanel({ stream }: BasicActorInfoPanelProps) {
         ) : null}
       </div>
     </details>
+    </ActorNamesProvider>
   );
 }

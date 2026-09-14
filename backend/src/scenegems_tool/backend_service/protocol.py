@@ -33,6 +33,18 @@ class GenerateSceneMessage(TypedDict):
     timeout: int
 
 
+class MonitorSceneMessage(TypedDict):
+    """Run a scene loaded on the frontend through the active monitor.
+
+    Answered with a `generated_scene` message carrying the same `requestId`.
+    """
+
+    type: Literal["monitor_scene"]
+    requestId: str
+    # Scenario JSON: evaluation-data shape with `best_scene`, or a TrajectoryData payload.
+    scenarioContent: str
+
+
 class GeofencePayload(TypedDict):
     """Circular reference geofence: WGS84 center and radius in meters.
 
@@ -147,6 +159,7 @@ ClientMessage = Union[
     InitializeSimulationMessage,
     InitializeMonitorMessage,
     GenerateSceneMessage,
+    MonitorSceneMessage,
     StopSceneGenerationMessage,
     GenerateTrajectoriesMessage,
     StopTrajectoryGenerationMessage,

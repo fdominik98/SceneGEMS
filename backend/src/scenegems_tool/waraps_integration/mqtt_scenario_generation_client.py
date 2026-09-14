@@ -1,13 +1,19 @@
+import copy
 import json
 import time
 import uuid
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List
 
 import paho.mqtt.client as mqtt
 
+from concrete_level.models.concrete_scene import ConcreteScene
+from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
 from scenegems_tool.backend_service.protocol import ServerMessage, make_generated_scene_message
 from scenegems_tool.waraps_integration.mqtt_client import MqttClient, MQttConnectionInfo
 from scenegems_tool.waraps_integration.sim_utils import Geofence
+
+# (request_id, scene, evaluation_data, valid)
+GeneratedSceneHandler = Callable[[str, ConcreteScene, Dict[str, Any], bool], None]
 
 
 class MqttScenarioGenerationClient(MqttClient):
@@ -18,10 +24,12 @@ class MqttScenarioGenerationClient(MqttClient):
         reference_geofence: Geofence,
         parent_service_name: str,
         send_payload: Callable[[ServerMessage], None],
+        on_generated_scene: GeneratedSceneHandler,
     ):
         super().__init__(name="scenario_generation_client", topic=topic, mqtt_connection=mqtt_connection, reference_geofence=reference_geofence)
         self.parent_service_name = parent_service_name
         self.send_payload = send_payload
+        self.on_generated_scene = on_generated_scene
         self.last_heartbeat_timestamp = 0.0
         self.timeout_sec = 10.0
         self.heartbeat_interval_sec = 5.0
@@ -40,16 +48,26 @@ class MqttScenarioGenerationClient(MqttClient):
             case self.generated_scene_topic:
                 if payload["task_sender"] != self.parent_service_name:
                     return
-                self.send_payload(
-                    make_generated_scene_message(
-                        request_id=payload["request-id"],
-                        scene=payload["generated-frame"],
-                        evaluation_data=payload["evaluation-data"],
-                        valid=payload["valid"],
-                    )
-                )
+                self._on_generated_scene_payload(payload)
             case self.heartbeat_topic:
                 self.last_heartbeat_timestamp = time.time()
+
+    def _on_generated_scene_payload(self, payload: Any) -> None:
+        """Hand the generated scene to the monitor, which sends it to the frontend.
+
+        Falls back to forwarding the unmonitored frame when the scene cannot be rebuilt,
+        so a scene generation request never waits on a scene that was dropped.
+        """
+        request_id = payload["request-id"]
+        evaluation_data = payload["evaluation-data"]
+        valid = bool(payload["valid"])
+        try:
+            scene = EvaluationData.from_dict(copy.deepcopy(evaluation_data)).best_scene
+        except Exception as exc:
+            print(f"Could not rebuild generated scene {request_id} for monitoring: {exc}")
+            self.send_payload(make_generated_scene_message(request_id=request_id, scene=payload["generated-frame"], evaluation_data=evaluation_data, valid=valid))
+            return
+        self.on_generated_scene(request_id, scene, evaluation_data, valid)
 
     @property
     def is_heartbeat_valid(self) -> bool:

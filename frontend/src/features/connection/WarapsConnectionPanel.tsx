@@ -5,15 +5,20 @@ import {
   usePlaybackStore,
 } from "../../domain/playback/playbackStore";
 import type { ClientToServerMessage } from "../../domain/simulation/wireTypes";
+import { MonitorControls } from "../controls/MonitorControls";
 import { mqttConnectionLibrary, type MqttConnectionPresetKey } from "./connectionLibrary";
 import { useConnectionStore } from "./connectionStore";
 import { ReferenceGeofenceMap } from "./ReferenceGeofenceMap";
 
 interface WarapsConnectionPanelProps {
   sendMessage: (message: ClientToServerMessage) => void;
+  colregsConstraintsContent: string;
 }
 
-export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProps) {
+export function WarapsConnectionPanel({
+  sendMessage,
+  colregsConstraintsContent,
+}: WarapsConnectionPanelProps) {
   const previewFrame = usePlaybackStore((s) => getCurrentFrame(s));
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
   const warapsStatus = usePlaybackStore((s) => s.warapsStatus);
@@ -38,6 +43,10 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
   const setGeofence = useConnectionStore((s) => s.setGeofence);
   const setUserDisconnectedWaraps = useConnectionStore((s) => s.setUserDisconnectedWaraps);
   const applyConnection = useConnectionStore((s) => s.applyConnection);
+  const connectionAttempt = useConnectionStore((s) => s.connectionAttempt);
+  const connectionError = useConnectionStore((s) => s.connectionError);
+  const beginConnectionAttempt = useConnectionStore((s) => s.beginConnectionAttempt);
+  const clearConnectionAttempt = useConnectionStore((s) => s.clearConnectionAttempt);
 
   const setReferenceGeofence = useUiStore((s) => s.setReferenceGeofence);
   useEffect(() => {
@@ -89,7 +98,8 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
           >
             <option value="">Custom</option>
             <option value="live_mqtt_connection">Live MQTT</option>
-            <option value="local_mqtt_connection">Local MQTT</option>
+            <option value="local_mqtt_connection">Local MQTT (compose broker)</option>
+            <option value="host_mqtt_connection">Host MQTT (OTG broker on 1882)</option>
           </select>
         </label>
 
@@ -162,6 +172,7 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
             disabled={!canSubmit}
             onClick={() => {
               setUserDisconnectedWaraps(false);
+              beginConnectionAttempt();
               sendMessage({
                 type: "connect_to_waraps",
                 user: user.trim(),
@@ -175,18 +186,30 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
               });
             }}
           >
-            Connect
+            {connectionAttempt === "connecting" ? "Connecting..." : "Connect"}
           </button>
           <button
             disabled={streamStatus !== "connected" || warapsStatus !== "connected"}
             onClick={() => {
               setUserDisconnectedWaraps(true);
+              clearConnectionAttempt();
               sendMessage({ type: "disconnect_from_waraps" });
             }}
           >
             Disconnect
           </button>
         </div>
+
+        {connectionAttempt === "failed" && connectionError && (
+          <div className="waraps-connection-error" role="alert">
+            <p className="error">{connectionError}</p>
+            <ul className="meta">
+              {connectionHints(clientBroker, port, tlsConnection).map((hint) => (
+                <li key={hint}>{hint}</li>
+              ))}
+            </ul>
+          </div>
+        )}
       </section>
       {previewFrame && (() => {
         const own = previewFrame.actors.find((a) => a.isOwnShip);
@@ -204,7 +227,40 @@ export function WarapsConnectionPanel({ sendMessage }: WarapsConnectionPanelProp
           geofence={geofence}
           onGeofenceChange={handleGeofenceChange}
         />
+        <section className="panel waraps-panel monitor-connection-panel">
+          <h3>Monitor</h3>
+          <MonitorControls
+            sendMessage={sendMessage}
+            colregsConstraintsContent={colregsConstraintsContent}
+          />
+        </section>
       </div>
     </div>
   );
+}
+
+/**
+ * Turn the attempted endpoint into the checks that actually resolve a failed connect.
+ * The backend already says what went wrong; these say what to do about it.
+ */
+function connectionHints(clientBroker: string, port: number, tlsConnection: boolean): string[] {
+  const host = clientBroker.trim().toLowerCase();
+  const hints: string[] = [];
+  if (host === "broker") {
+    hints.push(
+      "\"broker\" only resolves inside the SceneGEMS compose network. Start it with docker compose up broker, or pick the Host MQTT profile for a broker published on your machine."
+    );
+  }
+  if (host === "localhost" || host === "127.0.0.1") {
+    hints.push(
+      `The backend resolves localhost to the Docker host gateway, so it needs the broker published on host port ${port}. Check docker ps for a container mapping that port.`
+    );
+  }
+  hints.push(`Confirm something is listening: docker ps | grep ${port}`);
+  if (tlsConnection) {
+    hints.push("TLS is on: the port must speak MQTT over TLS (8883 for broker.waraps.org) and the credentials must be valid.");
+  } else {
+    hints.push("TLS is off: the port must speak plain MQTT (1883 inside a compose network, 1882 for the OTG broker on the host).");
+  }
+  return hints;
 }

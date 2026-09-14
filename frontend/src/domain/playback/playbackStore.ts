@@ -140,6 +140,8 @@ export interface PlaybackState {
   activeSceneGenerationRequestId: string | null;
   completedSceneGenerationRequestId: string | null;
   latestGeneratedScene: GeneratedSceneData | null;
+  /** Request id of the pending monitor run for a scene loaded from disk. */
+  pendingSceneMonitorRequestId: string | null;
   /** Bumped when a new single-scene generation starts; stale waits ignore updates. */
   sceneGenerationWaitEpoch: number;
   sceneGenerationEvaluationByRequestId: Record<string, EvaluationData>;
@@ -179,6 +181,9 @@ export interface PlaybackState {
   setReceivedSimulationModels: (models: ReceivedSimulationModels | null) => void;
   /** Sets the scene-generation preview and drops any prior backend-loaded trajectory. */
   setVisualizedScenario: (scene: GeneratedSceneData) => void;
+  beginSceneMonitor: (requestId: string) => void;
+  /** Merges the monitor fields of a `monitor_scene` answer into the displayed scene. */
+  applySceneMonitorResult: (requestId: string, frame: SimulationFrame) => void;
   cancelSceneGeneration: () => void;
   clearVisualizedScenario: () => void;
   setPlaying: (value: boolean) => void;
@@ -215,6 +220,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   activeSceneGenerationRequestId: null,
   completedSceneGenerationRequestId: null,
   latestGeneratedScene: loadPersistedScene(),
+  pendingSceneMonitorRequestId: null,
   sceneGenerationWaitEpoch: 0,
   sceneGenerationEvaluationByRequestId: {},
   sceneGenerationEvaluationBaselineByRequestId: {},
@@ -426,7 +432,31 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   setVisualizedScenario: (scene) =>
     set({
       latestGeneratedScene: scene,
+      pendingSceneMonitorRequestId: null,
       ...clearedLoadedPlaybackState,
+    }),
+  beginSceneMonitor: (requestId) => set({ pendingSceneMonitorRequestId: requestId }),
+  applySceneMonitorResult: (requestId, frame) =>
+    set((state) => {
+      const current = state.latestGeneratedScene;
+      // A newer scene replaced the one this answer belongs to.
+      if (state.pendingSceneMonitorRequestId !== requestId || !current) {
+        return {};
+      }
+      return {
+        pendingSceneMonitorRequestId: null,
+        latestGeneratedScene: {
+          ...current,
+          scene: {
+            ...current.scene,
+            situationContexts: frame.situationContexts,
+            colregsStates: frame.colregsStates,
+            ruleResults: frame.ruleResults,
+            maneuverStates: frame.maneuverStates,
+            metrics: frame.metrics,
+          },
+        },
+      };
     }),
   cancelSceneGeneration: () =>
     set((state) => {
@@ -451,6 +481,7 @@ export const usePlaybackStore = create<PlaybackState>((set, get) => ({
   clearVisualizedScenario: () =>
     set({
       latestGeneratedScene: null,
+      pendingSceneMonitorRequestId: null,
       completedSceneGenerationRequestId: null,
       ...clearedLoadedPlaybackState,
     }),

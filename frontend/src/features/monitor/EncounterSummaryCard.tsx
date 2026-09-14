@@ -89,6 +89,13 @@ export function EncounterSummaryCard({
               <span className="mon-enc-relation">{renderRelationId(relationId)}</span>
               {ctx ? <Chip label={ctx.situationLabel || ctx.situationType} tone="info" /> : null}
               {giver ? <Chip label={`${giver} gives way`} tone="warn" /> : null}
+              {col ? (
+                col.actorsSeeEachOther ? (
+                  <Chip label="within visibility distance" tone="info" />
+                ) : (
+                  <Chip label="beyond visibility distance" tone="neutral" />
+                )
+              ) : null}
               {col?.actorsOnCollisionCourse ? <Chip label="collision course" tone="danger" /> : null}
               {col?.actorsViolateSafetyDomain ? <Chip label="safety domain" tone="danger" /> : null}
               {col?.actorsHaveLowTcpa ? <Chip label="low TCPA" tone="danger" /> : null}

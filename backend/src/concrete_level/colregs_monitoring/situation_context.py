@@ -388,12 +388,15 @@ class HeadOnSituationContext(SituationContext):
 
 class OvertakingSituationContext(SituationContext):
     def __init__(self, vessel1: ConcreteActor, vessel2: ConcreteActor, start_scene: ConcreteScene, start_timestamp: int, colregs_constants: COLREGSConstraints):
-        if start_scene.in_overtaking_to_port_cr(vessel1, vessel2, colregs_constants):
+        # The caller has already established visibility and collision risk (strictly
+        # inside visibility, or at its boundary for an initial scene), so only the
+        # bearing geometry decides the side here.
+        if start_scene.overtaking_to_port(vessel1, vessel2, colregs_constants):
             situation_type = COLREGSType.OVERTAKING_TO_PORT
-        elif start_scene.in_overtaking_to_starboard_cr(vessel1, vessel2, colregs_constants):
+        elif start_scene.overtaking_to_starboard(vessel1, vessel2, colregs_constants):
             situation_type = COLREGSType.OVERTAKING_TO_STARBOARD
         else:
-            raise ValueError(f"Invalid overtaking situation: {start_scene.in_overtaking_cr(vessel1, vessel2, colregs_constants)}")
+            raise ValueError(f"Invalid overtaking situation: {start_scene.in_overtaking_cr(vessel1, vessel2, colregs_constants, include_visibility_band=True)}")
         super().__init__(situation_type, vessel1, vessel2, start_scene, start_timestamp, colregs_constants)
 
         # if actor2 is facing right of the collision domain of actor1 then left else right.

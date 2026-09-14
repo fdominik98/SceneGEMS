@@ -14,6 +14,7 @@ import { useRecordingStore } from "../playback/recordingStore";
 import { useBatchGenerationStore } from "../sceneGeneration/batchGenerationStore";
 import { buildFramesFromTrajectoryData } from "../sceneGeneration/parseEvaluationDataFile";
 import { useTrajectoryGenerationStore } from "../trajectoryGeneration/trajectoryGenerationStore";
+import { useConnectionStore } from "../../features/connection/connectionStore";
 import type { TrajectoryGenerationParamsWire } from "./wireTypes";
 
 let previewTrajectoryChunkQueue = Promise.resolve();
@@ -180,6 +181,14 @@ export function useSimulationWorkflow() {
         }
         case "generated_scene": {
           const store = usePlaybackStore.getState();
+          // Answer to a `monitor_scene` request for a scene loaded from disk.
+          if (
+            message.requestId !== null &&
+            message.requestId === store.pendingSceneMonitorRequestId
+          ) {
+            store.applySceneMonitorResult(message.requestId, message.scene);
+            break;
+          }
           const scenePayload = {
             scene: message.scene,
             evaluationData: message.evaluationData ?? undefined,
@@ -279,15 +288,30 @@ export function useSimulationWorkflow() {
           }
           break;
         }
-        case "error":
+        case "error": {
           setError(message.message);
+          // A pending Connect click owns this error: the panel reports it inline with
+          // the endpoint-specific hints, which the global banner has no room for.
+          const connection = useConnectionStore.getState();
+          if (connection.connectionAttempt === "connecting") {
+            connection.markConnectionFailed(message.message);
+          }
           break;
+        }
         case "ack":
           setError(null);
           break;
-        case "waraps_status":
+        case "waraps_status": {
           setWarapsStatus(message.status);
+          const connection = useConnectionStore.getState();
+          if (message.status === "connected" && connection.connectionAttempt !== "connected") {
+            connection.markConnectionSucceeded();
+            // Drop the banner left over from a failed attempt: it contradicts the
+            // Connected status now showing next to it.
+            setError(null);
+          }
           break;
+        }
         case "monitor_status":
           setMonitorStatus(message.status);
           break;

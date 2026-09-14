@@ -1,9 +1,10 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable, Iterator, List, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tuple
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.backend_service.protocol import ServerMessage, make_monitor_status_message
+from scenegems_tool.backend_service.protocol import ServerMessage, make_generated_scene_message, make_monitor_status_message
+from scenegems_tool.backend_service.serialization import serialize_frame
 
 SCENARIO_CHUNK_BATCH_SIZE = 100
 
@@ -69,6 +70,15 @@ class MonitorSession(ABC):
         time_step: int,
     ) -> None:
         pass
+
+    @abstractmethod
+    def monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        """Run a single generated or loaded scene through the monitor and send the
+        monitored frame to the frontend as a `generated_scene` message."""
+
+    def _send_unmonitored_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        frame = serialize_frame(scenario_id=request_id, scene=scene, timestamp=0, time_step=1)
+        self.send_payload(make_generated_scene_message(request_id=request_id, scene=frame, evaluation_data=evaluation_data, valid=valid))
 
     def destroy(self) -> None:
         self.monitor_status_task.cancel()

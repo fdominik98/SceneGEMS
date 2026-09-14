@@ -1,5 +1,6 @@
 import asyncio
 import json
+import traceback
 
 from scenegems_tool.backend_service.protocol import ClientMessage, simulation_config_from_body
 from scenegems_tool.backend_service.socket_session import SocketSession
@@ -38,7 +39,7 @@ class SocketMessageProcessor:
                             radius_meters=float(geofence_msg["radius_meters"]),
                         )
                         try:
-                            self.session.connect_to_waraps(
+                            await self.session.connect_to_waraps(
                                 user=message["user"],
                                 password=message["password"],
                                 agent_broker=message["agent_broker"],
@@ -49,8 +50,10 @@ class SocketMessageProcessor:
                                 reference_geofence=geofence,
                             )
                         except Exception as exc:
-                            self.session.send_runtime_error("Failed to connect to WARAPS")
-                            print(f"Failed to connect to WARAPS: {str(exc)}")
+                            detail = str(exc).strip() or exc.__class__.__name__
+                            requested = f"{message['client_broker']}:{message['port']}"
+                            self.session.send_runtime_error(f"Failed to connect to WARA-PS broker {requested}. {detail}")
+                            print(f"Failed to connect to WARAPS: {traceback.format_exc()}")
                     case "disconnect_from_waraps":
                         self.session.disconnect_from_waraps()
                     case "start_simulation":
@@ -81,6 +84,8 @@ class SocketMessageProcessor:
                             print(f"Failed to generate scene: {str(exc)}")
                     case "stop_scene_generation":
                         asyncio.create_task(self._handle_stop_scene_generation())
+                    case "monitor_scene":
+                        asyncio.create_task(self._handle_monitor_scene(message["requestId"], message["scenarioContent"]))
                     case "generate_trajectories":
                         try:
                             self.session.waraps_session.generate_trajectories(
@@ -105,6 +110,12 @@ class SocketMessageProcessor:
             await self.session.waraps_session.stop_scene_generation()
         except Exception as exc:
             self.session.send_runtime_error(f"Failed to stop scene generation: {str(exc)}")
+
+    async def _handle_monitor_scene(self, request_id: str, scenario_content: str) -> None:
+        try:
+            await self.session.monitor_scene(request_id=request_id, scenario_content=scenario_content)
+        except Exception as exc:
+            self.session.send_runtime_error(f"Failed to monitor scene: {str(exc)}")
 
     async def _handle_stop_trajectory_generation(self) -> None:
         try:

@@ -1,4 +1,4 @@
-from typing import Callable, Sequence
+from typing import Any, Callable, Dict, Sequence
 
 from concrete_level.models.concrete_scene import ConcreteScene
 from scenegems_tool.backend_service.protocol import ServerMessage
@@ -68,6 +68,14 @@ class LiveMonitorSession(MonitorSession):
             time_step=time_step,
             is_simulation_frame=True,
         )
+
+    def monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
+        try:
+            self.client.publish_monitor_generated_scene_command(request_id, scene, evaluation_data, valid)
+        except Exception as exc:
+            # Never leave the frontend waiting on a scene the monitor cannot take.
+            print(f"Monitor unavailable for generated scene {request_id}, sending it unmonitored: {exc}")
+            self._send_unmonitored_generated_scene(request_id, scene, evaluation_data, valid)
 
     def _destroy(self) -> None:
         self.client.disconnect()

@@ -19,7 +19,6 @@ import {
   warnAboutTrajectoryRun,
 } from "../../domain/trajectoryGeneration/summarizeTrajectoryResult";
 import { AnimationPlaybackControls } from "./AnimationPlaybackControls";
-import { MonitorControls } from "./MonitorControls";
 
 interface TrajectoryGenerationControlsProps {
   streamControls: ReturnType<typeof useSimulationWorkflow>;
@@ -43,7 +42,6 @@ const TABS: { id: TrajectoryGenerationTab; label: string }[] = [
   { id: "generate", label: "Generate" },
   { id: "advanced", label: "Advanced settings" },
   { id: "preview", label: "Preview" },
-  { id: "monitor", label: "Monitor" },
 ];
 
 function downloadJson(text: string, fileName: string) {
@@ -74,7 +72,9 @@ export function TrajectoryGenerationControls({
   const errorMessage = useTrajectoryGenerationStore((s) => s.errorMessage);
   const resultValid = useTrajectoryGenerationStore((s) => s.resultValid);
   const resultScenarioJson = useTrajectoryGenerationStore((s) => s.resultScenarioJson);
-  const activeTab = useTrajectoryGenerationStore((s) => s.activeTab);
+  const storedTab = useTrajectoryGenerationStore((s) => s.activeTab);
+  // A tab persisted before the monitor tab moved to the Connections page falls back to Generate.
+  const activeTab = TABS.some((t) => t.id === storedTab) ? storedTab : "generate";
   const setActiveTab = useTrajectoryGenerationStore((s) => s.setActiveTab);
   const setParam = useTrajectoryGenerationStore((s) => s.setParam);
   const setIncludeMonitorResults = useTrajectoryGenerationStore(
@@ -397,16 +397,6 @@ export function TrajectoryGenerationControls({
               comes first. Preview interval controls how often the best-so-far
               trajectory is streamed to the canvas.
             </p>
-          </section>
-        </div>
-      ) : activeTab === "monitor" ? (
-        <div className="animation-control-stack">
-          <section className="animation-control-group" aria-label="Monitor connection">
-            <h4 className="animation-control-group-title">Monitor connection</h4>
-            <MonitorControls
-              streamControls={streamControls}
-              colregsConstraintsContent={colregsConstraintsContent}
-            />
           </section>
         </div>
       ) : (

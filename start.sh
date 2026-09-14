@@ -21,7 +21,7 @@ compose_cmd up -d broker backend
 echo ""
 echo "SceneGEMS stack is running:"
 echo "  Frontend:  http://localhost:5173"
-echo "  Backend:   http://localhost:8000/health"
+echo "  Backend:   http://localhost:5174/health"
 echo "  MQTT:      localhost:1882 (host) / broker:1883 (compose network)"
 echo ""
 echo "Streaming backend logs (Ctrl+C stops the full stack)..."

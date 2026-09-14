@@ -17,7 +17,7 @@ From the **repository root**:
 ./start.sh
 ```
 
-Open http://localhost:5173 (frontend starts before the backend). The WebSocket URL defaults to `ws://127.0.0.1:8000/ws/scenegems_backend_service` in `frontend/.env`.
+Open http://localhost:5173 (frontend starts before the backend). The WebSocket URL defaults to `ws://127.0.0.1:5174/ws/scenegems_backend_service` in `frontend/.env`.
 
 ## Quick start (frontend only, host Node)
 

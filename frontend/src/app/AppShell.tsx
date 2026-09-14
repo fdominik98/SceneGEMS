@@ -19,6 +19,7 @@ import {
   DEFAULT_VESSEL_TYPES_PRESET,
 } from "../features/controls/domainConfigPresets";
 import { SceneGenerationSidebar } from "../features/controls/SceneGenerationSidebar";
+import { SceneMonitorPreview } from "../features/controls/SceneMonitorPreview";
 import { runBatchGeneration } from "../features/controls/runBatchGeneration";
 import { TrajectoryGenerationControls } from "../features/controls/TrajectoryGenerationControls";
 import { TrajectoryMonitorSidebar } from "../features/controls/TrajectoryMonitorSidebar";
@@ -69,6 +70,7 @@ export function AppShell() {
   const sceneGenerationTab = useUiStore((s) => s.sceneGenerationTab);
   const sceneGenerationLivePreview = useUiStore((s) => s.sceneGenerationLivePreview);
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
+  const sceneGenerationPaneView = useUiStore((s) => s.sceneGenerationPaneView);
   const isSceneGenerationBusy =
     activeSceneGenerationRequestId !== null || batchGenerationRunning;
   const latestGeneratedScene = usePlaybackStore((s) => s.latestGeneratedScene);
@@ -78,6 +80,7 @@ export function AppShell() {
   }, [latestGeneratedScene]);
   const clearVisualizedScenario = usePlaybackStore((s) => s.clearVisualizedScenario);
   const setVisualizedScenario = usePlaybackStore((s) => s.setVisualizedScenario);
+  const beginSceneMonitor = usePlaybackStore((s) => s.beginSceneMonitor);
   const requestAutoFit = usePlaybackStore((s) => s.requestAutoFit);
   const [scenarioSourceName, setScenarioSourceName] = usePersistedState<string | null>(
     "scenario-source-name",
@@ -191,6 +194,9 @@ export function AppShell() {
       if (!connectionFormIsValid(conn)) {
         return;
       }
+      // Mark the attempt so a failure lands in the connection panel with its hints,
+      // exactly as it would for a Connect click.
+      conn.beginConnectionAttempt();
       streamControlsRef.current.sendMessage({
         type: "connect_to_waraps",
         user: conn.user.trim(),
@@ -442,6 +448,17 @@ export function AppShell() {
         setLoadedScenarioFileContent(hasFullTrajectories ? text : null);
         setScenarioSourceName(file.name);
         setSceneGenerationError(null);
+        // The backend runs the scene through the active monitor and answers with a
+        // `generated_scene` carrying this id, merged in by useSimulationWorkflow.
+        const monitorRequestId = crypto.randomUUID();
+        beginSceneMonitor(monitorRequestId);
+        streamControls.sendMessage({
+          type: "monitor_scene",
+          requestId: monitorRequestId,
+          scenarioContent: hasFullTrajectories
+            ? text
+            : formatScenarioJsonForExport(evaluationData, scene),
+        });
       } catch (error) {
         setScenarioSourceName(null);
         setLoadedScenarioFileContent(null);
@@ -451,7 +468,13 @@ export function AppShell() {
         );
       }
     },
-    [clearVisualizedScenario, setVisualizedScenario, setScenarioSourceName]
+    [
+      beginSceneMonitor,
+      clearVisualizedScenario,
+      setVisualizedScenario,
+      setScenarioSourceName,
+      streamControls,
+    ]
   );
 
   const initializeVisualizedScenario = useCallback(async () => {
@@ -512,6 +535,7 @@ export function AppShell() {
               <div className="load-scenario-layout waraps-view">
                 <WarapsConnectionPanel
                   sendMessage={(message: ClientToServerMessage) => streamControls.sendMessage(message)}
+                  colregsConstraintsContent={colregsConstraintsText}
                 />
               </div>
             ) : activeView === "domainConfig" ? (
@@ -864,10 +888,7 @@ export function AppShell() {
                 />
                 <footer className="bottom-toolbar bottom-toolbar-compact bottom-toolbar-single">
                   <div className="bottom-slot bottom-slot-controls">
-                    <PlaybackControls
-                      streamControls={streamControls}
-                      colregsConstraintsContent={colregsConstraintsText}
-                    />
+                    <PlaybackControls streamControls={streamControls} />
                   </div>
                 </footer>
               </div>
@@ -899,7 +920,9 @@ export function AppShell() {
                 aria-label="Resize right panel"
               />
               {activeView === "simulation" || activeView === "trajectoryGeneration" ? (
-                <TrajectoryMonitorSidebar />
+                <TrajectoryMonitorSidebar previewOnly={activeView === "trajectoryGeneration"} />
+              ) : sceneGenerationPaneView === "monitor" ? (
+                <SceneMonitorPreview />
               ) : (
                 <SceneGenerationSidebar
                   functionalSpecText={functionalSpecText}

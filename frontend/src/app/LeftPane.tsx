@@ -94,7 +94,7 @@ const MENU_ITEMS: { view: AppView; label: string; Icon: (props: IconProps) => Re
   { view: "sceneGeneration", label: "Scene Generation", Icon: SceneGenerationIcon },
   { view: "trajectoryGeneration", label: "Trajectory Generation", Icon: TrajectoryGenerationIcon },
   { view: "simulation", label: "Simulation", Icon: SimulationIcon },
-  { view: "waraps", label: "Connect to WARA-PS", Icon: WarapsIcon },
+  { view: "waraps", label: "Connections", Icon: WarapsIcon },
 ];
 
 interface LeftPaneProps {
