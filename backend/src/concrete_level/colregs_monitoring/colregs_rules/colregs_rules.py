@@ -95,7 +95,8 @@ class PersistingCourseAfterCourseChangeRule(COLREGSRule):
             Relation(actor, actor),
             "8",
             "Course Held After the Manoeuvre",
-            "Once an avoidance course change is complete, the vessel should keep the changed heading and not drift back toward its original course.",
+            "Once an avoidance course change is complete, the vessel should keep the changed heading and not drift back toward its original course. "
+            "A give-way vessel may steer any way after its first evasive manoeuvre.",
             RULE_KIND,
             actor.id,
             actor.name,
@@ -122,7 +123,8 @@ class ReadilyApparentCoursePersistenceRule(COLREGSRule):
             Relation(actor, actor),
             "8",
             "Course Change Persistence",
-            f"After a readily apparent course change, the new heading should be held for at least {colregs_constants.HEADING_PERSISTENCE_TIME} seconds.",
+            f"After a readily apparent course change, the new heading should be held for at least {colregs_constants.HEADING_PERSISTENCE_TIME} seconds. "
+            "A give-way vessel may steer any way after its first evasive manoeuvre.",
             RULE_KIND,
             actor.id,
             actor.name,
@@ -187,9 +189,8 @@ class HoldAvoidanceCourseRule(COLREGSRule):
         super().__init__(
             Relation(actor, actor),
             "8",
-            "Avoidance Course Held Until Clear",
-            "An alteration of course made to keep out of the way should be held until the other vessel is finally past and clear. "
-            "Altering further away is allowed at any time; turning back toward the original course before the encounter is over is not.",
+            "Give-Way Steering After First Evasive",
+            "The give-way vessel's first alteration of course must keep out of the way. After that first evasive manoeuvre it may steer any way, including back toward its original course.",
             RULE_KIND,
             actor.id,
             actor.name,

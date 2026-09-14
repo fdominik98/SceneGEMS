@@ -52,7 +52,9 @@ class WARAPSSession(ABC):
         self.simulation_session.set_monitor_session(self.monitor_session)
 
     @abstractmethod
-    def generate_scene(self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int) -> None:
+    def generate_scene(
+        self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int, enforce_low_tcpa: bool = False
+    ) -> None:
         pass
 
     @abstractmethod

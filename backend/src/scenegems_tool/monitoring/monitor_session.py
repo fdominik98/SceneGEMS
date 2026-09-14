@@ -3,7 +3,13 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Sequence, Tuple
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.backend_service.protocol import ServerMessage, make_generated_scene_message, make_monitor_status_message
+from scenegems_tool.backend_service.protocol import (
+    ServerMessage,
+    make_generated_scene_message,
+    make_monitor_status_message,
+    make_preview_chunk_message,
+    make_simulation_chunk_message,
+)
 from scenegems_tool.backend_service.serialization import serialize_frame
 
 SCENARIO_CHUNK_BATCH_SIZE = 100
@@ -79,6 +85,37 @@ class MonitorSession(ABC):
     def _send_unmonitored_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
         frame = serialize_frame(scenario_id=request_id, scene=scene, timestamp=0, time_step=1)
         self.send_payload(make_generated_scene_message(request_id=request_id, scene=frame, evaluation_data=evaluation_data, valid=valid))
+
+    def send_unmonitored_chunk(
+        self,
+        scenario_id: str,
+        scenes: Sequence[ConcreteScene],
+        timestamps: Sequence[int],
+        time_step: int,
+        *,
+        is_simulation_frame: bool,
+    ) -> None:
+        frames = [serialize_frame(scenario_id=scenario_id, scene=scene, timestamp=timestamp, time_step=time_step) for scene, timestamp in zip(scenes, timestamps)]
+        if not frames:
+            return
+        if is_simulation_frame:
+            self.send_payload(
+                make_simulation_chunk_message(
+                    scenario_id=scenario_id,
+                    from_timestamp=timestamps[0],
+                    to_timestamp=timestamps[-1],
+                    frames=frames,
+                )
+            )
+            return
+        self.send_payload(
+            make_preview_chunk_message(
+                scenario_id=scenario_id,
+                from_timestamp=timestamps[0],
+                to_timestamp=timestamps[-1],
+                frames=frames,
+            )
+        )
 
     def destroy(self) -> None:
         self.monitor_status_task.cancel()

@@ -12,6 +12,8 @@ class PersistingCourseAfterCourseChangeCondition(RuleCondition):
         super().__init__(relation, actor, colregs_constants)
 
     def condition(self, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        if self.give_way_has_taken_first_evasive(current_monitored_scene):
+            return COLREGSRuleResult.UNKNOWN
         current_maneuver_state = current_monitored_scene.maneuver_state_set[self.relation]
         if not current_maneuver_state.is_course_change:
             return COLREGSRuleResult.UNKNOWN

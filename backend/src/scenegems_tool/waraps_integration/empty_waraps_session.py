@@ -23,7 +23,9 @@ class EmptyWARAPSSession(WARAPSSession):
     def _cancel(self) -> None:
         pass
 
-    def generate_scene(self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int) -> None:
+    def generate_scene(
+        self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int, enforce_low_tcpa: bool = False
+    ) -> None:
         self.send_payload(make_error_message(message="WARAPS is not connected"))
 
     async def stop_scene_generation(self) -> None:

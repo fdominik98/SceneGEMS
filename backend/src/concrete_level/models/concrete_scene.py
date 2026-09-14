@@ -8,7 +8,7 @@ from concrete_level.models.relation import Relation
 from logical_level.constraint_satisfaction.assignments import Assignments
 from logical_level.constraint_satisfaction.evaluation_cache import EvaluationCache, GeometricProperties
 from logical_level.models.actor_variable import ActorVariable
-from logical_level.models.relation_constraints_concept.literals import InBowSectorOf, InSternSectorOf, LowTCPA, OnCollisionCourse, OutVis
+from logical_level.models.relation_constraints_concept.literals import AtVis, InBowSectorOf, InSternSectorOf, InVis, LowTCPA, OnCollisionCourse, OutVis
 from logical_level.models.relation_constraints_concept.predicates import (
     AtOrInCrossingFromPortCR,
     AtOrInHeadOnCR,
@@ -16,6 +16,8 @@ from logical_level.models.relation_constraints_concept.predicates import (
     AtOrInOvertakingToStarboardCR,
     AtOrInTwoWayCrossingFromPortCR,
     AtOrInTwoWayCrossingFromStarboardCR,
+    CrossingFromPort,
+    HeadOn,
     InCrossingFromPortCR,
     InHeadOnCR,
     InOvertakingToPortCR,
@@ -24,6 +26,8 @@ from logical_level.models.relation_constraints_concept.predicates import (
     InTwoWayCrossingFromStarboardCR,
     OvertakingToPort,
     OvertakingToStarboard,
+    TwoWayCrossingFromPort,
+    TwoWayCrossingFromStarboard,
 )
 from utils.colregs_approximations import COLREGSConstraints
 from utils.safety_domains import DomainCollection
@@ -239,6 +243,20 @@ class ConcreteScene(Serializable):
     def out_of_visibility_distance(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
         return OutVis(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
 
+    def at_visibility_distance(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
+        return AtVis(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
+
+    def in_visibility_distance(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
+        return InVis(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
+
+    def visibility_distance_kind(self, actor1: ConcreteActor, actor2: ConcreteActor) -> str:
+        """Where the pair sits relative to the visibility bands: at, in, or out."""
+        if self.at_visibility_distance(actor1, actor2):
+            return "at"
+        if self.out_of_visibility_distance(actor1, actor2):
+            return "out"
+        return "in"
+
     def in_stern_sector_of(self, actor1: ConcreteActor, actor2: ConcreteActor) -> bool:
         return InSternSectorOf(self.vars[actor1], self.vars[actor2]).holds(self.evaluation_cache)
 
@@ -277,6 +295,18 @@ class ConcreteScene(Serializable):
         predicate = AtOrInTwoWayCrossingFromStarboardCR if include_visibility_band else InTwoWayCrossingFromStarboardCR
         return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
+    def in_sight_on_collision_course(self, actor1: ConcreteActor, actor2: ConcreteActor, include_visibility_band: bool = False) -> bool:
+        """True when the pair can see each other (at or in visibility) and DCPA is inside the safety distance.
+
+        Low TCPA is not required: coming into sight on a collision course is already a
+        COLREGS encounter. TCPA is reported separately on the monitor state.
+        """
+        if not self.on_collision_course(actor1, actor2):
+            return False
+        if include_visibility_band:
+            return self.at_visibility_distance(actor1, actor2) or self.in_visibility_distance(actor1, actor2)
+        return self.in_visibility_distance(actor1, actor2)
+
     def overtaking_to_port(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
         """Overtaking-to-port bearing geometry only, without visibility or collision risk."""
         return OvertakingToPort(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
@@ -284,6 +314,18 @@ class ConcreteScene(Serializable):
     def overtaking_to_starboard(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
         """Overtaking-to-starboard bearing geometry only, without visibility or collision risk."""
         return OvertakingToStarboard(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def head_on(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        return HeadOn(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def crossing_from_port(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        return CrossingFromPort(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def two_way_crossing_from_port(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        return TwoWayCrossingFromPort(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
+
+    def two_way_crossing_from_starboard(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
+        return TwoWayCrossingFromStarboard(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
     def get_geo_props(self, actor1: ConcreteActor, actor2: ConcreteActor) -> GeometricProperties:
         return self.evaluation_cache.get_props(self.vars[actor1], self.vars[actor2])

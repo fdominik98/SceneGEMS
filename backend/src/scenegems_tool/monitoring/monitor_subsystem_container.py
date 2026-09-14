@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import threading
+import uuid
 from typing import Optional
 
 import yaml
@@ -20,19 +21,24 @@ _SERVICE_CPU = 1
 _logger = logging.getLogger(__name__)
 
 
-def _container_ids_for_compose_project(project: str) -> list[str]:
+def _container_ids_for_monitor_stacks() -> list[str]:
     result = subprocess.run(
-        ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={project}"],
+        ["docker", "ps", "-a", "--format", '{{.ID}}\t{{.Label "com.docker.compose.project"}}'],
         capture_output=True,
         text=True,
         check=False,
     )
-    return [container_id for container_id in result.stdout.split() if container_id]
+    container_ids: list[str] = []
+    for line in result.stdout.splitlines():
+        container_id, _, project = line.partition("\t")
+        if container_id and project.startswith(_COMPOSE_PROJECT):
+            container_ids.append(container_id)
+    return container_ids
 
 
 def force_destroy_monitor_subsystem_stack() -> None:
-    """Fast teardown: force-remove scenegems-monitoring-subsystem containers."""
-    container_ids = _container_ids_for_compose_project(_COMPOSE_PROJECT)
+    """Fast teardown: force-remove every COLREGS monitoring worker container."""
+    container_ids = _container_ids_for_monitor_stacks()
     if container_ids:
         subprocess.run(["docker", "rm", "-f", *container_ids], check=False)
 
@@ -59,8 +65,11 @@ class MonitorSubsystemContainer:
         self.agent_name = agent_name
         self.topic = topic
         self.colregs_constraints_content = colregs_constraints_content
-        self.container_name = _sanitize_docker_name(agent_name)
-        self.compose_filename = f"{MONITORING_GEN_FOLDER}/docker-compose.yml"
+        self.instance_id = uuid.uuid4().hex[:8]
+        self.compose_project = f"{_COMPOSE_PROJECT}-{self.instance_id}"
+        self.container_name = f"{_sanitize_docker_name(agent_name)[:54]}-{self.instance_id}"
+        self.compose_folder = f"{MONITORING_GEN_FOLDER}/{self.instance_id}"
+        self.compose_filename = f"{self.compose_folder}/docker-compose.yml"
         self._shutdown = threading.Event()
         self._startup_complete = threading.Event()
         self._lifecycle_thread: Optional[threading.Thread] = None
@@ -106,7 +115,6 @@ class MonitorSubsystemContainer:
                 },
                 "networks": {
                     "monitoring_net": {
-                        "name": "monitoring_net",
                         "driver": "bridge",
                     }
                 },
@@ -117,12 +125,7 @@ class MonitorSubsystemContainer:
         try:
             if self._shutdown.is_set():
                 return
-            self._remove_docker_compose_project()
-            if self._shutdown.is_set():
-                return
-            if os.path.exists(MONITORING_GEN_FOLDER):
-                shutil.rmtree(MONITORING_GEN_FOLDER)
-            os.makedirs(MONITORING_GEN_FOLDER, exist_ok=True)
+            os.makedirs(self.compose_folder, exist_ok=True)
             if self._shutdown.is_set():
                 return
             with open(compose_filename, "w", encoding="utf-8") as file:
@@ -135,19 +138,24 @@ class MonitorSubsystemContainer:
                     "-f",
                     compose_filename,
                     "--project-name",
-                    _COMPOSE_PROJECT,
+                    self.compose_project,
                     "up",
                     "-d",
                     "--no-build",
                 ],
                 check=False,
             )
+            if self._shutdown.is_set():
+                self._remove_owned_container()
+                return
             self._startup_complete.set()
         except BaseException:
             _logger.exception("MonitoringContainer container lifecycle startup failed")
 
-    def _remove_docker_compose_project(self) -> None:
-        force_destroy_monitor_subsystem_stack()
+    def _remove_owned_container(self) -> None:
+        subprocess.run(["docker", "rm", "-f", self.container_name], check=False)
+        if os.path.isdir(self.compose_folder):
+            shutil.rmtree(self.compose_folder, ignore_errors=True)
 
     def _is_container_running(self) -> bool:
         result = subprocess.run(
@@ -167,4 +175,4 @@ class MonitorSubsystemContainer:
         if self._lifecycle_thread is not None:
             self._lifecycle_thread.join(timeout=120.0)
             self._lifecycle_thread = None
-        self._remove_docker_compose_project()
+        self._remove_owned_container()

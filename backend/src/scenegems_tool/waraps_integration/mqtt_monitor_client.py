@@ -23,7 +23,11 @@ class MqttMonitorClient(MqttClient):
         self.send_payload = send_payload
         self.last_heartbeat_timestamp = 0.0
         self.timeout_sec = 10.0
+        # Internal monitor Docker + TLS to the broker is often slower than 10 s.
+        self.startup_timeout_sec = 60.0
         self.heartbeat_interval_sec = 5.0
+        self._stop_wait = threading.Event()
+        self._heartbeat_wait_failed = False
         # request id to (evaluation data, valid), held until the monitored frame returns.
         self._pending_generated_scenes: Dict[str, Tuple[Dict[str, Any], bool]] = {}
         self._pending_lock = threading.Lock()
@@ -59,6 +63,7 @@ class MqttMonitorClient(MqttClient):
                     self.send_payload(make_preview_chunk_message(scenario_id=scenario_id, from_timestamp=from_timestamp, to_timestamp=to_timestamp, frames=frames))
             case self.heartbeat_topic:
                 self.last_heartbeat_timestamp = time.time()
+                self._heartbeat_wait_failed = False
 
     def _send_monitored_generated_scene(self, request_id: str, frame: Dict[str, Any]) -> None:
         with self._pending_lock:
@@ -71,11 +76,26 @@ class MqttMonitorClient(MqttClient):
         self.send_payload(make_generated_scene_message(request_id=request_id, scene=frame, evaluation_data=evaluation_data, valid=valid))
 
     def wait_for_heartbeat(self) -> None:
-        start_time = time.time()
+        if self.is_heartbeat_valid and self.is_connected:
+            self._heartbeat_wait_failed = False
+            return
+        if self._stop_wait.is_set():
+            raise ValueError("Monitor client disconnected")
+        if self._heartbeat_wait_failed:
+            raise ValueError("Timeout: Failed to connect to monitor service")
+        timeout_sec = self.startup_timeout_sec if self.last_heartbeat_timestamp == 0.0 else self.timeout_sec
+        start_time = time.monotonic()
         while not self.is_heartbeat_valid or not self.is_connected:
-            time.sleep(0.1)
-            if time.time() - start_time > self.timeout_sec:
+            if self._stop_wait.is_set():
+                raise ValueError("Monitor client disconnected")
+            if time.monotonic() - start_time > timeout_sec:
+                self._heartbeat_wait_failed = True
                 raise ValueError("Timeout: Failed to connect to monitor service")
+            time.sleep(0.1)
+
+    def disconnect(self):
+        self._stop_wait.set()
+        super().disconnect()
 
     @property
     def is_heartbeat_valid(self) -> bool:

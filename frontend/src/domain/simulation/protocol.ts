@@ -54,6 +54,14 @@ const staticAvoidanceDomainSchema = z
   })
   .passthrough();
 
+const maneuveringDomainSchema = z
+  .object({
+    vertices: z.array(z.tuple([z.number(), z.number()])),
+    holdPolyline: z.array(z.tuple([z.number(), z.number()])),
+    holdHeadingChangeDeg: z.number().optional(),
+  })
+  .passthrough();
+
 const situationContextSchema = z
   .object({
     relationId: z.string(),
@@ -72,6 +80,7 @@ const situationContextSchema = z
     staticAvoidanceDomainsByActorId: z
       .record(z.string(), z.array(staticAvoidanceDomainSchema))
       .optional(),
+    maneuveringDomainsByActorId: z.record(z.string(), maneuveringDomainSchema).optional(),
   })
   .passthrough();
 
@@ -79,6 +88,7 @@ const colregsStateSchema = z
   .object({
     relationId: z.string(),
     actorsSeeEachOther: z.boolean(),
+    visibilityDistance: z.enum(["at", "in", "out"]).optional(),
     actorsPassedEachOther: z.boolean(),
     actorsViolateSafetyDomain: z.boolean(),
     actorsOnCollisionCourse: z.boolean(),

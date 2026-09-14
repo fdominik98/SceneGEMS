@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from functional_level.metamodels.functional_object import FuncObject
 from functional_level.metamodels.functional_scenario import FunctionalScenario
@@ -9,19 +9,17 @@ from logical_level.mapping.vessel_type import VesselTypeMap
 from logical_level.models.actor_variable import ActorVariable, OSVariable, StaticObstacleVariable, TSVariable
 from logical_level.models.logical_scenario import LogicalScenario
 from logical_level.models.relation_constraints_concept.composites import RelationConstrComposite, RelationConstrTerm
-from logical_level.models.relation_constraints_concept.literals import AtVis, InBowSectorOf, InPortSideSectorOf, InStarboardSideSectorOf, InSternSectorOf, InVis, OutVis
 from logical_level.models.relation_constraints_concept.predicates import (
-    BinaryPredicate,
     AtCrossingFromPortCR,
     AtDangerousHeadOnSectorOfCR,
     AtHeadOnCR,
-    MayCollideSoon,
-    NotInBowSectorOf,
-    OutVisOrMayNotCollide,
     AtOvertakingToPortCR,
     AtOvertakingToStarboardCR,
+    BinaryPredicate,
+    OutVisOrMayNotCollide,
 )
 from utils.colregs_approximations import COLREGSConstraints
+
 
 class LogicalScenarioBuilder:
     @staticmethod
@@ -31,9 +29,10 @@ class LogicalScenarioBuilder:
         obstacle_type_map: StaticObstacleTypeMap,
         colregs_constants: COLREGSConstraints,
         init_method=RandomInstanceInitializer.name,
+        enforce_low_tcpa: bool = True,
     ) -> LogicalScenario:
         os = functional_scenario.os_object
-        object_variable_map : Dict[FuncObject, ActorVariable] = {os: OSVariable(os.id, vessel_type_map[functional_scenario.find_vessel_type_name(os)])}
+        object_variable_map: Dict[FuncObject, ActorVariable] = {os: OSVariable(os.id, vessel_type_map[functional_scenario.find_vessel_type_name(os)])}
         object_variable_map |= {ts: TSVariable(ts.id, vessel_type_map[functional_scenario.find_vessel_type_name(ts)]) for ts in functional_scenario.ts_objects}
         object_variable_map |= {
             o: StaticObstacleVariable(
@@ -67,11 +66,16 @@ class LogicalScenarioBuilder:
         # ]
 
         # Generate relation constraint expressions
-        relation_constr_exprs : Set[RelationConstrComposite] = set()
+        relation_constr_exprs: Set[RelationConstrComposite] = set()
         for o1, o2 in functional_scenario.all_sea_object_pair_permutations:
             for pred, Constr in predicate_constraint_map:
                 if pred(o1, o2):
-                    relation_constr_exprs.add(Constr(object_variable_map[o1], object_variable_map[o2], colregs_constants))
+                    var1 = object_variable_map[o1]
+                    var2 = object_variable_map[o2]
+                    if Constr is OutVisOrMayNotCollide:
+                        relation_constr_exprs.add(Constr(var1, var2, colregs_constants))
+                    else:
+                        relation_constr_exprs.add(Constr(var1, var2, colregs_constants, enforce_low_tcpa))
 
         actor_variables: List[ActorVariable] = sorted(object_variable_map.values(), key=lambda x: x.id)
 
@@ -91,7 +95,7 @@ class LogicalScenarioBuilder:
 
     @staticmethod
     def get_initializer(init_method: str, vessel_vars: List[ActorVariable]) -> InstanceInitializer:
-        if init_method == RandomInstanceInitializer.name or init_method == None:
+        if init_method == RandomInstanceInitializer.name or init_method is None:
             return RandomInstanceInitializer(vessel_vars)
         elif init_method == DeterministicInitializer.name:
             return DeterministicInitializer(vessel_vars)

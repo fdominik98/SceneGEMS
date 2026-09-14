@@ -3,7 +3,7 @@ READILY_APPARENT_COURSE_CHANGE_TIME: 30  # Time (seconds) for a course change to
 READILY_APPARENT_HEADING_CHANGE: 0.5235987755982988  # Minimum heading change (radians) to be readily apparent: 30.0 degrees
 UNDETECTABLE_HEADING_CHANGE: 0.03490658503988659  # Maximum heading change (radians) that is undetectable: 2.0 degrees
 HEADING_PERSISTENCE_TIME: 30  # Time (seconds) a heading change must persist to be considered valid
-IMMEDIATE_HEADING_CHANGE_TIME: 60  # Time (seconds) for immediate heading change action (Rule 16 - give way early)
+IMMEDIATE_HEADING_CHANGE_TIME: 120  # Time (seconds) for immediate heading change action (Rule 16 - give way early)
 UNDETECTABLE_HEADING_PERSISTENCE_TIME: 10  # Time (seconds) an undetectable heading change must persist
 
 # Speed change detection parameters

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Set
+from contextlib import contextmanager
+from typing import Iterator, Set
 
 from logical_level.constraint_satisfaction.assignments import Assignments
 from logical_level.constraint_satisfaction.evaluation_cache import EvaluationCache
@@ -7,9 +8,24 @@ from logical_level.models.penalty import Penalty
 
 
 class RelationConstrComposite(ABC):
+    # When True, Literal.penalty uses closed [lb, ub] (plus float tolerance) so holds()
+    # matches the generator's intended intervals. The optimizer keeps EPSILON-shrunk
+    # penalties so solutions sit inside the band.
+    _closed_membership = False
+
     def __init__(self, components: Set["RelationConstrComposite"]):
         super().__init__()
         self.components: Set["RelationConstrComposite"] = components
+
+    @classmethod
+    @contextmanager
+    def closed_membership(cls) -> Iterator[None]:
+        previous = cls._closed_membership
+        cls._closed_membership = True
+        try:
+            yield
+        finally:
+            cls._closed_membership = previous
 
     @abstractmethod
     def _evaluate_penalty(self, eval_cache: EvaluationCache) -> Penalty:
@@ -21,7 +37,8 @@ class RelationConstrComposite(ABC):
         return penalty
 
     def holds(self, eval_cache: EvaluationCache) -> bool:
-        return self._evaluate_penalty(eval_cache).is_zero
+        with RelationConstrComposite.closed_membership():
+            return self._evaluate_penalty(eval_cache).is_zero
 
 
 class RelationConstrTerm(RelationConstrComposite):

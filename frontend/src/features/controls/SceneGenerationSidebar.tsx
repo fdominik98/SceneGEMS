@@ -4,6 +4,7 @@ import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { classHighlighter } from "@lezer/highlight";
 import { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePersistedState } from "../../app/usePersistedState";
 import { useUiStore } from "../../app/uiStore";
 import problemLanguageSupport from "../../language/refineryProblem/problemLanguageSupport";
 import { formatFunctionalPresetLabel } from "./functionalPresetPaths";
@@ -84,9 +85,18 @@ export function SceneGenerationSidebar({
   const [allPresets, setAllPresets] = useState<FunctionalPresetEntry[]>([]);
   const [manifestError, setManifestError] = useState<string | null>(null);
   const [manifestLoading, setManifestLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [vesselFilter, setVesselFilter] = useState("any");
-  const [obstacleFilter, setObstacleFilter] = useState("any");
+  const [searchQuery, setSearchQuery] = usePersistedState(
+    "scene-generation-preset-search",
+    ""
+  );
+  const [vesselFilter, setVesselFilter] = usePersistedState(
+    "scene-generation-vessel-filter",
+    "any"
+  );
+  const [obstacleFilter, setObstacleFilter] = usePersistedState(
+    "scene-generation-obstacle-filter",
+    "any"
+  );
   const [page, setPage] = useState(0);
   const mod = primaryModifierLabel();
 
@@ -127,6 +137,27 @@ export function SceneGenerationSidebar({
     }
     return Array.from(counts).sort((a, b) => a - b);
   }, [allPresets]);
+
+  useEffect(() => {
+    if (manifestLoading || allPresets.length === 0) {
+      return;
+    }
+    if (vesselFilter !== "any" && !vesselOptions.includes(Number(vesselFilter))) {
+      setVesselFilter("any");
+    }
+    if (obstacleFilter !== "any" && !obstacleOptions.includes(Number(obstacleFilter))) {
+      setObstacleFilter("any");
+    }
+  }, [
+    manifestLoading,
+    allPresets.length,
+    vesselFilter,
+    obstacleFilter,
+    vesselOptions,
+    obstacleOptions,
+    setVesselFilter,
+    setObstacleFilter,
+  ]);
 
   const pageCount = Math.max(1, Math.ceil(filteredPresets.length / PRESETS_PAGE_SIZE));
   const pagePresets = filteredPresets.slice(

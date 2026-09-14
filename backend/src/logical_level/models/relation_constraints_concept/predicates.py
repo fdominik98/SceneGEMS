@@ -65,7 +65,9 @@ class NotOutVisAndMayCollideSoon(BinaryPredicate):
     """Collision risk while not out of visibility: inside visibility or at its boundary band.
 
     The union of the `AtVis` band the scene generator places encounters in and the
-    `InVis` region, so an encounter can be recognised at the moment it begins.
+    `InVis` region, so an encounter can be recognised at the moment it begins. Using
+    `AtVis ∨ InVis` (not `!OutVis`) keeps the outer AtVis edge in the union: OutVis and
+    AtVis both include `vis + drift`, so a negated OutVis would drop that bound.
     """
 
     def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
@@ -73,7 +75,11 @@ class NotOutVisAndMayCollideSoon(BinaryPredicate):
             "NotOutVisAndMayCollideSoon",
             var1,
             var2,
-            {OnCollisionCourse(var1, var2), LowTCPA(var1, var2, colregs_constants), OutVis(var1, var2, negated=True)},
+            {
+                OnCollisionCourse(var1, var2),
+                LowTCPA(var1, var2, colregs_constants),
+                RelationConstrClause({AtVis(var1, var2), InVis(var1, var2)}),
+            },
         )
 
 
@@ -90,6 +96,12 @@ class AtVisAndMayCollide(BinaryPredicate):
             var2,
             {OnCollisionCourse(var1, var2), AtVis(var1, var2)},
         )
+
+
+def _at_vis_collision_risk(var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool) -> BinaryPredicate:
+    if enforce_low_tcpa:
+        return AtVisAndMayCollideSoon(var1, var2, colregs_constants)
+    return AtVisAndMayCollide(var1, var2, colregs_constants)
 
 
 class OutVisOrMayNotCollide(BinaryPredicate):
@@ -207,90 +219,90 @@ class TwoWayCrossingFromStarboard(BinaryPredicate):
 
 
 class AtHeadOnCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtHeadOnCR",
             var1,
             var2,
             {
                 HeadOn(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtCrossingFromPortCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtCrossingFromPortCR",
             var1,
             var2,
             {
                 CrossingFromPort(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtOvertakingToPortCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtOvertakingToPortCR",
             var1,
             var2,
             {
                 OvertakingToPort(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtOvertakingToStarboardCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtOvertakingToStarboardCR",
             var1,
             var2,
             {
                 OvertakingToStarboard(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtTwoWayCrossingFromPortCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtTwoWayCrossingFromPortCR",
             var1,
             var2,
             {
                 TwoWayCrossingFromPort(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtTwoWayCrossingFromStarboardCR(BinaryPredicate):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtTwoWayCrossingFromStarboardCR",
             var1,
             var2,
             {
                 TwoWayCrossingFromStarboard(var1, var2, colregs_constants),
-                AtVisAndMayCollideSoon(var1, var2, colregs_constants),
+                _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa),
             },
         )
 
 
 class AtDangerousHeadOnSectorOfCR(BinaryPredicate):
-    def __init__(self, var1: StaticObstacleVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints):
+    def __init__(self, var1: StaticObstacleVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, enforce_low_tcpa: bool = True):
         super().__init__(
             "AtDangerousHeadOnSectorOfCR",
             var1,
             var2,
-            {InBowSectorOf(var1, var2), AtVisAndMayCollideSoon(var1, var2, colregs_constants)},
+            {InBowSectorOf(var1, var2), _at_vis_collision_risk(var1, var2, colregs_constants, enforce_low_tcpa)},
         )
 
 

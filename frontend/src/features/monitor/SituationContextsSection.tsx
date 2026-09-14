@@ -72,9 +72,11 @@ function ContextCard({
 }
 
 export function SituationContextsSection({
+  persistKey,
   contexts,
   actors,
 }: {
+  persistKey: string;
   contexts: SituationContextData[];
   actors: ActorStaticInfo[];
 }) {
@@ -82,10 +84,10 @@ export function SituationContextsSection({
     return null;
   }
   if (!looksLikeSituationContexts(contexts)) {
-    return <GeneralMonitorList title="Situation contexts" items={contexts} />;
+    return <GeneralMonitorList persistKey={persistKey} title="Situation contexts" items={contexts} />;
   }
   return (
-    <MonitorSection title="Situation contexts" badge={contexts.length}>
+    <MonitorSection persistKey={persistKey} title="Situation contexts" badge={contexts.length}>
       <div className="frame-list-stack">
         {contexts.map((ctx, i) => (
           <ContextCard key={`${ctx.relationId}-${i}`} ctx={ctx} actors={actors} />

@@ -1,8 +1,16 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { ActorKinematicState, ActorStaticInfo } from "../../domain/simulation/types";
+import type {
+  ActorKinematicState,
+  ActorStaticInfo,
+  SituationContextData,
+} from "../../domain/simulation/types";
 import { localMetersToLatLon } from "./geoTransform";
+import {
+  collectManeuveringDomainDrawings,
+  MANEUVERING_DOMAIN_KITE_COLOR,
+} from "./layers/ManeuveringDomainsLayer";
 
 interface TrajectoryPoint {
   x: number;
@@ -16,9 +24,19 @@ interface Props {
     trajectoriesByActorId: Record<string, TrajectoryPoint[]>;
     colorByActorId: Record<string, string>;
     showVelocity: boolean;
+    situationContexts?: SituationContextData[];
+    showManeuveringDomain?: boolean;
   }>;
   reference: { latitude: number; longitude: number };
   recenterSignal: number;
+}
+
+function toLatLng(
+  x: number,
+  y: number,
+  reference: { latitude: number; longitude: number }
+): [number, number] {
+  return localMetersToLatLon(x, y, reference);
 }
 
 export function NauticalMapView({
@@ -83,21 +101,59 @@ export function NauticalMapView({
     }).addTo(layer);
 
     for (const visualLayer of layers) {
+      if (visualLayer.showManeuveringDomain) {
+        const drawings = collectManeuveringDomainDrawings(
+          visualLayer.situationContexts ?? [],
+          visualLayer.colorByActorId
+        );
+        for (const drawing of drawings) {
+          const kiteLatLng = drawing.kite.map(([x, y]) => toLatLng(x, y, reference));
+          kiteLatLng.forEach((coord) => boundsPoints.push(coord));
+          if (kiteLatLng.length > 2) {
+            const actor = visualLayer.actors.find((item) => item.id === drawing.actorId);
+            const holdDeg =
+              drawing.holdHeadingChangeDeg === undefined
+                ? ""
+                : ` (hold ${drawing.holdHeadingChangeDeg.toFixed(1)} deg)`;
+            L.polygon(kiteLatLng, {
+              color: MANEUVERING_DOMAIN_KITE_COLOR,
+              weight: 2,
+              dashArray: "8,6",
+              fillColor: MANEUVERING_DOMAIN_KITE_COLOR,
+              fillOpacity: 0.14,
+              opacity: 0.95,
+            })
+              .bindTooltip(
+                `${actor?.name ?? drawing.actorId} maneuvering domain${holdDeg}`,
+                { sticky: true }
+              )
+              .addTo(layer);
+          }
+          if (drawing.hold.length > 1) {
+            const holdLatLng = drawing.hold.map(([x, y]) => toLatLng(x, y, reference));
+            L.polyline(holdLatLng, {
+              color: drawing.color,
+              weight: 3,
+              opacity: 0.95,
+            }).addTo(layer);
+          }
+        }
+      }
+
       for (const actor of visualLayer.actors) {
         const state = visualLayer.statesByActorId[actor.id];
         if (!state) {
           continue;
         }
         const color = visualLayer.colorByActorId[actor.id] ?? "#22d3ee";
-        const [lat, lon] = localMetersToLatLon(state.x, state.y, reference);
-        const latLng: [number, number] = [lat, lon];
+        const latLng = toLatLng(state.x, state.y, reference);
         boundsPoints.push(latLng);
 
         const path = visualLayer.trajectoriesByActorId[actor.id] ?? [];
         if (path.length > 1) {
-          const latLngPath = path.map((point) => localMetersToLatLon(point.x, point.y, reference));
-          latLngPath.forEach((coord) => boundsPoints.push([coord[0], coord[1]]));
-          L.polyline(latLngPath as L.LatLngExpression[], {
+          const latLngPath = path.map((point) => toLatLng(point.x, point.y, reference));
+          latLngPath.forEach((coord) => boundsPoints.push(coord));
+          L.polyline(latLngPath, {
             color,
             weight: actor.isOwnShip ? 4 : 2.5,
             opacity: 0.85,
@@ -108,8 +164,8 @@ export function NauticalMapView({
           const velocityLengthMeters = Math.max(6, Math.min(80, state.speed * 12));
           const vx = Math.cos(state.heading) * velocityLengthMeters;
           const vy = Math.sin(state.heading) * velocityLengthMeters;
-          const [vLat, vLon] = localMetersToLatLon(state.x + vx, state.y + vy, reference);
-          L.polyline([latLng, [vLat, vLon]], {
+          const vLatLng = toLatLng(state.x + vx, state.y + vy, reference);
+          L.polyline([latLng, vLatLng], {
             color,
             weight: 2,
             opacity: 0.9,

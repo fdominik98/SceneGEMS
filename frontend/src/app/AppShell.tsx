@@ -106,6 +106,10 @@ export function AppShell() {
     "scene-gen-timeout",
     240
   );
+  const [enforceLowTcpa, setEnforceLowTcpa] = usePersistedState(
+    "scene-generation-enforce-low-tcpa",
+    false
+  );
   const [sceneGenerationError, setSceneGenerationError] = useState<string | null>(null);
   const [sceneValidityBadgeDismissed, setSceneValidityBadgeDismissed] = useState(false);
   const [domainConfigLoading, setDomainConfigLoading] = useState(true);
@@ -370,7 +374,8 @@ export function AppShell() {
         colregsConstraintsText,
         vesselTypesText,
         obstacleTypesText,
-        sceneGenerationTimeoutSeconds
+        sceneGenerationTimeoutSeconds,
+        enforceLowTcpa
       );
       const outcome = await waitForSceneGeneration(requestId, sceneGenerationTimeoutSeconds);
       if (!outcome.ok) {
@@ -393,6 +398,7 @@ export function AppShell() {
       clearVisualizedScenario,
       colregsConstraintsText,
       domainReadyForGeneration,
+      enforceLowTcpa,
       obstacleTypesText,
       sceneGenerationTimeoutSeconds,
       streamControls,
@@ -409,12 +415,14 @@ export function AppShell() {
         colregsConstraintsText,
         vesselTypesText,
         obstacleTypesText,
-        sceneGenerationTimeoutSeconds
+        sceneGenerationTimeoutSeconds,
+        enforceLowTcpa
       );
     },
     [
       colregsConstraintsText,
       domainReadyForGeneration,
+      enforceLowTcpa,
       obstacleTypesText,
       sceneGenerationTimeoutSeconds,
       streamControls,
@@ -676,6 +684,15 @@ export function AppShell() {
                             aria-label="Live preview visualization during scene generation"
                           />
                           <span>Live preview</span>
+                        </label>
+                        <label className="check scene-generation-preview-toggle">
+                          <input
+                            type="checkbox"
+                            checked={enforceLowTcpa}
+                            onChange={(e) => setEnforceLowTcpa(e.target.checked)}
+                            aria-label="Enforce low TCPA when generating a COLREGS situation"
+                          />
+                          <span>Enforce low TCPA</span>
                         </label>
                         <label className="toolbar-timeout">
                           <span className="toolbar-timeout-label">Timeout (s)</span>

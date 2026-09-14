@@ -163,4 +163,5 @@ def vis_distance(o2_sees_o1_stern, length1, o1_sees_o2_stern, length2):
 
 
 def drift_threshold(length1, length2):
-    return max(length1, length2) / 2.0
+    # max(length1, length2) / 2.0
+    return length1 + length2

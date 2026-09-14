@@ -30,7 +30,14 @@ def run_scene_generation_worker(
     obstacle_type_map = StaticObstacleTypeMap(task.obstacle_types_content)
     functional_scenario = ModelParser.parse_problem(task.functional_scenario_content)
 
-    logical_scenario = LogicalScenarioBuilder.build_from_functional(functional_scenario, vessel_type_map, obstacle_type_map, colregs_constants, RandomInstanceInitializer.name)
+    logical_scenario = LogicalScenarioBuilder.build_from_functional(
+        functional_scenario,
+        vessel_type_map,
+        obstacle_type_map,
+        colregs_constants,
+        RandomInstanceInitializer.name,
+        enforce_low_tcpa=task.enforce_low_tcpa,
+    )
     aggregate = Aggregate.factory(logical_scenario, AggregateAll.name, minimize=True)
     config = EvaluationData(
         timeout=task.timeout,

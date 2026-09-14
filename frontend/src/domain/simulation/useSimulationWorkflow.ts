@@ -479,7 +479,8 @@ export function useSimulationWorkflow() {
       colregsConstraintsContent: string,
       vesselTypesContent: string,
       obstacleTypesContent: string,
-      timeoutSeconds: number
+      timeoutSeconds: number,
+      enforceLowTcpa: boolean
     ) => {
       clientRef.current?.send({
         type: "generate_scene",
@@ -489,6 +490,7 @@ export function useSimulationWorkflow() {
         vesselTypesContent,
         obstacleTypesContent,
         timeout: timeoutSeconds,
+        enforceLowTcpa,
       });
     },
     generateScene: (
@@ -497,7 +499,8 @@ export function useSimulationWorkflow() {
       colregsConstraintsContent: string,
       vesselTypesContent: string,
       obstacleTypesContent: string,
-      timeoutSeconds: number
+      timeoutSeconds: number,
+      enforceLowTcpa: boolean
     ) => {
       setActiveSceneGenerationRequestId(requestId);
       clientRef.current?.send({
@@ -508,6 +511,7 @@ export function useSimulationWorkflow() {
         vesselTypesContent,
         obstacleTypesContent,
         timeout: timeoutSeconds,
+        enforceLowTcpa,
       });
     },
     stopSceneGeneration: () => {

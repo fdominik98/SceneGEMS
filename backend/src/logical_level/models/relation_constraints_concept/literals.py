@@ -31,17 +31,22 @@ class Literal(RelationConstrComposite, ABC):
     def _penalty_value(self, eval_cache: EvaluationCache) -> float:
         pass
 
-    def holds(self, eval_cache: EvaluationCache) -> bool:
-        return self._penalty_value(eval_cache) == 0.0
-
     def penalty(self, val, lb, ub) -> float:
+        if RelationConstrComposite._closed_membership:
+            # Closed [lb, ub] plus float slop. Uses _penalty so NaN (arccos of a cosine
+            # slightly above 1) stays in the interval, matching the optimizer path.
+            pad = EPSILON
+            if not self.negated:
+                return self._normalize(self._penalty(val, lb - pad, ub + pad), lb, ub)
+            dist1 = self._penalty(val, 0, lb + pad)
+            dist2 = self._penalty(val, ub - pad, self.max_dist)
+            return min(self._normalize(dist1, 0, lb), self._normalize(dist2, ub, self.max_dist))
         if not self.negated:
             dist = self._penalty(val, lb + EPSILON, ub - EPSILON)
             return self._normalize(dist, lb, ub)
-        else:
-            dist1 = self._penalty(val, 0 + EPSILON, lb - EPSILON)
-            dist2 = self._penalty(val, ub + EPSILON, self.max_dist - EPSILON)
-            return min(self._normalize(dist1, 0, lb), self._normalize(dist2, ub, self.max_dist))
+        dist1 = self._penalty(val, 0 + EPSILON, lb - EPSILON)
+        dist2 = self._penalty(val, ub + EPSILON, self.max_dist - EPSILON)
+        return min(self._normalize(dist1, 0, lb), self._normalize(dist2, ub, self.max_dist))
 
     def _penalty(self, val, lb, ub):
         if val < lb:
@@ -173,7 +178,8 @@ class InBeamSectorOf(BinaryLiteral, ABC):
         return np.dot(self.rotation_matrix, geo_props.val2.v)
 
     def _do_evaluate_penalty(self, geo_props: GeometricProperties) -> float:
-        angle_p21_v2_rot = np.arccos(np.dot(geo_props.p21, self.__rotated_v2(geo_props)) / max(geo_props.o_distance, EPSILON) / max(geo_props.val2.sp, EPSILON))
+        cosine = np.dot(geo_props.p21, self.__rotated_v2(geo_props)) / max(geo_props.o_distance, EPSILON) / max(geo_props.val2.sp, EPSILON)
+        angle_p21_v2_rot = np.arccos(np.clip(cosine, -1.0, 1.0))
         return self.penalty(angle_p21_v2_rot, 0.0, HALF_SIDE_ANGLE)
 
 
@@ -223,7 +229,7 @@ class OnCollisionCourse(BinaryLiteral):
 
 
 class LowTCPA(BinaryLiteral):
-    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants : COLREGSConstraints, negated: bool = False):
+    def __init__(self, var1: ActorVariable, var2: ActorVariable, colregs_constants: COLREGSConstraints, negated: bool = False):
         self.colregs_constants = colregs_constants
         super().__init__(var1, var2, "LowTCPA", MAX_TEMPORAL_DISTANCE, negated)
 

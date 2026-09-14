@@ -31,29 +31,13 @@ class RRTStarVisualizer:
 
     def create_domain_bounding_rect_markers(self):
         rect_markers: Dict[ConcreteActor, List[Tuple[np.ndarray, np.ndarray]]] = {}
+        root = self.trajectory_tree_builder.root
         for trajectory_objective in self.trajectory_objective_set.values():
-            if trajectory_objective.potential_collision_domain.empty:
-                continue
-            potential_collision_domain = trajectory_objective.potential_collision_domain.bounding_rectangle
-            left_shift = potential_collision_domain.b * potential_collision_domain.v_perp_left
-            forward_shift = potential_collision_domain.a * potential_collision_domain.v
-            front_line = (
-                potential_collision_domain.front_point + left_shift,
-                potential_collision_domain.front_point - left_shift,
-            )
-            left_line = (
-                potential_collision_domain.left_point + forward_shift,
-                potential_collision_domain.left_point - forward_shift,
-            )
-            right_line = (
-                potential_collision_domain.right_point - forward_shift,
-                potential_collision_domain.right_point + forward_shift,
-            )
-            back_line = (
-                potential_collision_domain.back_point - left_shift,
-                potential_collision_domain.back_point + left_shift,
-            )
-            rect_markers[trajectory_objective.actor] = [front_line, left_line, right_line, back_line]
+            edges: List[Tuple[np.ndarray, np.ndarray]] = []
+            for domain in trajectory_objective.maneuvering_domains_for(root):
+                edges.extend(domain.edges)
+            if edges:
+                rect_markers[trajectory_objective.actor] = edges
         return rect_markers
 
     def draw_obstacles(self):
@@ -131,8 +115,7 @@ class RRTStarVisualizer:
                     # path_validation()
                     pass
                 elif e.button == 3:
-                    goal_position = self.inverse_reverse_coord(np.array(e.pos))
-                    # path_validation()
+                    pass
             elif e.type == pygame.KEYDOWN:
                 if e.key == pygame.K_SPACE:
                     return True

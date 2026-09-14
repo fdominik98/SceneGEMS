@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Sequence
 
 from concrete_level.models.concrete_scene import ConcreteScene
@@ -31,6 +32,8 @@ class LiveMonitorSession(MonitorSession):
             send_payload,
         )
         self.monitor = self._get_monitor(scope, self.client, colregs_constraints_content)
+        self._destroyed = False
+        self._step_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="monitor_step")
         self.client.connect()
 
     def step_preview_monitor_batch(
@@ -40,16 +43,7 @@ class LiveMonitorSession(MonitorSession):
         timestamps: Sequence[int],
         time_step: int,
     ) -> None:
-        if not scenes:
-            return
-        self.client.wait_for_heartbeat()
-        self.client.publish_step_monitor_batch_command(
-            scenario_id=scenario_id,
-            scenes=scenes,
-            timestamps=timestamps,
-            time_step=time_step,
-            is_simulation_frame=False,
-        )
+        self._enqueue_step(scenario_id, scenes, timestamps, time_step, is_simulation_frame=False)
 
     def step_simulation_monitor_batch(
         self,
@@ -58,16 +52,7 @@ class LiveMonitorSession(MonitorSession):
         timestamps: Sequence[int],
         time_step: int,
     ) -> None:
-        if not scenes:
-            return
-        self.client.wait_for_heartbeat()
-        self.client.publish_step_monitor_batch_command(
-            scenario_id=scenario_id,
-            scenes=scenes,
-            timestamps=timestamps,
-            time_step=time_step,
-            is_simulation_frame=True,
-        )
+        self._enqueue_step(scenario_id, scenes, timestamps, time_step, is_simulation_frame=True)
 
     def monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
         try:
@@ -77,7 +62,54 @@ class LiveMonitorSession(MonitorSession):
             print(f"Monitor unavailable for generated scene {request_id}, sending it unmonitored: {exc}")
             self._send_unmonitored_generated_scene(request_id, scene, evaluation_data, valid)
 
+    def _enqueue_step(
+        self,
+        scenario_id: str,
+        scenes: Sequence[ConcreteScene],
+        timestamps: Sequence[int],
+        time_step: int,
+        *,
+        is_simulation_frame: bool,
+    ) -> None:
+        if not scenes:
+            return
+        scene_list = list(scenes)
+        timestamp_list = list(timestamps)
+        if self._destroyed:
+            self.send_unmonitored_chunk(scenario_id, scene_list, timestamp_list, time_step, is_simulation_frame=is_simulation_frame)
+            return
+        try:
+            self._step_executor.submit(self._run_step, scenario_id, scene_list, timestamp_list, time_step, is_simulation_frame)
+        except RuntimeError:
+            self.send_unmonitored_chunk(scenario_id, scene_list, timestamp_list, time_step, is_simulation_frame=is_simulation_frame)
+
+    def _run_step(
+        self,
+        scenario_id: str,
+        scenes: Sequence[ConcreteScene],
+        timestamps: Sequence[int],
+        time_step: int,
+        is_simulation_frame: bool,
+    ) -> None:
+        if self._destroyed:
+            return
+        try:
+            self.client.publish_step_monitor_batch_command(
+                scenario_id=scenario_id,
+                scenes=scenes,
+                timestamps=timestamps,
+                time_step=time_step,
+                is_simulation_frame=is_simulation_frame,
+            )
+        except Exception as exc:
+            kind = "simulation" if is_simulation_frame else "preview"
+            print(f"Monitor unavailable for {kind} frames, sending them unmonitored: {exc}")
+            if not self._destroyed:
+                self.send_unmonitored_chunk(scenario_id, scenes, timestamps, time_step, is_simulation_frame=is_simulation_frame)
+
     def _destroy(self) -> None:
+        self._destroyed = True
+        self._step_executor.shutdown(wait=False, cancel_futures=True)
         self.client.disconnect()
         self.monitor.destroy()
 

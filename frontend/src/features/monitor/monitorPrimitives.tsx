@@ -1,33 +1,72 @@
-import type { ReactNode } from "react";
-import { useState } from "react";
+import type { DetailsHTMLAttributes, ReactNode } from "react";
+import type { TrajectoryStream } from "../../app/uiStore";
+import { useUiStore } from "../../app/uiStore";
 import type { ActorStaticInfo } from "../../domain/simulation/types";
 import { renderActorName } from "./actorNameFormat";
 import { directionWord, fmtNum, resolveActorLabel, type Tone } from "./monitorFormat";
 
+export function monitorSectionKey(stream: TrajectoryStream, section: string): string {
+  return `monitor:${stream}:${section}`;
+}
+
+/**
+ * Collapsible `details` whose open state is stored in `uiStore` (and localStorage).
+ * Missing keys stay closed so monitor panels start collapsed.
+ */
+export function PersistedDetails({
+  persistKey,
+  defaultOpen = false,
+  children,
+  onToggle,
+  ...rest
+}: {
+  persistKey: string;
+  defaultOpen?: boolean;
+} & DetailsHTMLAttributes<HTMLDetailsElement>) {
+  const stored = useUiStore((s) => s.monitorSectionOpen[persistKey]);
+  const open = stored ?? defaultOpen;
+  const setMonitorSectionOpen = useUiStore((s) => s.setMonitorSectionOpen);
+  return (
+    <details
+      {...rest}
+      open={open}
+      onToggle={(event) => {
+        const next = event.currentTarget.open;
+        if (next !== open) {
+          setMonitorSectionOpen(persistKey, next);
+        }
+        onToggle?.(event);
+      }}
+    >
+      {children}
+    </details>
+  );
+}
+
 /**
  * Collapsible subpanel shell, matching the other Frame data sections. Open state
- * is seeded from `defaultOpen` and then owned by the user: the component stays
- * mounted across frame ticks, so a manual collapse/expand is not undone.
+ * is persisted per `persistKey` so leaving a page and returning restores it.
  */
 export function MonitorSection({
+  persistKey,
   title,
   badge,
   tone,
   defaultOpen = false,
   children,
 }: {
+  persistKey: string;
   title: string;
   badge?: ReactNode;
   tone?: "bad";
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
   return (
-    <details
+    <PersistedDetails
+      persistKey={persistKey}
       className="frame-subpanel"
-      open={open}
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      defaultOpen={defaultOpen}
       data-has-failures={tone === "bad" ? "" : undefined}
     >
       <summary className="frame-subpanel-summary">
@@ -41,7 +80,7 @@ export function MonitorSection({
         ) : null}
       </summary>
       <div className="mon-section-body">{children}</div>
-    </details>
+    </PersistedDetails>
   );
 }
 

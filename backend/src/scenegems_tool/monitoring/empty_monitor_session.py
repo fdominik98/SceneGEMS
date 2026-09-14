@@ -1,8 +1,7 @@
 from typing import Any, Callable, Dict, Sequence
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.backend_service.protocol import ServerMessage, make_preview_chunk_message, make_simulation_chunk_message
-from scenegems_tool.backend_service.serialization import serialize_frame
+from scenegems_tool.backend_service.protocol import ServerMessage
 from scenegems_tool.monitoring.monitor_session import MonitorSession
 
 
@@ -17,16 +16,7 @@ class EmptyMonitorSession(MonitorSession):
         timestamps: Sequence[int],
         time_step: int,
     ) -> None:
-        frames = [serialize_frame(scenario_id=scenario_id, scene=scene, timestamp=timestamp, time_step=time_step) for scene, timestamp in zip(scenes, timestamps)]
-        if not frames:
-            return
-        payload = make_preview_chunk_message(
-            scenario_id=scenario_id,
-            from_timestamp=timestamps[0],
-            to_timestamp=timestamps[-1],
-            frames=frames,
-        )
-        self.send_payload(payload)
+        self.send_unmonitored_chunk(scenario_id, scenes, timestamps, time_step, is_simulation_frame=False)
 
     def step_simulation_monitor_batch(
         self,
@@ -35,16 +25,7 @@ class EmptyMonitorSession(MonitorSession):
         timestamps: Sequence[int],
         time_step: int,
     ) -> None:
-        frames = [serialize_frame(scenario_id=scenario_id, scene=scene, timestamp=timestamp, time_step=time_step) for scene, timestamp in zip(scenes, timestamps)]
-        if not frames:
-            return
-        payload = make_simulation_chunk_message(
-            scenario_id=scenario_id,
-            from_timestamp=timestamps[0],
-            to_timestamp=timestamps[-1],
-            frames=frames,
-        )
-        self.send_payload(payload)
+        self.send_unmonitored_chunk(scenario_id, scenes, timestamps, time_step, is_simulation_frame=True)
 
     def monitor_generated_scene(self, request_id: str, scene: ConcreteScene, evaluation_data: Dict[str, Any], valid: bool) -> None:
         self._send_unmonitored_generated_scene(request_id, scene, evaluation_data, valid)

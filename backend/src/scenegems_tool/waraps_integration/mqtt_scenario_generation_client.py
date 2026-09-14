@@ -88,6 +88,7 @@ class MqttScenarioGenerationClient(MqttClient):
         vessel_types_content: str,
         obstacle_types_content: str,
         timeout: int,
+        enforce_low_tcpa: bool = False,
     ):
         self.wait_for_heartbeat()
 
@@ -106,6 +107,7 @@ class MqttScenarioGenerationClient(MqttClient):
                     "vessel-types-content": vessel_types_content,
                     "obstacle-types-content": obstacle_types_content,
                     "timeout": timeout,
+                    "enforce-low-tcpa": bool(enforce_low_tcpa),
                 },
             },
         }

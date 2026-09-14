@@ -54,12 +54,18 @@ function dsIndexTone(value: number | undefined): Tone {
   return "good";
 }
 
-export function MonitorMetricsSection({ metrics }: { metrics: unknown }) {
+export function MonitorMetricsSection({
+  persistKey,
+  metrics,
+}: {
+  persistKey: string;
+  metrics: unknown;
+}) {
   if (metrics === undefined || metrics === null) {
     return null;
   }
   if (!looksLikeMetrics(metrics)) {
-    return <GeneralMonitorObject title="Metrics" data={metrics} />;
+    return <GeneralMonitorObject persistKey={persistKey} title="Metrics" data={metrics} />;
   }
 
   const m = metrics as Record<string, unknown>;
@@ -97,7 +103,7 @@ export function MonitorMetricsSection({ metrics }: { metrics: unknown }) {
     sceneProx !== undefined;
 
   return (
-    <MonitorSection title="Metrics" badge={relationIds.length || undefined}>
+    <MonitorSection persistKey={persistKey} title="Metrics" badge={relationIds.length || undefined}>
       {hasScene ? (
         <>
           <p className="mon-micro">Scene</p>

@@ -10,11 +10,23 @@ import { humanizeEnum, resolveActorLabel } from "./monitorFormat";
 import { Chip, MonitorSection } from "./monitorPrimitives";
 
 interface EncounterSummaryCardProps {
+  persistKey: string;
   situationContexts: SituationContextData[];
   colregsStates: ColregsMonitorStateData[];
   ruleResults: RuleResultData[];
   maneuverStates: ManeuverStateData[];
   actors: ActorStaticInfo[];
+}
+
+function visibilityChip(col: ColregsMonitorStateData) {
+  const kind = col.visibilityDistance ?? (col.actorsSeeEachOther ? "in" : "out");
+  if (kind === "at") {
+    return <Chip label="at visibility distance" tone="info" />;
+  }
+  if (kind === "in") {
+    return <Chip label="within visibility distance" tone="info" />;
+  }
+  return <Chip label="beyond visibility distance" tone="neutral" />;
 }
 
 function giveWayLabel(
@@ -42,6 +54,7 @@ function maneuverFor(
 }
 
 export function EncounterSummaryCard({
+  persistKey,
   situationContexts,
   colregsStates,
   ruleResults,
@@ -76,9 +89,9 @@ export function EncounterSummaryCard({
 
   return (
     <MonitorSection
+      persistKey={persistKey}
       title="Encounter summary"
       badge={rows.length}
-      defaultOpen
       tone={anyAlert ? "bad" : undefined}
     >
       <div className="mon-enc-list">
@@ -89,13 +102,7 @@ export function EncounterSummaryCard({
               <span className="mon-enc-relation">{renderRelationId(relationId)}</span>
               {ctx ? <Chip label={ctx.situationLabel || ctx.situationType} tone="info" /> : null}
               {giver ? <Chip label={`${giver} gives way`} tone="warn" /> : null}
-              {col ? (
-                col.actorsSeeEachOther ? (
-                  <Chip label="within visibility distance" tone="info" />
-                ) : (
-                  <Chip label="beyond visibility distance" tone="neutral" />
-                )
-              ) : null}
+              {col ? visibilityChip(col) : null}
               {col?.actorsOnCollisionCourse ? <Chip label="collision course" tone="danger" /> : null}
               {col?.actorsViolateSafetyDomain ? <Chip label="safety domain" tone="danger" /> : null}
               {col?.actorsHaveLowTcpa ? <Chip label="low TCPA" tone="danger" /> : null}

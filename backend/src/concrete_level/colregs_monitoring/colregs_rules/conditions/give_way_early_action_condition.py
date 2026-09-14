@@ -42,6 +42,8 @@ class GiveWayEarlyActionCondition(RuleCondition):
         return COLREGSRuleResult.UNKNOWN
 
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
+        if self.in_maneuver_condition(current_monitored_scene):
+            return ManeuverSuggestions()
         avoidance_direction = self.effective_avoidance_direction(current_monitored_scene)
         suggested_maneuver = AVOIDANCE_DIRECTION_TO_MANEUVER_TYPE[avoidance_direction]
         current_colregs_state = current_monitored_scene.colregs_state_set[self.relation]

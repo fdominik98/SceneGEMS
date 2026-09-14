@@ -90,6 +90,7 @@ class SituationContextStateMachine:
         The initial scene also accepts a pair at the visibility boundary: the scene
         generator places encounters exactly there (At*CR), the moment the vessels come
         into sight, while stepping only recognises a pair strictly inside visibility.
+        Low TCPA is not required in either case.
         """
         return SituationContextStateMachine.get_situation_context(scene, actor1, actor2, start_timestamp, colregs_constants, include_visibility_band=True)
 
@@ -180,24 +181,33 @@ class SituationContextStateMachine:
         colregs_constants: COLREGSConstraints,
         include_visibility_band: bool = False,
     ) -> SituationContext:
-        band = include_visibility_band
         if isinstance(vessel1, ConcreteVessel) and isinstance(vessel2, ConcreteVessel):
-            if scene.out_of_visibility_distance(vessel1, vessel2):
+            if not scene.in_sight_on_collision_course(vessel1, vessel2, include_visibility_band=include_visibility_band):
                 return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            # Rule 13 takes precedence over Rules 14 and 15, so overtaking is tested
-            # before head-on and crossing, in both actor orders.
-            if scene.in_overtaking_cr(vessel1, vessel2, colregs_constants, band):
-                return OvertakingSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            elif scene.in_overtaking_cr(vessel2, vessel1, colregs_constants, band):
-                return OvertakingSituationContext(vessel2, vessel1, scene, start_timestamp, colregs_constants)
-            elif scene.in_head_on_cr(vessel1, vessel2, colregs_constants, band):
-                return HeadOnSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            elif scene.in_crossing_from_port_cr(vessel1, vessel2, colregs_constants, band):
-                return CrossingFromPortSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            elif scene.in_crossing_from_port_cr(vessel2, vessel1, colregs_constants, band):
-                return CrossingFromPortSituationContext(vessel2, vessel1, scene, start_timestamp, colregs_constants)
-            elif scene.in_two_way_crossing_from_port_cr(vessel1, vessel2, colregs_constants, band):
-                return TwoWayCrossingFromPortSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            elif scene.in_two_way_crossing_from_starboard_cr(vessel1, vessel2, colregs_constants, band):
-                return TwoWayCrossingFromStarboardSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+            return SituationContextStateMachine._from_bearing_geometry(scene, vessel1, vessel2, start_timestamp, colregs_constants)
+        return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+
+    @staticmethod
+    def _from_bearing_geometry(
+        scene: ConcreteScene,
+        vessel1: ConcreteActor,
+        vessel2: ConcreteActor,
+        start_timestamp: int,
+        colregs_constants: COLREGSConstraints,
+    ) -> SituationContext:
+        """COLREGS type from relative bearings only. Rule 13 before 14 and 15."""
+        if scene.overtaking_to_port(vessel1, vessel2, colregs_constants) or scene.overtaking_to_starboard(vessel1, vessel2, colregs_constants):
+            return OvertakingSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+        if scene.overtaking_to_port(vessel2, vessel1, colregs_constants) or scene.overtaking_to_starboard(vessel2, vessel1, colregs_constants):
+            return OvertakingSituationContext(vessel2, vessel1, scene, start_timestamp, colregs_constants)
+        if scene.head_on(vessel1, vessel2, colregs_constants):
+            return HeadOnSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+        if scene.crossing_from_port(vessel1, vessel2, colregs_constants):
+            return CrossingFromPortSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+        if scene.crossing_from_port(vessel2, vessel1, colregs_constants):
+            return CrossingFromPortSituationContext(vessel2, vessel1, scene, start_timestamp, colregs_constants)
+        if scene.two_way_crossing_from_port(vessel1, vessel2, colregs_constants):
+            return TwoWayCrossingFromPortSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+        if scene.two_way_crossing_from_starboard(vessel1, vessel2, colregs_constants):
+            return TwoWayCrossingFromStarboardSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
         return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)

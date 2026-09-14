@@ -100,6 +100,8 @@ export type ClientToServerMessage =
       obstacleTypesContent: string;
       /** Scene generation time limit in seconds. */
       timeout: number;
+      /** When true, COLREGS vessel-pair constraints also require low TCPA. */
+      enforceLowTcpa?: boolean;
     }
   | { type: "stop_scene_generation" }
   | {

@@ -77,6 +77,7 @@ class SocketMessageProcessor:
                                 vessel_types_content=message["vesselTypesContent"],
                                 obstacle_types_content=message["obstacleTypesContent"],
                                 timeout=message["timeout"],
+                                enforce_low_tcpa=bool(message.get("enforceLowTcpa", False)),
                             )
                             pass
                         except Exception as exc:

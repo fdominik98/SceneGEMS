@@ -1,6 +1,7 @@
 import type { TrajectoryStream } from "../../app/uiStore";
 import { useUiStore } from "../../app/uiStore";
 import { usePlaybackStore } from "../../domain/playback/playbackStore";
+import { monitorSectionKey, PersistedDetails } from "../monitor/monitorPrimitives";
 
 interface ActorVisibilityPanelProps {
   /** Which trajectory column this panel belongs to. */
@@ -24,7 +25,10 @@ export function ActorVisibilityPanel({ stream }: ActorVisibilityPanelProps) {
   const setOverlay = isPreview ? setPreviewOverlay : setSimulationOverlay;
 
   return (
-    <details className="panel panel-collapsible collapsible-section">
+    <PersistedDetails
+      persistKey={monitorSectionKey(stream, "layers")}
+      className="panel panel-collapsible collapsible-section"
+    >
       <summary>
         <h3>{isPreview ? "Preview" : "Simulation"} layers</h3>
       </summary>
@@ -58,6 +62,7 @@ export function ActorVisibilityPanel({ stream }: ActorVisibilityPanelProps) {
           ["trajectory", "Trajectory"],
           ["safetyDomain", "Safety domains"],
           ["staticAvoidanceDomain", "Static avoidance domains"],
+          ["maneuveringDomain", "Maneuvering domains"],
         ] as const
       ).map(([key, label]) => (
         <label className="check" key={key}>
@@ -69,6 +74,6 @@ export function ActorVisibilityPanel({ stream }: ActorVisibilityPanelProps) {
           {label}
         </label>
       ))}
-    </details>
+    </PersistedDetails>
   );
 }

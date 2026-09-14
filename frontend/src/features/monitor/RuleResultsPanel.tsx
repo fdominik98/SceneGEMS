@@ -6,8 +6,10 @@ import type {
   SituationContextData,
 } from "../../domain/simulation/types";
 import { renderActorName, renderRelationId } from "./actorNameFormat";
+import { PersistedDetails } from "./monitorPrimitives";
 
 interface RuleResultsPanelProps {
+  persistKey: string;
   ruleResults: RuleResultData[];
   situationContexts: SituationContextData[];
 }
@@ -70,7 +72,7 @@ function RuleRow({ evaluation }: { evaluation: RuleEvaluation }) {
   );
 }
 
-export function RuleResultsPanel({ ruleResults, situationContexts }: RuleResultsPanelProps) {
+export function RuleResultsPanel({ persistKey, ruleResults, situationContexts }: RuleResultsPanelProps) {
   const [showAll, setShowAll] = useState(false);
 
   const situationLabelByRelation = new Map(
@@ -85,7 +87,11 @@ export function RuleResultsPanel({ ruleResults, situationContexts }: RuleResults
   }
 
   return (
-    <details className="frame-subpanel" data-has-failures={totalFailed > 0 ? "" : undefined}>
+    <PersistedDetails
+      persistKey={persistKey}
+      className="frame-subpanel"
+      data-has-failures={totalFailed > 0 ? "" : undefined}
+    >
       <summary className="frame-subpanel-summary">
         <span>COLREGS rules</span>
         <span
@@ -170,6 +176,6 @@ export function RuleResultsPanel({ ruleResults, situationContexts }: RuleResults
           })}
         </div>
       </div>
-    </details>
+    </PersistedDetails>
   );
 }

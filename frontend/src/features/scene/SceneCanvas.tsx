@@ -16,6 +16,7 @@ import {
 } from "../../domain/playback/playbackStore";
 import { useUiStore } from "../../app/uiStore";
 import { DomainsLayer } from "./layers/DomainsLayer";
+import { ManeuveringDomainsLayer } from "./layers/ManeuveringDomainsLayer";
 import { SafetyDomainsLayer } from "./layers/SafetyDomainsLayer";
 import { TrajectoriesLayer } from "./layers/TrajectoriesLayer";
 import { VelocityVectorsLayer } from "./layers/VelocityVectorsLayer";
@@ -354,6 +355,8 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                     trajectoriesByActorId,
                     colorByActorId,
                     showVelocity: previewOverlays.velocity,
+                    situationContexts,
+                    showManeuveringDomain: previewOverlays.maneuveringDomain,
                   },
                 ]
               : []),
@@ -365,6 +368,8 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                     trajectoriesByActorId: simulationTrajectoriesByActorId,
                     colorByActorId: simulationStreamColorByActorId,
                     showVelocity: simulationOverlays.velocity,
+                    situationContexts: simSituationContexts,
+                    showManeuveringDomain: simulationOverlays.maneuveringDomain,
                   },
                 ]
               : []),
@@ -424,6 +429,14 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                   showStaticAvoidanceDomains={previewOverlays.staticAvoidanceDomain}
                 />
               )}
+              {previewOverlays.maneuveringDomain && (
+                <ManeuveringDomainsLayer
+                  stream="animation"
+                  situationContexts={situationContexts}
+                  origin={previewOrigin}
+                  colorByActorId={colorByActorId}
+                />
+              )}
               {previewOverlays.dot && (
                 <VesselMarkerLayer
                   stream="animation"
@@ -475,6 +488,14 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
                   colorByActorId={simulationStreamColorByActorId}
                   showSafetyDomains={simulationOverlays.safetyDomain}
                   showStaticAvoidanceDomains={simulationOverlays.staticAvoidanceDomain}
+                />
+              )}
+              {simulationOverlays.maneuveringDomain && (
+                <ManeuveringDomainsLayer
+                  stream="simulation"
+                  situationContexts={simSituationContexts}
+                  origin={simulationOrigin}
+                  colorByActorId={simulationStreamColorByActorId}
                 />
               )}
               {simulationOverlays.dot && (

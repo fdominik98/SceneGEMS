@@ -9,9 +9,11 @@ from __future__ import annotations
 from typing import Any, Dict, List
 
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults, MonitoredTrajectory
+from concrete_level.colregs_monitoring.situation_context import SituationContext
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
+from concrete_level.trajectory_generation.maneuvering_domain import ManeuveringDomain
 from utils.safety_domains import CircularSafetyDomain, DomainCollection, EllipticalSafetyDomain, RectangularSafetyDomain, SafetyDomain
 
 
@@ -78,6 +80,37 @@ def _domain_collection_payload(collection: DomainCollection) -> List[Dict[str, A
     ]
 
 
+def _union_maneuvering_domain_payloads(monitored_scene: MonitoredSceneWithResults) -> Dict[str, Any]:
+    grouped: Dict[ConcreteActor, List[SituationContext]] = {}
+    for context in monitored_scene.situation_context_set.values():
+        for actor in context.actors:
+            grouped.setdefault(actor, []).append(context)
+    payloads: Dict[str, Any] = {}
+    for actor, contexts in grouped.items():
+        domain = ManeuveringDomain.for_give_way_ship(actor, contexts)
+        if domain is None:
+            continue
+        payloads[str(actor.id)] = domain.to_monitor_payload()
+    return payloads
+
+
+def _maneuvering_domains_payload(
+    context: SituationContext,
+    actor1: ConcreteActor,
+    actor2: ConcreteActor,
+    union_payloads: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {}
+    for actor in (actor1, actor2):
+        if not context.is_give_way_actor(actor):
+            continue
+        entry = union_payloads.get(str(actor.id))
+        if entry is None:
+            continue
+        payload[str(actor.id)] = entry
+    return payload
+
+
 def _effective_avoidance_direction(monitored_scene: MonitoredSceneWithResults, relation: Relation, actor: ConcreteActor) -> str:
     """The side this encounter judges ``actor`` against, as the rules see it.
 
@@ -101,6 +134,7 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
     maneuver_states: List[Dict[str, Any]] = []
 
     scene = monitored_scene.scene
+    union_maneuvering_domains = _union_maneuvering_domain_payloads(monitored_scene)
 
     for relation, context in monitored_scene.situation_context_set.items():
         relation_id = _relation_key(relation)
@@ -151,6 +185,9 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
                     actor1_id: _domain_collection_payload(context.start_potential_collision_domains[relation.actor1]),
                     actor2_id: _domain_collection_payload(context.start_potential_collision_domains[relation.actor2]),
                 },
+                # Give-way corridor the planner hugs. Separate from the discs above so
+                # the console can overlay it on its own layer.
+                "maneuveringDomainsByActorId": _maneuvering_domains_payload(context, relation.actor1, relation.actor2, union_maneuvering_domains),
             }
         )
 
@@ -159,6 +196,7 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
                 {
                     "relationId": relation_id,
                     "actorsSeeEachOther": state.actors_see_each_other,
+                    "visibilityDistance": scene.visibility_distance_kind(relation.actor1, relation.actor2),
                     "actorsPassedEachOther": state.actors_passed_each_other,
                     "actorsViolateSafetyDomain": state.actors_violate_safety_domain,
                     "actorsOnCollisionCourse": state.actors_on_collision_course,

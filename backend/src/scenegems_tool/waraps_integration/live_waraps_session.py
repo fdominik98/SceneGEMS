@@ -138,7 +138,9 @@ class LiveWARAPSSession(WARAPSSession):
     def is_connected(self) -> bool:
         return self.mqtt_service.is_connected
 
-    def generate_scene(self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int) -> None:
+    def generate_scene(
+        self, request_id: str, functional_scenario_content: str, colregs_constraints_content: str, vessel_types_content: str, obstacle_types_content: str, timeout: int, enforce_low_tcpa: bool = False
+    ) -> None:
         try:
             ModelParser.parse_problem(functional_scenario_content)
         except Exception as e:
@@ -152,6 +154,7 @@ class LiveWARAPSSession(WARAPSSession):
             vessel_types_content,
             obstacle_types_content,
             timeout,
+            enforce_low_tcpa,
         )
 
     async def stop_scene_generation(self) -> None:

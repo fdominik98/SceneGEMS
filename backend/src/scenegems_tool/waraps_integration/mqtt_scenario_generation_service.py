@@ -68,6 +68,7 @@ class MqttScenarioGenerationService(MqttClient):
                 vessel_types_content=payload["task"]["params"]["vessel-types-content"],
                 obstacle_types_content=payload["task"]["params"]["obstacle-types-content"],
                 timeout=payload["task"]["params"]["timeout"],
+                enforce_low_tcpa=bool(payload["task"]["params"].get("enforce-low-tcpa", False)),
             )
             self.scene_generation_task_queue.put_nowait(task)
             self.current_tasks.append(task)

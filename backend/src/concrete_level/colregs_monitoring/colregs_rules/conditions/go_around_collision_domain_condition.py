@@ -16,6 +16,8 @@ class GoAroundCollisionDomainCondition(RuleCondition):
         return COLREGSRuleResult.UNKNOWN
 
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
+        if self.actor_has_taken_evasive_in_this_encounter(current_monitored_scene):
+            return ManeuverSuggestions()
         avoidance_direction = self.effective_avoidance_direction(current_monitored_scene)
         suggested_maneuver = AVOIDANCE_DIRECTION_TO_MANEUVER_TYPE[avoidance_direction]
         # Only this actor's progress past its own potential collision domain matters;

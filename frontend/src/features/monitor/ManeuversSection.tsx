@@ -87,9 +87,11 @@ function ManeuverCard({
 }
 
 export function ManeuversSection({
+  persistKey,
   maneuvers,
   actors,
 }: {
+  persistKey: string;
   maneuvers: ManeuverStateData[];
   actors: ActorStaticInfo[];
 }) {
@@ -97,10 +99,10 @@ export function ManeuversSection({
     return null;
   }
   if (!looksLikeManeuverStates(maneuvers)) {
-    return <GeneralMonitorList title="Maneuvers" items={maneuvers} />;
+    return <GeneralMonitorList persistKey={persistKey} title="Maneuvers" items={maneuvers} />;
   }
   return (
-    <MonitorSection title="Maneuvers" badge={maneuvers.length}>
+    <MonitorSection persistKey={persistKey} title="Maneuvers" badge={maneuvers.length}>
       <div className="frame-list-stack">
         {maneuvers.map((row, i) => (
           <ManeuverCard key={`${row.actorId}-${i}`} row={row} actors={actors} />

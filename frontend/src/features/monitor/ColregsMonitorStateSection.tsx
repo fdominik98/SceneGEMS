@@ -96,9 +96,11 @@ function StateCard({
 }
 
 export function ColregsMonitorStateSection({
+  persistKey,
   states,
   actors,
 }: {
+  persistKey: string;
   states: ColregsMonitorStateData[];
   actors: ActorStaticInfo[];
 }) {
@@ -106,13 +108,14 @@ export function ColregsMonitorStateSection({
     return null;
   }
   if (!looksLikeColregsStates(states)) {
-    return <GeneralMonitorList title="COLREGS monitor state" items={states} />;
+    return <GeneralMonitorList persistKey={persistKey} title="COLREGS monitor state" items={states} />;
   }
   const anyRisk = states.some(
     (s) => s.actorsViolateSafetyDomain || s.actorsOnCollisionCourse || s.actorsHaveLowTcpa,
   );
   return (
     <MonitorSection
+      persistKey={persistKey}
       title="COLREGS monitor state"
       badge={states.length}
       tone={anyRisk ? "bad" : undefined}

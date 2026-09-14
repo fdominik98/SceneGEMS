@@ -47,6 +47,7 @@ class ScenarioGenerationSession:
         vessel_types_content: str,
         obstacle_types_content: str,
         timeout: int,
+        enforce_low_tcpa: bool = False,
     ) -> None:
         self.client.publish_generate_scene_command(
             request_id,
@@ -55,6 +56,7 @@ class ScenarioGenerationSession:
             vessel_types_content,
             obstacle_types_content,
             timeout,
+            enforce_low_tcpa,
         )
 
     async def destroy_async(self) -> None:

@@ -11,3 +11,4 @@ class MqttSceneGenerationTask:
     vessel_types_content: str
     obstacle_types_content: str
     timeout: int
+    enforce_low_tcpa: bool = False

@@ -8,7 +8,7 @@ Copy this package into your FastAPI project and extend `SimulationSession` to ca
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Required, TypedDict, Union
+from typing import Any, Dict, List, Literal, NotRequired, Optional, Required, TypedDict, Union
 
 import numpy as np
 
@@ -31,6 +31,7 @@ class GenerateSceneMessage(TypedDict):
     vesselTypesContent: str
     obstacleTypesContent: str
     timeout: int
+    enforceLowTcpa: NotRequired[bool]
 
 
 class MonitorSceneMessage(TypedDict):

@@ -1,6 +1,6 @@
 import { renderRelationId } from "./actorNameFormat";
 import { asRecord, DynamicFieldGrid, DynamicValue } from "./frameDataDisplay";
-import { MonitorSection } from "./monitorPrimitives";
+import { PersistedDetails, MonitorSection } from "./monitorPrimitives";
 
 /**
  * General fallback layout for a monitor field whose shape is not recognized.
@@ -8,9 +8,11 @@ import { MonitorSection } from "./monitorPrimitives";
  * monitor is still fully inspectable.
  */
 export function GeneralMonitorList({
+  persistKey,
   title,
   items,
 }: {
+  persistKey: string;
   title: string;
   items: unknown[];
 }) {
@@ -18,7 +20,7 @@ export function GeneralMonitorList({
     return null;
   }
   return (
-    <MonitorSection title={title} badge={items.length}>
+    <MonitorSection persistKey={persistKey} title={title} badge={items.length}>
       <p className="meta mon-fallback-note">
         Unrecognized shape for this monitor field: showing the raw structure.
       </p>
@@ -28,12 +30,16 @@ export function GeneralMonitorList({
           const relId =
             rec && typeof rec.relationId === "string" ? (rec.relationId as string) : null;
           return (
-            <details key={i} className="frame-item-card" open={items.length <= 3}>
+            <PersistedDetails
+              key={i}
+              persistKey={`${persistKey}:item:${i}`}
+              className="frame-item-card"
+            >
               <summary className="frame-item-summary">
                 {relId ? renderRelationId(relId) : `Item ${i + 1}`}
               </summary>
               {rec ? <DynamicFieldGrid data={rec} /> : <DynamicValue value={item} depth={0} />}
-            </details>
+            </PersistedDetails>
           );
         })}
       </div>
@@ -42,13 +48,21 @@ export function GeneralMonitorList({
 }
 
 /** Same, for a single object-shaped field (e.g. `metrics`). */
-export function GeneralMonitorObject({ title, data }: { title: string; data: unknown }) {
+export function GeneralMonitorObject({
+  persistKey,
+  title,
+  data,
+}: {
+  persistKey: string;
+  title: string;
+  data: unknown;
+}) {
   const rec = asRecord(data);
   if (!rec || Object.keys(rec).length === 0) {
     return null;
   }
   return (
-    <MonitorSection title={title} badge={Object.keys(rec).length}>
+    <MonitorSection persistKey={persistKey} title={title} badge={Object.keys(rec).length}>
       <p className="meta mon-fallback-note">
         Unrecognized shape for this monitor field: showing the raw structure.
       </p>

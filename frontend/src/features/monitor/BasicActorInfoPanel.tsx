@@ -18,6 +18,7 @@ import { ManeuversSection } from "./ManeuversSection";
 import { MonitorMetricsSection } from "./MonitorMetricsSection";
 import { RuleResultsPanel } from "./RuleResultsPanel";
 import { SituationContextsSection } from "./SituationContextsSection";
+import { monitorSectionKey, PersistedDetails } from "./monitorPrimitives";
 import { useMonitorFrameForKind } from "./useMonitorFrame";
 
 interface BasicActorInfoPanelProps {
@@ -39,15 +40,16 @@ function trajectorySummary(frame: SimulationFrame): string | null {
 export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActorInfoPanelProps) {
   const { frame: streamFrame, panelKind } = useMonitorFrameForKind(stream);
   const frame = frameOverride !== undefined ? frameOverride : streamFrame;
+  const frameDataKey = monitorSectionKey(stream, "frame-data");
 
   if (!frame) {
     return (
-      <details className="panel panel-collapsible frame-data-root" open>
+      <PersistedDetails persistKey={frameDataKey} className="panel panel-collapsible frame-data-root">
         <summary>
           <h3>Frame data</h3>
         </summary>
         <p className="meta">No frame data available.</p>
-      </details>
+      </PersistedDetails>
     );
   }
 
@@ -56,7 +58,7 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
 
   return (
     <ActorNamesProvider actors={frame.actors}>
-    <details className="panel panel-collapsible frame-data-root" open>
+    <PersistedDetails persistKey={frameDataKey} className="panel panel-collapsible frame-data-root">
       <summary>
         <h3>Frame data</h3>
       </summary>
@@ -65,18 +67,21 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
       </p>
 
       <div className="frame-data-stack">
-        <details className="frame-subpanel" open>
+        <PersistedDetails persistKey={monitorSectionKey(stream, "vessels")} className="frame-subpanel">
           <summary className="frame-subpanel-summary">
             <span>Vessels &amp; actors</span>
             <span className="frame-subpanel-badge">{frame.actors.length}</span>
           </summary>
           <div className="frame-actor-stack">
-            {frame.actors.map((actor, index) => {
+            {frame.actors.map((actor) => {
               const actorRec = asRecord(actor) ?? {};
               const state = asRecord(frame.statesByActorId[actor.id]);
-              const defaultOpen = frame.actors.length <= 2 || index < 2;
               return (
-                <details key={actor.id} className="frame-actor-block" open={defaultOpen}>
+                <PersistedDetails
+                  key={actor.id}
+                  persistKey={monitorSectionKey(stream, `actor:${actor.id}`)}
+                  className="frame-actor-block"
+                >
                   <summary className="frame-actor-summary">
                     <span
                       className="actor-color-dot frame-actor-dot"
@@ -102,13 +107,14 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
                       <p className="meta">No kinematic state for this actor.</p>
                     )}
                   </div>
-                </details>
+                </PersistedDetails>
               );
             })}
           </div>
-        </details>
+        </PersistedDetails>
 
         <EncounterSummaryCard
+          persistKey={monitorSectionKey(stream, "encounter-summary")}
           situationContexts={frame.situationContexts}
           colregsStates={frame.colregsStates}
           ruleResults={frame.ruleResults}
@@ -116,21 +122,34 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
           actors={frame.actors}
         />
 
-        <SituationContextsSection contexts={frame.situationContexts} actors={frame.actors} />
+        <SituationContextsSection
+          persistKey={monitorSectionKey(stream, "situation-contexts")}
+          contexts={frame.situationContexts}
+          actors={frame.actors}
+        />
 
-        <ColregsMonitorStateSection states={frame.colregsStates} actors={frame.actors} />
+        <ColregsMonitorStateSection
+          persistKey={monitorSectionKey(stream, "colregs-monitor-state")}
+          states={frame.colregsStates}
+          actors={frame.actors}
+        />
 
         <RuleResultsPanel
+          persistKey={monitorSectionKey(stream, "colregs-rules")}
           ruleResults={frame.ruleResults}
           situationContexts={frame.situationContexts}
         />
 
-        <ManeuversSection maneuvers={frame.maneuverStates} actors={frame.actors} />
+        <ManeuversSection
+          persistKey={monitorSectionKey(stream, "maneuvers")}
+          maneuvers={frame.maneuverStates}
+          actors={frame.actors}
+        />
 
-        <MonitorMetricsSection metrics={frame.metrics} />
+        <MonitorMetricsSection persistKey={monitorSectionKey(stream, "metrics")} metrics={frame.metrics} />
 
         {frame.trajectoriesByActorId && Object.keys(frame.trajectoriesByActorId).length > 0 ? (
-          <details className="frame-subpanel">
+          <PersistedDetails persistKey={monitorSectionKey(stream, "trajectory-samples")} className="frame-subpanel">
             <summary className="frame-subpanel-summary">
               <span>Trajectory samples</span>
               <span className="frame-subpanel-badge">
@@ -145,11 +164,11 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
                 </li>
               ))}
             </ul>
-          </details>
+          </PersistedDetails>
         ) : null}
 
         {extraFrameKeys.length > 0 ? (
-          <details className="frame-subpanel">
+          <PersistedDetails persistKey={monitorSectionKey(stream, "additional-fields")} className="frame-subpanel">
             <summary className="frame-subpanel-summary">
               <span>Additional frame fields</span>
               <span className="frame-subpanel-badge">{extraFrameKeys.length}</span>
@@ -164,10 +183,10 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
                 </Fragment>
               ))}
             </dl>
-          </details>
+          </PersistedDetails>
         ) : null}
       </div>
-    </details>
+    </PersistedDetails>
     </ActorNamesProvider>
   );
 }

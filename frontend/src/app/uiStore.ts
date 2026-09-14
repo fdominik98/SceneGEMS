@@ -11,6 +11,8 @@ export interface OverlayVisibility {
   safetyDomain: boolean;
   /** Potential collision domains frozen at the start of each encounter. */
   staticAvoidanceDomain: boolean;
+  /** Planner maneuvering corridor (give-way A-B-C-D). */
+  maneuveringDomain: boolean;
 }
 
 /** Bottom control panel tab (preview animation playback or simulation playback). */
@@ -34,6 +36,7 @@ const defaultOverlays: OverlayVisibility = {
   trajectory: true,
   safetyDomain: true,
   staticAvoidanceDomain: true,
+  maneuveringDomain: true,
 };
 
 interface UiState {
@@ -61,6 +64,12 @@ interface UiState {
   hideSimulationStream: boolean;
   setHidePreviewStream: (value: boolean) => void;
   setHideSimulationStream: (value: boolean) => void;
+  /**
+   * Open/closed state for monitor `details` sections. Missing keys are closed
+   * (the default). Keys are stable ids such as `monitor:animation:frame-data`.
+   */
+  monitorSectionOpen: Record<string, boolean>;
+  setMonitorSectionOpen: (key: string, open: boolean) => void;
   /** Right sidebar monitoring view: live frame data or metrics analysis. */
   monitorPanelView: MonitorPanelView;
   setMonitorPanelView: (view: MonitorPanelView) => void;
@@ -111,6 +120,14 @@ export const useUiStore = create<UiState>()(
   hideSimulationStream: false,
   setHidePreviewStream: (value) => set({ hidePreviewStream: value }),
   setHideSimulationStream: (value) => set({ hideSimulationStream: value }),
+  monitorSectionOpen: {},
+  setMonitorSectionOpen: (key, open) =>
+    set((state) => {
+      if (state.monitorSectionOpen[key] === open) {
+        return state;
+      }
+      return { monitorSectionOpen: { ...state.monitorSectionOpen, [key]: open } };
+    }),
   monitorPanelView: "runtime_data",
   setMonitorPanelView: (view) => set({ monitorPanelView: view }),
   selectedMetricsRelationId: null,
@@ -128,8 +145,9 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "scenegems:ui",
-      version: 2,
+      version: 3,
       // v2: the monitor tab moved to the Connections page.
+      // v3: persist monitor section collapse and preview/simulation column visibility.
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as { controlPanelMode?: string };
         if (version < 2 && state.controlPanelMode === "monitor") {
@@ -137,13 +155,17 @@ export const useUiStore = create<UiState>()(
         }
         return state as UiState;
       },
-      // Only persist where the user has navigated (page tabs / scene view), not transient UI state.
       partialize: (state) => ({
         controlPanelMode: state.controlPanelMode,
         sceneViewMode: state.sceneViewMode,
         sceneGenerationTab: state.sceneGenerationTab,
         sceneGenerationPaneView: state.sceneGenerationPaneView,
         sceneGenerationLivePreview: state.sceneGenerationLivePreview,
+        rightTrajectoryPreviewVisible: state.rightTrajectoryPreviewVisible,
+        rightTrajectorySimulationVisible: state.rightTrajectorySimulationVisible,
+        hidePreviewStream: state.hidePreviewStream,
+        hideSimulationStream: state.hideSimulationStream,
+        monitorSectionOpen: state.monitorSectionOpen,
       }),
     }
   )

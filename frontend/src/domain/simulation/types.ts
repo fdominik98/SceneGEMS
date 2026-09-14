@@ -55,6 +55,13 @@ export interface StaticAvoidanceDomain {
   radius: number;
 }
 
+/** Planner corridor for a give-way actor, frozen with the encounter. */
+export interface ManeuveringDomain {
+  vertices: [number, number][];
+  holdPolyline: [number, number][];
+  holdHeadingChangeDeg?: number;
+}
+
 export interface SituationContextData {
   relationId: string;
   actor1Id: string;
@@ -77,11 +84,15 @@ export interface SituationContextData {
   safetyDomainsByActorId?: Record<string, SafetyDomainShape>;
   /** Domains frozen when the encounter started, which each actor has to go around. */
   staticAvoidanceDomainsByActorId?: Record<string, StaticAvoidanceDomain[]>;
+  /** Give-way corridor the trajectory planner hugs. Absent on older payloads. */
+  maneuveringDomainsByActorId?: Record<string, ManeuveringDomain>;
 }
 
 export interface ColregsMonitorStateData {
   relationId: string;
   actorsSeeEachOther: boolean;
+  /** at: AtVis band; in: strictly inside visibility; out: beyond. Older frames omit this. */
+  visibilityDistance?: "at" | "in" | "out";
   actorsPassedEachOther: boolean;
   actorsViolateSafetyDomain: boolean;
   actorsOnCollisionCourse: boolean;

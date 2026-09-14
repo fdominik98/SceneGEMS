@@ -55,6 +55,32 @@ class RuleCondition(ABC):
             return monitored_scene.situation_context_set.resolved_avoidance_direction(self.relation, self.actor)
         return colregs_state.actors_avoidance_direction.get(self.actor, Direction.FORWARD)
 
+    def actor_has_taken_evasive_in_this_encounter(self, monitored_scene: MonitoredScene) -> bool:
+        """True once this actor has made a course change during the judged encounter."""
+        state = monitored_scene.colregs_state_set.get(self.relation)
+        if state is None:
+            return False
+        return state.actors_have_been_in_right_maneuver.get(self.actor, False) or state.actors_have_been_in_left_maneuver.get(self.actor, False)
+
+    def give_way_has_taken_first_evasive(self, monitored_scene: MonitoredScene) -> bool:
+        """True once this actor has made its give-way course change in any live encounter.
+
+        Maneuver-level rules are keyed by (actor, actor), not by an encounter, so they
+        have to look through the situation set. After that first evasive the give-way
+        vessel may steer any way; stand-on vessels never match.
+        """
+        for relation, context in monitored_scene.situation_context_set.items():
+            if self.actor not in relation:
+                continue
+            if not context.is_give_way_actor(self.actor):
+                continue
+            state = monitored_scene.colregs_state_set.get(relation)
+            if state is None:
+                continue
+            if state.actors_have_been_in_right_maneuver.get(self.actor, False) or state.actors_have_been_in_left_maneuver.get(self.actor, False):
+                return True
+        return False
+
     def __str__(self) -> str:
         return f"{self.__class__.__name__} : ({self.relation}, {self.actor})"
 
