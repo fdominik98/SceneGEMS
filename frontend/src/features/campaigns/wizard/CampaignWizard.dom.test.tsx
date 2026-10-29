@@ -14,7 +14,12 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../useCampaignData", () => {
   const idle = { data: undefined, error: null, isLoading: false, refetch: () => Promise.resolve() };
-  return { useOperatorClient: () => mocks.client, useCatalogClasses: () => idle, useCatalogStacks: () => idle };
+  return { useOperatorClient: () => mocks.client, useCatalogClasses: () => idle, useCatalogStacks: () => idle, retryUnlessUnreachable: () => false };
+});
+// The preset bar reads the master's presets; these tests start from an empty draft
+vi.mock("./useCampaignPresets", () => {
+  const idle = { mutate: () => undefined, isPending: false, isError: false, error: null };
+  return { useCampaignPresets: () => ({ data: [], isLoading: false, isError: false, error: null }), useSaveCampaignPreset: () => idle, useDeleteCampaignPreset: () => idle };
 });
 vi.mock("../../../domain/cluster/campaignApi", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../domain/cluster/campaignApi")>()),

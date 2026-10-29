@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import "./capabilities.css";
 import { usePersistedState } from "../../app/usePersistedState";
 import { EmptyState } from "../../components/EmptyState";
@@ -12,6 +12,7 @@ import type { DocumentView, GraphView } from "./capabilitiesModel";
 import { DetailPanel } from "./DetailPanel";
 import { MatrixView } from "./MatrixView";
 import { useArchitecture } from "./useArchitecture";
+import { useFullscreen } from "./useFullscreen";
 
 const VIEW_LABELS: Record<DocumentView, string> = { concrete: "Implemented", metamodel: "Metamodel", matrix: "Matrix" };
 const VIEW_HINTS: Record<DocumentView, string> = {
@@ -49,6 +50,8 @@ export function CapabilitiesSection() {
   const query = useArchitecture();
   const [stored, setStored] = usePersistedState<Stored>("capabilities-view", DEFAULT_STORED);
   const [selected, setSelected] = useState<Selected>({ scope: "", selection: null });
+  const workspace = useRef<HTMLDivElement>(null);
+  const fullscreen = useFullscreen(workspace);
 
   const documents = query.data?.documents ?? [];
   const document = documents.find((item) => item.id === stored.documentId) ?? documents[0];
@@ -140,8 +143,16 @@ export function CapabilitiesSection() {
         {view === "matrix" ? (
           <MatrixView document={document} />
         ) : (
-          <div className="cap-workspace">
-            <ArchitectureGraph document={document} view={view} selection={selection} onSelect={select} showRuledOut={stored.showRuledOut && view === "concrete"} />
+          <div ref={workspace} className={`cap-workspace${fullscreen.mode !== "off" ? " is-fullscreen" : ""}`}>
+            <ArchitectureGraph
+              document={document}
+              view={view}
+              selection={selection}
+              onSelect={select}
+              showRuledOut={stored.showRuledOut && view === "concrete"}
+              fullscreen={fullscreen.mode}
+              onToggleFullscreen={fullscreen.toggle}
+            />
             <DetailPanel document={document} view={view} selection={selection} onShow={show} />
           </div>
         )}

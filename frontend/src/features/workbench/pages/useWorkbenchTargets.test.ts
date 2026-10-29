@@ -17,7 +17,7 @@ const { PAGE_STORES } = await import("./pageStore");
 describe("target consumption", () => {
   beforeEach(() => {
     useWorkbenchTargetStore.setState({ pending: {} });
-    useUiStore.setState({ section: "history", workbenchView: "domainConfig" });
+    useUiStore.setState({ section: "history", workbenchView: "connections" });
     for (const store of Object.values(PAGE_STORES)) {
       store.setState({ loaded: null });
     }

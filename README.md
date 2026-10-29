@@ -50,11 +50,12 @@ From the repository root:
 
 In the web console, under Workbench:
 
-1. **Domain Configuration**: COLREGS constants, vessel and obstacle types, edited in a form generated from the YAML or as raw YAML. Presets load from `frontend/public/domain_config/`.
-2. **Scene Generation**: load a functional scenario (`.problem` file) and generate a scene.
-3. **Trajectory Generation**: monitor-driven RRT, or straight trajectories over a time span.
-4. **Simulation**: run the scenario and play it back in the encounter view (nautical canvas, a card per vessel pair, rule timeline) with the COLREGS monitor's outcomes; record, replay and export.
-5. **Connections**: the MQTT broker of live simulation sessions (the master's own by default).
+1. **Scene Generation**: load a functional scenario (one of the master's, or a `.problem` file) and generate a scene.
+2. **Trajectory Generation**: monitor-driven RRT, or straight trajectories over a time span.
+3. **Simulation**: run the scenario and play it back in the encounter view (nautical canvas, a card per vessel pair, rule timeline) with the COLREGS monitor's outcomes; record, replay and export.
+4. **Connections**: the MQTT broker of live simulation sessions (the master's own by default).
+
+Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and obstacle types of the cluster, edited in a form generated from the YAML or as raw YAML and saved on the master; every workbench run and campaign uses them. Every preset comes from the master and ships in its image from `backend/assets/`: the domain presets (`domain_config/`), the functional scenarios (`generated_functional_models/all/`) and the campaign presets the wizard starts from (`campaign_presets/`).
 
 ## Building images
 

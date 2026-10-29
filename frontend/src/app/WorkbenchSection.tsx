@@ -5,7 +5,10 @@ import { LoadingSpinner } from "../components/LoadingSpinner";
 import { usePlaybackTicker } from "../domain/playback/usePlaybackTicker";
 import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../domain/playback/playbackStore";
 import { PlaybackStoreContext } from "../domain/playback/playbackContext";
-import { formatFunctionalPresetLabel } from "../features/workbench/controls/functionalPresetPaths";
+import { getClassContent } from "../domain/cluster/presetsApi";
+import { useOperatorClient } from "../features/campaigns/useCampaignData";
+import { useClusterDomain } from "../features/domain/useClusterDomain";
+import { sceneInputSpecification } from "../features/workbench/pages/inputSpecification";
 import { PageEntryStatus } from "../features/workbench/pages/PageEntryStatus";
 import { inputOfFile, sceneOfScenePage, setTrajectoryInput } from "../features/workbench/pages/pageHandoff";
 import { useScenePageStore } from "../features/workbench/pages/pageStore";
@@ -21,12 +24,6 @@ import {
 import { useSimulationWorkflow } from "../domain/simulation/useSimulationWorkflow";
 import type { ClientToServerMessage } from "../domain/simulation/wireTypes";
 import { SimulationRunPanel } from "../features/workbench/controls/SimulationRunPanel";
-import { DomainConfigurationPanel } from "../features/workbench/controls/DomainConfigurationPanel";
-import {
-  DEFAULT_COLREGS_PRESET,
-  DEFAULT_OBSTACLE_TYPES_PRESET,
-  DEFAULT_VESSEL_TYPES_PRESET,
-} from "../features/workbench/controls/domainConfigPresets";
 import { SceneGenerationSidebar } from "../features/workbench/controls/SceneGenerationSidebar";
 import { SceneMonitorPreview } from "../features/workbench/controls/SceneMonitorPreview";
 import { runBatchGeneration } from "../features/workbench/controls/runBatchGeneration";
@@ -54,9 +51,10 @@ interface WorkbenchSectionProps {
 }
 
 /**
- * The workbench section: domain configuration, scene and trajectory generation, simulation
- * and connections over the workbench gateway socket (`VITE_WS_URL`). Its view is the
- * `workbenchView` of `uiStore`.
+ * The workbench section: scene and trajectory generation, simulation and connections over the
+ * workbench gateway socket (`VITE_WS_URL`). Its view is the `workbenchView` of `uiStore`. The
+ * domain configuration is the active cluster's (the Domain Configuration section edits it), and
+ * the functional scenarios to start from are the master's catalog.
  */
 export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const RIGHT_PANE_MIN_WIDTH = 300;
@@ -87,7 +85,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const simulationInitializing = usePlaybackStore((s) => s.simulationInitializing);
   const activeSceneGenerationRequestId = useScenePlaybackStore((s) => s.activeSceneGenerationRequestId);
   const batchGenerationRunning = useBatchGenerationStore((s) => s.running);
-  const selectedBatchPaths = useBatchGenerationStore((s) => s.selectedPaths);
+  const selectedBatchClassIds = useBatchGenerationStore((s) => s.selectedClassIds);
   const sceneGenerationTab = useUiStore((s) => s.sceneGenerationTab);
   const sceneGenerationLivePreview = useUiStore((s) => s.sceneGenerationLivePreview);
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
@@ -119,9 +117,12 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const [isResizingBottomPanel, setIsResizingBottomPanel] = useState(false);
   const activeView = useUiStore((s) => s.workbenchView);
   const setActiveView = useUiStore((s) => s.setWorkbenchView);
-  const [colregsConstraintsText, setColregsConstraintsText] = usePersistedState("colregs-text", "");
-  const [vesselTypesText, setVesselTypesText] = usePersistedState("vessel-types-text", "");
-  const [obstacleTypesText, setObstacleTypesText] = usePersistedState("obstacle-types-text", "");
+  // The cluster's domain configuration, global for the cluster and kept on the master.
+  const clusterDomain = useClusterDomain();
+  const colregsConstraintsText = clusterDomain.data?.colregs_constants ?? "";
+  const vesselTypesText = clusterDomain.data?.vessel_types ?? "";
+  const obstacleTypesText = clusterDomain.data?.obstacle_types ?? "";
+  const operatorClient = useOperatorClient();
   const [functionalSpecText, setFunctionalSpecText] = usePersistedState("functional-spec-text", "");
   // What the scene page calls its functional scenario: the preset or file it came from.
   const [functionalSpecLabel, setFunctionalSpecLabel] = usePersistedState<string | null>("functional-spec-label", null);
@@ -135,52 +136,21 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   );
   const [sceneGenerationError, setSceneGenerationError] = useState<string | null>(null);
   const [sceneValidityBadgeDismissed, setSceneValidityBadgeDismissed] = useState(false);
-  const [domainConfigLoading, setDomainConfigLoading] = useState(true);
   const mainLayoutRef = useRef<HTMLElement | null>(null);
   const simulationCenterRef = useRef<HTMLDivElement | null>(null);
   const previousViewRef = useRef<WorkbenchView>("simulation");
   const scenarioFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const loadTextFromPreset = useCallback(async (path: string): Promise<string> => {
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`Failed to load preset ${path}: ${response.status}`);
-    }
-    return response.text();
-  }, []);
-
-  useEffect(() => {
-    // Only fetch default presets for fields the user has not already edited
-    // (persisted edits are restored before this runs).
-    const needColregs = colregsConstraintsText.trim().length === 0;
-    const needVessels = vesselTypesText.trim().length === 0;
-    const needObstacles = obstacleTypesText.trim().length === 0;
-    if (!needColregs && !needVessels && !needObstacles) {
-      setDomainConfigLoading(false);
-      return;
-    }
-    void (async () => {
-      setDomainConfigLoading(true);
-      try {
-        const [colregs, vessels, obstacles] = await Promise.all([
-          needColregs ? loadTextFromPreset(DEFAULT_COLREGS_PRESET) : Promise.resolve(null),
-          needVessels ? loadTextFromPreset(DEFAULT_VESSEL_TYPES_PRESET) : Promise.resolve(null),
-          needObstacles ? loadTextFromPreset(DEFAULT_OBSTACLE_TYPES_PRESET) : Promise.resolve(null),
-        ]);
-        if (colregs !== null) setColregsConstraintsText(colregs);
-        if (vessels !== null) setVesselTypesText(vessels);
-        if (obstacles !== null) setObstacleTypesText(obstacles);
-      } catch (error) {
-        setSceneGenerationError(
-          error instanceof Error ? error.message : "Failed to load default domain configuration presets."
-        );
-      } finally {
-        setDomainConfigLoading(false);
+  /** A functional scenario of the master's catalog, by class id. */
+  const loadScenarioText = useCallback(
+    async (classId: string): Promise<string> => {
+      if (operatorClient === null) {
+        throw new Error("Select a cluster first: the functional scenarios come from its master.");
       }
-    })();
-    // Runs once on mount; reads initial (restored) values intentionally.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadTextFromPreset]);
+      return getClassContent(operatorClient, classId);
+    },
+    [operatorClient]
+  );
 
   useEffect(() => {
     let wasInitialized = usePlaybackStore.getState().simulationInitialized;
@@ -247,13 +217,39 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     colregsTextRef.current = colregsConstraintsText;
   }, [colregsConstraintsText]);
 
+  // A scene loaded on the scene page brings its functional scenario into the editor, so it can be generated again or changed.
+  const loadInputSpecification = useCallback(
+    (target: WorkbenchTarget) => {
+      if (target.page !== "sceneGeneration" || operatorClient === null) {
+        return;
+      }
+      void sceneInputSpecification(operatorClient, target)
+        .then((specification) => {
+          if (specification !== null) {
+            setFunctionalSpecText(specification.text);
+            setFunctionalSpecLabel(specification.label);
+          }
+        })
+        .catch((error: unknown) => {
+          setSceneGenerationError(`The scene's functional scenario could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
+        });
+    },
+    [operatorClient, setFunctionalSpecLabel, setFunctionalSpecText]
+  );
+
   // Outputs other sections open here (`openInWorkbench`), and the pages' loaded entries after a reload.
-  const openTarget = useCallback((target: WorkbenchTarget) => {
-    if (target.page === "simulation") {
-      usePlaybackStore.getState().requestAutoFit();
-    }
-    void streamControlsRef.current.openTarget(target, colregsTextRef.current);
-  }, []);
+  const openTarget = useCallback(
+    (target: WorkbenchTarget) => {
+      if (target.page === "simulation") {
+        usePlaybackStore.getState().requestAutoFit();
+      }
+      if (!target.live) {
+        loadInputSpecification(target);
+      }
+      void streamControlsRef.current.openTarget(target, colregsTextRef.current);
+    },
+    [loadInputSpecification]
+  );
   const refreshLoaded = useCallback((target: WorkbenchTarget) => {
     void streamControlsRef.current.refreshLoaded(target, colregsTextRef.current);
   }, []);
@@ -378,6 +374,11 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     colregsConstraintsText.trim().length > 0 &&
     vesselTypesText.trim().length > 0 &&
     obstacleTypesText.trim().length > 0;
+  const domainProblem = clusterDomain.isError
+    ? `The cluster's domain configuration could not be read: ${clusterDomain.error instanceof Error ? clusterDomain.error.message : String(clusterDomain.error)}`
+    : clusterDomain.isPending
+      ? "Reading the cluster's domain configuration..."
+      : "The cluster's domain configuration is incomplete: complete it on the Domain Configuration page of the cluster.";
 
   const globalErrorMessage = resolveGlobalErrorMessage(sceneGenerationError, errorMessage);
   const sceneGenerationResources = streamControls.clusterResources(SCENE_GENERATION_JOB);
@@ -410,7 +411,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const runSceneGeneration = useCallback(
     async (specText: string) => {
       if (!domainReadyForGeneration) {
-        return { ok: false, message: "Domain configuration is incomplete." };
+        return { ok: false, message: domainProblem };
       }
       clearVisualizedScenario();
       setLoadedScenarioFileContent(null);
@@ -435,6 +436,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     [
       clearVisualizedScenario,
       colregsConstraintsText,
+      domainProblem,
       domainReadyForGeneration,
       enforceLowTcpa,
       functionalSpecLabel,
@@ -565,88 +567,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             <div className="load-scenario-layout mqtt-broker-view">
               <MqttBrokerPanel sendMessage={(message: ClientToServerMessage) => streamControls.sendMessage(message)} />
             </div>
-          ) : activeView === "domainConfig" ? (
-            <div className="load-scenario-layout">
-              {domainConfigLoading && <LoadingSpinner label="Loading domain presets…" />}
-              <DomainConfigurationPanel
-                colregsText={colregsConstraintsText}
-                onColregsTextChange={setColregsConstraintsText}
-                onLoadColregsFromPreset={(path) => {
-                  void (async () => {
-                    try {
-                      const text = await loadTextFromPreset(path);
-                      setColregsConstraintsText(text);
-                      setSceneGenerationError(null);
-                    } catch (error) {
-                      setSceneGenerationError(
-                        error instanceof Error ? error.message : "Failed to load COLREGS preset."
-                      );
-                    }
-                  })();
-                }}
-                onLoadColregsFromFile={(file) => {
-                  void (async () => {
-                    const text = await readTextFile(file);
-                    setColregsConstraintsText(text);
-                    setSceneGenerationError(null);
-                  })();
-                }}
-                onExportColregs={() =>
-                  exportTextFile(colregsConstraintsText, "colregs_constants.yaml", "text/yaml")
-                }
-                vesselTypesText={vesselTypesText}
-                onVesselTypesTextChange={setVesselTypesText}
-                onLoadVesselTypesFromPreset={(path) => {
-                  void (async () => {
-                    try {
-                      const text = await loadTextFromPreset(path);
-                      setVesselTypesText(text);
-                      setSceneGenerationError(null);
-                    } catch (error) {
-                      setSceneGenerationError(
-                        error instanceof Error ? error.message : "Failed to load vessel types preset."
-                      );
-                    }
-                  })();
-                }}
-                onLoadVesselTypesFromFile={(file) => {
-                  void (async () => {
-                    const text = await readTextFile(file);
-                    setVesselTypesText(text);
-                    setSceneGenerationError(null);
-                  })();
-                }}
-                onExportVesselTypes={() =>
-                  exportTextFile(vesselTypesText, "vessel_types.yaml", "text/yaml")
-                }
-                obstacleTypesText={obstacleTypesText}
-                onObstacleTypesTextChange={setObstacleTypesText}
-                onLoadObstacleTypesFromPreset={(path) => {
-                  void (async () => {
-                    try {
-                      const text = await loadTextFromPreset(path);
-                      setObstacleTypesText(text);
-                      setSceneGenerationError(null);
-                    } catch (error) {
-                      setSceneGenerationError(
-                        error instanceof Error ? error.message : "Failed to load obstacle types preset."
-                      );
-                    }
-                  })();
-                }}
-                onLoadObstacleTypesFromFile={(file) => {
-                  void (async () => {
-                    const text = await readTextFile(file);
-                    setObstacleTypesText(text);
-                    setSceneGenerationError(null);
-                  })();
-                }}
-                onExportObstacleTypes={() =>
-                  exportTextFile(obstacleTypesText, "static_obstacle_types.yaml", "text/yaml")
-                }
-                onContinue={() => setActiveView("sceneGeneration")}
-              />
-            </div>
           ) : activeView === "sceneGeneration" ? (
             <div
               ref={simulationCenterRef}
@@ -696,7 +616,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                 <div className="bottom-slot bottom-slot-controls">
                   <div className="control-panel-heading">
                     <div>
-                      <p className="control-panel-eyebrow">Step 2 of 4</p>
+                      <p className="control-panel-eyebrow">Step 1 of 3</p>
                       <h3>Scene Generation</h3>
                     </div>
                     <div className="control-panel-status">
@@ -726,13 +646,13 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                   <div className="toolbar-row scene-generation-toolbar">
                     {(() => {
                       const isBatch = sceneGenerationTab === "batch";
-                      const sceneCount = isBatch ? selectedBatchPaths.length : 1;
+                      const sceneCount = isBatch ? selectedBatchClassIds.length : 1;
                       const disabled =
                         sceneGenerationResources.blocker !== null ||
                         (isBatch
                           ? !domainReadyForGeneration ||
                             isSceneGenerationBusy ||
-                            selectedBatchPaths.length === 0
+                            selectedBatchClassIds.length === 0
                           : !canGenerateScene || isSceneGenerationBusy);
                       return (
                         <button
@@ -743,8 +663,8 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                             setSceneGenerationError(null);
                             if (isBatch) {
                               void runBatchGeneration({
-                                selectedPaths: selectedBatchPaths,
-                                loadPresetText: loadTextFromPreset,
+                                selectedClassIds: selectedBatchClassIds,
+                                loadScenarioText,
                                 generateBatch,
                                 sceneGenerationTimeoutSeconds,
                                 isAborted: () =>
@@ -795,12 +715,11 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                       Next: Trajectory Generation
                     </button>
                   </div>
-                  {!canGenerateScene && sceneGenerationTab === "single" && (
-                    <p className="meta">
-                      {functionalSpecText.trim().length === 0
-                        ? "Choose or write a scenario specification on the right to enable generating."
-                        : "The domain configuration is incomplete: load the COLREGS, vessel and obstacle files on the Domain Configuration page."}
-                    </p>
+                  {!domainReadyForGeneration ? (
+                    <p className="meta">{domainProblem}</p>
+                  ) : (
+                    !canGenerateScene &&
+                    sceneGenerationTab === "single" && <p className="meta">Choose or write a scenario specification on the right to enable generating.</p>
                   )}
                   <Disclosure
                     id="scene-gen:options"
@@ -1018,20 +937,21 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                   setFunctionalSpecText(text);
                   setFunctionalSpecLabel((label) => (label === null || label.endsWith(" (edited)") ? label : `${label} (edited)`));
                 }}
-                onLoadFunctionalSpecFromPreset={(path) => {
+                onLoadFunctionalSpecFromPreset={(classId) => {
                   void (async () => {
                     try {
-                      const text = await loadTextFromPreset(path);
+                      const text = await loadScenarioText(classId);
                       setFunctionalSpecText(text);
-                      setFunctionalSpecLabel(formatFunctionalPresetLabel(path));
+                      setFunctionalSpecLabel(classId);
                       setSceneGenerationError(null);
                     } catch (error) {
                       setSceneGenerationError(
-                        error instanceof Error ? error.message : "Failed to load functional spec preset."
+                        error instanceof Error ? `The functional scenario could not be loaded: ${error.message}` : "The functional scenario could not be loaded."
                       );
                     }
                   })();
                 }}
+                loadScenarioText={loadScenarioText}
                 onLoadFunctionalSpecFromFile={(file) => {
                   void (async () => {
                     const text = await readTextFile(file);

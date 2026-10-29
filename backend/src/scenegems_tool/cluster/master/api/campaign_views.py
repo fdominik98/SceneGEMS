@@ -185,6 +185,8 @@ def case_view(case: CaseRecord) -> Dict[str, Any]:
         "scene_artifact": case.scene_artifact,
         "trajectories_artifact": case.trajectories_artifact,
         "trajectories_complete": case.trajectories_complete,
+        "input_artifact": case.input_artifact,
+        "input_source": case.input_source,
         "reason": case.reason,
         "created_at": iso(case.created_at),
         "updated_at": iso(case.updated_at),

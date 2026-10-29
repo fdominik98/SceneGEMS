@@ -1,0 +1,112 @@
+/* Overlay scrollbars (overlayScrollbars.ts). The native scrollbars are hidden everywhere, so they take no
+   room; the thumbs are drawn over the content in one fixed layer instead. */
+
+* {
+  scrollbar-width: none;
+}
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+.overlay-scrollbars {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* One frame per scroll container, covering the part of it that is visible; it clips the thumbs. */
+.overlay-scrollbars-frame {
+  position: absolute;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+
+.overlay-scrollbars-frame.is-visible {
+  opacity: 1;
+  transition-duration: 120ms;
+}
+
+/* The thumb is a 10px hit area; the pill drawn in it hugs the container's edge. */
+.overlay-scrollbar {
+  position: absolute;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.overlay-scrollbar[hidden] {
+  display: none;
+}
+
+.overlay-scrollbars-frame.is-visible .overlay-scrollbar {
+  pointer-events: auto;
+}
+
+.overlay-scrollbar::before {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  transition:
+    width 140ms ease,
+    height 140ms ease,
+    background-color 140ms ease;
+}
+
+.overlay-scrollbar.is-vertical::before {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--scrollbar-size);
+}
+
+.overlay-scrollbar.is-horizontal::before {
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--scrollbar-size);
+}
+
+.overlay-scrollbar:hover::before,
+.overlay-scrollbar.is-active::before {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.overlay-scrollbar.is-active::before {
+  background: var(--scrollbar-thumb-active);
+}
+
+.overlay-scrollbar.is-vertical:hover::before,
+.overlay-scrollbar.is-vertical.is-active::before {
+  width: var(--scrollbar-size-hover);
+}
+
+.overlay-scrollbar.is-horizontal:hover::before,
+.overlay-scrollbar.is-horizontal.is-active::before {
+  height: var(--scrollbar-size-hover);
+}
+
+/* While a thumb is dragged the page neither selects text nor shows the cursors of what the pointer passes. */
+.is-dragging-scrollbar,
+.is-dragging-scrollbar * {
+  user-select: none !important;
+  cursor: default !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-scrollbars-frame,
+  .overlay-scrollbar::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .overlay-scrollbar::before,
+  .overlay-scrollbar:hover::before,
+  .overlay-scrollbar.is-active::before {
+    background: CanvasText;
+  }
+}

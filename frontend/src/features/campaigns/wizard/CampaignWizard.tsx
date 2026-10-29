@@ -16,6 +16,7 @@ import { ResourcesStep } from "./ResourcesStep";
 import { ReviewStep } from "./ReviewStep";
 import { RunsStep } from "./RunsStep";
 import { InputStep } from "./InputStep";
+import { PresetBar } from "./PresetBar";
 import { StepsStep } from "./StepsStep";
 import { visibleWizardSteps } from "./stepPlan";
 import type { CatalogState, ClusterResources, StepProps } from "./stepTypes";
@@ -54,6 +55,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const visited = useWizardStore((state) => state.visited);
   const setStep = useWizardStore((state) => state.setStep);
   const update = useWizardStore((state) => state.update);
+  const replaceDraft = useWizardStore((state) => state.replaceDraft);
   const reset = useWizardStore((state) => state.reset);
 
   // The pages of the chosen steps; a stored page that the steps no longer include falls back to the first
@@ -241,6 +243,15 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
           </button>
         </div>
       </header>
+      <PresetBar
+        draft={draft}
+        catalog={stacks.data ? builderCatalog : null}
+        onLoad={(next) => {
+          replaceDraft(next);
+          resetValidation();
+          setCreateMessage(null);
+        }}
+      />
       <nav className="wiz-steps" aria-label="Wizard steps">
         <ol>
           {pages.map((id, at) => {

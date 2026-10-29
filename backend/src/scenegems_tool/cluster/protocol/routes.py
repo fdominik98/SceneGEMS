@@ -15,5 +15,7 @@ CAMPAIGNS_PATH = "/cluster/campaigns"
 LIVE_PATH = "/cluster/live"  # operator API: the browser's live channel WebSocket (live.py)
 
 CATALOG_PATH = "/cluster/catalog"  # operator API: GET <CATALOG_PATH>/classes the class catalog, GET <CATALOG_PATH>/stacks what a campaign run may use (catalog_routes.py)
+DOMAIN_PATH = "/cluster/domain"  # operator API: GET and POST the cluster's domain configuration (setting_routes.py)
+CAMPAIGN_PRESETS_PATH = "/cluster/campaign-presets"  # operator API: GET the presets, POST one to save, DELETE <CAMPAIGN_PRESETS_PATH>/<preset id> (setting_routes.py)
 
 NODE_ID_HEADER = "X-Node-Id"  # the node's id on the artifact routes; on the control socket the Hello names it

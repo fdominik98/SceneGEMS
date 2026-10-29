@@ -8,6 +8,7 @@ The migrations create exactly these tables; a test compares them.
     campaign_tables.py  campaign, campaign_config_version, campaign_class, scenario_case, pipeline_job,
                         pipeline_cursor, run_record, verdict, campaign_event, their states, kinds and steps
     artifact_tables.py  artifact, artifact_reference, calibration_result and the sha256 hex format
+    setting_tables.py   cluster_domain (the cluster's domain configuration) and campaign_preset (saved presets)
 """
 
 from scenegems_tool.persistence.schema.artifact_tables import ArtifactHolderKind, ArtifactReferenceRow, ArtifactRow, CalibrationResultRow
@@ -38,8 +39,10 @@ from scenegems_tool.persistence.schema.campaign_tables import (
 )
 from scenegems_tool.persistence.schema.job_tables import HELD_UNTIL, JobEventKind, JobEventRow, JobRow
 from scenegems_tool.persistence.schema.node_tables import NodeCapabilityRow, NodeFingerprintRow, NodeRow, NodeStatus
+from scenegems_tool.persistence.schema.setting_tables import CLUSTER_DOMAIN_ROW_ID, CampaignPresetRow, ClusterDomainRow
 
 __all__ = [
+    "CLUSTER_DOMAIN_ROW_ID",
     "HELD_UNTIL",
     "ArtifactHolderKind",
     "ArtifactReferenceRow",
@@ -55,8 +58,10 @@ __all__ = [
     "CampaignEventRow",
     "CampaignKind",
     "CampaignOrigin",
+    "CampaignPresetRow",
     "CampaignRow",
     "CaseState",
+    "ClusterDomainRow",
     "JobEventKind",
     "JobEventRow",
     "JobRow",

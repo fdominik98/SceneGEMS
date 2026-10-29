@@ -1,0 +1,27 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Three-vessel encounters on the kinematic layer"
+description: >-
+  Three cases of every three-vessel class, with and without a static obstacle (56 classes, 168
+  cases), through the whole chain with a kinematic replay and the post hoc monitor. Covers
+  situations where the own ship meets two target ships at once.
+steps: [scene_generation, trajectory_generation, simulation]
+scope:
+  - patterns: [3vessel_*_scenarios]
+    quota: 3
+    failure_budget: 3
+domain:
+  scene_generation_timeout_s: 120
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+execution:
+  runs:
+    - name: kinematic replay
+      stack: {simulation_layer: kinematic, mode: replay}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

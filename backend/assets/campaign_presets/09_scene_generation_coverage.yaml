@@ -1,0 +1,20 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Scene generation over the whole catalog"
+description: >-
+  One scene for every functional scenario of the catalog, from one to six vessels, each judged by
+  the post hoc monitor as a single scene. No trajectories are planned. Shows which functional
+  scenarios the scene generation cannot satisfy within its timeout.
+steps: [scene_generation]
+scope:
+  - patterns: ["*"]
+    quota: 1
+    failure_budget: 2
+domain:
+  scene_generation_timeout_s: 120
+  enforce_low_tcpa: false
+scene_generation:
+  monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

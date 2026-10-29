@@ -294,6 +294,9 @@ export const caseViewSchema = z.object({
   scene_artifact: z.string().nullable(),
   trajectories_artifact: z.string().nullable(),
   trajectories_complete: z.boolean().nullable(),
+  /** The artifact the case started from (a functional scenario or an item), null for a catalog class; an older master leaves it out. */
+  input_artifact: z.string().nullish(),
+  input_source: z.record(z.string(), z.unknown()).nullish(),
   reason: z.string().nullable(),
   created_at: isoTime,
   updated_at: isoTime,

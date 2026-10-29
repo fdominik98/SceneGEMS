@@ -7,6 +7,26 @@ title: Campaign wizard
 
 The Campaigns section defines and starts campaigns. A campaign runs a consecutive part of the chain scene generation, trajectory generation and simulation, with an optional monitor after each step. The wizard walks through the choices and checks the finished config on the master before it creates the campaign. Your entries are kept in this browser until the campaign is created or you discard them.
 
+## Presets
+
+Above the pages, **Start from a preset** lists the campaign presets of the active cluster's master: the ones its image ships for campaign runs that come up again and again (`backend/assets/campaign_presets/`), and the ones saved on the cluster. **Load into the wizard** replaces the draft with the preset (the wizard asks first when the draft has entries) and opens the Steps page, so you only adjust what differs.
+
+| Shipped preset | What it runs |
+|----------------|--------------|
+| Smoke test: one case per two-vessel class | The whole chain once per two-vessel class without obstacles, kinematic replay: the check after a deployment |
+| Two-vessel encounters on the kinematic layer | Five cases of each two-vessel class, with and without an obstacle |
+| Three-vessel encounters on the kinematic layer | Three cases of each three-vessel class |
+| Four-vessel encounters on the kinematic layer | One case of each four-vessel class, with longer timeouts |
+| USV Navigation against the planned trajectories | Two runs per case: the planned trajectories replayed, and USV Navigation steering the own ship |
+| ArduPilot SITL replay of two-vessel encounters | The planned trajectories replayed on ArduPilot SITL |
+| ArduPilot SITL repeatability: three repeats per case | Three SITL repeats per case, so calibration measures their deviation |
+| Gazebo replay of two-vessel encounters | The planned trajectories replayed on SITL against a Gazebo world |
+| Scene generation over the whole catalog | One scene per functional scenario, judged as a single scene |
+| Trajectory planning check without simulation | Scene and trajectory generation with the planned trajectories judged |
+| Simulate saved trajectories: kinematic and ArduPilot SITL | Simulation only; pick the trajectories on the Input page |
+
+**Save this draft as a preset** stores the current draft on the master under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
+
 ## Pages
 
 The wizard shows only the pages the chosen steps need.
@@ -15,7 +35,7 @@ The wizard shows only the pages the chosen steps need.
 |------|------------|---------------|
 | Steps | always | The campaign's name and description, the first and the last step, and the monitor after scene generation and after trajectory generation |
 | Input | always | What the first step starts from: catalog classes and scenario files, scenes, or trajectories |
-| Domain | always | The master's domain content or customized COLREGS constants, vessel types and obstacle types. The scene generation timeout and the low TCPA option appear only with scene generation |
+| Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only. The scene generation timeout and the low TCPA option appear only with scene generation |
 | Trajectories | trajectory generation is a step | The trajectory generator and its parameters |
 | Runs | simulation is a step | The simulation runs: stack (kinematic, or replay on ArduPilot SITL or Gazebo), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |

@@ -17,6 +17,13 @@
   --accent-strong: #60a5fa;
   --focus-ring: #7dd3fc;
 
+  /* Overlay scrollbars (app/overlayScrollbars): a thin pill at rest, wider under the pointer, accent while dragged. */
+  --scrollbar-thumb: rgba(148, 163, 184, 0.38);
+  --scrollbar-thumb-hover: rgba(168, 181, 200, 0.7);
+  --scrollbar-thumb-active: rgba(56, 189, 248, 0.85);
+  --scrollbar-size: 3px;
+  --scrollbar-size-hover: 7px;
+
   /* Spacing scale (4px base). */
   --space-1: 4px;
   --space-2: 8px;
@@ -133,8 +140,7 @@ body,
   min-height: 0;
 }
 
-.load-scenario-layout:has(.scene-generation-sidebar),
-.load-scenario-layout:has(.domain-configuration-panel) {
+.load-scenario-layout:has(.scene-generation-sidebar) {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -156,54 +162,6 @@ body,
   flex: 1 1 260px;
   min-width: 0;
   max-width: 560px;
-}
-
-.domain-config-dual-panel {
-  flex: 1;
-  min-height: 0;
-}
-
-.domain-config-dual-columns {
-  display: flex;
-  flex-direction: row;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-
-.domain-config-dual-columns.is-resizing {
-  user-select: none;
-  cursor: col-resize;
-}
-
-.domain-config-column-resizer {
-  flex: 0 0 6px;
-  width: 6px;
-  cursor: col-resize;
-  background: #1e293b;
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-  align-self: stretch;
-  border-radius: var(--radius-sm);
-}
-
-.domain-config-column-resizer:hover {
-  background: var(--border);
-}
-
-.domain-config-column {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  min-height: 0;
-  min-width: 0;
-}
-
-.domain-config-column h4 {
-  margin: 0;
-  font-size: var(--font-size);
-  font-weight: 600;
-  color: var(--text);
 }
 
 .load-scenario-layout .panel {

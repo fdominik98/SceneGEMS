@@ -1,0 +1,27 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Smoke test: one case per two-vessel class"
+description: >-
+  One case of each of the seven two-vessel classes without obstacles runs through scene generation,
+  trajectory generation and a kinematic replay, judged by the post hoc monitor. Run it after a
+  deployment or an update to check that every step works on the cluster.
+steps: [scene_generation, trajectory_generation, simulation]
+scope:
+  - patterns: [2vessel_0obstacle_scenarios]
+    quota: 1
+    failure_budget: 1
+domain:
+  scene_generation_timeout_s: 60
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+execution:
+  runs:
+    - name: kinematic replay
+      stack: {simulation_layer: kinematic, mode: replay}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

@@ -7,8 +7,9 @@ Sections:
     scope           classes (catalog ids or folder patterns), each entry with a quota and a failure budget
     input           format 2: functional scenarios given as content (a campaign that starts with scene
                     generation) or items, outputs of earlier steps or uploaded files (one that starts later)
-    domain          COLREGS constants, vessel types and obstacle types as content (defaults from
-                    backend/assets/domain_config/), the scene generation timeout, enforce_low_tcpa
+    domain          COLREGS constants, vessel types and obstacle types as content (defaults: the
+                    cluster's domain configuration when the master fills them in, else the default
+                    presets of backend/assets/domain_config/), the scene generation timeout, enforce_low_tcpa
     scene_generation  format 2: the monitor of the generated scenes (post_hoc or empty)
     trajectories    the generator: monitor_driven_rrt with its search parameters (the wire keys of
                     TrajectoryGenerationParams) or straight with its timespan; the timeout; format 2:
@@ -48,27 +49,19 @@ from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEY
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
+from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TrajectoryGenerationParams
-from utils.file_system_utils import COLREGS_CONSTANTS_FOLDER, STATIC_OBSTACLE_TYPES_FOLDER, VESSEL_TYPES_FOLDER
 
 CONFIG_FORMAT = 1  # the format of a config that names none
 MAX_SEED = 2**31 - 1  # seeds are 31-bit, so every consumer (numpy included) takes them
 
-DEFAULT_COLREGS_CONSTANTS_FILE = Path(COLREGS_CONSTANTS_FOLDER) / "general_maritime_constants.yaml"
-DEFAULT_VESSEL_TYPES_FILE = Path(VESSEL_TYPES_FOLDER) / "vessel_types.yaml"
-DEFAULT_OBSTACLE_TYPES_FILE = Path(STATIC_OBSTACLE_TYPES_FOLDER) / "static_obstacle_types.yaml"
+DEFAULT_COLREGS_CONSTANTS_FILE = default_preset_file("colregs_constants")
+DEFAULT_VESSEL_TYPES_FILE = default_preset_file("vessel_types")
+DEFAULT_OBSTACLE_TYPES_FILE = default_preset_file("obstacle_types")
 
 # The generator choice travels in the trajectory parameters on the wire (P4.2); here it is its own field
 GENERATOR_CHOICE_KEYS = frozenset({"generator", "timespan"})
 SEARCH_PARAM_KEYS = frozenset(PARAM_KEYS) - GENERATOR_CHOICE_KEYS
-
-
-def normalize_newlines(content: str) -> str:
-    return content.replace("\r\n", "\n").replace("\r", "\n")
-
-
-def read_domain_file(path: Path) -> str:
-    return normalize_newlines(path.read_text(encoding="utf-8"))
 
 
 class ConfigModel(BaseModel):
@@ -566,15 +559,30 @@ def campaign_config_from_dict(data: Mapping[str, Any]) -> CampaignConfig:
         raise CampaignConfigError(_reasons(error)) from error
 
 
-def parse_campaign_config(text: str) -> CampaignConfig:
-    """A config from YAML text (JSON is YAML too)."""
+def with_domain_defaults(data: Mapping[str, Any], domain_defaults: Optional[Mapping[str, str]]) -> Dict[str, Any]:
+    """The config's sections with the domain contents it leaves out taken from domain_defaults (the cluster's domain configuration).
+
+    A domain section that is not a mapping is left as it is, so validation reports it.
+    """
+    filled = dict(data)
+    if not domain_defaults:
+        return filled
+    domain = filled.get("domain", {})
+    if not isinstance(domain, dict):
+        return filled
+    filled["domain"] = {**{key: domain_defaults[key] for key in DOMAIN_KEYS if key in domain_defaults and key not in domain}, **domain}
+    return filled
+
+
+def parse_campaign_config(text: str, domain_defaults: Optional[Mapping[str, str]] = None) -> CampaignConfig:
+    """A config from YAML text (JSON is YAML too); domain contents it leaves out come from domain_defaults when given, else the default presets."""
     try:
         data = yaml.load(text, Loader=_UniqueKeyLoader)  # noqa: S506 (a SafeLoader subclass)
     except yaml.YAMLError as error:
         raise CampaignConfigError([f"not valid YAML: {error}"]) from error
     if not isinstance(data, dict):
         raise CampaignConfigError(["a campaign config is a mapping of its sections"])
-    return campaign_config_from_dict(data)
+    return campaign_config_from_dict(with_domain_defaults(data, domain_defaults))
 
 
 def load_campaign_config(path: Union[str, Path]) -> CampaignConfig:

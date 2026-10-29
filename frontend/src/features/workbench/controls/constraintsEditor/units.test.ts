@@ -107,4 +107,11 @@ describe("formatDisplayNumber", () => {
     expect(formatDisplayNumber(0)).toBe("0");
     expect(formatDisplayNumber(0.0000001234)).toBe("1.234e-7");
   });
+
+  it("takes fewer significant digits for a converted value", () => {
+    expect(formatDisplayNumber(50.00002484, 6)).toBe("50");
+    expect(formatDisplayNumber(1.7188733853924696, 6)).toBe("1.71887");
+    expect(formatDisplayNumber(0.0001396263402, 6)).toBe("0.000139626");
+    expect(formatDisplayNumber(14.66522786, 6)).toBe("14.6652");
+  });
 });

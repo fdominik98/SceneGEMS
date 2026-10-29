@@ -1,0 +1,27 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "ArduPilot SITL replay of two-vessel encounters"
+description: >-
+  Two cases of every two-vessel class replayed on ArduPilot SITL at ten times real time, judged by
+  the post hoc monitor. Checks that the planned trajectories stay compliant when an autopilot
+  follows them in calm water.
+steps: [scene_generation, trajectory_generation, simulation]
+scope:
+  - patterns: [2vessel_*_scenarios]
+    quota: 2
+    failure_budget: 2
+domain:
+  scene_generation_timeout_s: 60
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+execution:
+  runs:
+    - name: ardupilot sitl replay
+      stack: {simulation_layer: ardupilot_sim, mode: replay, speedup: 10}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

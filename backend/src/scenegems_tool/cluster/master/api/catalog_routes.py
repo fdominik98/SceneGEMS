@@ -7,6 +7,10 @@ campaign stores. Like the other operator routes they have no authentication yet.
                                            obstacle counts, content hash. folder is a catalog folder, pattern a scope pattern (a folder
                                            pattern without a slash, a class id pattern with one); both narrow the list. The number of
                                            matching classes is in X-Total-Count. 503 when the master has no catalog folder
+    GET CATALOG_PATH/classes/<class id>    the class's functional scenario (.problem text, LF line endings, text/plain): the preset the
+                                           workbench's scene generation loads into its editor. 404 for an unknown class, 503 without a catalog
+    GET CATALOG_PATH/domain-presets        the domain presets of backend/assets/domain_config/: {"colregs_constants": [...],
+                                           "vessel_types": [...], "obstacle_types": [...]}, each preset {"name", "default", "content"}
     GET CATALOG_PATH/stacks                the stack options a campaign config accepts with their repeatability tier and parameters,
                                            the monitors, the trajectory generators with their parameter keys and defaults, the run
                                            fields, and the resolver's other stacks with the reasons a campaign cannot use them
@@ -21,9 +25,10 @@ from typing import Optional
 
 import anyio
 from fastapi import APIRouter, HTTPException, Response
+from fastapi.responses import PlainTextResponse
 
 from scenegems_tool.architecture.architecture_files import architecture_view
-from scenegems_tool.cluster.master.api.catalog_views import class_view, stacks_view
+from scenegems_tool.cluster.master.api.catalog_views import class_view, domain_presets_view, stacks_view
 from scenegems_tool.cluster.protocol.routes import CATALOG_PATH
 
 MAX_LISTED = 1000
@@ -31,14 +36,43 @@ MAX_LISTED = 1000
 
 def catalog_router() -> APIRouter:
     router = APIRouter()
+    router.include_router(_class_routes())
 
-    def classes(folder: Optional[str], pattern: Optional[str]) -> list:
-        # Imported here: the catalog module is part of the campaign package, whose config model the master keeps out of its startup
-        from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
+    @router.get(CATALOG_PATH + "/domain-presets")
+    async def list_domain_presets() -> dict:
+        return await anyio.to_thread.run_sync(domain_presets_view)
 
-        catalog = ClassCatalog.default()
-        found = catalog.classes() if not pattern else catalog.expand(pattern)
-        return [scenario_class for scenario_class in found if folder is None or scenario_class.folder == folder]
+    @router.get(CATALOG_PATH + "/stacks")
+    async def list_stacks() -> dict:
+        return await anyio.to_thread.run_sync(stacks_view)
+
+    @router.get(CATALOG_PATH + "/architecture")
+    async def get_architecture() -> dict:
+        return await anyio.to_thread.run_sync(architecture_view)
+
+    return router
+
+
+def classes(folder: Optional[str], pattern: Optional[str]) -> list:
+    # Imported here: the catalog module is part of the campaign package, whose config model the master keeps out of its startup
+    from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
+
+    catalog = ClassCatalog.default()
+    found = catalog.classes() if not pattern else catalog.expand(pattern)
+    return [scenario_class for scenario_class in found if folder is None or scenario_class.folder == folder]
+
+
+def class_content(class_id: str) -> str:
+    from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog, UnknownClassId
+
+    try:
+        return ClassCatalog.default().get(class_id).read_content()
+    except UnknownClassId:
+        raise HTTPException(status_code=404, detail=f"no class {class_id} in the catalog")
+
+
+def _class_routes() -> APIRouter:
+    router = APIRouter()
 
     @router.get(CATALOG_PATH + "/classes")
     async def list_classes(response: Response, folder: Optional[str] = None, pattern: Optional[str] = None, limit: int = 100, offset: int = 0) -> list:
@@ -50,12 +84,12 @@ def catalog_router() -> APIRouter:
         start = max(0, offset)
         return [class_view(scenario_class) for scenario_class in found[start : start + max(1, min(limit, MAX_LISTED))]]
 
-    @router.get(CATALOG_PATH + "/stacks")
-    async def list_stacks() -> dict:
-        return await anyio.to_thread.run_sync(stacks_view)
-
-    @router.get(CATALOG_PATH + "/architecture")
-    async def get_architecture() -> dict:
-        return await anyio.to_thread.run_sync(architecture_view)
+    @router.get(CATALOG_PATH + "/classes/{class_id:path}", response_class=PlainTextResponse)
+    async def get_class_content(class_id: str) -> PlainTextResponse:
+        try:
+            content = await anyio.to_thread.run_sync(class_content, class_id)
+        except FileNotFoundError as error:
+            raise HTTPException(status_code=503, detail=str(error))
+        return PlainTextResponse(content, media_type="text/plain; charset=utf-8")
 
     return router

@@ -153,9 +153,8 @@ interface NavEntry<T> {
   Icon: (props: IconProps) => ReactElement;
 }
 
-/** The workbench views in the order of the workflow: configure, generate a scene, plan trajectories, simulate. */
+/** The workbench views in the order of the workflow: generate a scene, plan trajectories, simulate. */
 const WORKBENCH_ITEMS: NavEntry<WorkbenchView>[] = [
-  { id: "domainConfig", label: "Domain Configuration", hint: "Set the rules and vessel types", Icon: DomainConfigIcon },
   { id: "sceneGeneration", label: "Scene Generation", hint: "Create a starting scene", Icon: SceneGenerationIcon },
   { id: "trajectoryGeneration", label: "Trajectory Generation", hint: "Plan the vessel routes", Icon: TrajectoryGenerationIcon },
   { id: "simulation", label: "Simulation", hint: "Watch the scenario play", Icon: SimulationIcon },
@@ -164,6 +163,7 @@ const WORKBENCH_ITEMS: NavEntry<WorkbenchView>[] = [
 
 const CLUSTER_ITEMS: NavEntry<AppSection>[] = [
   { id: "cluster", label: "Cluster", hint: "Machines and what they run", Icon: ClusterIcon },
+  { id: "domain", label: "Domain Configuration", hint: "Rules and vessel types of the cluster", Icon: DomainConfigIcon },
   { id: "capabilities", label: "Capabilities", hint: "What the system can run", Icon: CapabilitiesIcon },
   { id: "campaigns", label: "Campaigns", hint: "Define and start a campaign", Icon: CampaignsIcon },
   { id: "history", label: "Campaign History", hint: "Campaigns and runs, with outputs", Icon: HistoryIcon },

@@ -23,10 +23,17 @@ CAMPAIGN_TABLES = {
     "artifact_reference",
     "calibration_result",
 }
+SETTING_TABLES = {"cluster_domain", "campaign_preset"}
 
 
 def test_tables():
-    assert set(Base.metadata.tables) == CLUSTER_TABLES | CAMPAIGN_TABLES
+    assert set(Base.metadata.tables) == CLUSTER_TABLES | CAMPAIGN_TABLES | SETTING_TABLES
+
+
+def test_the_cluster_domain_has_one_row_at_most():
+    from scenegems_tool.persistence.schema import ClusterDomainRow
+
+    assert "ck_cluster_domain_single_row" in {constraint.name for constraint in ClusterDomainRow.__table__.constraints}
 
 
 def test_jobs_have_an_availability_and_events_their_transaction():

@@ -20,7 +20,8 @@ workbench gateway.
 
 The node view carries the machine the node runs on (null until a node that reports it says hello).
 
-The catalog routes (catalog_routes.py) are always there; the campaign routes (campaign_routes.py) join them when the master has the campaign stores.
+The catalog routes (catalog_routes.py) and the setting routes (setting_routes.py: the domain configuration and the campaign presets,
+read-only without the campaign stores) are always there; the campaign routes (campaign_routes.py) join them when the master has the campaign stores.
 """
 
 from typing import Optional
@@ -30,6 +31,7 @@ from fastapi import APIRouter, Body, HTTPException, Response
 
 from scenegems_tool.cluster.master.api.campaign_routes import campaign_router, unavailable_router
 from scenegems_tool.cluster.master.api.catalog_routes import catalog_router
+from scenegems_tool.cluster.master.api.setting_routes import setting_router
 from scenegems_tool.cluster.master.api.views import job_detail_view, job_view, node_view
 from scenegems_tool.cluster.master.control_plane import ControlPlane, FingerprintsUnavailable, InvalidPayload
 from scenegems_tool.cluster.protocol.jobs import JobState, JobSubmission
@@ -44,6 +46,7 @@ MAX_LISTED_JOBS = 1000
 def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = None) -> APIRouter:
     router = APIRouter()
     router.include_router(catalog_router())
+    router.include_router(setting_router(assurance))
     router.include_router(unavailable_router() if assurance is None else campaign_router(assurance, plane))
     router.include_router(_job_routes(plane))
     router.include_router(_node_routes(plane))

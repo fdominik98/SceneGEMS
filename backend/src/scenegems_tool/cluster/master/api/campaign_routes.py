@@ -19,6 +19,9 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
                                            beside the config, not in it, so they do not change its hash. The artifacts
                                            the config's input names are checked against the master's artifact store. The
                                            pipeline engine is woken, so the campaign does not wait for the next tick.
+                                           COLREGS constants, vessel types and obstacle types the config leaves out come
+                                           from the cluster's domain configuration (preset_routes.py), so the stored config
+                                           and its hash hold the contents the campaign runs with
                                            422 with {"message", "reasons"} for a config that does not load or that the
                                            catalog, the artifact store or the vessel stack resolver refuses
     GET  CAMPAIGNS_PATH?state=&kind=&origin=&q=&limit=&offset=      campaigns, newest first; state, kind and origin are repeatable,
@@ -29,7 +32,8 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
     GET  <id>                              the campaign with its classes (counts, state, verdicts per run and state) and totals
     GET  <id>/classes                      the classes alone
     GET  <id>/cases?class_id=&state=&stage=&limit=&offset=      cases by class and index
-    GET  <id>/cases/<case id>              the case with its jobs, run records and verdicts
+    GET  <id>/cases/<case id>              the case with its jobs, run records and verdicts. A case names its input_artifact (the
+                                           functional scenario or item it started from, null for a catalog class) and input_source
     GET  <id>/outputs?step=&state=&class_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
                                            simulation) by class and case: the artifact, whether it is valid and complete, the step's verdict
                                            and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run
@@ -204,17 +208,19 @@ async def _request_config(request: Request, name: Optional[str], start: Optional
     return _json_body(text, name, start, kind, origin)
 
 
-def _validated_config(text: str, artifacts: Any = None) -> Any:
+def _validated_config(text: str, artifacts: Any = None, stores: Optional[AssuranceStores] = None) -> Any:
     """The config text checked against the catalog, the resolver and, for the artifacts its input names, the master's artifact store
-    (a RecordedArtifacts, None without one); a ValidatedCampaign, or 422 with every reason when it does not pass."""
+    (a RecordedArtifacts, None without one); a ValidatedCampaign, or 422 with every reason when it does not pass. Domain contents the
+    config leaves out come from the cluster's domain configuration in stores, or the default presets while none is saved."""
     # Imported here: the config model pulls in numpy and the job type modules, which the master keeps out of its startup
     from scenegems_tool.assurance.campaign import CampaignConfigError, parse_campaign_config, validate_campaign_config
 
     callables: Dict[str, Any] = {}
     if artifacts is not None:
         callables = {"artifact_exists": lambda sha256: artifacts.record(sha256) is not None, "read_artifact": artifacts.store.read}
+    saved = stores.domain.current() if stores is not None else None
     try:
-        return validate_campaign_config(parse_campaign_config(text), **callables)
+        return validate_campaign_config(parse_campaign_config(text, None if saved is None else saved.contents()), **callables)
     except CampaignConfigError as error:
         raise _config_problem(error.reasons)
 
@@ -279,7 +285,7 @@ def _create_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
     router = APIRouter()
 
     def create(request: CreateRequest, artifacts: Any) -> tuple:
-        validated = _validated_config(request.text, artifacts)
+        validated = _validated_config(request.text, artifacts, stores)
         # Pin what this master expects now. Without a listing yet the campaign has none and the engine pins it at start
         pinned = plane.expected.current() or {}
         campaign = stores.campaigns.create_campaign(
@@ -306,7 +312,7 @@ def _create_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
     @router.post(CAMPAIGNS_PATH + "/validate")
     async def validate_campaign(request: Request, name: Optional[str] = None, start: Optional[bool] = None, kind: Optional[str] = None, origin: Optional[str] = None) -> dict:
         text = (await _request_config(request, name, start, kind, origin)).text
-        return validated_campaign_view(await _run(_validated_config, text, _artifact_store(request)))
+        return validated_campaign_view(await _run(_validated_config, text, _artifact_store(request), stores))
 
     @router.post(CAMPAIGNS_PATH)
     async def create_campaign(request: Request, response: Response, name: Optional[str] = None, start: Optional[bool] = None, kind: Optional[str] = None, origin: Optional[str] = None) -> dict:

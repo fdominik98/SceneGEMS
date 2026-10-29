@@ -167,6 +167,12 @@
   font-family: var(--font-mono);
 }
 
+.ce-converted {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .ce-equals {
   color: var(--text-faint);
 }
@@ -288,7 +294,7 @@
 
 .ce-table th,
 .ce-table td {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3);
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
@@ -317,12 +323,24 @@
   white-space: normal;
 }
 
+/* Room for eleven characters (25.722235, a converted 0.000139626) in the monospace font, plus the padding */
 .ce-table .ce-number {
-  width: 6.5em;
+  width: calc(12ch + 32px);
 }
 
+/* In a table cell the converted value stands under the value, so a column is one field wide */
 .ce-table .ce-number-control {
-  flex-wrap: nowrap;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-1);
+}
+
+.ce-table .ce-converted {
+  gap: var(--space-2);
+}
+
+.ce-table .ce-converted .ce-number {
+  color: var(--text-muted);
 }
 
 .ce-table-name {
@@ -358,14 +376,20 @@
   font-size: var(--font-size-xs);
 }
 
+/* The row's buttons stand under each other, so the column is one button wide */
 .ce-row-actions {
   white-space: nowrap;
 }
 
 .ce-row-actions button {
+  display: block;
+  width: 100%;
   min-height: var(--hit-target);
   padding: 1px 6px;
-  margin-right: var(--space-2);
+}
+
+.ce-row-actions button + button {
+  margin-top: var(--space-1);
 }
 
 .ce-pending {

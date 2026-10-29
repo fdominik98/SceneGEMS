@@ -53,8 +53,8 @@ describe("uiStore sections", () => {
 
   it("keeps a v4 state as it is", () => {
     storage.setItem(ui.LEGACY_ACTIVE_VIEW_KEY, JSON.stringify("waraps"));
-    const state = migrate({ section: "cluster", workbenchView: "domainConfig" }, 4);
-    expect(state).toEqual({ section: "cluster", workbenchView: "domainConfig" });
+    const state = migrate({ section: "cluster", workbenchView: "trajectoryGeneration" }, 4);
+    expect(state).toEqual({ section: "cluster", workbenchView: "trajectoryGeneration" });
   });
 
   it("renames the WARA-PS view to connections in v5", () => {
@@ -69,12 +69,20 @@ describe("uiStore sections", () => {
   });
 
   it("leaves other sections alone when migrating to v6", () => {
-    expect(migrate({ section: "results", workbenchView: "domainConfig" }, 5)).toEqual({ section: "results", workbenchView: "domainConfig" });
+    expect(migrate({ section: "results", workbenchView: "trajectoryGeneration" }, 5)).toEqual({ section: "results", workbenchView: "trajectoryGeneration" });
     expect(migrate({ section: "history" }, 5).section).toBe("history");
   });
 
   it("does not rename a v6 state", () => {
     expect(migrate({ section: "observe" }, 6).section).toBe("observe");
+  });
+
+  it("moves the domain configuration out of the workbench into the cluster's section in v7", () => {
+    expect(migrate({ section: "workbench", workbenchView: "domainConfig" }, 6)).toEqual({ section: "domain", workbenchView: "sceneGeneration" });
+    expect(migrate({ section: "results", workbenchView: "domainConfig" }, 6)).toEqual({ section: "results", workbenchView: "sceneGeneration" });
+    expect(migrate({ section: "workbench", workbenchView: "simulation" }, 6)).toEqual({ section: "workbench", workbenchView: "simulation" });
+    expect(ui.WORKBENCH_VIEWS as readonly string[]).not.toContain("domainConfig");
+    expect(ui.APP_SECTIONS).toContain("domain");
   });
 
   it("lists history among the sections and not observe", () => {
@@ -84,9 +92,9 @@ describe("uiStore sections", () => {
 
   it("takes the workbench view from the old key when there is no stored ui state", async () => {
     vi.resetModules();
-    storage.setItem(ui.LEGACY_ACTIVE_VIEW_KEY, JSON.stringify("domainConfig"));
+    storage.setItem(ui.LEGACY_ACTIVE_VIEW_KEY, JSON.stringify("trajectoryGeneration"));
     const fresh = await import("./uiStore");
-    expect(fresh.useUiStore.getState().workbenchView).toBe("domainConfig");
+    expect(fresh.useUiStore.getState().workbenchView).toBe("trajectoryGeneration");
     expect(fresh.useUiStore.getState().section).toBe("workbench");
   });
 
@@ -100,6 +108,6 @@ describe("uiStore sections", () => {
     const persisted = partialize(ui.useUiStore.getState()) as Record<string, unknown>;
     expect(persisted.section).toBe("history");
     expect(persisted.workbenchView).toBe("trajectoryGeneration");
-    expect(ui.useUiStore.persist.getOptions().version).toBe(6);
+    expect(ui.useUiStore.persist.getOptions().version).toBe(7);
   });
 });

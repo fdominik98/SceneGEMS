@@ -8,9 +8,7 @@
     "docs:dev": "npm run start --prefix website",
     "docs:pdf": "node scripts/generate-docs-pdf.mjs",
     "docs:build": "npm run docs:pdf && npm run build --prefix website",
-    "prebuild": "node scripts/generate-presets-manifest.mjs",
     "build": "npm run docs:build && node scripts/stage-docs.mjs && tsc -b && vite build",
-    "presets:manifest": "node scripts/generate-presets-manifest.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"

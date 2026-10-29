@@ -1,0 +1,22 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Trajectory planning check without simulation"
+description: >-
+  Two cases of every two- and three-vessel class through scene and trajectory generation, with the
+  planned trajectories judged by the post hoc monitor. Checks the planner on its own, without the
+  time a simulation takes.
+steps: [scene_generation, trajectory_generation]
+scope:
+  - patterns: [2vessel_*_scenarios, 3vessel_*_scenarios]
+    quota: 2
+    failure_budget: 2
+domain:
+  scene_generation_timeout_s: 120
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+  monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

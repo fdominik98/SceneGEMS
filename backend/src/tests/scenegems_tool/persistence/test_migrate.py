@@ -32,9 +32,9 @@ from scenegems_tool.persistence.schema import (
     VerdictState,
 )
 from scenegems_tool.persistence.schema.campaign_tables import KIND_OF_ORIGIN_CHECK
-from tests.scenegems_tool.persistence.schema.test_tables import CAMPAIGN_TABLES, CLUSTER_TABLES
+from tests.scenegems_tool.persistence.schema.test_tables import CAMPAIGN_TABLES, CLUSTER_TABLES, SETTING_TABLES
 
-ALL_TABLES = CLUSTER_TABLES | CAMPAIGN_TABLES
+ALL_TABLES = CLUSTER_TABLES | CAMPAIGN_TABLES | SETTING_TABLES
 
 
 def _scripts() -> ScriptDirectory:
@@ -56,13 +56,14 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0005"]
+    assert scripts.get_heads() == ["0006"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0005", "0004", "0003", "0002", "0001"]
-    assert revisions[0].down_revision == "0004"
-    assert revisions[1].down_revision == "0003"
-    assert revisions[2].down_revision == "0002"
-    assert revisions[3].down_revision == "0001"
+    assert [revision.revision for revision in revisions] == ["0006", "0005", "0004", "0003", "0002", "0001"]
+    assert revisions[0].down_revision == "0005"
+    assert revisions[1].down_revision == "0004"
+    assert revisions[2].down_revision == "0003"
+    assert revisions[3].down_revision == "0002"
+    assert revisions[4].down_revision == "0001"
     assert revisions[-1].down_revision is None
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
@@ -129,7 +130,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0005"
+            assert MigrationContext.configure(connection).get_current_revision() == "0006"
     finally:
         engine.dispose()
 
@@ -388,5 +389,29 @@ def test_command_line_reads_the_environment(empty_database_url, monkeypatch):
     engine = create_engine(empty_database_url)
     try:
         assert ALL_TABLES <= set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_the_setting_tables_come_and_go_with_revision_0006(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0005")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 10, 29, 9, 30, tzinfo=timezone.utc)
+    try:
+        assert not {"cluster_domain", "campaign_preset"} & set(inspect(engine).get_table_names())
+        command.upgrade(config, "0006")
+        with engine.begin() as connection:
+            connection.execute(
+                text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (1, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at}
+            )
+        with pytest.raises(IntegrityError):  # one domain configuration per cluster
+            with engine.begin() as connection:
+                connection.execute(
+                    text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (2, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at}
+                )
+        command.downgrade(config, "0005")
+        assert not {"cluster_domain", "campaign_preset"} & set(inspect(engine).get_table_names())
     finally:
         engine.dispose()

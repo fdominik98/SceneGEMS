@@ -167,10 +167,13 @@ class LiveRunRecorder:
 
     def _open(self, setup: LiveRunSetup) -> OpenedEntry:
         from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
+        from scenegems_tool.assurance.campaign.campaign_config import with_domain_defaults
         from scenegems_tool.persistence.schema import ArtifactHolderKind, CampaignDesiredState, CampaignKind, CampaignOrigin
 
         item = self._store(setup.trajectories)
-        config = campaign_config_from_dict(self._config(setup, item))
+        # The entry judges its run with the cluster's domain configuration, as every other workbench entry
+        saved = self.stores.domain.current()
+        config = campaign_config_from_dict(with_domain_defaults(self._config(setup, item), None if saved is None else saved.contents()))
         validated = validate_campaign_config(config, artifact_exists=lambda sha256: self.artifacts.record(sha256) is not None, read_artifact=self.artifacts.store.read)
         campaign = self.stores.campaigns.create_campaign(
             validated.config.name,

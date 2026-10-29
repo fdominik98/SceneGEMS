@@ -1,13 +1,13 @@
-import { formatFunctionalPresetLabel } from "./functionalPresetPaths";
-import { loadFunctionalPresetsManifest } from "./functionalPresets";
 import {
   useBatchGenerationStore,
   type BatchRunResult,
 } from "../../../domain/sceneGeneration/batchGenerationStore";
 
 export interface RunBatchGenerationParams {
-  selectedPaths: string[];
-  loadPresetText: (path: string) => Promise<string>;
+  /** Class ids of the master's catalog. */
+  selectedClassIds: string[];
+  /** A class's functional scenario, from the master. */
+  loadScenarioText: (classId: string) => Promise<string>;
   /** Runs every row as one batch entry with a case per scenario; resolves once every row ended. */
   generateBatch: (rows: { requestId: string; label: string; specText: string }[]) => Promise<void>;
   sceneGenerationTimeoutSeconds: number;
@@ -16,46 +16,36 @@ export interface RunBatchGenerationParams {
 }
 
 /**
- * Runs every selected preset as one workbench entry with a case per scenario (design doc 6.3),
+ * Runs every selected functional scenario of the master's catalog as one workbench entry with a case per scenario (design doc 6.3),
  * so the cluster runs as many as it has free slots and queues the rest. Each row follows its
  * case's job (queued, running, done); the per-scene timeout is the generation's own, not the wait
  * in the queue.
  */
 export async function runBatchGeneration({
-  selectedPaths,
-  loadPresetText,
+  selectedClassIds,
+  loadScenarioText,
   generateBatch,
   sceneGenerationTimeoutSeconds,
   isAborted,
 }: RunBatchGenerationParams): Promise<void> {
-  if (selectedPaths.length === 0) {
+  if (selectedClassIds.length === 0) {
     return;
   }
-  const paths = [...selectedPaths];
+  const classIds = [...selectedClassIds];
   useBatchGenerationStore.getState().setRunning(true);
 
   try {
-    const labelByPath = new Map<string, string>();
-    try {
-      const manifest = await loadFunctionalPresetsManifest();
-      for (const preset of manifest.presets) {
-        labelByPath.set(preset.path, preset.label);
-      }
-    } catch {
-      // Fall back to path-derived labels.
-    }
-
     const jobs = await Promise.all(
-      paths.map(async (path) => ({
-        presetPath: path,
-        label: labelByPath.get(path) ?? formatFunctionalPresetLabel(path),
+      classIds.map(async (classId) => ({
+        classId,
+        label: classId,
         requestId: crypto.randomUUID(),
-        specText: await loadPresetText(path),
+        specText: await loadScenarioText(classId),
       }))
     );
 
     const initial: BatchRunResult[] = jobs.map((job) => ({
-      presetPath: job.presetPath,
+      classId: job.classId,
       label: job.label,
       requestId: job.requestId,
       status: "pending",

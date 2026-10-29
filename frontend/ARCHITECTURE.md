@@ -20,7 +20,9 @@ src/
 Sizes are tokens in `index.css` (`:root`): body 16px (`--font-size`), captions 13px at the smallest
 (`--font-size-xs`), controls and every clickable thing at least 40px (`--control-height`,
 `--hit-target`), spacing on a 4px scale (`--space-1` to `--space-6`). Screens use the tokens rather
-than their own sizes. One focus ring (`--focus-ring`) covers all keyboard focus.
+than their own sizes. One focus ring (`--focus-ring`) covers all keyboard focus. Scrollbars are overlays
+(`app/overlayScrollbars.ts`, installed in `main.tsx`): the native ones are hidden and take no room, and
+any element with `overflow: auto` gets a thin thumb while it scrolls or the pointer moves over it.
 
 Each screen shows what its main task needs and hides the rest behind progressive disclosure:
 `Disclosure` (a button with `aria-expanded`, optionally remembered per browser through its `id`, kept
@@ -31,9 +33,11 @@ control panel.
 
 ## Sections
 
-The left pane has six sections: Workbench (with the views Domain Configuration, Scene
-Generation, Trajectory Generation, Simulation and Connections), Cluster, Capabilities, Campaigns,
-Campaign History (section id `history`) and Results. `uiStore` keeps `section` and `workbenchView` (persisted, v6). Other sections
+The left pane has seven sections: Workbench (with the views Scene Generation, Trajectory
+Generation, Simulation and Connections), Cluster, Domain Configuration (section id `domain`),
+Capabilities, Campaigns, Campaign History (section id `history`) and Results. `uiStore` keeps
+`section` and `workbenchView` (persisted, v7: the old workbench view `domainConfig` becomes the
+section `domain`). Other sections
 open an output on a workbench page through `openInWorkbench(target)` in
 `features/workbench/pages/workbenchTarget.ts`, which shows the page and queues the target for it
 (`takeTarget(page)`). The workbench stays mounted while another section is shown, so its gateway socket and state carry on.
@@ -60,6 +64,22 @@ keeps the list (name and operator URL, per browser). A master's operator API lis
   reference-counted topic subscriptions, snapshot then updates with per-topic `seq`, reconnect
   with backoff and resubscribe, ping. `liveTopics.ts` has the reducers per topic.
 - `useLiveTopic(topic, reducer)`: a topic of the selected cluster as React state.
+- `presetsApi.ts`: everything the console starts from comes from the master; the frontend ships no
+  presets. The class catalog's functional scenarios (`GET /cluster/catalog/classes/<class id>` as
+  text), the domain presets (`GET /cluster/catalog/domain-presets`), the cluster's domain
+  configuration (`GET` and `POST /cluster/domain`) and the campaign presets (`GET`, `POST` and
+  `DELETE /cluster/campaign-presets`), all read from `backend/assets/` in the master image or the
+  master's database.
+
+The domain configuration is global for the cluster. `features/domain/` is its section:
+`useClusterDomain()` reads it (also for the workbench, whose runs and monitors take its texts,
+and for the wizard's Domain page), `DomainSection` edits a draft per cluster
+(`domainDraftStore.ts`, in memory) and saves it with `useSaveClusterDomain()`. The scene page lists
+the master's catalog (`useCatalogClasses`, `controls/scenarioCatalog.ts`) and loads a class's text
+into its editor; when it loads a generated scene, `pages/inputSpecification.ts` loads the scene's
+functional scenario too (the case's `input_artifact`, or the catalog class). The wizard's
+`PresetBar` starts a draft from a campaign preset (`presetDraft.ts`: `draftFromConfig`, the inverse
+of `configBuilder.ts`) and saves the draft as one without its input (`presetConfigOf`).
 
 ## Campaign History and the Cluster page's instances
 
@@ -91,6 +111,9 @@ simulator or generator declared in the backend specs appears after the master re
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
 - `ArchitectureGraph.tsx` (React Flow canvas, custom edge with a label), `GraphNodes.tsx` (cards and
   lane bands), `cardSizes.ts`, `DetailPanel.tsx`, `MatrixView.tsx`, `CapabilitiesSection.tsx`.
+- `useFullscreen.ts` and `FullscreenButton.tsx`: full screen for the graph and its detail panel. It
+  covers the window at once and asks the browser for the whole screen; where the browser refuses or
+  never answers (an embedded browser), the window stays covered. Escape leaves it.
 - `nodesStore.ts`: the nodes of the selected cluster from the `nodes` topic, with a REST poll
   while the topic is not live.
 

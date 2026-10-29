@@ -5,8 +5,10 @@ import { usePersistedState } from "../../app/usePersistedState";
 import type { ArchitectureDocument } from "../../domain/cluster/architectureApi";
 import { highlightFor, parallelIndex, shortId, words, type GraphView } from "./capabilitiesModel";
 import { CONCRETE_WIDTH, META_WIDTH, concreteHeight, metaHeight } from "./cardSizes";
+import { FullscreenButton } from "./FullscreenButton";
 import { ConcreteNode, LaneBand, MetaNode, type ConcreteFlowNode, type LaneFlowNode, type MetaFlowNode } from "./GraphNodes";
 import { laneBands, layoutGraph, type LayoutEdge, type LayoutNode } from "./graphLayout";
+import type { FullscreenMode } from "./useFullscreen";
 
 export type Selection = { kind: "node" | "edge"; id: string };
 
@@ -117,10 +119,13 @@ interface ArchitectureGraphProps {
   onSelect: (selection: Selection | null) => void;
   /** Draw the connections the design rules out (concrete view). */
   showRuledOut: boolean;
+  /** Whether the graph and its detail panel fill the window or the screen. */
+  fullscreen: FullscreenMode;
+  onToggleFullscreen: () => void;
 }
 
 /** One document as a left-to-right graph: lanes as columns, cards as the layers or interfaces, curves as the adapters between them. */
-export function ArchitectureGraph({ document, view, selection, onSelect, showRuledOut }: ArchitectureGraphProps) {
+export function ArchitectureGraph({ document, view, selection, onSelect, showRuledOut, fullscreen, onToggleFullscreen }: ArchitectureGraphProps) {
   const scope = `${document.id}:${view}`;
   const [movedCards, setMovedCards] = usePersistedState<MovedCards>("capabilities-positions", {});
   const moved = movedCards[scope] ?? NO_MOVES;
@@ -179,8 +184,9 @@ export function ArchitectureGraph({ document, view, selection, onSelect, showRul
     <div className="cap-graph" data-testid="architecture-graph">
       <Legend concrete={concrete} showRuledOut={showRuledOut} movedCount={movedCount} onReset={() => setMovedCards((current) => ({ ...current, [scope]: {} }))} />
       <div className="cap-graph-canvas">
+      {/* A change of the full screen mode mounts the canvas anew, so it fits the graph into its new size. */}
       <ReactFlow
-        key={`${document.id}:${view}`}
+        key={`${document.id}:${view}:${fullscreen}`}
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
@@ -209,6 +215,8 @@ export function ArchitectureGraph({ document, view, selection, onSelect, showRul
         <Controls showInteractive={false} position="bottom-left" />
         <MiniMap pannable zoomable className="cap-minimap" style={{ background: "#0b1325", width: 150, height: 96 }} nodeStrokeWidth={2} nodeColor={(node) => (node.type === "lane" ? "#1e293b" : "#38bdf8")} maskColor="rgba(2, 6, 23, 0.7)" />
       </ReactFlow>
+      {/* Outside the canvas, so it keeps the keyboard focus when the canvas mounts anew. */}
+      <FullscreenButton fullscreen={fullscreen !== "off"} onToggle={onToggleFullscreen} />
       </div>
     </div>
   );

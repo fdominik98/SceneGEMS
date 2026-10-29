@@ -290,3 +290,29 @@ def test_the_architecture_is_served_from_the_files_written_at_startup(operator, 
     path.write_text(path.read_text(encoding="utf-8").replace("title: Monitoring", "title: From the file", 1), encoding="utf-8")
     titles = {document["id"]: document["title"] for document in operator.get(ARCHITECTURE).json()["documents"]}
     assert titles["monitoring"] == "From the file"
+
+
+def test_a_class_answers_its_functional_scenario_as_text(operator, small_catalog):
+    response = operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/functional_model1")
+    assert response.status_code == 200 and response.headers["content-type"].startswith("text/plain")
+    assert response.text == "OS(os1).\nTS(ts1).\nTS(ts2).\nStaticObstacle(o1).\n"  # LF line endings from a Windows checkout
+    assert operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/functional_model99").status_code == 404
+
+
+def test_a_class_content_needs_the_catalog_folder(operator, tmp_path, monkeypatch):
+    missing = ClassCatalog(tmp_path / "missing")
+    monkeypatch.setattr(ClassCatalog, "default", classmethod(lambda cls: missing))
+    assert operator.get(f"{CLASSES}/2vessel_0obstacle_scenarios/functional_model1").status_code == 503
+
+
+def test_the_domain_presets_are_the_masters_files(operator):
+    from scenegems_tool.assurance.campaign.domain_presets import domain_presets
+
+    response = operator.get(f"{CATALOG_PATH}/domain-presets")
+    assert response.status_code == 200
+    listed = response.json()
+    expected = domain_presets()
+    assert set(listed) == {"colregs_constants", "vessel_types", "obstacle_types"}
+    for key, presets in listed.items():
+        assert presets == [{"name": preset.name, "default": preset.default, "content": preset.content} for preset in expected[key]]
+    assert [preset["name"] for preset in listed["colregs_constants"] if preset["default"]] == ["general_maritime_constants"]

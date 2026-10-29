@@ -9,7 +9,8 @@ Both run in the master process on one event loop (server.py) and share one contr
     operator     plain HTTP bound to the local machine: the workbench WebSocket gateway,
                  mounted unchanged with its own lifespan, the job and node routes
                  (operator_routes.py, and campaign_routes.py with the campaign stores),
-                 the catalog routes (catalog_routes.py), artifact reads, the browsers' live
+                 the catalog routes (catalog_routes.py), the cluster's domain configuration
+                 and campaign presets (setting_routes.py), artifact reads, the browsers' live
                  channel (live_routes.py) and frames on demand (run_frames_routes.py). None
                  has authentication yet, which is why they are not on the node API's
                  listener. The web UI's origins may call it from a browser (CORS, below).

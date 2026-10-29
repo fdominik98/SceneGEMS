@@ -126,6 +126,35 @@
   border-radius: var(--radius);
 }
 
+/* Full screen: the graph and its detail panel cover the window, and the whole screen where the browser allows it
+   (its own full screen styles then place the element). */
+
+.cap-workspace.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  padding: var(--space-3);
+  background: var(--bg);
+  z-index: 1000;
+}
+
+.cap-fullscreen {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: 6;
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  background: rgba(30, 41, 59, 0.92);
+  border-color: var(--border);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.cap-fullscreen:hover:not(:disabled) {
+  color: var(--text);
+}
+
 /* Lanes */
 
 .cap-lane {
@@ -869,6 +898,10 @@
 
   .cap-detail {
     max-height: none;
+  }
+
+  .cap-workspace.is-fullscreen {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
   }
 
   .cap-minimap {

@@ -26,6 +26,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     load_campaign_config,
     parse_campaign_config,
     run_seed,
+    with_domain_defaults,
 )
 from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
 from scenegems_tool.persistence.canonical_json import canonical_json
@@ -350,3 +351,26 @@ def test_input_with_scenarios_and_items():
 )
 def test_invalid_format_2_configs_are_rejected_with_the_reason(data, reason):
     assert reason in _reasons(data)
+
+
+CLUSTER_DOMAIN = {"colregs_constants": "SAFE_DISTANCE: 400\n", "vessel_types": "Ferry:\n  max_speed: 12\n", "obstacle_types": "Buoy:\n  radius: 2\n"}
+
+
+def test_domain_defaults_fill_only_the_contents_a_config_leaves_out():
+    config = parse_campaign_config("format: 2\nname: lab\ndomain:\n  vessel_types: 'Tug: {max_speed: 6}'\n  scene_generation_timeout_s: 90\n", CLUSTER_DOMAIN)
+    assert config.domain.colregs_constants == CLUSTER_DOMAIN["colregs_constants"]
+    assert config.domain.obstacle_types == CLUSTER_DOMAIN["obstacle_types"]
+    assert config.domain.vessel_types == "Tug: {max_speed: 6}"  # the config's own content wins
+    assert config.domain.scene_generation_timeout_s == 90
+    assert parse_campaign_config("format: 2\nname: lab\n", CLUSTER_DOMAIN).domain.vessel_types == CLUSTER_DOMAIN["vessel_types"]
+
+
+def test_without_domain_defaults_the_default_presets_apply():
+    assert parse_campaign_config("format: 2\nname: lab\n").domain.colregs_constants == DEFAULT_COLREGS_CONSTANTS_FILE.read_text(encoding="utf-8").replace("\r\n", "\n")
+    assert with_domain_defaults({"name": "lab"}, None) == {"name": "lab"}
+
+
+def test_a_domain_section_that_is_no_mapping_is_left_for_validation_to_report():
+    assert with_domain_defaults({"domain": "colregs"}, CLUSTER_DOMAIN) == {"domain": "colregs"}
+    with pytest.raises(CampaignConfigError):
+        parse_campaign_config("format: 2\nname: lab\ndomain: colregs\n", CLUSTER_DOMAIN)

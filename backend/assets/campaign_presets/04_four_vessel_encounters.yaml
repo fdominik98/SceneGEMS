@@ -1,0 +1,27 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Four-vessel encounters on the kinematic layer"
+description: >-
+  One case of every four-vessel class (84 classes) through the whole chain with a kinematic replay
+  and the post hoc monitor. A heavier run for crowded waters: scene and trajectory generation take
+  longer, so both timeouts are raised.
+steps: [scene_generation, trajectory_generation, simulation]
+scope:
+  - patterns: [4vessel_*_scenarios]
+    quota: 1
+    failure_budget: 2
+domain:
+  scene_generation_timeout_s: 180
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 3600
+execution:
+  runs:
+    - name: kinematic replay
+      stack: {simulation_layer: kinematic, mode: replay}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

@@ -224,7 +224,7 @@ export function TrajectoryGenerationControls({
     <div className="panel">
       <div className="control-panel-heading">
         <div>
-          <p className="control-panel-eyebrow">Step 3 of 4</p>
+          <p className="control-panel-eyebrow">Step 2 of 3</p>
           <h3>Trajectory Generation</h3>
         </div>
         <div className="control-panel-status">

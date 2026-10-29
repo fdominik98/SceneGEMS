@@ -26,6 +26,7 @@ COLREGS_CONSTANTS_FOLDER = f"{CONFIG_FOLDER}/colregs_constants"
 VESSEL_TYPES_FOLDER = f"{CONFIG_FOLDER}/vessel_types"
 STATIC_OBSTACLE_TYPES_FOLDER = f"{CONFIG_FOLDER}/static_obstacle_types"
 VESSEL_DYNAMICS_FOLDER = f"{CONFIG_FOLDER}/vessel_dynamics"
+CAMPAIGN_PRESETS_FOLDER = f"{ASSET_FOLDER}/campaign_presets"
 
 RUNTIME_ASSETS_VOLUME = os.environ.get("SCENEGEMS_RUNTIME_VOLUME", "scenegems_runtime_assets")
 GAZEBO_GEN_MOUNT = f"{RUNTIME_ASSETS_FOLDER}/scenario_execution/gen_tmp"

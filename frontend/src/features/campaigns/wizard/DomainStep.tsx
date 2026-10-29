@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { describeOperatorError } from "../../../domain/cluster/operatorApi";
+import { useClusterDomain } from "../../domain/useClusterDomain";
 import { ConstraintsEditor } from "../../workbench/controls/constraintsEditor";
-import { startingDomainTexts, type DomainTexts } from "./domainTexts";
 import { Field, FieldIssues, NumberField } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
 import type { StepProps } from "./stepTypes";
 
-type TextKey = keyof DomainTexts;
+type TextKey = "colregsConstants" | "vesselTypes" | "obstacleTypes";
 
 const TEXT_TABS: { key: TextKey; field: string; label: string; protectedRows?: string[] }[] = [
   { key: "colregsConstants", field: "colregs_constants", label: "COLREGS constants" },
@@ -13,49 +14,33 @@ const TEXT_TABS: { key: TextKey; field: string; label: string; protectedRows?: s
   { key: "obstacleTypes", field: "obstacle_types", label: "Obstacle types", protectedRows: ["UnspecifiedObstacleType"] },
 ];
 
-const SOURCE_LABELS: Record<TextKey, string> = {
-  colregsConstants: "COLREGS constants",
-  vesselTypes: "vessel types",
-  obstacleTypes: "obstacle types",
-};
-
-/** Domain: the master's defaults, or customized COLREGS constants, vessel types and obstacle types stored in the campaign. */
+/** Domain: the cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types stored in the campaign. */
 export function DomainStep({ draft, update, reasons }: StepProps) {
   const [tab, setTab] = useState<TextKey>("colregsConstants");
-  const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
+  const clusterDomain = useClusterDomain();
   const { domain } = draft;
   const own = splitByField(reasonsOfEntry(reasons, null), ["colregs_constants", "vessel_types", "obstacle_types", "scene_generation_timeout_s", "enforce_low_tcpa"]);
+  const loadError = clusterDomain.isError ? describeOperatorError(clusterDomain.error) : null;
 
-  const loadStart = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const { texts, fromWorkbench } = await startingDomainTexts();
-      update((next) => {
-        next.domain.colregsConstants = texts.colregsConstants;
-        next.domain.vesselTypes = texts.vesselTypes;
-        next.domain.obstacleTypes = texts.obstacleTypes;
-      });
-      setSource(
-        fromWorkbench.length === 0
-          ? "the app's presets (the workbench has no texts of its own)"
-          : fromWorkbench.length === 3
-            ? "the workbench's current texts"
-            : `the workbench's ${fromWorkbench.map((key) => SOURCE_LABELS[key]).join(" and ")}, and the presets for the rest`
-      );
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setLoading(false);
+  /** Starts the customized texts from the cluster's domain configuration. */
+  const loadStart = () => {
+    const current = clusterDomain.data;
+    if (!current) {
+      return;
     }
+    update((next) => {
+      next.domain.colregsConstants = current.colregs_constants;
+      next.domain.vesselTypes = current.vessel_types;
+      next.domain.obstacleTypes = current.obstacle_types;
+    });
+    setSource(current.saved ? "the cluster's domain configuration" : "the master's default presets (the cluster has saved no domain configuration)");
   };
 
   const chooseCustom = (custom: boolean) => {
     update((next) => void (next.domain.custom = custom));
     if (custom && domain.colregsConstants.trim() === "" && domain.vesselTypes.trim() === "" && domain.obstacleTypes.trim() === "") {
-      void loadStart();
+      loadStart();
     }
   };
 
@@ -68,15 +53,15 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
         <label className={`wiz-option${domain.custom ? "" : " wiz-option--on"}`}>
           <input type="radio" name="wiz-domain" checked={!domain.custom} onChange={() => chooseCustom(false)} />
           <span>
-            <strong>Use the master's defaults</strong>
-            <span className="wiz-hint">The three texts are left out of the config. The master fills them from its own domain files when the campaign is created, and the campaign keeps what it filled in.</span>
+            <strong>Use the cluster's domain configuration</strong>
+            <span className="wiz-hint">The three texts are left out of the config. The master fills them from the cluster's domain configuration (the Domain Configuration page) when the campaign is created, and the campaign keeps what it filled in.</span>
           </span>
         </label>
         <label className={`wiz-option${domain.custom ? " wiz-option--on" : ""}`}>
           <input type="radio" name="wiz-domain" checked={domain.custom} onChange={() => chooseCustom(true)} />
           <span>
             <strong>Customize</strong>
-            <span className="wiz-hint">Edit the COLREGS constants, vessel types and obstacle types here, starting from the workbench's current texts.</span>
+            <span className="wiz-hint">Edit the COLREGS constants, vessel types and obstacle types for this campaign only, starting from the cluster's domain configuration.</span>
           </span>
         </label>
       </fieldset>
@@ -84,7 +69,7 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
       {domain.custom && (
         <section className="wiz-card" aria-label="Customized domain content">
           <p className="wiz-notice" role="note">
-            Customized content is stored in the campaign: it becomes part of the campaign's config and its hash, so every case of this campaign uses exactly these texts, whatever the master's files say later or the workbench holds.
+            Customized content is stored in the campaign: it becomes part of the campaign's config and its hash, so every case of this campaign uses exactly these texts, whatever the cluster's domain configuration says later.
           </p>
           <div className="wiz-domain-bar">
             <div className="ce-tabs" role="tablist" aria-label="Domain files">
@@ -100,8 +85,8 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
             </div>
             <span className="wiz-domain-actions">
               {source && <span className="meta">Started from {source}.</span>}
-              <button type="button" onClick={() => void loadStart()} disabled={loading} title="Replace the three texts with the workbench's current ones">
-                {loading ? "Loading..." : "Start again from the workbench"}
+              <button type="button" onClick={loadStart} disabled={!clusterDomain.data} title="Replace the three texts with the cluster's domain configuration">
+                {clusterDomain.isPending ? "Loading..." : "Start again from the cluster's configuration"}
               </button>
             </span>
           </div>

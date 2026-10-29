@@ -142,18 +142,21 @@ export function fromAlternateUnit(unit: UnitId, alternateValue: number): number 
   return alternate ? alternateValue / alternate.factor : alternateValue;
 }
 
-/** A number for display: ten significant digits, no trailing zeros, no exponent for ordinary sizes. */
-export function formatDisplayNumber(value: number): string {
+/** Significant digits of a converted value (knots, degrees): enough to read it off, short enough for a table cell. */
+export const CONVERTED_DIGITS = 6;
+
+/** A number for display: ten significant digits (or `digits`), no trailing zeros, no exponent for ordinary sizes. */
+export function formatDisplayNumber(value: number, digits = 10): string {
   if (!Number.isFinite(value)) {
     return String(value);
   }
-  const rounded = Number(value.toPrecision(10));
+  const rounded = Number(value.toPrecision(digits));
   if (rounded === 0) {
     return "0";
   }
   const magnitude = Math.abs(rounded);
   if (magnitude >= 1e-6 && magnitude < 1e15) {
-    return rounded.toFixed(Math.min(20, Math.max(0, 9 - Math.floor(Math.log10(magnitude))))).replace(/\.?0+$/, "");
+    return rounded.toFixed(Math.min(20, Math.max(0, digits - 1 - Math.floor(Math.log10(magnitude))))).replace(/\.?0+$/, "");
   }
   return String(rounded);
 }

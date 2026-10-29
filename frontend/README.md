@@ -31,10 +31,10 @@ npm run dev
 ### Typical demo flow
 
 1. Run `./start.sh` from the repo root (or ensure the backend is up and `VITE_WS_URL` in `.env` is correct).
-2. Open **Domain Configuration**: presets load automatically from `public/domain_config/`.
-3. Open **Scene Generation**: pick a functional preset (use **Find a preset** to search and filter), then click **Generate Initial Scenes**.
+2. Optional: open **Domain Configuration** in the Cluster group to review the cluster's COLREGS constants, vessel types and obstacle types (the master's default presets apply until one is saved).
+3. Open **Scene Generation**: pick one of the master's functional scenarios (use **Find a preset** to search and filter), then click **Generate scene**.
 4. Click **Next: Trajectory Generation**, generate trajectories, then **Load for Simulation** to open **Simulation** for dual-stream playback, metrics, and exports.
-5. Optional: **Record and replay** under Simulation controls, and the **Batch** tab in Scene Generation to run several presets.
+5. Optional: **Record and replay** under Simulation controls, and the **Batch** tab in Scene Generation to run several functional scenarios.
 
 ## Documentation
 
@@ -53,8 +53,7 @@ During `npm run dev`, Docusaurus starts **only when you open** **Documentation**
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Vite + Docusaurus dev servers (app and `/docs/`) |
-| `npm run build` | Build docs, regenerate preset manifest, typecheck, production build |
-| `npm run presets:manifest` | Scan `public/generated_functional_models/` -> `presets-manifest.json` |
+| `npm run build` | Build docs, typecheck, production build |
 | `npm test` | Unit tests (Vitest) |
 | `npm run lint` | ESLint |
 
@@ -64,10 +63,9 @@ During `npm run dev`, Docusaurus starts **only when you open** **Documentation**
 |----------|---------|
 | `VITE_WS_URL` | WebSocket URL for the simulation backend (default in `.env.example`) |
 
-## Static assets
+## Presets
 
-- `public/domain_config/`: COLREGS constants, vessel types, obstacle types (YAML)
-- `public/generated_functional_models/`: Functional scenario presets (`.problem`) and `presets-manifest.json`
+The console ships no presets of its own. The domain presets, the functional scenarios and the campaign presets come from the active cluster's master (`backend/assets/` in the master image): see the catalog and setting routes in `domain/cluster/presetsApi.ts`.
 
 ## Architecture
 

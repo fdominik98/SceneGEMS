@@ -1,4 +1,4 @@
-"""The stores of campaigns and their results on one database, and the transaction they share.
+"""The stores of campaigns, their results and the cluster's settings on one database, and the transaction they share.
 
 The pipeline engine and the operator API take one AssuranceStores. Its transaction() opens
 the session that every store method accepts, so one step of the engine commits as a whole.
@@ -18,6 +18,7 @@ from scenegems_tool.persistence.stores.campaign_store import CampaignStore
 from scenegems_tool.persistence.stores.case_store import CaseStore
 from scenegems_tool.persistence.stores.pipeline_store import PipelineStore
 from scenegems_tool.persistence.stores.result_store import ResultStore
+from scenegems_tool.persistence.stores.setting_stores import CampaignPresetStore, DomainStore
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,8 @@ class AssuranceStores:
     results: ResultStore
     artifacts: ArtifactRecordStore
     calibrations: CalibrationStore
+    domain: DomainStore
+    presets: CampaignPresetStore
 
     @classmethod
     def create(cls, session_factory: sessionmaker[Session], clock: Clock = utc_now) -> "AssuranceStores":
@@ -40,6 +43,8 @@ class AssuranceStores:
             results=ResultStore(session_factory, clock),
             artifacts=ArtifactRecordStore(session_factory, clock),
             calibrations=CalibrationStore(session_factory, clock),
+            domain=DomainStore(session_factory, clock),
+            presets=CampaignPresetStore(session_factory, clock),
         )
 
     @contextmanager

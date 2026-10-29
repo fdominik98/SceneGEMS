@@ -29,18 +29,16 @@ export type SceneGenerationTab = "single" | "batch";
 /** Scene generation right pane: the specification editor or the monitor preview of the displayed scene. */
 export type SceneGenerationPaneView = "specification" | "monitor";
 /** Top-level sections of the left pane. */
-export type AppSection = "workbench" | "cluster" | "capabilities" | "campaigns" | "history" | "results";
+export type AppSection = "workbench" | "cluster" | "domain" | "capabilities" | "campaigns" | "history" | "results";
 /** Views inside the workbench section (its sub-navigation). */
 export type WorkbenchView =
   | "simulation"
   | "connections"
-  | "domainConfig"
   | "sceneGeneration"
   | "trajectoryGeneration";
 
-export const APP_SECTIONS: readonly AppSection[] = ["workbench", "cluster", "capabilities", "campaigns", "history", "results"];
+export const APP_SECTIONS: readonly AppSection[] = ["workbench", "cluster", "domain", "capabilities", "campaigns", "history", "results"];
 export const WORKBENCH_VIEWS: readonly WorkbenchView[] = [
-  "domainConfig",
   "sceneGeneration",
   "trajectoryGeneration",
   "simulation",
@@ -52,6 +50,9 @@ export const LEGACY_CONNECTIONS_VIEW = "waraps";
 
 /** The History section's id before v6, when the page was named Observe. */
 export const LEGACY_OBSERVE_SECTION = "observe";
+
+/** The workbench view of the domain configuration before v7, when it was the workbench's and not the cluster's. */
+export const LEGACY_DOMAIN_CONFIG_VIEW = "domainConfig";
 
 /** Where the workbench kept its view before v4 (`usePersistedState("active-view")`). */
 export const LEGACY_ACTIVE_VIEW_KEY = "scenegems:active-view";
@@ -200,17 +201,18 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "scenegems:ui",
-      version: 6,
+      version: 7,
       // v2: the monitor tab moved to the Connections page.
       // v3: persist monitor section collapse and preview/simulation column visibility.
       // v4: sections; the workbench view moved here from its own "active-view" key.
       // v5: the Connections view's id is "connections" (was "waraps").
       // v6: the section "observe" is "history" (Campaign History).
+      // v7: the domain configuration is the cluster's section "domain", no longer the workbench view "domainConfig".
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as {
           controlPanelMode?: string;
           section?: AppSection | typeof LEGACY_OBSERVE_SECTION;
-          workbenchView?: WorkbenchView | typeof LEGACY_CONNECTIONS_VIEW;
+          workbenchView?: WorkbenchView | typeof LEGACY_CONNECTIONS_VIEW | typeof LEGACY_DOMAIN_CONFIG_VIEW;
         };
         if (version < 2 && state.controlPanelMode === "monitor") {
           state.controlPanelMode = "animation";
@@ -224,6 +226,12 @@ export const useUiStore = create<UiState>()(
         }
         if (version < 6 && state.section === LEGACY_OBSERVE_SECTION) {
           state.section = "history";
+        }
+        if (version < 7 && state.workbenchView === LEGACY_DOMAIN_CONFIG_VIEW) {
+          state.workbenchView = "sceneGeneration";
+          if (state.section === "workbench") {
+            state.section = "domain";
+          }
         }
         return state as UiState;
       },

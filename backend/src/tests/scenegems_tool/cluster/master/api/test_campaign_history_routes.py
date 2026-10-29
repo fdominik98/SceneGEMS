@@ -392,6 +392,8 @@ def test_an_input_source_reads_empty_once_its_campaign_was_deleted(client, store
     )
     for case in created:  # the first step of this campaign is trajectory generation
         stores.cases.move_case(case.case_id, case.version, stage=PipelineStage.GENERATE_TRAJECTORIES)
+    detail = client.get(f"{CAMPAIGNS_PATH}/{made}/cases/{created[1].case_id}").json()
+    assert (detail["input_artifact"], detail["input_source"]) == (scene["sha256"], {"file": "scene.json"})  # what the case started from
     path = f"{CAMPAIGNS_PATH}/{made}/outputs"
     sources = [row["input_source"] for row in client.get(path, params={"step": "trajectory_generation"}).json()]
     assert sources == [items[0]["source"], {"file": "scene.json"}]

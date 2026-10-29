@@ -7,12 +7,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { useUiStore } from "../../../app/uiStore";
 import problemLanguageSupport from "../../../language/refineryProblem/problemLanguageSupport";
-import { formatFunctionalPresetLabel } from "./functionalPresetPaths";
-import {
-  filterPresets,
-  loadFunctionalPresetsManifest,
-  type FunctionalPresetEntry,
-} from "./functionalPresets";
+import { useCatalogClasses } from "../../campaigns/useCampaignData";
+import { ANY_COUNT, countOptions, filterCatalogClasses } from "./scenarioCatalog";
 import { Disclosure } from "../../../components/Disclosure";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { BatchPresetRunner } from "./BatchPresetRunner";
@@ -55,7 +51,10 @@ const PRESETS_PAGE_SIZE = 40;
 interface Props {
   functionalSpecText: string;
   onFunctionalSpecTextChange: (value: string) => void;
-  onLoadFunctionalSpecFromPreset: (path: string) => void;
+  /** Loads a functional scenario of the master's catalog into the editor, by class id. */
+  onLoadFunctionalSpecFromPreset: (classId: string) => void;
+  /** The functional scenario of a class of the master's catalog. */
+  loadScenarioText: (classId: string) => Promise<string>;
   onLoadFunctionalSpecFromFile: (file: File) => void;
   onExportFunctionalSpec: () => void;
   isSceneGenerationBusy?: boolean;
@@ -69,6 +68,7 @@ export function SceneGenerationSidebar({
   functionalSpecText,
   onFunctionalSpecTextChange,
   onLoadFunctionalSpecFromPreset,
+  loadScenarioText,
   onLoadFunctionalSpecFromFile,
   onExportFunctionalSpec,
   isSceneGenerationBusy = false,
@@ -83,71 +83,43 @@ export function SceneGenerationSidebar({
   const tab = useUiStore((s) => s.sceneGenerationTab);
   const setTab = useUiStore((s) => s.setSceneGenerationTab);
   const [refineryPasteHintOpen, setRefineryPasteHintOpen] = useState(false);
-  const [allPresets, setAllPresets] = useState<FunctionalPresetEntry[]>([]);
-  const [manifestError, setManifestError] = useState<string | null>(null);
-  const [manifestLoading, setManifestLoading] = useState(true);
+  // The functional scenarios come from the master's class catalog: the presets every cluster offers.
+  const catalog = useCatalogClasses();
+  const allPresets = useMemo(() => catalog.data?.items ?? [], [catalog.data]);
+  const manifestLoading = catalog.isLoading;
+  const manifestError = catalog.isError ? `The master's functional scenarios could not be read: ${catalog.error instanceof Error ? catalog.error.message : String(catalog.error)}` : null;
   const [searchQuery, setSearchQuery] = usePersistedState(
     "scene-generation-preset-search",
     ""
   );
   const [vesselFilter, setVesselFilter] = usePersistedState(
     "scene-generation-vessel-filter",
-    "any"
+    ANY_COUNT
   );
   const [obstacleFilter, setObstacleFilter] = usePersistedState(
     "scene-generation-obstacle-filter",
-    "any"
+    ANY_COUNT
   );
   const [page, setPage] = useState(0);
   const mod = primaryModifierLabel();
 
-  useEffect(() => {
-    void (async () => {
-      setManifestLoading(true);
-      try {
-        const manifest = await loadFunctionalPresetsManifest();
-        setAllPresets(manifest.presets);
-        setManifestError(null);
-      } catch (error) {
-        setManifestError(
-          error instanceof Error ? error.message : "Failed to load functional presets manifest."
-        );
-      } finally {
-        setManifestLoading(false);
-      }
-    })();
-  }, []);
-
   const filteredPresets = useMemo(
-    () => filterPresets(allPresets, searchQuery, vesselFilter, obstacleFilter),
+    () => filterCatalogClasses(allPresets, searchQuery, vesselFilter, obstacleFilter),
     [allPresets, searchQuery, vesselFilter, obstacleFilter]
   );
 
-  const vesselOptions = useMemo(() => {
-    const counts = new Set<number>();
-    for (const p of allPresets) {
-      if (p.vesselCount !== null) counts.add(p.vesselCount);
-    }
-    return Array.from(counts).sort((a, b) => a - b);
-  }, [allPresets]);
-
-  const obstacleOptions = useMemo(() => {
-    const counts = new Set<number>();
-    for (const p of allPresets) {
-      if (p.obstacleCount !== null) counts.add(p.obstacleCount);
-    }
-    return Array.from(counts).sort((a, b) => a - b);
-  }, [allPresets]);
+  const vesselOptions = useMemo(() => countOptions(allPresets, "vessel_count"), [allPresets]);
+  const obstacleOptions = useMemo(() => countOptions(allPresets, "obstacle_count"), [allPresets]);
 
   useEffect(() => {
     if (manifestLoading || allPresets.length === 0) {
       return;
     }
-    if (vesselFilter !== "any" && !vesselOptions.includes(Number(vesselFilter))) {
-      setVesselFilter("any");
+    if (vesselFilter !== ANY_COUNT && !vesselOptions.includes(Number(vesselFilter))) {
+      setVesselFilter(ANY_COUNT);
     }
-    if (obstacleFilter !== "any" && !obstacleOptions.includes(Number(obstacleFilter))) {
-      setObstacleFilter("any");
+    if (obstacleFilter !== ANY_COUNT && !obstacleOptions.includes(Number(obstacleFilter))) {
+      setObstacleFilter(ANY_COUNT);
     }
   }, [
     manifestLoading,
@@ -161,22 +133,13 @@ export function SceneGenerationSidebar({
   ]);
 
   const pageCount = Math.max(1, Math.ceil(filteredPresets.length / PRESETS_PAGE_SIZE));
+  // A filter that matches fewer presets may leave the remembered page past the end
+  const shownPage = Math.min(page, pageCount - 1);
   const pagePresets = filteredPresets.slice(
-    page * PRESETS_PAGE_SIZE,
-    (page + 1) * PRESETS_PAGE_SIZE
+    shownPage * PRESETS_PAGE_SIZE,
+    (shownPage + 1) * PRESETS_PAGE_SIZE
   );
 
-  useEffect(() => {
-    setPage(0);
-  }, [searchQuery, vesselFilter, obstacleFilter]);
-
-  const loadPresetText = async (path: string) => {
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`Failed to load ${path}`);
-    }
-    return response.text();
-  };
 
   const openInRefinery = async (text: string) => {
     const trimmedText = text.trim();
@@ -192,10 +155,10 @@ export function SceneGenerationSidebar({
     setRefineryPasteHintOpen(true);
   };
 
-  const openPresetInRefinery = (path: string) => {
+  const openPresetInRefinery = (classId: string) => {
     void (async () => {
       try {
-        await openInRefinery(await loadPresetText(path));
+        await openInRefinery(await loadScenarioText(classId));
       } catch {
         // Ignore failures to load the preset for Refinery hand-off.
       }
@@ -208,7 +171,7 @@ export function SceneGenerationSidebar({
     <aside className="right-pane scene-generation-sidebar">
       <SceneGenerationPaneViewSelect />
       <div className="scene-editor-panel">
-        {manifestLoading && <LoadingSpinner label="Loading preset catalog…" size="sm" />}
+        {manifestLoading && <LoadingSpinner label="Loading the master's functional scenarios…" size="sm" />}
         {manifestError && <p className="error">{manifestError}</p>}
         <Disclosure
           id="scene-gen:find-preset"
@@ -216,7 +179,7 @@ export function SceneGenerationSidebar({
           headingLevel={4}
           title="Find a preset"
           hint={
-            searchQuery || vesselFilter !== "any" || obstacleFilter !== "any"
+            searchQuery || vesselFilter !== ANY_COUNT || obstacleFilter !== ANY_COUNT
               ? `${filteredPresets.length} of ${allPresets.length} match`
               : `${allPresets.length} presets`
           }
@@ -226,15 +189,21 @@ export function SceneGenerationSidebar({
               type="search"
               placeholder="Search presets…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(0);
+              }}
               aria-label="Search functional presets"
             />
             <select
               value={vesselFilter}
-              onChange={(e) => setVesselFilter(e.target.value)}
+              onChange={(e) => {
+                setVesselFilter(e.target.value);
+                setPage(0);
+              }}
               aria-label="Filter by vessel count"
             >
-              <option value="any">Any vessels</option>
+              <option value={ANY_COUNT}>Any vessels</option>
               {vesselOptions.map((n) => (
                 <option key={n} value={String(n)}>
                   {n} vessels
@@ -243,10 +212,13 @@ export function SceneGenerationSidebar({
             </select>
             <select
               value={obstacleFilter}
-              onChange={(e) => setObstacleFilter(e.target.value)}
+              onChange={(e) => {
+                setObstacleFilter(e.target.value);
+                setPage(0);
+              }}
               aria-label="Filter by obstacle count"
             >
-              <option value="any">Any obstacles</option>
+              <option value={ANY_COUNT}>Any obstacles</option>
               {obstacleOptions.map((n) => (
                 <option key={n} value={String(n)}>
                   {n} obstacles
@@ -257,7 +229,7 @@ export function SceneGenerationSidebar({
           <p className="meta">
             {filteredPresets.length} preset(s)
             {tab === "single" && filteredPresets.length > PRESETS_PAGE_SIZE
-              ? ` · page ${page + 1} / ${pageCount}`
+              ? ` · page ${shownPage + 1} / ${pageCount}`
               : ""}
           </p>
         </Disclosure>
@@ -300,8 +272,8 @@ export function SceneGenerationSidebar({
                   Load preset…
                 </option>
                 {pagePresets.map((preset) => (
-                  <option key={preset.path} value={preset.path}>
-                    {formatFunctionalPresetLabel(preset.path)}
+                  <option key={preset.class_id} value={preset.class_id}>
+                    {preset.class_id}
                   </option>
                 ))}
               </select>
@@ -309,15 +281,15 @@ export function SceneGenerationSidebar({
                 <>
                   <button
                     type="button"
-                    disabled={page <= 0}
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={shownPage <= 0}
+                    onClick={() => setPage(Math.max(0, shownPage - 1))}
                   >
                     Prev
                   </button>
                   <button
                     type="button"
-                    disabled={page >= pageCount - 1}
-                    onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                    disabled={shownPage >= pageCount - 1}
+                    onClick={() => setPage(Math.min(pageCount - 1, shownPage + 1))}
                   >
                     Next
                   </button>

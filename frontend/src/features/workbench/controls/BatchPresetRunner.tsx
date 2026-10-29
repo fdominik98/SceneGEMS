@@ -3,18 +3,19 @@ import {
   useBatchGenerationStore,
   type BatchRunResult,
 } from "../../../domain/sceneGeneration/batchGenerationStore";
-import type { FunctionalPresetEntry } from "./functionalPresets";
+import type { CatalogClass } from "../../../domain/cluster/campaignApi";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { downloadValidBatchScenesZip } from "./batchSceneExport";
 
 export type { BatchRunResult };
 
 interface BatchPresetRunnerProps {
-  presets: FunctionalPresetEntry[];
+  /** The functional scenarios of the master's catalog that the filters match. */
+  presets: CatalogClass[];
   /** Preview a generated scene in the canvas (without loading it on the backend). */
   onVisualizeScenario: (evaluationData: EvaluationData, scene: SimulationFrame) => void;
-  /** Open a preset's functional spec in Refinery. */
-  onOpenPresetInRefinery: (path: string) => void;
+  /** Open a class's functional scenario in Refinery. */
+  onOpenPresetInRefinery: (classId: string) => void;
   /** Scene currently visualized in the canvas, used to highlight the active result. */
   activeScene: SimulationFrame | null;
 }
@@ -26,13 +27,13 @@ export function BatchPresetRunner({
   activeScene,
 }: BatchPresetRunnerProps) {
   const results = useBatchGenerationStore((s) => s.results);
-  const selectedPaths = useBatchGenerationStore((s) => s.selectedPaths);
+  const selectedClassIds = useBatchGenerationStore((s) => s.selectedClassIds);
   const running = useBatchGenerationStore((s) => s.running);
-  const toggleSelectedPath = useBatchGenerationStore((s) => s.toggleSelectedPath);
-  const selectAllPaths = useBatchGenerationStore((s) => s.selectAllPaths);
-  const clearSelectedPaths = useBatchGenerationStore((s) => s.clearSelectedPaths);
+  const toggleSelectedClassId = useBatchGenerationStore((s) => s.toggleSelectedClassId);
+  const setSelectedClassIds = useBatchGenerationStore((s) => s.setSelectedClassIds);
+  const clearSelectedClassIds = useBatchGenerationStore((s) => s.clearSelectedClassIds);
 
-  const selected = new Set(selectedPaths);
+  const selected = new Set(selectedClassIds);
 
   const validResultCount = results.filter(
     (r) => r.status === "success" && r.evaluationData && r.scene
@@ -42,7 +43,7 @@ export function BatchPresetRunner({
     <div className="batch-preset-runner batch-preset-runner--tab">
       <div className="batch-preset-runner-body">
         {presets.length === 0 ? (
-          <p className="meta">No functional presets available for batch generation.</p>
+          <p className="meta">The master offers no functional scenarios that match the filters.</p>
         ) : (
           <>
             <p className="meta">
@@ -53,14 +54,14 @@ export function BatchPresetRunner({
               <button
                 type="button"
                 disabled={running}
-                onClick={() => selectAllPaths(presets.map((p) => p.path))}
+                onClick={() => setSelectedClassIds(presets.map((p) => p.class_id))}
               >
                 Select all ({presets.length})
               </button>
               <button
                 type="button"
                 disabled={running || selected.size === 0}
-                onClick={clearSelectedPaths}
+                onClick={clearSelectedClassIds}
               >
                 Clear
               </button>
@@ -74,22 +75,22 @@ export function BatchPresetRunner({
             </div>
             <div className="batch-preset-list">
               {presets.map((preset) => (
-                <div key={preset.path} className="batch-preset-item">
+                <div key={preset.class_id} className="batch-preset-item">
                   <label className="batch-preset-item-label">
                     <input
                       type="checkbox"
-                      checked={selected.has(preset.path)}
-                      onChange={() => toggleSelectedPath(preset.path)}
+                      checked={selected.has(preset.class_id)}
+                      onChange={() => toggleSelectedClassId(preset.class_id)}
                       disabled={running}
                     />
-                    <span>{preset.label}</span>
+                    <span>{preset.class_id}</span>
                   </label>
                   <button
                     type="button"
                     className="batch-preset-refinery-icon-btn"
                     title="Open in Refinery"
-                    aria-label={`Open ${preset.label} in Refinery`}
-                    onClick={() => onOpenPresetInRefinery(preset.path)}
+                    aria-label={`Open ${preset.class_id} in Refinery`}
+                    onClick={() => onOpenPresetInRefinery(preset.class_id)}
                   >
                     <img src="/refinery-icon.svg" alt="" width={14} height={14} />
                   </button>

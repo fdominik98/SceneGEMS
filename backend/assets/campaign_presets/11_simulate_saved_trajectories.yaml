@@ -1,0 +1,21 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "Simulate saved trajectories: kinematic and ArduPilot SITL"
+description: >-
+  Simulates trajectories that already exist, once on the kinematic layer and once on ArduPilot
+  SITL, both judged by the post hoc monitor. Pick trajectory generation or simulation outputs of
+  Campaign History, or trajectory files, on the input page.
+steps: [simulation]
+execution:
+  runs:
+    - name: kinematic replay
+      stack: {simulation_layer: kinematic, mode: replay}
+      repeats: 1
+      monitor: post_hoc
+    - name: ardupilot sitl replay
+      stack: {simulation_layer: ardupilot_sim, mode: replay, speedup: 10}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ScalarFieldModel } from "./fieldModel";
-import { alternateUnit, formatDisplayNumber, fromAlternateUnit, toAlternateUnit, unitSymbol } from "./units";
+import { alternateUnit, CONVERTED_DIGITS, formatDisplayNumber, fromAlternateUnit, toAlternateUnit, unitSymbol } from "./units";
 import type { FieldIssue } from "./validation";
 import type { YamlEdit } from "./yamlEdit";
 import { parseTypedNumber } from "./yamlValues";
@@ -103,16 +103,17 @@ export function ScalarControl({ field, onEdit, ariaLabel, showUnits }: ScalarCon
         />
         {showUnits && unit ? <span className="ce-unit">{unitSymbol(unit)}</span> : null}
         {unit && alternate ? (
-          <>
+          // The converted value: beside the value in a form, under it in a table cell (constraintsEditor.css)
+          <span className="ce-converted">
             <span className="ce-equals">=</span>
             <DraftNumberInput
-              display={formatDisplayNumber(toAlternateUnit(unit, numeric))}
+              display={formatDisplayNumber(toAlternateUnit(unit, numeric), CONVERTED_DIGITS)}
               ariaLabel={`${ariaLabel} in ${alternate.symbol}`}
               flagged={false}
               onNumber={(next) => onEdit({ kind: "set", path, value: fromAlternateUnit(unit, next), asFloat: true })}
             />
             {showUnits ? <span className="ce-unit">{alternate.symbol}</span> : null}
-          </>
+          </span>
         ) : null}
       </span>
     );

@@ -3,7 +3,8 @@ import type { EvaluationData, GeneratedSceneData, SimulationFrame } from "../sim
 import { hasExceededEvaluationTimeout, evaluationTimeBaseline } from "./evaluationTime";
 
 export interface BatchRunResult {
-  presetPath: string;
+  /** The functional scenario's class in the master's catalog. */
+  classId: string;
   label: string;
   requestId: string;
   status: "pending" | "running" | "success" | "error" | "timeout" | "cancelled";
@@ -32,15 +33,15 @@ const TERMINAL_STATUSES: BatchRunResult["status"][] = [
 
 interface BatchGenerationState {
   results: BatchRunResult[];
-  selectedPaths: string[];
+  /** Class ids of the master's catalog to generate a scene for. */
+  selectedClassIds: string[];
   running: boolean;
   batchTimeoutSeconds: number | null;
   batchRequestIds: Set<string>;
   setResults: (updater: BatchRunResult[] | ((prev: BatchRunResult[]) => BatchRunResult[])) => void;
-  setSelectedPaths: (paths: string[]) => void;
-  toggleSelectedPath: (path: string) => void;
-  selectAllPaths: (paths: string[]) => void;
-  clearSelectedPaths: () => void;
+  setSelectedClassIds: (classIds: string[]) => void;
+  toggleSelectedClassId: (classId: string) => void;
+  clearSelectedClassIds: () => void;
   setRunning: (running: boolean) => void;
   setBatchTimeoutSeconds: (seconds: number | null) => void;
   clearResults: () => void;
@@ -56,7 +57,7 @@ interface BatchGenerationState {
 
 export const useBatchGenerationStore = create<BatchGenerationState>((set, get) => ({
   results: [],
-  selectedPaths: [],
+  selectedClassIds: [],
   running: false,
   batchTimeoutSeconds: null,
   batchRequestIds: new Set(),
@@ -64,16 +65,15 @@ export const useBatchGenerationStore = create<BatchGenerationState>((set, get) =
     set((state) => ({
       results: typeof updater === "function" ? updater(state.results) : updater,
     })),
-  setSelectedPaths: (paths) => set({ selectedPaths: paths }),
-  toggleSelectedPath: (path) =>
+  setSelectedClassIds: (classIds) => set({ selectedClassIds: classIds }),
+  toggleSelectedClassId: (classId) =>
     set((state) => {
-      const selected = new Set(state.selectedPaths);
-      if (selected.has(path)) selected.delete(path);
-      else selected.add(path);
-      return { selectedPaths: Array.from(selected) };
+      const selected = new Set(state.selectedClassIds);
+      if (selected.has(classId)) selected.delete(classId);
+      else selected.add(classId);
+      return { selectedClassIds: Array.from(selected) };
     }),
-  selectAllPaths: (paths) => set({ selectedPaths: paths }),
-  clearSelectedPaths: () => set({ selectedPaths: [] }),
+  clearSelectedClassIds: () => set({ selectedClassIds: [] }),
   setRunning: (running) => set({ running }),
   setBatchTimeoutSeconds: (seconds) => set({ batchTimeoutSeconds: seconds }),
   clearResults: () => set({ results: [], batchRequestIds: new Set(), batchTimeoutSeconds: null }),

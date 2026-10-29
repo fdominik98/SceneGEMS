@@ -25,6 +25,13 @@ def class_view(scenario_class: Any) -> Dict[str, Any]:
     }
 
 
+def domain_presets_view() -> Dict[str, List[Dict[str, Any]]]:
+    """The domain presets per key (colregs_constants, vessel_types, obstacle_types), each {"name", "default", "content"}."""
+    from scenegems_tool.assurance.campaign.domain_presets import domain_presets
+
+    return {key: [{"name": preset.name, "default": preset.default, "content": preset.content} for preset in presets] for key, presets in domain_presets().items()}
+
+
 def parameter(
     key: str,
     kind: str,

@@ -17,6 +17,7 @@ import pytest
 
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.assurance.pipeline.case_machine import RecordedRun
+from scenegems_tool.assurance.campaign.domain_presets import default_domain
 from scenegems_tool.gateway.live_run_recorder import (
     INPUT_ROLE,
     NO_STATE_MESSAGE,
@@ -52,6 +53,19 @@ class FakeCampaigns:
         self.desired[campaign_id] = state
 
 
+CLUSTER_DOMAIN = {"colregs_constants": "SAFE_DISTANCE: 400\n", "vessel_types": "Ferry: {}\n", "obstacle_types": "Buoy: {}\n"}
+
+
+class FakeDomain:
+    """The cluster's domain configuration: none saved, unless a test saves one."""
+
+    def __init__(self):
+        self.saved = None
+
+    def current(self, *, session=None):
+        return self.saved
+
+
 class FakeEngine:
     def __init__(self, error: Exception = None):
         self.error = error
@@ -78,8 +92,9 @@ def world(tmp_path):
     records = InMemoryArtifactRecords(lambda: NOW)
     artifacts = RecordedArtifacts(FileArtifactStore(tmp_path / "artifacts"), records)
     campaigns, engine, announced = FakeCampaigns(), FakeEngine(), []
-    recorder = LiveRunRecorder(SimpleNamespace(campaigns=campaigns), artifacts, engine, announce=announced.extend, seeds=lambda: 1234, clock=lambda: NOW)
-    return SimpleNamespace(records=records, artifacts=artifacts, campaigns=campaigns, engine=engine, recorder=recorder, announced=announced)
+    domain = FakeDomain()
+    recorder = LiveRunRecorder(SimpleNamespace(campaigns=campaigns, domain=domain), artifacts, engine, announce=announced.extend, seeds=lambda: 1234, clock=lambda: NOW)
+    return SimpleNamespace(records=records, artifacts=artifacts, campaigns=campaigns, domain=domain, engine=engine, recorder=recorder, announced=announced)
 
 
 async def recording(world, setup=None, recorder=...):
@@ -157,6 +172,18 @@ class TestRecordedRuns:
         assert (item["ref"]["sha256"], "campaign", "entry-1", INPUT_ROLE) in world.records.references
         assert world.announced == ["entry-1"] and world.engine.wakes == 1
         assert world.engine.runs[0][1].trajectories_complete is True
+        assert config["domain"]["colregs_constants"] == default_domain()["colregs_constants"]  # no cluster domain saved: the default presets
+
+    async def test_the_entry_judges_its_run_with_the_clusters_domain_configuration(self, world):
+        world.domain.saved = SimpleNamespace(contents=lambda: CLUSTER_DOMAIN)
+        setup = live_setup()
+        session, _ = await recording(world, setup)
+        session.run_started()
+        session.state_simulated(0.0, setup.trajectories.initial_scene)
+        session.run_ended()
+        await finished(session)
+        (campaign,) = world.campaigns.created
+        assert {key: campaign.config["domain"][key] for key in CLUSTER_DOMAIN} == CLUSTER_DOMAIN
 
     async def test_a_run_stopped_by_the_operator_is_recorded_with_its_states(self, world):
         setup = live_setup()

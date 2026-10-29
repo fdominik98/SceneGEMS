@@ -22,7 +22,8 @@ stores take an optional session, so several calls commit together (store_session
     result_store.py       run records and step verdicts, written once, queries, coverage per class, findings per step
     artifact_records.py   artifact records and references, expiring uploads, unreferenced artifacts for the sweep
     calibration_store.py  calibration results by stack, fingerprints and environment
-    assurance_stores.py   all campaign stores on one session factory, with a shared transaction
+    setting_stores.py     the cluster's domain configuration and its saved campaign presets
+    assurance_stores.py   all campaign and setting stores on one session factory, with a shared transaction
 """
 
 from scenegems_tool.persistence.stores.artifact_records import UPLOAD_ROLE, ArtifactInsert, ArtifactMismatch, ArtifactRecord, ArtifactRecordStore, ArtifactReference, UnknownArtifact
@@ -56,6 +57,7 @@ from scenegems_tool.persistence.stores.node_store import NodeStore
 from scenegems_tool.persistence.stores.pipeline_store import ENGINE_CURSOR, TERMINAL_EVENT_KINDS, CursorConflict, PipelineJobConflict, PipelineStore, UnknownPipelineJob
 from scenegems_tool.persistence.stores.result_records import ClassCoverage, ClassFindings, NewRunRecord, NewVerdict, RuleFindings, RunRecord, StepFindings, VerdictRecord
 from scenegems_tool.persistence.stores.result_store import ResultStore
+from scenegems_tool.persistence.stores.setting_stores import CampaignPresetStore, ClusterDomain, DomainStore, PresetNameTaken, SavedPreset, UnknownPreset
 
 __all__ = [
     "ENGINE_CURSOR",
@@ -72,6 +74,7 @@ __all__ = [
     "CalibrationResult",
     "CalibrationStore",
     "CampaignEventRecord",
+    "CampaignPresetStore",
     "CampaignRecord",
     "CampaignStateConflict",
     "CampaignStore",
@@ -87,9 +90,11 @@ __all__ = [
     "ClassRecord",
     "ClassSpec",
     "ClassStateConflict",
+    "ClusterDomain",
     "ConfigVersionRecord",
     "CursorConflict",
     "CursorPosition",
+    "DomainStore",
     "EventBatch",
     "ExpiredLease",
     "IdempotencyKeyMismatch",
@@ -110,11 +115,13 @@ __all__ = [
     "PipelineJobEvent",
     "PipelineJobRecord",
     "PipelineStore",
+    "PresetNameTaken",
     "ResultReport",
     "ResultStatus",
     "ResultStore",
     "RuleFindings",
     "RunRecord",
+    "SavedPreset",
     "StepFindings",
     "SubmitOutcome",
     "UnknownArtifact",
@@ -124,5 +131,6 @@ __all__ = [
     "UnknownJob",
     "UnknownNode",
     "UnknownPipelineJob",
+    "UnknownPreset",
     "VerdictRecord",
 ]

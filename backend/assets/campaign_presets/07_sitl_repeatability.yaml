@@ -1,0 +1,27 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 2
+name: "ArduPilot SITL repeatability: three repeats per case"
+description: >-
+  Two cases of every two-vessel class without obstacles, each replayed three times on ArduPilot
+  SITL with the same seed. The calibration step measures how far the repeats deviate, which bounds
+  how much a single SITL verdict can be trusted.
+steps: [scene_generation, trajectory_generation, simulation]
+scope:
+  - patterns: [2vessel_0obstacle_scenarios]
+    quota: 2
+    failure_budget: 2
+domain:
+  scene_generation_timeout_s: 60
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+execution:
+  runs:
+    - name: ardupilot sitl, three repeats
+      stack: {simulation_layer: ardupilot_sim, mode: replay, speedup: 10}
+      repeats: 3
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261029

@@ -20,7 +20,7 @@ afterAll(() => {
 beforeEach(() => {
   storage.clear();
   target.useWorkbenchTargetStore.setState({ pending: {} });
-  ui.useUiStore.setState({ section: "campaigns", workbenchView: "domainConfig" });
+  ui.useUiStore.setState({ section: "campaigns", workbenchView: "connections" });
 });
 
 describe("openInWorkbench", () => {

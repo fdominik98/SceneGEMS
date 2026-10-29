@@ -224,6 +224,8 @@ export interface WizardState {
   setStep: (step: WizardStepId) => void;
   /** Applies a change to the draft; the function gets a copy it may change in place. */
   update: (change: (draft: WizardDraft) => void) => void;
+  /** Starts over from another draft (a preset): the first page, nothing visited yet. */
+  replaceDraft: (draft: WizardDraft) => void;
   reset: () => void;
 }
 
@@ -310,6 +312,7 @@ export function createWizardStore(storage?: StateStorage) {
             change(draft);
             return { draft };
           }),
+        replaceDraft: (draft) => set({ step: "steps", draft: clone(draft), visited: [] }),
         reset: () => set({ step: "steps", draft: emptyDraft(), visited: [] }),
       }),
       {

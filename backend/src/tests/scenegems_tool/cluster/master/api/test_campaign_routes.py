@@ -214,6 +214,7 @@ def test_a_case_shows_its_jobs_run_records_and_verdicts(client, stores, plane):
     stores.pipeline.add_intent(campaign_id, a1.case_id, PipelineStage.SIMULATE, "key-sim", 0, 0, {"job_type": "simulation.kinematic"})
     detail = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases/{a1.case_id}").json()
     assert detail["case_id"] == a1.case_id and detail["state"] == "complete"
+    assert detail["input_artifact"] is None and detail["input_source"] is None  # a catalog class
     scene, simulate = detail["jobs"]
     assert scene["stage"] == "generate_scene" and scene["job_id"] == job["job_id"] and scene["intent"] is False
     assert scene["job"]["state"] == "queued" and scene["job"]["job_type"] == "scene_generation" and "payload" not in scene["job"]
