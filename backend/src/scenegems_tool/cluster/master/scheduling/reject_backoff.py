@@ -7,15 +7,20 @@ node, 30 s after the first reject and twice as long after each further one, up t
 minutes. Other nodes get the job meanwhile, and the node keeps getting other jobs; when no
 other node can run the job, the rejecting node is asked again after the hold.
 
-The holds live in the master's memory: a master restart clears them, which only means one
-more reject. They are dropped when the job ends.
+The holds live in the master's memory and are dropped when the job ends. Every reject is
+also a job event (REJECTED, with the node), so at start the control plane replays the
+recent rejects of unfinished jobs through restore and a restarted master keeps the holds.
+The replay looks back RESTORE_HOLDS maximum holds: enough rejects to reach the longest hold,
+so a hold rebuilt from that window is the one the master had, or at most a step shorter.
 """
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 from scenegems_tool.persistence.clock import Clock, utc_now
+
+RESTORE_HOLDS = 6  # 30, 60, 120, 240, 480, then 600 s: six rejects reach the longest hold
 
 
 @dataclass
@@ -33,7 +38,20 @@ class RejectBackoff:
 
     def rejected(self, node_id: str, job_id: str) -> datetime:
         """Records a reject; returns until when the job is held back from the node."""
-        now = self.clock()
+        return self._record(node_id, job_id, self.clock())
+
+    def restore_since(self) -> datetime:
+        """How far back restore needs the rejects."""
+        return self.clock() - timedelta(seconds=self.max_hold_s * RESTORE_HOLDS)
+
+    def restore(self, rejections: Iterable[Tuple[str, str, datetime]]) -> int:
+        """Replays past rejects (node, job, time), oldest first, as if each had been recorded at its time; returns the holds kept."""
+        for node_id, job_id, at in rejections:
+            self._record(node_id, job_id, at)
+        self._prune(self.clock())
+        return len(self._holds)
+
+    def _record(self, node_id: str, job_id: str, now: datetime) -> datetime:
         self._prune(now)
         hold = self._holds.get((node_id, job_id))
         rejects = 1 if hold is None else hold.rejects + 1

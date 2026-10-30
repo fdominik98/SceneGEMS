@@ -285,6 +285,22 @@ def test_reject_requeues_without_a_failed_attempt(job_store, node_a):
     assert (rejected_event.kind, rejected_event.detail) == (JobEventKind.REJECTED, {"reason": "no free slot"})
 
 
+def test_recent_rejections_are_those_of_unfinished_jobs(job_store, node_a, clock):
+    waiting = job_store.submit(make_submission()).job
+    job_store.reject(job_store.claim_next("node-a", LEASE_S).lease_id, "busy")
+    first_reject = clock.now
+    clock.advance(60)
+    job_store.reject(job_store.claim_next("node-a", LEASE_S).lease_id, "still busy")
+    ended = job_store.submit(make_submission(idempotency_key="ended")).job
+    job_store.reject(job_store.claim_next("node-a", LEASE_S, exclude_job_ids=[waiting.job_id]).lease_id, "busy")
+    job_store.cancel(ended.job_id, "not needed")
+    assert [(event.job_id, event.node_id, event.at) for event in job_store.recent_rejections(first_reject)] == [
+        (waiting.job_id, "node-a", first_reject),
+        (waiting.job_id, "node-a", clock.now),
+    ]
+    assert [event.at for event in job_store.recent_rejections(first_reject + timedelta(seconds=1))] == [clock.now]
+
+
 def test_reject_needs_an_unaccepted_offer(job_store, node_a):
     job_store.submit(make_submission())
     lease = job_store.claim_next("node-a", LEASE_S)
