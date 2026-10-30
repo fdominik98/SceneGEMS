@@ -2,7 +2,7 @@ import { Disclosure } from "../../../components/Disclosure";
 import type { NodeView } from "../../../domain/cluster/schemas";
 import { formatMegabytes } from "../../cluster/clusterFormat";
 import { plural } from "../campaignFormat";
-import { capabilityLabel, fullUsageQueueDepth, nodeProblems, simulationJobTypesOf, slotsByJobType, type CapabilityCoverage } from "../resourcePlan";
+import { capabilityLabel, fullUsageQueueDepth, needKey, needLabel, nodeProblems, simulationJobTypesOf, slotsByJobType, type CapabilityCoverage } from "../resourcePlan";
 import { requiredLabelsOf, stagesOf } from "./configBuilder";
 import { Field, FieldIssues, NumberField } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
@@ -21,12 +21,16 @@ function NeedRow({ entry }: { entry: CapabilityCoverage }) {
         {covered ? "✓" : "✕"}
       </span>
       <span className="wiz-need-body">
-        <strong>{capabilityLabel(entry.capability.jobType)}</strong>
+        <strong>{capitalized(needLabel(entry.capability))}</strong>
         <span className="wiz-need-reason">{entry.capability.reason}</span>
       </span>
       <span className="wiz-need-status">{covered ? `${plural(entry.nodes.length, "machine")}, ${plural(entry.slots, "slot")}` : "No machine"}</span>
     </li>
   );
+}
+
+function capitalized(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 interface MachineProps {
@@ -40,7 +44,7 @@ interface MachineProps {
 }
 
 function Machine({ node, used, fullUsage, problems, requiredJobTypes, onToggle }: MachineProps) {
-  const capabilities = Object.entries(node.capabilities).sort(([a], [b]) => Number(requiredJobTypes.has(b)) - Number(requiredJobTypes.has(a)) || a.localeCompare(b));
+  const slots = Object.entries(node.slots).sort(([a], [b]) => Number(requiredJobTypes.has(b)) - Number(requiredJobTypes.has(a)) || a.localeCompare(b));
   const title = node.machine ?? node.name;
   return (
     <li className={`wiz-machine${used ? " wiz-machine--used" : ""}${problems.length > 0 ? " wiz-machine--unusable" : ""}`}>
@@ -55,11 +59,11 @@ function Machine({ node, used, fullUsage, problems, requiredJobTypes, onToggle }
       <p className="wiz-machine-specs">
         {plural(node.resources.cpus, "CPU")}, {formatMegabytes(node.resources.memory_mb)} memory
       </p>
-      {capabilities.length === 0 ? (
+      {slots.length === 0 ? (
         <p className="wiz-hint">Offers no job types.</p>
       ) : (
         <ul className="wiz-machine-caps" aria-label={`Capabilities of ${title}`}>
-          {capabilities.map(([jobType, usage]) => (
+          {slots.map(([jobType, usage]) => (
             <li key={jobType} className={`wiz-cap${requiredJobTypes.has(jobType) ? " wiz-cap--needed" : ""}`}>
               {capabilityLabel(jobType)} <span className="wiz-cap-slots">{plural(usage.slots, "slot")}</span>
             </li>
@@ -147,7 +151,7 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
         {plan ? (
           <ul className="wiz-needs">
             {plan.coverage.map((entry) => (
-              <NeedRow key={entry.capability.jobType} entry={entry} />
+              <NeedRow key={needKey(entry.capability)} entry={entry} />
             ))}
           </ul>
         ) : (

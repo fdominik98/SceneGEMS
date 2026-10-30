@@ -102,6 +102,31 @@ describe("draftFromConfig", () => {
     expect(stackIdOf({ simulation_layer: "carla" }, catalog)).toBe("");
     expect(stackIdOf({}, catalog)).toBe("kinematic.replay");
   });
+
+  it("tells the stacks of a layer apart by their mode and control layer", () => {
+    expect(stackIdOf({ simulation_layer: "ardupilot_sim" }, catalog)).toBe("ardupilot_sim.replay");
+    expect(stackIdOf({ simulation_layer: "ardupilot_sim", mode: "usv_navigation" }, catalog)).toBe("ardupilot_sim.usv_navigation");
+    expect(stackIdOf({ simulation_layer: "ardupilot_sim", control_layer: "ardupilot" }, catalog)).toBe("ardupilot_sim.replay"); // the implied control layer named
+    expect(stackIdOf({ simulation_layer: "gazebo", control_layer: "custom" }, catalog)).toBe("gazebo_custom.replay");
+    expect(stackIdOf({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }, catalog)).toBe("gazebo_custom.usv_navigation");
+    expect(stackIdOf({ simulation_layer: "gazebo" }, catalog)).toBe(""); // ArduPilot on Gazebo is not in the sample catalog
+  });
+
+  it("reads a custom controller run back with its parameters, groups and environment", () => {
+    const usvNavigation = { goal: [100, 0], speed: 4, safety_radius: 30, control_horizon: 60 };
+    const run = {
+      stack: { simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation", dt: 2, usv_navigation: usvNavigation },
+      environment: { wind_vector: [0, 3, 0] },
+      monitor: "live",
+    };
+    const draft = draftFromConfig({ ...USV_PRESET, execution: { runs: [run] } }, catalog);
+    expect(draft.runs[0].stackId).toBe("gazebo_custom.usv_navigation");
+    expect(draft.runs[0].stackParameters).toEqual({ dt: 2 });
+    expect(draft.runs[0].groups).toEqual({ usv_navigation: usvNavigation });
+    const written = (buildCampaignConfig(draft, catalog).execution as { runs: Record<string, unknown>[] }).runs[0];
+    expect(written.stack).toEqual(run.stack);
+    expect(written.environment).toEqual({ wind_vector: [0, 3, 0] });
+  });
 });
 
 describe("presetConfigOf", () => {

@@ -45,7 +45,7 @@ verdicts) or cancels it (above the quota).
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, RunConfig, StackConfig
+from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, CustomStackConfig, RunConfig, StackConfig
 from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, ComponentId, stack_components
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind
@@ -240,8 +240,8 @@ class StageGraph:
         return run_stack_components(self.runs[run_index].stack)
 
     def run_tier(self, run_index: int) -> Optional[str]:
-        """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (replay_mavlink_lockstep), unknown on the kinematic layer."""
-        return "bounded" if isinstance(self.runs[run_index].stack, ArdupilotStackConfig) else None
+        """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (the lockstep MAVLink adapters) and on the custom controller (gz_transport_actuator), unknown on the kinematic layer."""
+        return "bounded" if isinstance(self.runs[run_index].stack, (ArdupilotStackConfig, CustomStackConfig)) else None
 
     def simulate_steps(self) -> List[Step]:
         return [Step(PipelineStage.SIMULATE, run_index, repeat) for run_index, run in enumerate(self.runs) for repeat in range(run.repeats)]

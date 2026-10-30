@@ -167,11 +167,9 @@ function buildTrajectories(draft: WizardDraft, catalog: BuilderCatalog): ConfigO
   return trajectories;
 }
 
+/** A run's stack section: the fields that pick the catalog option (its stack_section), then the given parameters and groups. */
 function buildStack(run: RunDraft, stack: CatalogStack | undefined): ConfigObject {
-  const result: ConfigObject = { simulation_layer: stack?.simulation_layer ?? "kinematic" };
-  if (stack) {
-    result.mode = stack.mode;
-  }
+  const result: ConfigObject = stack ? { ...(stack.stack_section ?? { simulation_layer: stack.simulation_layer, mode: stack.mode }) } : { simulation_layer: "kinematic" };
   Object.assign(result, givenValues(run.stackParameters, stack?.parameters ?? []));
   for (const group of stack?.groups ?? []) {
     const values = run.groups[group.key];

@@ -83,7 +83,8 @@ class SimulationRunner(str, Enum):
     """The runners of the simulation job (cluster/node/jobs/simulation_job.py), the value of its payload's runner."""
 
     KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, in process
-    ARDUPILOT = "ardupilot"  # replay over the lockstep MAVLink adapter on a SITL or Gazebo stack per job
+    ARDUPILOT = "ardupilot"  # replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
+    GAZEBO_CUSTOM = "gazebo_custom"  # replay or USV Navigation on the custom controller, the runner stepping a Gazebo world per job (no SITL)
 
 
 # The vessel stacks each runner may run. Each must be a campaign stack of the matrix: available and
@@ -96,6 +97,12 @@ RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
     SimulationRunner.ARDUPILOT: (
         (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
         (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+    ),
+    SimulationRunner.GAZEBO_CUSTOM: (
+        (AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
+        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
     ),
 }
 

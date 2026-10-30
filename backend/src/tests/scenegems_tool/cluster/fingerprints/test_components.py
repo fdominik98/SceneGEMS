@@ -117,7 +117,7 @@ def test_components_come_in_catalog_order_and_unknown_ones_fail():
 
 def test_the_runners_run_campaign_stacks_only():
     check_runner_stacks()
-    assert {runner.value for runner in RUNNER_STACKS} == {"kinematic", "ardupilot"}
+    assert {runner.value for runner in RUNNER_STACKS} == {"kinematic", "ardupilot", "gazebo_custom"}
     with pytest.raises(JobStackError, match="not available in the vessel stack matrix: no adapter from control_layer/ardupilot to simulation_layer/kinematic"):
         stack_images([(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.KINEMATIC)])
     with pytest.raises(JobStackError, match="workbench only"):
@@ -127,13 +127,18 @@ def test_the_runners_run_campaign_stacks_only():
 def test_the_runner_of_a_stack():
     assert runner_of_stack(_stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)) == SimulationRunner.KINEMATIC
     assert runner_of_stack(_stack(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)) == SimulationRunner.ARDUPILOT
-    assert runner_of_stack(_stack(AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)) is None
+    assert runner_of_stack(_stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)) == SimulationRunner.ARDUPILOT
+    assert runner_of_stack(_stack(AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)) == SimulationRunner.GAZEBO_CUSTOM
+    assert runner_of_stack(_stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)) == SimulationRunner.GAZEBO_CUSTOM
+    assert runner_of_stack(_stack(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)) is None
 
 
-def test_the_campaign_stacks_no_runner_runs():
-    assert set(unrun_campaign_stacks()) == {
-        _stack(AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
-        _stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
-        _stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
-        _stack(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
-    }
+def test_every_campaign_stack_has_a_runner():
+    assert unrun_campaign_stacks() == ()
+
+
+def test_the_custom_controller_needs_no_sitl():
+    """A node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
+    components = stack_components(RUNNER_STACKS[SimulationRunner.GAZEBO_CUSTOM])
+    assert components == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
+    assert images_of(components) == {GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE}

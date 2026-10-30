@@ -66,15 +66,16 @@ export interface LoadScenarioOptions {
 /** The simulator a recorded simulation layer is selected as (`planSimulationRun` plans these layers on the cluster). */
 const SIMULATOR_OF_LAYER = { ardupilot_sim: "ArduPilot Sim", gazebo: "Gazebo" } as const;
 
-/** The setup of a loaded run as the simulation controls take it: the kinematic layer, or replay on ArduPilot SITL or Gazebo. */
+/** The setup of a loaded run as the simulation controls take it: the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo. */
 export function setupRequestOf(run: LoadedRun) {
   const waves = run.setup.waves;
   const layer = run.setup.simulationLayer;
   const arduPilot = layer === "ardupilot_sim" || layer === "gazebo";
+  const custom = layer === "gazebo" && run.setup.controlLayer === "custom";
   return {
     simulatorType: arduPilot ? SIMULATOR_OF_LAYER[layer] : ("Kinematic" as const),
-    controlLayer: arduPilot ? ("ardupilot" as const) : ("none" as const),
-    speedup: arduPilot ? run.setup.speedup : null,
+    controlLayer: custom ? ("custom" as const) : arduPilot ? ("ardupilot" as const) : ("none" as const),
+    speedup: arduPilot && !custom ? run.setup.speedup : null,
     mode: run.setup.mode === "usv_navigation" ? ("usv_navigation" as const) : ("replay" as const),
     windVector: run.setup.windVector,
     wave: waves === null ? null : { amplitude: waves.amplitude, period: waves.period, steepness: waves.steepness, east: waves.direction[0], north: waves.direction[1] },

@@ -74,6 +74,51 @@ def test_two_jobs_get_disjoint_stacks(instances_folder, node, make_job, head_on_
     assert not first_names & second_names
 
 
+def usv_navigation_stack(node, make_job, head_on_trajectories, layer="ardupilot_sim", **fields):
+    payload_data = {"runner": "ardupilot", "simulation_layer": layer, "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE, **fields}
+    job = make_job(JobType.SIMULATION, payload_data)
+    return job, build_job_stack(job, node, ArduPilotSimulationPayload.model_validate(payload_data))
+
+
+@pytest.mark.parametrize("layer", ["ardupilot_sim", "gazebo"])
+def test_usv_navigation_gets_a_sitl_per_vessel_and_nothing_else(instances_folder, node, make_job, head_on_trajectories, layer):
+    """USV Navigation runs in the runner, so its vessel has a SITL service like a replaying one, and no MAVProxy or ArduAgent."""
+    _, stack = usv_navigation_stack(node, make_job, head_on_trajectories, layer)
+    services = stack.compose["services"]
+    expected = {"vessel_0", "vessel_1", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    assert set(services) == expected
+    assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
+
+
+def test_an_unknown_own_ship_fails_for_good(instances_folder, node, make_job, head_on_trajectories):
+    with pytest.raises(JobFailed) as failure:
+        usv_navigation_stack(node, make_job, head_on_trajectories, own_ship_id=7)
+    assert not failure.value.retryable and "No vessel with id 7" in str(failure.value)
+
+
+@pytest.mark.parametrize("layer", ["ardupilot_sim", "gazebo"])
+def test_the_payloads_mode_names_its_vessel_stacks(make_job, head_on_trajectories, layer):
+    from scenegems_tool.cluster.node.jobs.job_types import payload_components
+
+    payload_data = {"runner": "ardupilot", "simulation_layer": layer, "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE}
+    assert payload_components(JobType.SIMULATION, payload_data) == ("asv_software/replay", "control_layer/ardupilot", f"simulation_layer/{layer}")
+    assert payload_components(JobType.SIMULATION, {**payload_data, "mode": "usv_navigation"}) == (
+        "asv_software/replay",
+        "asv_software/usv_navigation",
+        "control_layer/ardupilot",
+        f"simulation_layer/{layer}",
+    )
+
+
+@pytest.mark.parametrize("fields", [{"own_ship_id": 1}, {"usv_navigation": {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}}])
+def test_closed_loop_options_need_mode_usv_navigation(make_job, head_on_trajectories, fields):
+    payload_data = {"runner": "ardupilot", "simulation_layer": "gazebo", "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE, **fields}
+    with pytest.raises(JobFailed) as failure:
+        parse_payload(SimulationPayload, make_job(JobType.SIMULATION, payload_data))
+    assert "apply only to mode usv_navigation" in str(failure.value)
+    assert parse_payload(SimulationPayload, make_job(JobType.SIMULATION, {**payload_data, "mode": "usv_navigation"})).root.mode.value == "usv_navigation"
+
+
 def test_unavailable_stack_fails_for_good(instances_folder, node, make_job, head_on_trajectories):
     payload_data = {"runner": "ardupilot", "simulation_layer": "ardupilot_sim", "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE, "speedup": 1000}
     job = make_job(JobType.SIMULATION, payload_data)
@@ -90,15 +135,24 @@ def test_the_payload_names_its_layer(make_job, head_on_trajectories):
     assert not failure.value.retryable and "simulation_layer" in str(failure.value)
 
 
+class FakeSitlColumns(dict):
+    """The replayed columns by vessel id; calls holds each run_mavlink_stack call's instance and USV Navigation parameters."""
+
+    def __init__(self, columns):
+        super().__init__(columns)
+        self.calls = []
+
+
 @pytest.fixture
 def fake_sitl(monkeypatch, head_on_trajectories):
-    """run_mavlink_stack replaced by a replay of the head-on trajectories, observed exactly; returns the replayed columns."""
+    """run_mavlink_stack replaced by a replay of the head-on trajectories, observed exactly; returns the replayed columns and the calls."""
     from scenegems_tool.vessel_stack.control_layers.ardupilot import mavlink_lockstep_runner
 
     vessels = head_on_trajectories.initial_scene.vessels
-    columns = {vessel.id: head_on_trajectories.state_list(vessel) for vessel in vessels}
+    columns = FakeSitlColumns({vessel.id: head_on_trajectories.state_list(vessel) for vessel in vessels})
 
-    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None):
+    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None, usv_navigation_parameters=None):
+        columns.calls.append({"instance": instance, "usv_navigation_parameters": usv_navigation_parameters})
         recorded = []
         for index in range(len(columns[0])):
             samples = {vessel_id: StampedState(boot_ms=100_000 + index * 1000, state=column[index]) for vessel_id, column in columns.items()}
@@ -201,3 +255,38 @@ def test_static_obstacles_stay_in_every_step_scene(head_on_trajectories):
     moved = ActorState(1.0, 2.0, 8.0, 0.0)
     states = step_scene(scene)({0: StampedState(boot_ms=0, state=moved)})
     assert states[vessels[0]] == moved and states[obstacle] == ActorState(1500.0, 50.0, 0.0, 0.0)
+
+
+def _asv_adapters(instance):
+    return {agent_id: (vessel.stack.asv_software.value, vessel.adapter_ids) for agent_id, vessel in instance.vessels.items()}
+
+
+def test_replay_puts_every_vessel_on_the_replay_adapter(fake_sitl, make_job, head_on_trajectories):
+    execute(ardupilot_job(make_job, head_on_trajectories), _quiet)
+    [call] = fake_sitl.calls
+    assert _asv_adapters(call["instance"]) == {"0": ("replay", ("replay_mavlink_lockstep",)), "1": ("replay", ("replay_mavlink_lockstep",))}
+    assert call["usv_navigation_parameters"] is None
+
+
+def test_usv_navigation_steers_the_scenes_own_ship(fake_sitl, make_job, head_on_trajectories):
+    result = execute(ardupilot_job(make_job, head_on_trajectories, mode="usv_navigation", simulation_layer="gazebo"), _quiet)
+    [call] = fake_sitl.calls
+    assert _asv_adapters(call["instance"]) == {"0": ("usv_navigation", ("usv_navigation_mavlink_lockstep",)), "1": ("replay", ("replay_mavlink_lockstep",))}
+    assert call["instance"].simulation_layer.value == "gazebo"
+    assert call["usv_navigation_parameters"] is None  # derived from the own ship's trajectory by run_mavlink_stack
+    assert result["steps"] == 120
+
+
+def test_usv_navigation_steers_the_named_vessel_with_the_given_parameters(fake_sitl, make_job, head_on_trajectories):
+    usv_navigation = {"goal": [0.0, 0.0], "speed": 6.0, "safety_radius": 150.0, "control_horizon": 40.0, "runtime_options": {"K": 2.0}}
+    execute(ardupilot_job(make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1, usv_navigation=usv_navigation), _quiet)
+    [call] = fake_sitl.calls
+    assert _asv_adapters(call["instance"]) == {"0": ("replay", ("replay_mavlink_lockstep",)), "1": ("usv_navigation", ("usv_navigation_mavlink_lockstep",))}
+    [(vessel_id, parameters)] = call["usv_navigation_parameters"].items()
+    assert vessel_id == 1
+    assert (parameters.goal, parameters.speed, parameters.safety_radius, parameters.control_horizon, parameters.runtime_options) == ((0.0, 0.0), 6.0, 150.0, 40.0, (("K", 2.0),))
+
+
+def test_the_live_monitor_judges_a_usv_navigation_run(fake_sitl, make_job, head_on_trajectories):
+    result = execute(ardupilot_job(make_job, head_on_trajectories, mode="usv_navigation", monitor="live", include_trajectories=True), _quiet)
+    assert result["monitor"]["scenes"] == 121 and "trajectories" in result

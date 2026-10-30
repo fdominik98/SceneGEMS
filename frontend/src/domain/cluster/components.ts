@@ -67,36 +67,39 @@ function field(value: unknown, key: string): unknown {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>)[key] : undefined;
 }
 
-const KINEMATIC_REPLAY = ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"];
+/** The control layer a stack section's simulation layer implies when it names none (`campaign_config.IMPLIED_CONTROL_LAYERS`). */
+const IMPLIED_CONTROL_LAYERS: Record<string, string> = { kinematic: "none", ardupilot_sim: "ardupilot", gazebo: "ardupilot" };
 
-function kinematicComponents(mode: unknown): string[] {
-  return orderedComponents(mode === "usv_navigation" ? [...KINEMATIC_REPLAY, "asv_software/usv_navigation"] : KINEMATIC_REPLAY);
-}
-
-function ardupilotComponents(layer: string): string[] {
-  return ["asv_software/replay", "control_layer/ardupilot", `simulation_layer/${layer}`];
+/** Replay on the layers for every vessel, and USV Navigation for the own ship in mode usv_navigation. */
+function layerComponents(controlLayer: string, simulationLayer: string, mode: unknown): string[] {
+  const replay = ["asv_software/replay", `control_layer/${controlLayer}`, `simulation_layer/${simulationLayer}`];
+  return orderedComponents(mode === "usv_navigation" ? [...replay, "asv_software/usv_navigation"] : replay);
 }
 
 /**
  * The components a campaign run needs, from its stack section (`stage_graph.run_stack_components`):
- * replay on ArduPilot for an ArduPilot layer, else the kinematic layer with replay, and USV
- * Navigation for the own ship in mode usv_navigation.
+ * its simulation layer (kinematic when it names none) with the control layer it names (custom) or
+ * implies, replay for every vessel, and USV Navigation for the own ship in mode usv_navigation.
  */
 export function runStackComponents(stack: unknown): string[] {
   const layer = field(stack, "simulation_layer");
-  if (layer === "ardupilot_sim" || layer === "gazebo") {
-    return ardupilotComponents(layer);
-  }
-  return kinematicComponents(field(stack, "mode"));
+  const simulationLayer = typeof layer === "string" && layer in IMPLIED_CONTROL_LAYERS ? layer : "kinematic";
+  const controlLayer = field(stack, "control_layer") === "custom" ? "custom" : IMPLIED_CONTROL_LAYERS[simulationLayer];
+  return layerComponents(controlLayer, simulationLayer, field(stack, "mode"));
 }
 
 /** The components a simulation job payload needs, by its runner (`simulation_job.required_components`). */
 export function simulationPayloadComponents(payload: unknown): string[] {
+  const runner = field(payload, "runner");
   const layer = field(payload, "simulation_layer");
-  if (field(payload, "runner") === "ardupilot" && typeof layer === "string") {
-    return ardupilotComponents(layer);
+  const mode = field(payload, "mode");
+  if (runner === "ardupilot" && typeof layer === "string") {
+    return layerComponents("ardupilot", layer, mode);
   }
-  return kinematicComponents(field(payload, "mode"));
+  if (runner === "gazebo_custom") {
+    return layerComponents("custom", "gazebo", mode);
+  }
+  return layerComponents("none", "kinematic", mode);
 }
 
 /** The components a job of the type needs; a simulation's come from its payload, the kinematic replay when there is none. */

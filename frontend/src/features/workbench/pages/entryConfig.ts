@@ -171,20 +171,31 @@ export interface SimulationEntryInput {
   geofence?: ReferenceGeofence;
 }
 
-/** The run's stack section (`campaign_config.KinematicStackConfig`, `ArdupilotStackConfig`) for the plan the workbench made of the setup. */
+/**
+ * The run's stack section (`campaign_config.KinematicStackConfig`, `ArdupilotStackConfig`, `CustomStackConfig`) for the plan the
+ * workbench made of the setup. A campaign run steers the scene's own ship, as the plan does.
+ */
 export function simulationStack(plan: ClusterRunPlan, geofence: ReferenceGeofence = defaultReferenceGeofence): Record<string, unknown> {
   if (plan.runner === "kinematic") {
     return { simulation_layer: "kinematic", mode: plan.mode };
   }
+  if (plan.runner === "gazebo_custom") {
+    return { simulation_layer: "gazebo", control_layer: "custom", mode: plan.mode };
+  }
   return {
     simulation_layer: plan.simulationLayer,
-    mode: "replay",
+    mode: plan.mode,
     speedup: plan.speedup,
     geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
   };
 }
 
-/** A run over one trajectory item on the kinematic layer or on ArduPilot SITL or Gazebo, judged live by the COLREGS monitor as the workbench watches it. */
+/** The run's environment section: the custom controller's wind; none for the stacks that run calm. */
+export function simulationEnvironment(plan: ClusterRunPlan): Record<string, unknown> | null {
+  return plan.runner === "gazebo_custom" && plan.windVector.some((component) => component !== 0) ? { wind_vector: [...plan.windVector] } : null;
+}
+
+/** A run over one trajectory item on the kinematic layer, on ArduPilot SITL or Gazebo, or on the custom controller with Gazebo, judged live by the COLREGS monitor as the workbench watches it. */
 export function simulationEntryConfig(input: SimulationEntryInput): CampaignConfigFormat2 {
   return {
     format: 3,
@@ -193,10 +204,15 @@ export function simulationEntryConfig(input: SimulationEntryInput): CampaignConf
     input: { items: [input.trajectories] },
     domain: { colregs_constants: input.colregsConstraintsContent },
     execution: {
-      runs: [{ stack: simulationStack(input.plan, input.geofence), monitor: "live" }],
+      runs: [runOf(input)],
     },
     policy: entryPolicy(input.seed),
   };
+}
+
+function runOf(input: SimulationEntryInput): Record<string, unknown> {
+  const environment = simulationEnvironment(input.plan);
+  return { stack: simulationStack(input.plan, input.geofence), ...(environment !== null ? { environment } : {}), monitor: "live" };
 }
 
 /** The YAML the create route takes. */

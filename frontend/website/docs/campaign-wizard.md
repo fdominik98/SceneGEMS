@@ -50,7 +50,7 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only |
 | Scene generation | scene generation is a step | The monitor after scene generation, the scene generation timeout and the low TCPA option |
 | Trajectory generation | trajectory generation is a step | The trajectory generator and its parameters, and the monitor after trajectory generation |
-| Simulation | simulation is a step | The simulation runs: stack (kinematic, or replay on ArduPilot SITL or Gazebo), environment, seed, repeats and monitor |
+| Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay or USV Navigation on the own ship), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
 | Policy | always | Retention, frames, the base seed and stop conditions |
 | Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the master's check of it and the buttons that create the campaign |

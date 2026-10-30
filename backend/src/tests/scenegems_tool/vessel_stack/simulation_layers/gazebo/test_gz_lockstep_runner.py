@@ -1,8 +1,5 @@
 """gz lockstep runner: participants, autopilots and the stepped world on one clock, against a fake link whose hulls are the surge-yaw model."""
 
-import math
-from typing import Dict, Tuple
-
 import numpy as np
 import pytest
 
@@ -16,7 +13,6 @@ from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot imp
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_layers.gazebo import gz_lockstep_runner
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_generator import sdf_value
-from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_link import GzStepResult, HullOdometry
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import (
     FLUID_DENSITY,
     gz_custom_instance,
@@ -26,49 +22,9 @@ from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner imp
     thruster_constants,
 )
 from tests.scenegems_tool.vessel_stack.scenarios import stack_instance
+from tests.scenegems_tool.vessel_stack.simulation_layers.gazebo.fake_hull_link import FakeHullLink
 
 CALM = EnvironmentConfig.calm()
-
-
-def odometry(state: HullState) -> HullOdometry:
-    return HullOdometry(state.x, state.y, -0.1, 0.0, 0.0, math.sin(state.heading / 2), math.cos(state.heading / 2), state.surge, state.sway, 0.0, 0.0, 0.0, state.yaw_rate)
-
-
-class FakeHullLink:
-    """Stands in for GzLockstepLink: each model is a HullSurgeYawModel, stepped step_ns per iteration with the thrust held over the step."""
-
-    def __init__(self, hulls: Dict[str, Tuple[HullSurgeYawModel, HullState]], late_steps=()):
-        self.models = {name: model for name, (model, _) in hulls.items()}
-        self.states = {name: state for name, (_, state) in hulls.items()}
-        self.late_steps = set(late_steps)  # step numbers (from 1) whose port thrusters report late
-        self.started = None
-        self.steps = 0
-        self.sim_time_ns = 0
-        self.step_ns = 0
-        self.closed = False
-
-    def connect(self, timeout_s: float) -> None:
-        del timeout_s
-
-    def close(self) -> None:
-        self.closed = True
-
-    def start(self, thrusters, step_ns, settle_iterations) -> GzStepResult:
-        self.started = ({name: dict(values) for name, values in thrusters.items()}, step_ns, settle_iterations)
-        self.step_ns = step_ns
-        return self._iterate(settle_iterations, {name: (0.0, 0.0) for name in self.states}, ())
-
-    def step(self, iterations, thrust) -> GzStepResult:
-        self.steps += 1
-        late = tuple(f"{name}/port" for name in sorted(thrust)) if self.steps in self.late_steps else ()
-        return self._iterate(iterations, thrust, late)
-
-    def _iterate(self, iterations, thrust, late) -> GzStepResult:
-        for _ in range(iterations):
-            for name, model in self.models.items():
-                self.states[name] = model.step(self.states[name], *thrust[name], self.step_ns / 1e9)
-        self.sim_time_ns += iterations * self.step_ns
-        return GzStepResult(self.sim_time_ns, {name: odometry(state) for name, state in self.states.items()}, late)
 
 
 def straight_run():

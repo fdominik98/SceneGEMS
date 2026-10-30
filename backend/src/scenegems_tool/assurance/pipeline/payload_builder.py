@@ -20,7 +20,10 @@
                             runner ardupilot: the same trajectories for a run on an ArduPilot stack: its simulation layer,
                             speedup, geofence, dt, steps and the run seed; the observed run comes back
                             as trajectories (include_trajectories), with the live monitor options when
-                            the run is judged live and no state rows (the trajectories are the state log)
+                            the run is judged live and no state rows (the trajectories are the state log);
+                            the stack's mode and USV Navigation parameters
+                            runner gazebo_custom: the same for the custom controller on Gazebo, with the
+                            run's environment (wind and waves) and no speedup or geofence
     monitoring.post_hoc     (monitor) the simulation result's trajectories, the COLREGS constants
     calibration.deviation   the trajectories of the run's repeats
 
@@ -37,7 +40,16 @@ from typing import Any, Collection, Dict, Mapping, Optional, Sequence, Tuple
 
 from pydantic import ValidationError
 
-from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, FunctionalScenarioInput, InputArtifactKind, InputItem, InputRef, RunConfig
+from scenegems_tool.assurance.campaign.campaign_config import (
+    ArdupilotStackConfig,
+    CampaignConfig,
+    CustomStackConfig,
+    FunctionalScenarioInput,
+    InputArtifactKind,
+    InputItem,
+    InputRef,
+    RunConfig,
+)
 from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.stage_graph import StageGraph, Step
@@ -190,6 +202,8 @@ class PayloadBuilder:
         run = self.config.execution.runs[run_index]
         if isinstance(run.stack, ArdupilotStackConfig):
             return self._ardupilot_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
+        if isinstance(run.stack, CustomStackConfig):
+            return self._custom_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         stack = run.stack
         payload: Dict[str, Any] = {"runner": SimulationRunner.KINEMATIC.value, "mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
         if stack.usv_navigation is not None:
@@ -207,6 +221,7 @@ class PayloadBuilder:
         payload: Dict[str, Any] = {
             "runner": SimulationRunner.ARDUPILOT.value,
             "simulation_layer": stack.simulation_layer,
+            "mode": stack.mode.value,
             "trajectories": trajectories,
             "geofence": stack.geofence.model_dump(mode="json"),
             "speedup": stack.speedup,
@@ -214,6 +229,24 @@ class PayloadBuilder:
             "include_states": False,  # the sample rows would be a second state log next to the trajectories
             "include_trajectories": True,
         }
+        return self._lockstep_options(run, stack, payload)
+
+    def _custom_simulation(self, run: RunConfig, stack: CustomStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:
+        """The gazebo_custom runner's payload of a run: the run's environment goes to the world and to the controller's hulls, and the observed run comes back as trajectories."""
+        payload: Dict[str, Any] = {
+            "runner": SimulationRunner.GAZEBO_CUSTOM.value,
+            "mode": stack.mode.value,
+            "trajectories": trajectories,
+            "environment": run.environment.model_dump(mode="json"),
+            "seed": seed,
+            "include_trajectories": True,
+        }
+        return self._lockstep_options(run, stack, payload)
+
+    def _lockstep_options(self, run: RunConfig, stack: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """The fields the ardupilot and gazebo_custom payloads share: the USV Navigation parameters, dt, steps and the live monitor's options."""
+        if stack.usv_navigation is not None:
+            payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
         if stack.dt is not None:
             payload["dt"] = stack.dt
         if stack.steps is not None:
