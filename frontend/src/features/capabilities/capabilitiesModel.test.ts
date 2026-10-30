@@ -130,7 +130,7 @@ describe("cluster jobs", () => {
   });
 
   it("rates a stack without a cluster job amber", () => {
-    expect(factTone(fact(CLUSTER_JOB_FACT, "simulation.gazebo"))).toBe("ok");
+    expect(factTone(fact(CLUSTER_JOB_FACT, "simulation, runner ardupilot"))).toBe("ok");
     expect(factTone(fact(CLUSTER_JOB_FACT, null))).toBe("warn");
   });
 });

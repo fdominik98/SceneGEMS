@@ -126,7 +126,7 @@ export const sampleCatalogStacks = {
   ],
   monitors: [
     { id: "post_hoc", label: "Post hoc", description: "A monitoring job judges the recorded run after the simulation.", job_types: ["monitoring.post_hoc"], supports_early_stop: false },
-    { id: "live", label: "Live", description: "The COLREGS monitor runs inside the simulation step by step.", job_types: ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"], supports_early_stop: true },
+    { id: "live", label: "Live", description: "The COLREGS monitor runs inside the simulation step by step.", job_types: ["simulation"], supports_early_stop: true },
     { id: "empty", label: "None", description: "Nothing is judged; every verdict is unmonitored.", job_types: [], supports_early_stop: false },
   ],
   trajectory_generators: [

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { nodeViewSchema } from "../../domain/cluster/schemas";
 import { sampleNode } from "../../test/fixtures/clusterViews";
@@ -28,5 +28,30 @@ describe("NodeCard image mismatches", () => {
   it("shows no note for a node that matches the release", () => {
     renderCard({});
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("names the out-of-date components, which get no jobs, while the others work", () => {
+    renderCard({
+      out_of_date: true,
+      fingerprint_mismatches: [{ image: "scenegems-gazebo-harmonic:latest", required: "fp-gazebo-123456", actual: "fp-old" }],
+      components: [
+        { component: "asv_software/replay", images: [], state: "usable" },
+        { component: "simulation_layer/gazebo", images: ["scenegems-gazebo-harmonic:latest"], state: "out_of_date" },
+      ],
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("the images of Gazebo differ from the master's release; jobs needing it go elsewhere.");
+    const components = screen.getByRole("list", { name: "Components" });
+    expect(components).toHaveTextContent("Replay");
+    expect(components).toHaveTextContent("Gazebo out of date");
+  });
+});
+
+describe("NodeCard components and slots", () => {
+  it("lists the components and the slots per job type", () => {
+    renderCard({});
+    expect(screen.getByRole("list", { name: "Components" })).toHaveTextContent("ReplayNo control layerKinematic layerScene generation");
+    fireEvent.click(screen.getByRole("button", { name: /Details/ }));
+    expect(screen.getByText("Simulation")).toBeInTheDocument();
+    expect(screen.getByText("8/8")).toBeInTheDocument();
   });
 });

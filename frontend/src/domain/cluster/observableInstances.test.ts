@@ -6,10 +6,10 @@ import { jobViewSchema, nodeViewSchema } from "./schemas";
 
 const node = nodeViewSchema.parse(
   sampleNode({
-    capabilities: {
+    slots: {
       scene_generation: { slots: 3, slots_in_use: 1 },
       trajectory_generation: { slots: 2, slots_in_use: 0 },
-      "simulation.kinematic": { slots: 8, slots_in_use: 2 },
+      simulation: { slots: 8, slots_in_use: 2 },
     },
   })
 );
@@ -39,7 +39,7 @@ describe("poolInstances", () => {
   });
 
   it("gives nothing for a node without pooled capabilities", () => {
-    const simulationOnly = nodeViewSchema.parse(sampleNode({ capabilities: { "simulation.kinematic": { slots: 4, slots_in_use: 0 } } }));
+    const simulationOnly = nodeViewSchema.parse(sampleNode({ slots: { simulation: { slots: 4, slots_in_use: 0 } } }));
     expect(poolInstances(simulationOnly)).toEqual([]);
   });
 });
@@ -47,11 +47,11 @@ describe("poolInstances", () => {
 describe("jobInstances", () => {
   it("names the leased and running jobs this node owns by job id and attempt", () => {
     const jobs = [
-      job({ job_id: "aaaa1111bbbb2222", job_type: "simulation.kinematic", state: "running", attempt: 2 }),
+      job({ job_id: "aaaa1111bbbb2222", job_type: "simulation", state: "running", attempt: 2 }),
       job({ job_id: "cccc3333dddd4444", job_type: "monitoring.post_hoc", state: "leased", attempt: 1 }),
-      job({ job_id: "other", job_type: "simulation.kinematic", state: "running", lease_owner: "node-b2" }),
-      job({ job_id: "done", job_type: "simulation.kinematic", state: "succeeded" }),
-      job({ job_id: "waiting", job_type: "simulation.kinematic", state: "queued", lease_owner: null }),
+      job({ job_id: "other", job_type: "simulation", state: "running", lease_owner: "node-b2" }),
+      job({ job_id: "done", job_type: "simulation", state: "succeeded" }),
+      job({ job_id: "waiting", job_type: "simulation", state: "queued", lease_owner: null }),
     ];
     const instances = jobInstances(node, jobs);
     expect(instances.map((entry) => entry.instance)).toEqual(["job-aaaa1111bbbb2222-2", "job-cccc3333dddd4444-1"]);
@@ -71,7 +71,7 @@ describe("jobInstances", () => {
   });
 
   it("puts the pools before the jobs", () => {
-    const all = nodeInstances(node, [job({ job_id: "x1", job_type: "simulation.kinematic" })]);
+    const all = nodeInstances(node, [job({ job_id: "x1", job_type: "simulation" })]);
     expect(all.map((entry) => entry.origin)).toEqual(["pool", "pool", "pool", "pool", "pool", "job"]);
   });
 });
@@ -80,9 +80,7 @@ describe("kinds and viewers", () => {
   it("maps job types to the kinds the master reports", () => {
     expect(jobInstanceKind("scene_generation")).toBe("scene_generation");
     expect(jobInstanceKind("trajectory_generation")).toBe("trajectory_generation");
-    expect(jobInstanceKind("simulation.kinematic")).toBe("simulation");
-    expect(jobInstanceKind("simulation.ardupilot_sim")).toBe("simulation");
-    expect(jobInstanceKind("simulation.gazebo")).toBe("simulation");
+    expect(jobInstanceKind("simulation")).toBe("simulation");
     expect(jobInstanceKind("calibration.deviation")).toBe("simulation");
     expect(jobInstanceKind("monitoring.post_hoc")).toBe("monitoring");
   });

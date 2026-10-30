@@ -121,7 +121,7 @@ describe("buildCampaignConfig steps", () => {
     draft.sceneMonitor = "post_hoc";
     const cluster: BuilderCatalog = {
       ...catalog,
-      slots: { scene_generation: 40, trajectory_generation: 50, "simulation.kinematic": 60, "monitoring.post_hoc": 64, "calibration.deviation": 20 },
+      slots: { scene_generation: 40, trajectory_generation: 50, simulation: 60, "monitoring.post_hoc": 64, "calibration.deviation": 20 },
     };
     expect(buildCampaignConfig(draft, cluster).resources).toEqual({ queue_depth: { generate_scene: 40, monitor: 64 }, priority: 0 });
   });

@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { COMPONENTS } from "../../domain/cluster/components";
 import { nodeViewSchema, type NodeView } from "../../domain/cluster/schemas";
 import { sampleNode } from "../../test/fixtures/clusterViews";
 import {
   capabilityLabel,
   fullUsageQueueDepth,
+  needLabel,
   nodeProblems,
   planOfConfig,
   planResources,
@@ -15,22 +17,37 @@ import {
 } from "./resourcePlan";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
-function node(id: string, capabilities: Record<string, number>, overrides: Record<string, unknown> = {}): NodeView {
-  const usage = Object.fromEntries(Object.entries(capabilities).map(([jobType, slots]) => [jobType, { slots, slots_in_use: 0 }]));
-  return nodeViewSchema.parse(sampleNode({ node_id: id, name: id, machine: `${id}-pc`, labels: { site: "lab" }, capabilities: usage, ...overrides }));
+const KINEMATIC_NODE = ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring"];
+const SITL_NODE = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+
+function components(usable: readonly string[], stale: readonly string[] = []) {
+  return [...usable.map((component) => ({ component, images: [], state: "usable" })), ...stale.map((component) => ({ component, images: [], state: "out_of_date" }))];
 }
 
-const PIPELINE = { scene_generation: 4, trajectory_generation: 4, "simulation.kinematic": 8, "monitoring.post_hoc": 4 };
+/** A node with slots per job type and components, every one of the catalog unless named. */
+function node(id: string, slots: Record<string, number>, overrides: Record<string, unknown> = {}, offered: readonly string[] = COMPONENTS): NodeView {
+  const usage = Object.fromEntries(Object.entries(slots).map(([jobType, count]) => [jobType, { slots: count, slots_in_use: 0 }]));
+  return nodeViewSchema.parse(sampleNode({ node_id: id, name: id, machine: `${id}-pc`, labels: { site: "lab" }, slots: usage, components: components(offered), ...overrides }));
+}
+
+const PIPELINE = { scene_generation: 4, trajectory_generation: 4, simulation: 8, "monitoring.post_hoc": 4 };
+const KINEMATIC_COMPONENTS = ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"];
 
 function config(runs: Record<string, unknown>[], resources: Record<string, unknown> = {}): Record<string, unknown> {
   return { trajectories: { generator: "monitor_driven_rrt" }, execution: { runs }, resources };
 }
 
 describe("requiredCapabilities", () => {
-  it("needs scenes, trajectories, the simulation and the post hoc monitor by default", () => {
+  it("needs scenes, trajectories, the simulation and the post hoc monitor by default, each with its components", () => {
     const required = requiredCapabilities(config([{}]));
-    expect(required.map((capability) => capability.jobType)).toEqual(["scene_generation", "trajectory_generation", "simulation.kinematic", "monitoring.post_hoc"]);
+    expect(required.map((capability) => [capability.jobType, capability.components])).toEqual([
+      ["scene_generation", ["scene_generation"]],
+      ["trajectory_generation", ["trajectory_generation"]],
+      ["simulation", KINEMATIC_COMPONENTS],
+      ["monitoring.post_hoc", ["monitoring"]],
+    ]);
     expect(required[1].reason).toBe("Every case plans its trajectories (monitor driven rrt).");
+    expect(required[2].reason).toBe("The run is simulated on the kinematic layer.");
   });
 
   it("needs the monitoring job only for post hoc runs and the calibration only for repeats", () => {
@@ -39,49 +56,55 @@ describe("requiredCapabilities", () => {
     const repeated = requiredCapabilities(config([{ name: "nav", monitor: "post_hoc", repeats: 3 }, { monitor: "post_hoc", repeats: 2 }]));
     expect(repeated.map((capability) => capability.stage)).toEqual(["generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate"]);
     expect(repeated[3].reason).toBe("The post hoc monitor judges nav and run 2.");
-    expect(repeated[4].reason).toBe("The repeats of nav and run 2 are compared.");
+    expect(repeated[4]).toMatchObject({ components: ["calibration"], reason: "The repeats of nav and run 2 are compared." });
   });
 });
 
-describe("requiredCapabilities of a campaign with ArduPilot runs", () => {
+describe("requiredCapabilities of a campaign with several stacks", () => {
   const sitl = { name: "sitl", stack: { simulation_layer: "ardupilot_sim" }, monitor: "post_hoc" };
   const world = { stack: { simulation_layer: "gazebo" }, monitor: "live" };
 
-  it("reads the simulation job type of a run from its stack, as stage_graph does", () => {
-    expect(simulationJobType({ simulation_layer: "ardupilot_sim" })).toBe("simulation.ardupilot_sim");
-    expect(simulationJobType({ simulation_layer: "gazebo" })).toBe("simulation.gazebo");
-    expect(simulationJobType({ simulation_layer: "kinematic", mode: "replay" })).toBe("simulation.kinematic");
-    expect(simulationJobType({ mode: "usv_navigation" })).toBe("simulation.kinematic");
-    expect(simulationJobType(undefined)).toBe("simulation.kinematic");
+  it("simulates every run with the simulation job type", () => {
+    expect(simulationJobType({ simulation_layer: "gazebo" })).toBe("simulation");
+    expect(simulationJobType(undefined)).toBe("simulation");
   });
 
-  it("needs the ArduPilot simulation of the run's layer instead of the kinematic one", () => {
+  it("needs the layers of the run's stack", () => {
     const required = requiredCapabilities(config([sitl]));
-    expect(required.map((capability) => capability.jobType)).toEqual(["scene_generation", "trajectory_generation", "simulation.ardupilot_sim", "monitoring.post_hoc"]);
-    expect(required[2]).toMatchObject({ stage: "simulate", reason: "The run is simulated on ArduPilot SITL." });
+    expect(required[2]).toMatchObject({ jobType: "simulation", stage: "simulate", components: SITL_NODE, reason: "The run is simulated on ArduPilot SITL." });
     expect(requiredCapabilities(config([world, { ...world, name: "again" }]))[2].reason).toBe("Each of the 2 runs is simulated on Gazebo.");
+    const navigation = requiredCapabilities(config([{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" } }]))[2];
+    expect(navigation.components).toEqual(["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(navigation.reason).toBe("The run is simulated on the kinematic layer with USV Navigation.");
   });
 
-  it("needs both simulation jobs for a mix, naming the runs of each", () => {
-    const required = requiredCapabilities(config([{ name: "kinematic" }, sitl, world]));
+  it("needs one simulation per distinct set of components, naming the runs of each", () => {
+    const required = requiredCapabilities(config([{ name: "kinematic" }, sitl, world, { ...sitl, name: "sitl again" }]));
     const simulations = required.filter((capability) => capability.stage === "simulate");
-    expect(simulations.map((capability) => [capability.jobType, capability.reason])).toEqual([
-      ["simulation.kinematic", "kinematic is simulated on the kinematic layer."],
-      ["simulation.ardupilot_sim", "sitl is simulated on ArduPilot SITL."],
-      ["simulation.gazebo", "run 3 is simulated on Gazebo."],
+    expect(simulations.map((capability) => [capability.jobType, capability.components.at(-1), capability.reason])).toEqual([
+      ["simulation", "simulation_layer/kinematic", "kinematic is simulated on the kinematic layer."],
+      ["simulation", "simulation_layer/ardupilot_sim", "sitl and sitl again are simulated on ArduPilot SITL."],
+      ["simulation", "simulation_layer/gazebo", "run 3 is simulated on Gazebo."],
     ]);
-    expect(capabilityLabel("simulation.ardupilot_sim")).toBe("ArduPilot SITL simulation");
-    expect(capabilityLabel("simulation.gazebo")).toBe("Gazebo simulation");
+    expect(capabilityLabel("simulation")).toBe("Simulation");
+    expect(needLabel(simulations[2])).toBe("simulation with Replay, ArduPilot and Gazebo");
+    expect(needLabel(required[0])).toBe("scene generation");
   });
 
-  it("is missing when no usable node offers the ArduPilot simulation of the run's layer", () => {
-    const nodes = [node("a", PIPELINE), node("b", { "simulation.ardupilot_sim": 2 })];
+  it("is missing when no usable node has the run's components", () => {
+    const nodes = [node("a", PIPELINE, {}, KINEMATIC_NODE), node("b", { simulation: 2 }, {}, SITL_NODE)];
     const plan = planOfConfig(config([sitl], {}), [nodes[0]]);
-    expect(plan.missing.map((capability) => capability.jobType)).toEqual(["simulation.ardupilot_sim"]);
-    expect(startBlocker(plan)).toBe("No usable machine of the campaign runs ardupilot sitl simulation.");
+    expect(plan.missing.map((capability) => capability.components)).toEqual([SITL_NODE]);
+    expect(startBlocker(plan)).toBe("No usable machine of the campaign runs simulation with Replay, ArduPilot and ArduPilot SITL.");
     expect(planOfConfig(config([sitl], {}), nodes).missing).toEqual([]);
     // a SITL node does not run Gazebo runs
-    expect(planOfConfig(config([world], {}), nodes).missing.map((capability) => capability.jobType)).toEqual(["simulation.gazebo"]);
+    expect(planOfConfig(config([world], {}), nodes).missing.map((capability) => capability.components.at(-1))).toEqual(["simulation_layer/gazebo"]);
+  });
+
+  it("does not count a component that is out of date on the node", () => {
+    const stale = node("s", { simulation: 2 }, { out_of_date: true, components: components(["asv_software/replay", "control_layer/ardupilot"], ["simulation_layer/ardupilot_sim"]) });
+    expect(nodeProblems(stale, {}), "the node's other components still work").toEqual([]);
+    expect(planOfConfig(config([sitl], {}), [stale]).missing.map((capability) => capability.stage)).toContain("simulate");
   });
 });
 
@@ -122,10 +145,10 @@ describe("nodeProblems", () => {
   });
 
   it("names every reason a node cannot take jobs", () => {
-    const stale = node("a", PIPELINE, { status: "draining", out_of_date: true });
+    const stale = node("a", PIPELINE, { status: "draining", out_of_date: true, components: components([], ["scene_generation", "monitoring"]) });
     expect(nodeProblems(stale, { site: "sea", gpu: "true" })).toEqual([
       "Draining: it takes no new jobs.",
-      "Out of date: its images differ from the master's release.",
+      "Out of date: the images of all its components differ from the master's release.",
       "Lacks the labels site=sea, gpu=true.",
     ]);
     expect(nodeProblems(node("b", PIPELINE, { status: "offline" }), {})).toEqual(["Offline."]);
@@ -136,20 +159,22 @@ describe("planResources", () => {
   const required = requiredCapabilities(config([{ repeats: 2 }]));
   const nodes = [
     node("a", { scene_generation: 2, trajectory_generation: 2 }),
-    node("b", { "simulation.kinematic": 6, "monitoring.post_hoc": 2 }),
-    node("c", { "simulation.kinematic": 4, "calibration.deviation": 1 }, { out_of_date: true }),
+    node("b", { simulation: 6, "monitoring.post_hoc": 2 }),
+    node("c", { simulation: 4, "calibration.deviation": 1 }, { out_of_date: true, components: components([], ["simulation_layer/kinematic", "calibration"]) }),
+    node("d", { simulation: 9 }, {}, SITL_NODE),
   ];
 
   it("covers with every usable node in full usage and reports what no node runs", () => {
     const plan = planResources(required, nodes, { nodes: null, labels: {} });
-    expect(plan.usable.map((entry) => entry.node_id)).toEqual(["a", "b"]);
+    expect(plan.usable.map((entry) => entry.node_id)).toEqual(["a", "b", "d"]);
     expect(plan.coverage.map((entry) => [entry.capability.jobType, entry.slots])).toEqual([
       ["scene_generation", 2],
       ["trajectory_generation", 2],
-      ["simulation.kinematic", 6],
+      ["simulation", 6],
       ["monitoring.post_hoc", 2],
       ["calibration.deviation", 0],
     ]);
+    expect(plan.coverage[2].nodes.map((entry) => entry.node_id), "the SITL node lacks the kinematic layer").toEqual(["b"]);
     expect(plan.missing.map((capability) => capability.jobType)).toEqual(["calibration.deviation"]);
     expect(startBlocker(plan)).toBe("No usable machine of the campaign runs repeat calibration.");
   });
@@ -183,32 +208,27 @@ describe("planOfConfig", () => {
 
 describe("full usage", () => {
   it("adds the slots of usable nodes per job type", () => {
-    const nodes = [node("a", PIPELINE), node("b", { "simulation.kinematic": 40 }), node("c", { "simulation.kinematic": 99 }, { status: "offline" })];
-    expect(slotsByJobType(nodes)).toEqual({ scene_generation: 4, trajectory_generation: 4, "simulation.kinematic": 48, "monitoring.post_hoc": 4 });
+    const nodes = [node("a", PIPELINE), node("b", { simulation: 40 }), node("c", { simulation: 99 }, { status: "offline" })];
+    expect(slotsByJobType(nodes)).toEqual({ scene_generation: 4, trajectory_generation: 4, simulation: 48, "monitoring.post_hoc": 4 });
   });
 
   it("sizes each queue cap to the slots of its stage, never below the default", () => {
     expect(fullUsageQueueDepth({})).toEqual(QUEUE_DEPTH_DEFAULTS);
-    expect(fullUsageQueueDepth({ scene_generation: 40, "simulation.kinematic": 12, "calibration.deviation": 9 })).toEqual({
+    expect(fullUsageQueueDepth({ scene_generation: 40, simulation: 12, "calibration.deviation": 9 })).toEqual({
       ...QUEUE_DEPTH_DEFAULTS,
       generate_scene: 40,
       calibrate: 9,
     });
   });
 
-  it("sizes the simulate cap to the slots of the simulation jobs the runs use", () => {
-    const slots = { "simulation.kinematic": 12, "simulation.ardupilot_sim": 20, "simulation.gazebo": 4 };
-    expect(fullUsageQueueDepth(slots, ["simulation.ardupilot_sim"]).simulate).toBe(32);
-    expect(fullUsageQueueDepth(slots, ["simulation.kinematic", "simulation.ardupilot_sim"]).simulate).toBe(32);
-    expect(fullUsageQueueDepth(slots, ["simulation.ardupilot_sim", "simulation.gazebo"]).simulate).toBe(32);
-    expect(fullUsageQueueDepth({ "simulation.gazebo": 50 }, ["simulation.gazebo"]).simulate).toBe(50);
-    expect(fullUsageQueueDepth({ "simulation.gazebo": 50 }).simulate).toBe(QUEUE_DEPTH_DEFAULTS.simulate);
-    expect(simulationJobTypesOf(requiredCapabilities(config([{ stack: { simulation_layer: "gazebo" } }, {}])))).toEqual(["simulation.gazebo", "simulation.kinematic"]);
-    expect(simulationJobTypesOf([])).toEqual(["simulation.kinematic"]);
+  it("sizes the simulate cap to the simulation slots once, whatever the runs' stacks", () => {
+    expect(fullUsageQueueDepth({ simulation: 50 }).simulate).toBe(50);
+    expect(fullUsageQueueDepth({ simulation: 50 }, ["simulation", "simulation"]).simulate).toBe(50);
+    expect(simulationJobTypesOf(requiredCapabilities(config([{ stack: { simulation_layer: "gazebo" } }, {}])))).toEqual(["simulation"]);
+    expect(simulationJobTypesOf([])).toEqual(["simulation"]);
   });
 
   it("names capabilities without the comma of the cluster labels", () => {
-    expect(capabilityLabel("simulation.kinematic")).toBe("Kinematic simulation");
     expect(capabilityLabel("custom.job")).toBe("custom.job");
   });
 });
