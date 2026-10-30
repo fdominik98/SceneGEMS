@@ -18,7 +18,7 @@ def test_every_job_type_has_a_module_with_a_runner():
 
 
 def test_runner_container_job_types_have_an_in_container_part():
-    for job_type in (JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
+    for job_type in (JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
         assert callable(JOB_TYPE_MODULES[job_type].execute)
 
 

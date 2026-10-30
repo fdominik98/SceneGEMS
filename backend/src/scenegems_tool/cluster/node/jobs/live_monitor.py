@@ -1,7 +1,7 @@
 """The COLREGS monitor inside a simulation job, judging the run step by step (monitor: live).
 
-simulation.kinematic and simulation.ardupilot feed it from their step observers with the scene
-of each step, as monitoring.post_hoc feeds it scene by scene, and report its summary in the
+simulation.kinematic, simulation.ardupilot_sim and simulation.gazebo feed it from their step
+observers with the scene of each step, as monitoring.post_hoc feeds it scene by scene, and report its summary in the
 post-hoc result shape (subsystems/monitoring/rule_outcomes.py).
 """
 

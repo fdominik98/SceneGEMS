@@ -209,7 +209,7 @@ function OutputList({
                 <thead>
                   <tr>
                     <th>Case</th>
-                    <th>Class</th>
+                    <th>FEC</th>
                     <th>State</th>
                     <th>Output</th>
                     <th>Monitor</th>
@@ -226,7 +226,7 @@ function OutputList({
                           {row.case_index}
                           {row.run_index !== null ? `, run ${row.run_index + 1}` : ""}
                         </td>
-                        <td title={row.class_id}>{row.class_id}</td>
+                        <td title={row.fec_id}>{row.fec_id}</td>
                         <td>{row.state}</td>
                         <td>{problem ?? (flagsOf(row) || "available")}</td>
                         <td>{row.verdict ? row.verdict.state : "none"}</td>

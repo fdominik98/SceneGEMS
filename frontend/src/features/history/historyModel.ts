@@ -235,10 +235,10 @@ export function outputFlags(row: OutputRow): OutputFlag[] {
  * What an output's case is called: a case of a catalog class (with its folder), a case of a
  * scenario given as content, or the input item a case of a later start stands for (one case each).
  */
-export function outputCaseLabel(row: Pick<OutputRow, "class_id" | "case_index">): { title: string; detail: string | null } {
-  const slash = row.class_id.indexOf("/");
-  const folder = slash === -1 ? "" : row.class_id.slice(0, slash);
-  const name = slash === -1 ? row.class_id : row.class_id.slice(slash + 1);
+export function outputCaseLabel(row: Pick<OutputRow, "fec_id" | "case_index">): { title: string; detail: string | null } {
+  const slash = row.fec_id.indexOf("/");
+  const folder = slash === -1 ? "" : row.fec_id.slice(0, slash);
+  const name = slash === -1 ? row.fec_id : row.fec_id.slice(slash + 1);
   if (folder === "item") {
     return { title: `input item ${name}`, detail: null };
   }

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef } from "react";
 import "./simulationPanel.css";
 import { useUiStore, type TrajectoryStream } from "../../../app/uiStore";
 import { usePersistedState } from "../../../app/usePersistedState";
+import { IconButton } from "../../../components/IconButton";
+import { DownloadIcon, PanelRightCloseIcon } from "../../../components/icons";
 import { useShownPlayback } from "../../../domain/playback/playbackContext";
 import { framesAtOrBeforeCursor } from "../../../domain/playback/playbackFrameResolve";
 import type { SimulationFrame } from "../../../domain/simulation/types";
@@ -9,7 +11,6 @@ import { MetricsView } from "../metrics/MetricsView";
 import { pickDefaultRelationId } from "../metrics/metricsRelations";
 import { BasicActorInfoPanel } from "../monitor/BasicActorInfoPanel";
 import { WorkbenchPairCards } from "../monitor/WorkbenchEncounterPanels";
-import { ActorVisibilityPanel } from "./ActorVisibilityPanel";
 
 function exportTrajectoryFrames(stream: "preview" | "simulation", scenarioId: string | null, frames: SimulationFrame[]) {
   const sortedFrames = [...frames].sort((a, b) => a.timestamp - b.timestamp);
@@ -34,7 +35,8 @@ const STREAM_LABELS: Record<TrajectoryStream, string> = { animation: "Preview", 
 
 /**
  * The monitoring panel beside the canvas: one stream at a time (the planned preview, or the
- * simulation once it has frames), as live data (pairs, layers, frame data) or charts.
+ * simulation once it has frames), as live data (pairs, frame data) or charts. The layers
+ * are set on the canvas itself.
  */
 export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?: boolean }) {
   const monitorPanelView = useUiStore((s) => s.monitorPanelView);
@@ -87,9 +89,7 @@ export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?
             </button>
           ))}
         </div>
-        <button type="button" className="right-pane-hide-btn" onClick={() => setRightPaneVisible(false)} aria-label="Hide monitoring panel" title="Hide monitoring panel">
-          Hide panel
-        </button>
+        <IconButton label="Hide monitoring panel" icon={<PanelRightCloseIcon />} onClick={() => setRightPaneVisible(false)} />
       </header>
       <div className="monitor-stream-bar">
         {hasSimulation ? (
@@ -110,20 +110,17 @@ export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?
         ) : (
           <span className="meta">{STREAM_LABELS.animation}: the planned trajectory</span>
         )}
-        <button
-          type="button"
-          className="right-trajectory-hide-btn"
+        <IconButton
+          label={`Export the ${stream === "simulation" ? "simulation" : "preview"} frames (JSON)`}
+          icon={<DownloadIcon />}
           disabled={sortedFrames.length === 0}
           onClick={() => exportTrajectoryFrames(stream === "simulation" ? "simulation" : "preview", activeScenarioId, sortedFrames)}
-        >
-          Export frames
-        </button>
+        />
       </div>
       <div className="right-trajectory-column-scroll">
         {monitorPanelView === "runtime_data" ? (
           <>
             <WorkbenchPairCards stream={stream} />
-            <ActorVisibilityPanel stream={stream} />
             <BasicActorInfoPanel stream={stream} />
           </>
         ) : (

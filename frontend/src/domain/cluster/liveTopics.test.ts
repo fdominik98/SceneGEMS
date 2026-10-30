@@ -54,24 +54,24 @@ describe("live topic reducers", () => {
 
     state = campaignReducer.update(state, { campaign: { ...sampleCampaignSummary, actual_state: "paused", desired_state: "paused" } }, 3);
     expect(state.detail.actual_state).toBe("paused");
-    expect(state.detail.classes).toHaveLength(1);
+    expect(state.detail.fecs).toHaveLength(1);
 
     state = campaignReducer.update(
       state,
       {
-        classes: [
+        fecs: [
           sampleClass({ complete: 10, in_flight: 0, state: "complete", verdicts: { "0": { passed: 9, failed: 1 } } }),
-          sampleClass({ class_id: "class-b", quota: 5, complete: 0, dropped: 0, in_flight: 1, verdicts: {} }),
+          sampleClass({ fec_id: "class-b", quota: 5, complete: 0, dropped: 0, in_flight: 1, verdicts: {} }),
         ],
       },
       4
     );
-    expect(state.detail.classes.map((entry) => entry.class_id)).toEqual(["class-a", "class-b"]);
+    expect(state.detail.fecs.map((entry) => entry.fec_id)).toEqual(["class-a", "class-b"]);
     expect(state.detail.totals).toEqual({
-      classes: 2,
-      classes_open: 1,
-      classes_complete: 1,
-      classes_abandoned: 0,
+      fecs: 2,
+      fecs_open: 1,
+      fecs_complete: 1,
+      fecs_abandoned: 0,
       quota: 15,
       complete: 10,
       dropped: 1,

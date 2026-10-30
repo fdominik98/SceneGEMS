@@ -1,6 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { fact, sampleStackDocument } from "../../test/fixtures/architectureDocuments";
-import { buildMatrix, cardFacts, connectedIds, factsByGroup, factTone, formatFactValue, highlightFor, parallelIndex, shortId, stacksThrough, words } from "./capabilitiesModel";
+import {
+  buildMatrix,
+  cardFacts,
+  CLUSTER_JOB_FACT,
+  clusterJobOf,
+  connectedIds,
+  factsByGroup,
+  factTone,
+  formatFactValue,
+  highlightFor,
+  parallelIndex,
+  shortId,
+  stacksRunAsJobs,
+  stacksThrough,
+  words,
+} from "./capabilitiesModel";
 
 describe("fact tones", () => {
   it("rates repeatability, environment support and the lockstep flags", () => {
@@ -96,6 +111,27 @@ describe("stacks and the matrix", () => {
 
   it("has no matrix for a document without combinations", () => {
     expect(buildMatrix({ ...document, combinations: [] })).toBeNull();
+  });
+});
+
+describe("cluster jobs", () => {
+  const document = sampleStackDocument();
+
+  it("reads the job type that runs an available stack, none for a workbench stack, nothing for one that is not available", () => {
+    expect(clusterJobOf(document.combinations[0])?.value).toBe("sim.e");
+    expect(clusterJobOf(document.combinations[2])?.value).toBeNull();
+    expect(clusterJobOf(document.combinations[4])).toBeUndefined();
+  });
+
+  it("counts the stacks a cluster job runs, and nothing for a document of an older master", () => {
+    expect(stacksRunAsJobs(document)).toBe(2);
+    const older = { ...document, combinations: document.combinations.map((combination) => ({ ...combination, facts: combination.facts.filter((fact) => fact.key !== CLUSTER_JOB_FACT) })) };
+    expect(stacksRunAsJobs(older)).toBeNull();
+  });
+
+  it("rates a stack without a cluster job amber", () => {
+    expect(factTone(fact(CLUSTER_JOB_FACT, "simulation.gazebo"))).toBe("ok");
+    expect(factTone(fact(CLUSTER_JOB_FACT, null))).toBe("warn");
   });
 });
 

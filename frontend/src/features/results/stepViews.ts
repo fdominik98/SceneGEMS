@@ -163,10 +163,10 @@ export interface ClassRow {
   failed: number;
 }
 
-/** Classes with the most failures first, then by name (numbers inside names in order). */
-export function rankClasses(classes: Findings["classes"]): ClassRow[] {
+/** FECs with the most failures first, then by name (numbers inside names in order). */
+export function rankClasses(classes: Findings["fecs"]): ClassRow[] {
   return classes
-    .map((view) => ({ classId: view.class_id, cases: view.cases, passed: view.passed, failed: view.failed }))
+    .map((view) => ({ classId: view.fec_id, cases: view.cases, passed: view.passed, failed: view.failed }))
     .sort((a, b) => b.failed - a.failed || a.classId.localeCompare(b.classId, undefined, { numeric: true }));
 }
 
@@ -207,7 +207,7 @@ export function describeFindings(findings: Findings): FindingsView {
     showComplete: findings.step !== "scene_generation",
     verdicts: monitored ? { ...findings.verdicts, judged } : null,
     failedRules: monitored ? rankFailedRules(findings.failed_rules) : [],
-    classes: rankClasses(findings.classes),
+    classes: rankClasses(findings.fecs),
     duration: hasDuration ? { median: formatSeconds(findings.durations_s.median), p90: formatSeconds(findings.durations_s.p90) } : null,
   };
 }

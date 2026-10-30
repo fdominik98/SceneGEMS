@@ -9,7 +9,7 @@ function caseView(classId: string, inputArtifact: string | null) {
   return {
     case_id: 3,
     campaign_id: "wb1",
-    class_id: classId,
+    fec_id: classId,
     case_index: 0,
     seed: 1,
     config_version: 1,
@@ -42,7 +42,7 @@ function operator(detail: Record<string, unknown>) {
     if (url.pathname === `/cluster/artifacts/${SHA}`) {
       return new Response("OS(os1).\r\nTS(ts1).\r\n", { headers: { "Content-Type": "text/plain" } });
     }
-    if (url.pathname.startsWith("/cluster/catalog/classes/")) {
+    if (url.pathname.startsWith("/cluster/catalog/fecs/")) {
       return new Response("OS(os1).\nTS(ts1).\nTS(ts2).\n", { headers: { "Content-Type": "text/plain" } });
     }
     return new Response("{}", { status: 404 });
@@ -63,7 +63,7 @@ describe("sceneInputSpecification", () => {
       label: "3vessel_0obstacle_scenarios/functional_model5",
       text: "OS(os1).\nTS(ts1).\nTS(ts2).\n",
     });
-    expect(paths[1]).toBe("/cluster/catalog/classes/3vessel_0obstacle_scenarios/functional_model5");
+    expect(paths[1]).toBe("/cluster/catalog/fecs/3vessel_0obstacle_scenarios/functional_model5");
   });
 
   it("has none for an item class or a master that does not name the input", async () => {

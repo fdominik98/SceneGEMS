@@ -30,15 +30,15 @@ The findings panel of a step shows:
 - **Cases by state**: complete, active, dropped, failed or cancelled cases that reached the step.
 - **Generation time**: the median and the 90th percentile of the jobs that produced the step's output.
 - **Which rules failed**: the rules ranked by the number of verdicts they failed in, each with the earliest failure time and the median of the first failure times. A rule that failed for several vessel pairs counts once per verdict.
-- **Per class**: cases, passed and failed per scenario class, most failures first.
+- **Per FEC**: cases, passed and failed per FEC (functional equivalence class), most failures first.
 
 ### Partial findings
 
-A step is monitored only when the campaign asked for a monitor after it. For a step without a monitor, the page shows the statistics only (outputs, cases, generation time and classes), marks the panel "partial findings" and says plainly that no monitor judged the step. There are no verdicts or failed rules to show, so the verdict table is replaced by a note and a button that opens Campaign History, where the outputs of the step are listed.
+A step is monitored only when the campaign asked for a monitor after it. For a step without a monitor, the page shows the statistics only (outputs, cases, generation time and FECs), marks the panel "partial findings" and says plainly that no monitor judged the step. There are no verdicts or failed rules to show, so the verdict table is replaced by a note and a button that opens Campaign History, where the outputs of the step are listed.
 
 ## Verdict table
 
-Below the findings, the table lists the verdicts of the shown step, one row per case (scene and trajectory steps) or per run (simulation). You can filter by class, state, run and sensitivity, sort by class, case and run, page through the rows, and download the filtered rows as CSV. For the simulation step, a second panel counts the verdicts of the filtered rows per run. Select a row to open its case.
+Below the findings, the table lists the verdicts of the shown step, one row per case (scene and trajectory steps) or per run (simulation). You can filter by FEC, state, run and sensitivity, sort by FEC, case and run, page through the rows, and download the filtered rows as CSV. For the simulation step, a second panel counts the verdicts of the filtered rows per run. Select a row to open its case.
 
 ## Case page
 

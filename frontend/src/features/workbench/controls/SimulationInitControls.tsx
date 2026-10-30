@@ -1,5 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { Disclosure } from "../../../components/Disclosure";
+import { IconButton } from "../../../components/IconButton";
+import { DownloadIcon } from "../../../components/icons";
+import { NumberSetting, Setting, StepRow } from "../pages/StepPanel";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
 import type { ActorStaticInfo } from "../../../domain/simulation/types";
@@ -39,25 +42,24 @@ import {
 
 export interface SimulationInitControlsHandle {
   initializeSimulation: () => void;
-  generateSimulationWorld: () => void;
 }
 
 const SDF_FILE_ACCEPT = ".sdf,.xml,.world,.model,text/xml,application/xml";
 
+/** A vessel's Gazebo model: the server makes one unless a file is loaded. */
 function ModelFileControls(props: {
+  vesselId: string;
   content: string | undefined;
   exportFileName: string;
   onLoad: (text: string) => void;
   onClear: () => void;
 }) {
-  const { content, exportFileName, onLoad, onClear } = props;
+  const { vesselId, content, exportFileName, onLoad, onClear } = props;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasContent = typeof content === "string" && content.length > 0;
   return (
-    <div className="sim-init-model-controls">
-      <span className={`sim-init-model-status ${hasContent ? "loaded" : "auto"}`}>
-        {hasContent ? "loaded" : "auto (server)"}
-      </span>
+    <span className="sim-model-file">
+      <span className={hasContent ? "sim-model-status is-loaded" : "sim-model-status"}>{hasContent ? "from a file" : "made by the server"}</span>
       <input
         ref={inputRef}
         hidden
@@ -71,44 +73,35 @@ function ModelFileControls(props: {
           e.target.value = "";
         }}
       />
-      <button
-        type="button"
-        className="sim-init-small-btn"
-        onClick={() => inputRef.current?.click()}
-      >
-        Load
+      <button type="button" aria-label={`Load a Gazebo model for vessel ${vesselId}`} onClick={() => inputRef.current?.click()}>
+        Load...
       </button>
-      <button
-        type="button"
-        className="sim-init-small-btn"
+      <IconButton
+        label={`Export the Gazebo model of vessel ${vesselId}`}
+        icon={<DownloadIcon />}
         disabled={!hasContent}
-        onClick={() =>
-          downloadBlob(
-            new Blob([content ?? ""], { type: "application/xml" }),
-            exportFileName
-          )
-        }
-      >
-        Export
-      </button>
-      <button
-        type="button"
-        className="sim-init-small-btn danger"
-        disabled={!hasContent}
-        onClick={onClear}
-      >
-        Clear
-      </button>
-    </div>
+        onClick={() => downloadBlob(new Blob([content ?? ""], { type: "application/xml" }), exportFileName)}
+      />
+      {hasContent ? (
+        <button type="button" className="link-btn" aria-label={`Clear the Gazebo model of vessel ${vesselId}`} onClick={onClear}>
+          Clear
+        </button>
+      ) : null}
+    </span>
   );
 }
 
 interface Props {
   streamControls: SimulationStreamControls;
-  /** Fired when the number of vessels in the init table changes (for parent action bar). */
-  onScenarioVesselCount?: (count: number) => void;
   /** The setup as it changes, so the run panel can tell where it runs. */
   onSetupChange?: (setup: SimulationSetup) => void;
+  /** Whether the setup runs as a live session (its connections and Gazebo models apply then only). */
+  liveSession: boolean;
+  /** Whether the real-time factor paces the run (a live session or an ArduPilot job; a kinematic job follows the watch speed). */
+  paceApplies: boolean;
+  /** Settings of the run panel shown with the simulator (the seed of a cluster run). */
+  extraSettings?: ReactNode;
+  disabled?: boolean;
 }
 
 const EMPTY_ACTORS: ActorStaticInfo[] = [];
@@ -128,54 +121,6 @@ interface WaveParamDraft {
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
-}
-
-function PreciseParam(props: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  sliderStep?: number;
-  integer?: boolean;
-  onChange: (v: number) => void;
-  suffix?: string;
-}) {
-  const { label, value, min, max, onChange, suffix, integer = false } = props;
-  const sliderStep = props.sliderStep ?? (integer ? 1 : 0.01);
-  const normalize = (n: number) =>
-    integer ? Math.round(clamp(n, min, max)) : round2(clamp(n, min, max));
-  const displayValue = normalize(value);
-  return (
-    <label className="field sim-init-precise-field">
-      <span className="sim-init-precise-label">
-        {label}
-        {suffix ? <span className="meta">{suffix}</span> : null}
-      </span>
-      <div className="sim-init-precise-row">
-        <input
-          type="range"
-          min={min}
-          max={max}
-          step={sliderStep}
-          value={displayValue}
-          onChange={(e) => onChange(normalize(Number(e.target.value)))}
-        />
-        <input
-          type="number"
-          className="sim-init-number"
-          step={integer ? 1 : 0.01}
-          value={Number.isFinite(displayValue) ? displayValue : 0}
-          onChange={(e) => {
-            const raw = Number(e.target.value);
-            if (!Number.isFinite(raw)) {
-              return;
-            }
-            onChange(normalize(raw));
-          }}
-        />
-      </div>
-    </label>
-  );
 }
 
 function waveToWire(w: WaveParamDraft): WaveInfoWire {
@@ -205,7 +150,7 @@ function removeLegacyVesselDraftsWithModels(): void {
 }
 
 export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, Props>(
-  function SimulationInitControls({ streamControls, onScenarioVesselCount, onSetupChange }, ref) {
+  function SimulationInitControls({ streamControls, onSetupChange, liveSession, paceApplies, extraSettings, disabled = false }, ref) {
   // The simulation page's own trajectories: its input, or the run it replays.
   const animationActors = usePlaybackStore((s) => s.frames[0]?.actors ?? EMPTY_ACTORS);
   const simulationActors = usePlaybackStore((s) => s.simulationFrames[0]?.actors ?? EMPTY_ACTORS);
@@ -215,7 +160,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
   const [persistedVesselSettings, setPersistedVesselSettings] = usePersistedState<
     PersistedVesselConnectionDraft[]
   >("sim-init-vessel-settings", []);
-  const [scenarioVesselCount, setScenarioVesselCount] = useState(0);
 
   const [simulatorType, setSimulatorType] = usePersistedState<GlobalSimulatorType>(
     "sim-init-simulator-type",
@@ -267,52 +211,20 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     setVesselConnectionDrafts(applySetupRequestToDrafts(vesselConnectionDrafts, setupRequest.mode, ownShipIdsOf([...animationActors, ...simulationActors]), setupRequest.controlLayer));
   }
 
-  useImperativeHandle(
-    ref,
-    () => {
-      const buildPayloadBase = () => {
-        const waveWire = waveToWire(wave);
-        return {
-          simulatorType,
-          simulationSpeed: Math.round(
-            clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)
-          ),
-          windVector: [round2(windEast), round2(windNorth), round2(windUp)] as [
-            number,
-            number,
-            number,
-          ],
-          wave: waveWire,
-          connectionsByAgentId:
-            buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
-        };
-      };
-      return {
-        initializeSimulation: () => {
-          streamControls.sendMessage({
-            type: "initialize_simulation",
-            ...buildPayloadBase(),
-          });
-        },
-        generateSimulationWorld: () => {
-          streamControls.sendMessage({
-            type: "generate_simulation_models",
-            ...buildPayloadBase(),
-          });
-        },
-      };
+  // What `initialize_simulation` and `generate_simulation_models` both carry.
+  const buildPayloadBase = () => ({
+    simulatorType,
+    simulationSpeed: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
+    windVector: [round2(windEast), round2(windNorth), round2(windUp)] as [number, number, number],
+    wave: waveToWire(wave),
+    connectionsByAgentId: buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
+  });
+
+  useImperativeHandle(ref, () => ({
+    initializeSimulation: () => {
+      streamControls.sendMessage({ type: "initialize_simulation", ...buildPayloadBase() });
     },
-    [
-      streamControls,
-      simulatorType,
-      simulationSpeed,
-      windEast,
-      windNorth,
-      windUp,
-      wave,
-      stackDrafts,
-    ]
-  );
+  }));
 
   useEffect(() => {
     removeLegacyVesselDraftsWithModels();
@@ -324,10 +236,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     }
     setPersistedVesselSettings(toPersistedVesselDrafts(vesselConnectionDrafts));
   }, [vesselConnectionDrafts, setPersistedVesselSettings]);
-
-  useEffect(() => {
-    onScenarioVesselCount?.(scenarioVesselCount);
-  }, [scenarioVesselCount, onScenarioVesselCount]);
 
   const ownShipIds = useMemo(
     () => new Set([...animationActors, ...simulationActors].filter((actor) => actor.isOwnShip).map((actor) => actor.id)),
@@ -352,7 +260,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
   useEffect(() => {
     const mergeWithExistingDrafts = (vessels: { id: string; isOwnShip: boolean }[]) => {
       const vesselIds = vessels.map((v) => v.id).join("|");
-      setScenarioVesselCount((current) => (current === vessels.length ? current : vessels.length));
       setVesselConnectionDrafts((previousDrafts) => {
         const generated = buildInitialVesselConnectionDrafts(vessels);
         const previousIds = previousDrafts.map((draft) => draft.vesselId).join("|");
@@ -382,7 +289,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     simulationActors,
     persistedVesselSettings,
     setVesselConnectionDrafts,
-    setScenarioVesselCount,
   ]);
 
   const updateConnection = <K extends keyof VesselInitConnectionDraft>(
@@ -417,273 +323,207 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     updateConnection(vesselId, "context", context);
   };
 
-  return (
-    <div className="sim-setup">
-      <div className="sim-setup-row">
-        <label className="field sim-setup-simulator">
-          <span>Simulator</span>
-          <select value={simulatorType} onChange={(e) => setSimulatorType(e.target.value as GlobalSimulatorType)}>
-            {GLOBAL_SIMULATOR_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+  const vesselsWithKind = stackDrafts.length > 0;
+  const simulatedDrafts = stackDrafts.filter((draft) => draft.context === "simulation");
+  const loadedModels = simulatedDrafts.filter((draft) => (draft.gazeboVesselModel ?? "").length > 0).length;
+  const windy = windEast !== 0 || windNorth !== 0 || windUp !== 0;
+  const environmentHint = windy || wave.amplitude > 0 ? [windy ? `wind ${round2(Math.hypot(windEast, windNorth, windUp))} m/s` : null, wave.amplitude > 0 ? `waves ${round2(wave.amplitude)} m` : null].filter(Boolean).join(", ") : "calm";
 
-      <table className="sim-init-table sim-setup-vessels">
-        <thead>
-          <tr>
-            <th align="left">Vessel</th>
-            <th align="left">Kind</th>
-            <th align="left">ASV software</th>
-            <th align="left">Control layer</th>
-          </tr>
-        </thead>
-        <tbody>
-          {stackDrafts.length > 0 ? (
-            stackDrafts.map((draft) => {
-              const real = draft.context === "real";
-              const softwareChoices = real ? REAL_VESSEL_ASV_SOFTWARE : ASV_SOFTWARE;
-              return (
-                <tr key={draft.vesselId}>
-                  <td>
-                    {ownShipIds.has(draft.vesselId) ? "Own ship" : "Target"} {draft.vesselId}
-                  </td>
-                  <td>
-                    <select value={draft.context} onChange={(e) => updateKind(draft.vesselId, e.target.value as SimulationContext)}>
-                      <option value="simulation">Simulated</option>
-                      <option value="real">Real vessel</option>
-                    </select>
-                  </td>
-                  <td>
-                    <select value={draft.asvSoftware} onChange={(e) => updateConnection(draft.vesselId, "asvSoftware", e.target.value as AsvSoftware)}>
-                      {softwareChoices.map((software) => {
-                        const choice = real ? realVesselSoftwareChoice(stackOptions, software) : asvSoftwareChoice(stackOptions, simulatorType, software);
-                        return (
-                          <option key={software} value={software} disabled={!choice.available} title={choice.reason}>
-                            {ASV_SOFTWARE_LABELS[software]}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </td>
-                  <td>
-                    {real ? (
-                      <span className="meta" title="A real vessel is its own control layer and its own physics, reached through its ArduAgent">
-                        {CONTROL_LAYER_LABELS.real_vessel}
-                      </span>
-                    ) : (
+  return (
+    <StepRow label="Setup">
+      <Setting label="Simulator">
+        <select value={simulatorType} disabled={disabled} onChange={(e) => setSimulatorType(e.target.value as GlobalSimulatorType)}>
+          {GLOBAL_SIMULATOR_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </Setting>
+      {paceApplies ? (
+        <NumberSetting
+          label="Pace"
+          unit="x real time"
+          integer
+          min={SIMULATION_SPEED_MIN}
+          max={SIMULATION_SPEED_MAX}
+          width={3}
+          value={simulationSpeed}
+          disabled={disabled}
+          title={`Real-time factor of a live session or an ArduPilot run, ${SIMULATION_SPEED_MIN} to ${SIMULATION_SPEED_MAX}`}
+          onChange={setSimulationSpeed}
+        />
+      ) : null}
+      {extraSettings}
+
+      <div className="step-row-full step-table-scroll">
+        <table className="step-table sim-vessel-table">
+          <thead>
+            <tr>
+              <th>Vessel</th>
+              <th>Kind</th>
+              <th>ASV software</th>
+              <th>Control layer</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vesselsWithKind ? (
+              stackDrafts.map((draft) => {
+                const real = draft.context === "real";
+                const softwareChoices = real ? REAL_VESSEL_ASV_SOFTWARE : ASV_SOFTWARE;
+                const name = `${ownShipIds.has(draft.vesselId) ? "Own ship" : "Target"} ${draft.vesselId}`;
+                return (
+                  <tr key={draft.vesselId}>
+                    <td className="sim-vessel-name">{name}</td>
+                    <td>
+                      <select aria-label={`Kind of ${name}`} value={draft.context} disabled={disabled} onChange={(e) => updateKind(draft.vesselId, e.target.value as SimulationContext)}>
+                        <option value="simulation">Simulated</option>
+                        <option value="real">Real vessel</option>
+                      </select>
+                    </td>
+                    <td>
                       <select
-                        value={draft.controlLayer}
-                        title={controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, draft.controlLayer).reason}
-                        onChange={(e) => updateConnection(draft.vesselId, "controlLayer", e.target.value as ControlLayer)}
+                        aria-label={`ASV software of ${name}`}
+                        value={draft.asvSoftware}
+                        disabled={disabled}
+                        onChange={(e) => updateConnection(draft.vesselId, "asvSoftware", e.target.value as AsvSoftware)}
                       >
-                        {CONTROL_LAYERS.map((layer) => {
-                          const choice = controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, layer);
+                        {softwareChoices.map((software) => {
+                          const choice = real ? realVesselSoftwareChoice(stackOptions, software) : asvSoftwareChoice(stackOptions, simulatorType, software);
                           return (
-                            <option key={layer} value={layer} disabled={!choice.available} title={choice.reason}>
-                              {CONTROL_LAYER_LABELS[layer]}
+                            <option key={software} value={software} disabled={!choice.available} title={choice.reason}>
+                              {ASV_SOFTWARE_LABELS[software]}
                             </option>
                           );
                         })}
                       </select>
-                    )}
-                  </td>
-                </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td colSpan={4} className="meta">
-                Load a scenario with trajectories to set up its vessels.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-
-      <Disclosure
-        id="simulation:environment"
-        title="Wind, waves and pace"
-        hint={`${windEast || windNorth || windUp ? "wind" : "no wind"}, ${wave.amplitude > 0 ? "waves" : "no waves"}, ${simulationSpeed}x`}
-        headingLevel={4}
-        className="sim-init-subpanel"
-      >
-        <PreciseParam
-          label="Real-time factor of a live session or an ArduPilot run"
-          value={simulationSpeed}
-          min={SIMULATION_SPEED_MIN}
-          max={SIMULATION_SPEED_MAX}
-          integer
-          onChange={setSimulationSpeed}
-        />
-        <Disclosure
-          id="simulation:wind"
-          title="Wind"
-          hint="m/s"
-          variant="plain"
-          headingLevel={5}
-          className="sim-init-nested-collapsible"
-        >
-          <div className="sim-init-nested-body">
-            <div className="sim-init-param-grid">
-              <PreciseParam
-                label="East (+X)"
-                suffix="Ux"
-                value={windEast}
-                min={-50}
-                max={50}
-                onChange={setWindEast}
-              />
-              <PreciseParam
-                label="North (+Y)"
-                suffix="Uy"
-                value={windNorth}
-                min={-50}
-                max={50}
-                onChange={setWindNorth}
-              />
-              <PreciseParam
-                label="Up (+Z)"
-                suffix="Uz"
-                value={windUp}
-                min={-20}
-                max={20}
-                onChange={setWindUp}
-              />
-            </div>
-          </div>
-        </Disclosure>
-
-        <Disclosure
-          id="simulation:waves"
-          title="Waves"
-          hint="m/s"
-          variant="plain"
-          headingLevel={5}
-          className="sim-init-nested-collapsible"
-        >
-          <div className="sim-init-nested-body">
-            <div className="sim-init-param-grid">
-              <PreciseParam
-                label="Amplitude"
-                suffix="m"
-                value={wave.amplitude}
-                min={0}
-                max={20}
-                onChange={(v) => updateWave({ amplitude: v })}
-              />
-              <PreciseParam
-                label="Period"
-                suffix="s"
-                value={wave.period}
-                min={0.5}
-                max={60}
-                onChange={(v) => updateWave({ period: v })}
-              />
-              <PreciseParam
-                label="Steepness"
-                value={wave.steepness}
-                min={0}
-                max={1}
-                onChange={(v) => updateWave({ steepness: v })}
-              />
-              <PreciseParam
-                label="East (+X)"
-                suffix="Ux"
-                value={wave.east}
-                min={-50}
-                max={50}
-                onChange={(v) => updateWave({ east: v })}
-              />
-              <PreciseParam
-                label="North (+Y)"
-                suffix="Uy"
-                value={wave.north}
-                min={-50}
-                max={50}
-                onChange={(v) => updateWave({ north: v })}
-              />
-            </div>
-          </div>
-        </Disclosure>
-      </Disclosure>
-
-      <Disclosure
-        id="simulation:agent-connections"
-        title="Agent names, topics and ports"
-        hint="For live sessions over the MQTT broker"
-        headingLevel={4}
-        className="sim-init-subpanel"
-      >
-        <div style={{ maxHeight: 220, overflow: "auto" }}>
-          <table className="sim-init-table">
-            <thead>
+                    </td>
+                    <td>
+                      {real ? (
+                        <span className="step-value-note" title="A real vessel is its own control layer and its own physics, reached through its ArduAgent">
+                          {CONTROL_LAYER_LABELS.real_vessel}
+                        </span>
+                      ) : (
+                        <select
+                          aria-label={`Control layer of ${name}`}
+                          value={draft.controlLayer}
+                          disabled={disabled}
+                          title={controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, draft.controlLayer).reason}
+                          onChange={(e) => updateConnection(draft.vesselId, "controlLayer", e.target.value as ControlLayer)}
+                        >
+                          {CONTROL_LAYERS.map((layer) => {
+                            const choice = controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, layer);
+                            return (
+                              <option key={layer} value={layer} disabled={!choice.available} title={choice.reason}>
+                                {CONTROL_LAYER_LABELS[layer]}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
               <tr>
-                <th align="left">Vessel</th>
-                <th align="left">Agent name</th>
-                <th align="left">Topic</th>
-                <th align="left">Port</th>
+                <td colSpan={4} className="step-value-note">
+                  The vessels appear once the input trajectories are taken.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {stackDrafts.map((draft) => (
-                <tr key={draft.vesselId}>
-                  <td>{draft.vesselId}</td>
-                  <td>
-                    <input value={draft.agentName} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
-                  </td>
-                  <td>
-                    <input value={draft.topic} className="sim-init-topic-input" onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
-                  </td>
-                  <td>
-                    {draft.context === "simulation" ? (
-                      <input
-                        type="number"
-                        step={1}
-                        value={draft.port}
-                        onChange={(e) =>
-                          updateConnection(draft.vesselId, "port", Number.isFinite(Number(e.target.value)) ? Math.trunc(Number(e.target.value)) : draft.port)
-                        }
-                      />
-                    ) : (
-                      <span className="meta" title="A real vessel needs no simulator port">
-                        -
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Disclosure id="simulation:environment" variant="link" headingLevel={null} title="Wind and waves" openTitle="Hide wind and waves" hint={environmentHint} className="step-more">
+        <div className="step-more-body">
+          <span className="step-more-group">Wind</span>
+          <NumberSetting label="East" unit="m/s" min={-50} max={50} width={5} value={windEast} disabled={disabled} onChange={setWindEast} />
+          <NumberSetting label="North" unit="m/s" min={-50} max={50} width={5} value={windNorth} disabled={disabled} onChange={setWindNorth} />
+          <NumberSetting label="Up" unit="m/s" min={-20} max={20} width={5} value={windUp} disabled={disabled} onChange={setWindUp} />
+          <span className="step-row-full" aria-hidden />
+          <span className="step-more-group">Waves</span>
+          <NumberSetting label="Amplitude" unit="m" min={0} max={20} width={5} value={wave.amplitude} disabled={disabled} onChange={(v) => updateWave({ amplitude: v })} />
+          <NumberSetting label="Period" unit="s" min={0.5} max={60} width={5} value={wave.period} disabled={disabled} onChange={(v) => updateWave({ period: v })} />
+          <NumberSetting label="Steepness" min={0} max={1} width={4} value={wave.steepness} disabled={disabled} onChange={(v) => updateWave({ steepness: v })} />
+          <NumberSetting label="Going east" unit="m/s" min={-50} max={50} width={5} value={wave.east} disabled={disabled} onChange={(v) => updateWave({ east: v })} />
+          <NumberSetting label="Going north" unit="m/s" min={-50} max={50} width={5} value={wave.north} disabled={disabled} onChange={(v) => updateWave({ north: v })} />
         </div>
       </Disclosure>
 
-      {simulatorType === "Gazebo" && (
+      {liveSession ? (
+        <Disclosure
+          id="simulation:agent-connections"
+          variant="link"
+          headingLevel={null}
+          title="Agent connections"
+          openTitle="Hide the agent connections"
+          className="step-more"
+        >
+          <div className="step-table-scroll">
+            <table className="step-table sim-connection-table">
+              <thead>
+                <tr>
+                  <th>Vessel</th>
+                  <th>Agent name</th>
+                  <th>Topic</th>
+                  <th>Port</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stackDrafts.map((draft) => (
+                  <tr key={draft.vesselId}>
+                    <td className="sim-vessel-name">{draft.vesselId}</td>
+                    <td>
+                      <input aria-label={`Agent name of vessel ${draft.vesselId}`} value={draft.agentName} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
+                    </td>
+                    <td>
+                      <input aria-label={`Topic of vessel ${draft.vesselId}`} title={draft.topic} value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
+                    </td>
+                    <td className="sim-port-cell">
+                      {draft.context === "simulation" ? (
+                        <input
+                          aria-label={`Simulator port of vessel ${draft.vesselId}`}
+                          type="number"
+                          step={1}
+                          value={draft.port}
+                          disabled={disabled}
+                          onChange={(e) => updateConnection(draft.vesselId, "port", Number.isFinite(Number(e.target.value)) ? Math.trunc(Number(e.target.value)) : draft.port)}
+                        />
+                      ) : (
+                        <span className="step-value-note" title="A real vessel needs no simulator port">
+                          none
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Disclosure>
+      ) : null}
+
+      {liveSession && simulatorType === "Gazebo" ? (
         <Disclosure
           id="simulation:vessel-physics-models"
-          title="Gazebo vessel models"
-          hint="Optional: the server makes one per vessel if you do not"
-          headingLevel={4}
-          className="sim-init-subpanel"
+          variant="link"
+          headingLevel={null}
+          title="Gazebo models"
+          openTitle="Hide the Gazebo models"
+          hint={loadedModels > 0 ? `${loadedModels} from a file` : undefined}
+          className="step-more"
         >
-          <table className="sim-init-table">
-            <thead>
-              <tr>
-                <th align="left">Vessel</th>
-                <th align="left">Gazebo model (.sdf)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {stackDrafts
-                .filter((draft) => draft.context === "simulation")
-                .map((draft) => (
+          <div className="step-more-body">
+            <table className="step-table sim-model-table step-row-full">
+              <tbody>
+                {simulatedDrafts.map((draft) => (
                   <tr key={draft.vesselId}>
-                    <td>{draft.vesselId}</td>
+                    <td className="sim-vessel-name">{draft.vesselId}</td>
                     <td>
                       <ModelFileControls
+                        vesselId={draft.vesselId}
                         content={draft.gazeboVesselModel}
                         exportFileName={`${draft.agentName || draft.vesselId}.sdf`}
                         onLoad={(text) => updateConnection(draft.vesselId, "gazeboVesselModel", text)}
@@ -692,11 +532,20 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                     </td>
                   </tr>
                 ))}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+            <button
+              type="button"
+              disabled={disabled || simulatedDrafts.length === 0}
+              title="Ask the server for the models it would make, to look at or change them"
+              onClick={() => streamControls.sendMessage({ type: "generate_simulation_models", ...buildPayloadBase() })}
+            >
+              Generate the models
+            </button>
+          </div>
         </Disclosure>
-      )}
-    </div>
+      ) : null}
+    </StepRow>
   );
   }
 );

@@ -19,10 +19,10 @@ function fakeClient(): OperatorClient {
 
 function renderPanel(overrides: Partial<Parameters<typeof PageInputPanel>[0]> = {}) {
   const props = {
-    title: "Input scene",
+    noun: "Scene",
     input: null,
-    emptyText: "none yet.",
-    previousLabel: "Use the scene of the Scene Generation page",
+    previousLabel: "Scene page",
+    previousTitle: "Take the scene shown on the Scene Generation page",
     previousAvailable: true,
     onUsePrevious: vi.fn(),
     historyStep: "scene_generation" as const,
@@ -38,20 +38,28 @@ function renderPanel(overrides: Partial<Parameters<typeof PageInputPanel>[0]> = 
 describe("PageInputPanel in the DOM", () => {
   it("says what the input is and where it came from", () => {
     renderPanel({ input: { label: "head_on.json", origin: "file", ref: null, source: { file: "head_on.json" } } });
-    expect(screen.getByRole("status")).toHaveTextContent("Input scene: head_on.json (from a file)");
+    expect(screen.getByRole("status")).toHaveTextContent("Scene head_on.json from a file");
+    expect(screen.getByRole("group", { name: "Input" })).toBeInTheDocument();
+  });
+
+  it("says when no input is chosen yet", () => {
+    renderPanel();
+    expect(screen.getByRole("status")).toHaveTextContent("Scene none chosen");
   });
 
   it("takes the previous page's output in one click", async () => {
     const user = userEvent.setup();
     const props = renderPanel();
-    await user.click(screen.getByRole("button", { name: "Use the scene of the Scene Generation page" }));
+    const previous = screen.getByRole("button", { name: "Scene page" });
+    expect(previous).toHaveAttribute("title", "Take the scene shown on the Scene Generation page");
+    await user.click(previous);
     expect(props.onUsePrevious).toHaveBeenCalledTimes(1);
   });
 
   it("cannot take the previous page's output when it shows none, nor history without a cluster", () => {
     renderPanel({ previousAvailable: false, client: null });
-    expect(screen.getByRole("button", { name: "Use the scene of the Scene Generation page" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "From Campaign History" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Scene page" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Campaign History" })).toBeDisabled();
   });
 
   it("picks an output of an entry that ran the step and hands over its content", async () => {
@@ -60,7 +68,7 @@ describe("PageInputPanel in the DOM", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(scene))));
     const onPickHistory = vi.fn();
     renderPanel({ onPickHistory });
-    await user.click(screen.getByRole("button", { name: "From Campaign History" }));
+    await user.click(screen.getByRole("button", { name: "Campaign History" }));
     // The entry without the step is left out.
     expect(await screen.findByText("Scene generation: head_on")).toBeVisible();
     expect(screen.queryByText("Sims only")).not.toBeInTheDocument();

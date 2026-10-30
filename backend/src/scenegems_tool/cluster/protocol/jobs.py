@@ -17,7 +17,8 @@ class JobType(str, Enum):
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     SIMULATION_KINEMATIC = "simulation.kinematic"  # replay or USV Navigation closed loop, in process
-    SIMULATION_ARDUPILOT = "simulation.ardupilot"  # replay over the lockstep MAVLink adapter, one stack per job
+    SIMULATION_ARDUPILOT_SIM = "simulation.ardupilot_sim"  # replay over the lockstep MAVLink adapter on SITL's own physics, one stack per job
+    SIMULATION_GAZEBO = "simulation.gazebo"  # the same against a Gazebo world
     MONITORING_POST_HOC = "monitoring.post_hoc"
     CALIBRATION_DEVIATION = "calibration.deviation"  # deviation between repeats of one case on one stack
 

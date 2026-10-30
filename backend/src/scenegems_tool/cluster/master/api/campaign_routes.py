@@ -6,7 +6,7 @@ pipeline engine in the master (P4.4) converges a campaign onto the desired state
 routes set. Without Postgres stores the master mounts unavailable_router instead.
 
     POST CAMPAIGNS_PATH/validate           the same body as create, nothing is created: 200 with {"valid": true, "name", "config_hash",
-                                           "classes" (id, content hash, counts, quota, failure budget), "cases_planned" (the quotas' sum),
+                                           "fecs" (fec_id, content hash, counts, quota, failure budget: null when it is unlimited), "cases_planned" (the quotas' sum),
                                            "runs" (index, name, repeatability tier, warnings)}, or the 422 create answers
     POST CAMPAIGNS_PATH?name=&start=&kind=&origin=       create from a config; 201 with the campaign. The body is the config as
                                            YAML text (Content-Type application/yaml, text/yaml or application/x-yaml;
@@ -29,20 +29,22 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
                                            made_from (campaign ids of its items) and totals (cases by state, verdicts by step and state)
     DELETE <id>                            deletes a final campaign with its rows and references: 204, 404, or 409 until it is
                                            stopped or completed
-    GET  <id>                              the campaign with its classes (counts, state, verdicts per run and state) and totals
-    GET  <id>/classes                      the classes alone
-    GET  <id>/cases?class_id=&state=&stage=&limit=&offset=      cases by class and index
+    GET  <id>                              the campaign with its FECs (fecs: counts, state, verdicts per run and state) and totals
+                                           (fecs, fecs_open, ...); an FEC's failure_budget and failure_budget_left are null when its
+                                           failure budget is unlimited
+    GET  <id>/fecs                         the FECs alone
+    GET  <id>/cases?fec_id=&state=&stage=&limit=&offset=      cases by FEC and index
     GET  <id>/cases/<case id>              the case with its jobs, run records and verdicts. A case names its input_artifact (the
-                                           functional scenario or item it started from, null for a catalog class) and input_source
-    GET  <id>/outputs?step=&state=&class_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
-                                           simulation) by class and case: the artifact, whether it is valid and complete, the step's verdict
+                                           functional scenario or item it started from, null for a catalog FEC) and input_source
+    GET  <id>/outputs?step=&state=&fec_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
+                                           simulation) by FEC and case: the artifact, whether it is valid and complete, the step's verdict
                                            and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run
-    GET  <id>/findings?step=               the summary of a step for Results: cases by state, outputs, verdicts, failed rules, classes, durations;
+    GET  <id>/findings?step=               the summary of a step for Results: cases by state, outputs, verdicts, failed rules, FECs (fecs), durations;
                                            statistics only for a step the config does not monitor
-    GET  <id>/verdicts?class_id=&state=&run_index=&sensitive=&step=&limit=&offset=&format=       verdicts by class, case, step and run;
+    GET  <id>/verdicts?fec_id=&state=&run_index=&sensitive=&step=&limit=&offset=&format=       verdicts by FEC, case, step and run;
                                            step is scene, trajectories or simulation; format=csv answers every matching verdict as a CSV stream
                                            (limit and offset still apply when given)
-    GET  <id>/run-records?class_id=&run_index=&limit=&offset=      rows carry source (job or live_session); trajectory_generator is null for a live session
+    GET  <id>/run-records?fec_id=&run_index=&limit=&offset=      rows carry source (job or live_session); trajectory_generator is null for a live session
     GET  <id>/events?after=&limit=         the audit trail after an event id, oldest first
     GET  <id>/config                       the current config and every config version
     POST <id>/start | resume               desired state running
@@ -51,7 +53,7 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
     POST <id>/stop                         desired state stopped; final. 409 for any change of a stopped or finished campaign
 
 The lists (campaigns, cases, outputs, verdicts, run records, events) answer the number of entries that match their filters without the
-page in the X-Total-Count header. Verdicts and run records carry the case's index in its class (case_index).
+page in the X-Total-Count header. Verdicts and run records carry the case's index in its FEC (case_index) and the FEC as fec_id.
 
 Control routes answer 200 with the campaign. The actual state follows when the engine has converged.
 
@@ -366,8 +368,8 @@ def _campaign_routes(stores: AssuranceStores) -> APIRouter:
             topic.campaign_deleted(campaign_id)
         return Response(status_code=204)
 
-    @router.get(CAMPAIGNS_PATH + "/{campaign_id}/classes")
-    async def get_classes(campaign_id: str) -> list:
+    @router.get(CAMPAIGNS_PATH + "/{campaign_id}/fecs")
+    async def get_fecs(campaign_id: str) -> list:
         await _campaign_or_404(stores, campaign_id)
         return await _run(_classes_of, stores, campaign_id)
 
@@ -394,15 +396,15 @@ def _case_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
     async def list_cases(
         response: Response,
         campaign_id: str,
-        class_id: Optional[str] = None,
+        fec_id: Optional[str] = None,
         state: Optional[List[CaseState]] = Query(None),
         stage: Optional[List[PipelineStage]] = Query(None),
         limit: int = 100,
         offset: int = 0,
     ) -> list:
         await _campaign_or_404(stores, campaign_id)
-        cases = await _run(stores.cases.list_cases, campaign_id, class_id, state, stage, _page(limit), max(0, offset))
-        _with_total(response, await _run(stores.cases.count_cases, campaign_id, state, class_id=class_id, stages=stage))
+        cases = await _run(stores.cases.list_cases, campaign_id, fec_id, state, stage, _page(limit), max(0, offset))
+        _with_total(response, await _run(stores.cases.count_cases, campaign_id, state, class_id=fec_id, stages=stage))
         return [case_view(case) for case in cases]
 
     @router.get(CAMPAIGNS_PATH + "/{campaign_id}/cases/{case_id}")
@@ -445,7 +447,7 @@ def _output_routes(stores: AssuranceStores) -> APIRouter:
         campaign_id: str,
         step: str,
         state: Optional[List[CaseState]] = Query(None),
-        class_id: Optional[str] = None,
+        fec_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list:
@@ -453,8 +455,8 @@ def _output_routes(stores: AssuranceStores) -> APIRouter:
 
         def read() -> tuple:
             with stores.transaction() as session:
-                outputs = stores.cases.list_outputs(campaign_id, kind, state, class_id, _page(limit), max(0, offset), session=session)
-                total = stores.cases.count_outputs(campaign_id, kind, state, class_id, session=session)
+                outputs = stores.cases.list_outputs(campaign_id, kind, state, fec_id, _page(limit), max(0, offset), session=session)
+                total = stores.cases.count_outputs(campaign_id, kind, state, fec_id, session=session)
                 sources = source_campaigns(outputs)
                 existing = set(stores.campaigns.current_configs(sorted(sources), session=session)) if sources else set()
             return outputs, total, existing
@@ -499,7 +501,7 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
     async def list_verdicts(
         response: Response,
         campaign_id: str,
-        class_id: Optional[str] = None,
+        fec_id: Optional[str] = None,
         state: Optional[VerdictState] = None,
         run_index: Optional[int] = None,
         sensitive: Optional[bool] = None,
@@ -511,8 +513,8 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         await _campaign_or_404(stores, campaign_id)
         if format not in ("json", "csv"):
             raise HTTPException(status_code=422, detail="format is json or csv")
-        filters = (class_id, None, state, run_index, sensitive)  # class, case, state, run, sensitivity: the case filter is not offered here
-        total = await _run(partial(stores.results.count_verdicts, campaign_id, state, class_id=class_id, run_index=run_index, sensitive=sensitive, step=step))
+        filters = (fec_id, None, state, run_index, sensitive)  # FEC, case, state, run, sensitivity: the case filter is not offered here
+        total = await _run(partial(stores.results.count_verdicts, campaign_id, state, class_id=fec_id, run_index=run_index, sensitive=sensitive, step=step))
         _with_total(response, total)
         if format == "json":
             verdicts = await _run(partial(stores.results.list_verdicts, campaign_id, *filters, _page(100 if limit is None else limit), max(0, offset), step=step))
@@ -521,10 +523,10 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         return StreamingResponse(csv_rows(campaign_id, filters, step, limit, max(0, offset)), media_type="text/csv", headers=headers)
 
     @router.get(CAMPAIGNS_PATH + "/{campaign_id}/run-records")
-    async def list_run_records(response: Response, campaign_id: str, class_id: Optional[str] = None, run_index: Optional[int] = None, limit: int = 100, offset: int = 0) -> list:
+    async def list_run_records(response: Response, campaign_id: str, fec_id: Optional[str] = None, run_index: Optional[int] = None, limit: int = 100, offset: int = 0) -> list:
         await _campaign_or_404(stores, campaign_id)
-        records = await _run(stores.results.list_run_records, campaign_id, class_id, None, run_index, _page(limit), max(0, offset))
-        _with_total(response, await _run(stores.results.count_run_records, campaign_id, class_id, None, run_index))
+        records = await _run(stores.results.list_run_records, campaign_id, fec_id, None, run_index, _page(limit), max(0, offset))
+        _with_total(response, await _run(stores.results.count_run_records, campaign_id, fec_id, None, run_index))
         return [run_record_view(record) for record in records]
 
     return router

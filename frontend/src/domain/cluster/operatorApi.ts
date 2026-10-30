@@ -94,7 +94,7 @@ export interface OperatorClientOptions {
 export type CampaignControl = "start" | "resume" | "pause" | "drain" | "stop";
 
 export interface CaseFilters {
-  class_id?: string;
+  fec_id?: string;
   state?: CaseState;
   stage?: PipelineStage;
   limit?: number;
@@ -102,7 +102,7 @@ export interface CaseFilters {
 }
 
 export interface VerdictFilters {
-  class_id?: string;
+  fec_id?: string;
   state?: VerdictState;
   run_index?: number;
   sensitive?: boolean;
@@ -113,7 +113,7 @@ export interface VerdictFilters {
 }
 
 export interface RunRecordFilters {
-  class_id?: string;
+  fec_id?: string;
   run_index?: number;
   limit?: number;
   offset?: number;
@@ -329,7 +329,7 @@ export class OperatorClient {
   }
 
   listClasses(campaignId: string, signal?: AbortSignal) {
-    return this.list(`${this.campaignPath(campaignId)}/classes`, classViewSchema, undefined, signal);
+    return this.list(`${this.campaignPath(campaignId)}/fecs`, classViewSchema, undefined, signal);
   }
 
   listCases(campaignId: string, filters: CaseFilters = {}, signal?: AbortSignal) {

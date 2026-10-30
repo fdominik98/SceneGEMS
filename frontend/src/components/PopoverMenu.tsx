@@ -1,10 +1,12 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 interface PopoverMenuProps {
-  /** The text of the button that opens the menu. */
+  /** The text of the button that opens the menu, or its icon with `iconLabel`. */
   label: ReactNode;
   /** Names the opened group for assistive technology; defaults to a string label. */
   ariaLabel?: string;
+  /** Makes the button icon-only: `label` is the icon, this is its name and tooltip (and the group's name). */
+  iconLabel?: string;
   /** Which edge of the button the panel lines up with. */
   align?: "start" | "end";
   /** Whether the panel opens below or above the button. */
@@ -21,6 +23,7 @@ interface PopoverMenuProps {
 export function PopoverMenu({
   label,
   ariaLabel,
+  iconLabel,
   align = "start",
   placement = "bottom",
   className,
@@ -59,19 +62,21 @@ export function PopoverMenu({
       <button
         ref={buttonRef}
         type="button"
-        className="popover-menu-button"
+        className={iconLabel ? `popover-menu-button icon-btn${open ? " is-active" : ""}` : "popover-menu-button"}
         aria-expanded={open}
         aria-controls={panelId}
+        aria-label={iconLabel}
+        title={iconLabel}
         onClick={() => setOpen((value) => !value)}
       >
         {label}
-        <span className="popover-menu-chevron" aria-hidden />
+        {iconLabel ? null : <span className="popover-menu-chevron" aria-hidden />}
       </button>
       <div
         id={panelId}
         className="popover-menu-panel"
         role="group"
-        aria-label={ariaLabel ?? (typeof label === "string" ? label : undefined)}
+        aria-label={ariaLabel ?? iconLabel ?? (typeof label === "string" ? label : undefined)}
         data-align={align}
         data-placement={placement}
         hidden={!open}

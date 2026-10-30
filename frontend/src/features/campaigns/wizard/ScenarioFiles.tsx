@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import type { OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { ArtifactRef } from "../../../domain/cluster/schemas";
 import { shortHash } from "../../cluster/clusterFormat";
-import { Field, FieldIssues, NumberField } from "./fields";
+import { FailureBudgetField, Field, FieldIssues, NumberField } from "./fields";
 import { scenarioFromUpload, uploadNote } from "./inputItems";
 import { reasonsOfEntry, splitByField, type Reason } from "./reasons";
 import type { StepProps } from "./stepTypes";
@@ -39,14 +39,14 @@ function ScenarioCard({
         </button>
       </header>
       <div className="wiz-row">
-        <Field label="Name" htmlFor={`scenario-name-${scenario.id}`} hint={`The class is scenario/${scenario.name.trim() || "name"}.`} issues={byField.get("name")}>
+        <Field label="Name" htmlFor={`scenario-name-${scenario.id}`} hint={`The FEC is scenario/${scenario.name.trim() || "name"}.`} issues={byField.get("name")}>
           <input id={`scenario-name-${scenario.id}`} type="text" value={scenario.name} maxLength={200} onChange={(event) => onChange((item) => void (item.name = event.target.value))} />
         </Field>
         <Field label="Quota" htmlFor={`scenario-quota-${scenario.id}`} hint="Complete cases the scenario needs." issues={byField.get("quota")}>
           <NumberField id={`scenario-quota-${scenario.id}`} integer min={1} value={scenario.quota} invalid={byField.has("quota")} onChange={(value) => onChange((item) => void (item.quota = value))} />
         </Field>
         <Field label="Failure budget" htmlFor={`scenario-budget-${scenario.id}`} hint="Dropped or failed cases it may use up." issues={byField.get("failure_budget")}>
-          <NumberField id={`scenario-budget-${scenario.id}`} integer min={0} value={scenario.failureBudget} invalid={byField.has("failure_budget")} onChange={(value) => onChange((item) => void (item.failureBudget = value))} />
+          <FailureBudgetField id={`scenario-budget-${scenario.id}`} value={scenario.failureBudget} invalid={byField.has("failure_budget")} onChange={(value) => onChange((item) => void (item.failureBudget = value))} />
         </Field>
       </div>
       <p className="wiz-hint">{uploadNote(scenario.uploadedAt, now)}</p>
@@ -78,7 +78,7 @@ export function ScenarioFiles({ draft, update, reasons, client, now }: StepProps
     <section className="wiz-subsection wiz-subsection--first" aria-label="Functional scenario files">
       <h4 className="wiz-subhead">Functional scenario files</h4>
       <p className="meta">
-        Optional. A scenario file is a functional scenario you wrote yourself (a <code>.problem</code> file). Each one becomes a class of its own and is generated like a class of the catalog. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
+        Optional. A scenario file is a functional scenario you wrote yourself (a <code>.problem</code> file). Each one becomes an FEC of its own and is generated like an FEC of the catalog. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
       </p>
       <UploadControl client={client} kind="functional_scenario" label="Add scenario files" accept=".problem,.txt,text/plain" onUploaded={onUploaded} />
       <FieldIssues reasons={own} />

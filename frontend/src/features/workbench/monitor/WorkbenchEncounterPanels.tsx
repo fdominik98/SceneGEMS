@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import type { TrajectoryStream } from "../../../app/uiStore";
 import { usePersistedState } from "../../../app/usePersistedState";
+import { IconButton } from "../../../components/IconButton";
+import { TimelineIcon } from "../../../components/icons";
 import {
   getCurrentFrame,
   getCurrentSimulationFrame,
@@ -69,16 +71,12 @@ export function WorkbenchPairCards({ stream }: { stream: TrajectoryStream }) {
   );
 }
 
-interface StripControls {
-  seek: (timestamp: number) => void;
-  setSpeed: (speed: number) => void;
-}
-
 /**
- * Below the workbench canvas: the playback bar and the rule timeline of the preview and
- * the simulation streams, on the global playback store.
+ * Below the workbench canvas: the playback bar and the rule timeline of the preview and the
+ * simulation streams, on the shown page's playback store (the trajectory page's or the
+ * simulation page's).
  */
-export function WorkbenchEncounterStrip({ streamControls }: { streamControls: StripControls }) {
+export function WorkbenchEncounterStrip() {
   const frames = useShownPlayback((s) => s.frames);
   const simulationFrames = useShownPlayback((s) => s.simulationFrames);
   const cursor = useShownPlayback((s) => s.playbackCursor);
@@ -88,6 +86,8 @@ export function WorkbenchEncounterStrip({ streamControls }: { streamControls: St
   const followLatestPush = useShownPlayback((s) => s.followLatestPush);
   const serverTimeStep = useShownPlayback((s) => s.serverTimeStep);
   const setPlaying = useShownPlayback((s) => s.setPlaying);
+  const seek = useShownPlayback((s) => s.seek);
+  const setSpeed = useShownPlayback((s) => s.setSpeed);
   const stepBy = useShownPlayback((s) => s.stepBy);
   const followSimulationLive = useShownPlayback((s) => s.followSimulationLive);
   const selectedRelationId = useEncounterSelectionStore((s) => s.selectedRelationId);
@@ -124,26 +124,26 @@ export function WorkbenchEncounterStrip({ streamControls }: { streamControls: St
           following={followLatestPush && !isPlaying}
           disabled={frames.length === 0}
           onTogglePlay={() => setPlaying(!isPlaying)}
-          onSeek={streamControls.seek}
+          onSeek={seek}
           onStep={(direction) => stepBy(direction * step)}
-          onSpeed={streamControls.setSpeed}
+          onSpeed={setSpeed}
           onFollowLive={followSimulationLive}
         />
-        <button
-          type="button"
+        <IconButton
+          label="Rule timeline"
+          title={timelineOpen ? "Hide the rule timeline" : "Show the rule timeline"}
+          icon={<TimelineIcon />}
+          expanded={timelineOpen}
           className="workbench-encounter-strip-toggle"
-          aria-expanded={timelineOpen}
           onClick={() => setTimelineOpen(!timelineOpen)}
-        >
-          {timelineOpen ? "Hide timeline" : "Rule timeline"}
-        </button>
+        />
       </div>
       {timelineOpen ? (
         <div className="workbench-encounter-timeline">
           <RuleTimeline
             groups={groups}
             currentTime={cursor}
-            onSeek={frames.length > 0 ? streamControls.seek : undefined}
+            onSeek={frames.length > 0 ? seek : undefined}
             selectedRelationId={selectedRelationId}
             onSelectRelation={setSelectedRelationId}
             emptyMessage="Rule states appear here once a scenario with monitor results is loaded."

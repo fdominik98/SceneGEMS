@@ -70,7 +70,7 @@ export async function waitForCase(client: EntryClient, campaignId: string, class
   const { signal, pollMs = 1000, sleep = abortableSleep } = options;
   for (;;) {
     checkAborted(signal);
-    const found = (await entryCases(client, campaignId, signal)).find((item) => classId === null || item.class_id === classId);
+    const found = (await entryCases(client, campaignId, signal)).find((item) => classId === null || item.fec_id === classId);
     if (found) {
       return found;
     }
@@ -93,7 +93,7 @@ export function createCaseWaiter(client: EntryClient, campaignId: string, option
 
   const settle = (cases: CaseView[]) => {
     for (const [classId, waiter] of [...waiters]) {
-      const found = cases.find((item) => item.class_id === classId);
+      const found = cases.find((item) => item.fec_id === classId);
       if (found) {
         waiters.delete(classId);
         waiter.resolve(found);

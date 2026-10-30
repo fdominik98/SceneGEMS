@@ -7,7 +7,7 @@ import { defaultReferenceGeofence, type ReferenceGeofence } from "../connection/
 import type { WorkbenchPage } from "./workbenchTarget";
 
 /**
- * The config of a workbench entry (design doc 6.3): format 2 with one step, the page's input as
+ * The config of a workbench entry (design doc 6.3): format 3 with one step, the page's input as
  * a functional scenario or an item, the step's monitor post-hoc so the page gets the monitor's
  * frames, the frames kept, and a fresh campaign seed so two runs of the same input differ.
  */
@@ -94,7 +94,7 @@ export interface SceneEntryInput {
 /** Scene generation: one case per functional scenario (a batch is one entry with a scenario per row). */
 export function sceneEntryConfig(input: SceneEntryInput): CampaignConfigFormat2 {
   return {
-    format: 2,
+    format: 3,
     name: input.name,
     steps: ["scene_generation"],
     input: {
@@ -151,7 +151,7 @@ export function trajectoriesSection(params: TrajectoryGenerationParamsWire, moni
 /** Trajectory generation over one scene item. */
 export function trajectoryEntryConfig(input: TrajectoryEntryInput): CampaignConfigFormat2 {
   return {
-    format: 2,
+    format: 3,
     name: input.name,
     steps: ["trajectory_generation"],
     input: { items: [input.scene] },
@@ -187,7 +187,7 @@ export function simulationStack(plan: ClusterRunPlan, geofence: ReferenceGeofenc
 /** A run over one trajectory item on the kinematic layer or on ArduPilot SITL or Gazebo, judged live by the COLREGS monitor as the workbench watches it. */
 export function simulationEntryConfig(input: SimulationEntryInput): CampaignConfigFormat2 {
   return {
-    format: 2,
+    format: 3,
     name: input.name,
     steps: ["simulation"],
     input: { items: [input.trajectories] },

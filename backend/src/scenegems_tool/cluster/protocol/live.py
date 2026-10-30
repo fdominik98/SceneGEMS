@@ -16,7 +16,7 @@ Topics and what they carry:
                                    create and on every change of a campaign (state, totals), CampaignDeleted when one is deleted
     campaign:<campaign id>         snapshot: the campaign detail view (as GET /cluster/campaigns/<id>) with
                                    last_event_id; event updates may repeat events up to that id
-                                   data: CampaignEventAdded | CampaignChanged | CampaignClassesChanged
+                                   data: CampaignEventAdded | CampaignChanged | CampaignFecsChanged
     job:<job id>                   snapshot: the job view (as GET /cluster/jobs lists it, with progress) and
                                    logs, its recent log lines
                                    data: JobStatusChanged | JobLogsAdded | JobChanged
@@ -166,8 +166,8 @@ class CampaignChanged(LiveModel):
     campaign: Dict[str, Any]  # the summary view (states, times), as GET /cluster/campaigns lists it
 
 
-class CampaignClassesChanged(LiveModel):
-    classes: List[Dict[str, Any]]  # the class views that changed, as GET /cluster/campaigns/<id>/classes
+class CampaignFecsChanged(LiveModel):
+    fecs: List[Dict[str, Any]]  # the FEC views that changed, as GET /cluster/campaigns/<id>/fecs
 
 
 class JobProgressView(LiveModel):
@@ -199,7 +199,8 @@ JOB_INSTANCE_KINDS: Dict[JobType, InstanceKind] = {
     JobType.SCENE_GENERATION: InstanceKind.SCENE_GENERATION,
     JobType.TRAJECTORY_GENERATION: InstanceKind.TRAJECTORY_GENERATION,
     JobType.SIMULATION_KINEMATIC: InstanceKind.SIMULATION,
-    JobType.SIMULATION_ARDUPILOT: InstanceKind.SIMULATION,
+    JobType.SIMULATION_ARDUPILOT_SIM: InstanceKind.SIMULATION,
+    JobType.SIMULATION_GAZEBO: InstanceKind.SIMULATION,
     JobType.CALIBRATION_DEVIATION: InstanceKind.SIMULATION,
     JobType.MONITORING_POST_HOC: InstanceKind.MONITORING,
 }

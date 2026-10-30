@@ -41,7 +41,7 @@ export function globToRegExp(pattern: string): RegExp {
 export function expandPattern(pattern: string, classes: readonly CatalogClass[]): CatalogClass[] {
   const expression = globToRegExp(pattern);
   const byClassId = pattern.includes("/");
-  return classes.filter((entry) => expression.test(byClassId ? entry.class_id : entry.folder));
+  return classes.filter((entry) => expression.test(byClassId ? entry.fec_id : entry.folder));
 }
 
 export interface ScopeEntryPlan {
@@ -64,7 +64,7 @@ export interface ScopePlan {
 
 /** The plan of the scope: each class counts once, for the first entry that names it (as the master resolves it). */
 export function planScope(scope: readonly ScopeEntryDraft[], catalog: readonly CatalogClass[]): ScopePlan {
-  const byId = new Map(catalog.map((entry) => [entry.class_id, entry]));
+  const byId = new Map(catalog.map((entry) => [entry.fec_id, entry]));
   const taken = new Set<string>();
   const entries: ScopeEntryPlan[] = [];
   for (const entry of scope) {
@@ -90,18 +90,18 @@ export function planScope(scope: readonly ScopeEntryDraft[], catalog: readonly C
     const duplicates: string[] = [];
     const own = new Set<string>();
     for (const found of named) {
-      if (own.has(found.class_id)) {
+      if (own.has(found.fec_id)) {
         continue;
       }
-      own.add(found.class_id);
-      if (taken.has(found.class_id)) {
-        duplicates.push(found.class_id);
+      own.add(found.fec_id);
+      if (taken.has(found.fec_id)) {
+        duplicates.push(found.fec_id);
       } else {
         classes.push(found);
       }
     }
     for (const found of classes) {
-      taken.add(found.class_id);
+      taken.add(found.fec_id);
     }
     entries.push({ classes, unknownClasses, emptyPatterns, duplicates, casesPlanned: classes.length * (entry.quota ?? 0) });
   }

@@ -1,5 +1,5 @@
 import type { ArchitectureDocument, Fact } from "../../domain/cluster/architectureApi";
-import { buildMatrix, factTone, formatFactValue, words, type MatrixCell } from "./capabilitiesModel";
+import { buildMatrix, clusterJobOf, factTone, formatFactValue, words, type MatrixCell } from "./capabilitiesModel";
 
 function fact(cell: MatrixCell, key: string): Fact | undefined {
   return cell.combination.facts.find((item) => item.key === key);
@@ -23,10 +23,16 @@ function Cell({ cell }: { cell: MatrixCell | undefined }) {
   const speedup = fact(cell, "max_speedup");
   const wind = fact(cell, "wind");
   const waves = fact(cell, "waves");
+  const job = clusterJobOf(combination);
   return (
     <td className="cap-matrix-cell cap-matrix-cell--on">
       <span className="cap-matrix-status">available</span>
       <span className="cap-matrix-facts">
+        {job && (
+          <span className={`cap-fact-value cap-fact-value--${factTone(job)}`} title={job.note ?? undefined}>
+            {job.value === null ? "no cluster job, live session" : `job ${formatFactValue(job)}`}
+          </span>
+        )}
         {tier && <span className={`cap-fact-value cap-fact-value--${factTone(tier)}`}>{formatFactValue(tier)}</span>}
         {speedup && <span className="cap-matrix-detail">speedup {speedup.value === null ? "not measured" : formatFactValue(speedup)}</span>}
         {(wind || waves) && (

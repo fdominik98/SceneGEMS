@@ -10,7 +10,8 @@ def test_job_type_wire_values_are_stable():
         "scene_generation",
         "trajectory_generation",
         "simulation.kinematic",
-        "simulation.ardupilot",
+        "simulation.ardupilot_sim",
+        "simulation.gazebo",
         "monitoring.post_hoc",
         "calibration.deviation",
     }

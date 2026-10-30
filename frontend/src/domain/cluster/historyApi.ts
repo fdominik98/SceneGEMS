@@ -68,7 +68,7 @@ export const outputVerdictSchema = z.object({
 export const outputRowSchema = z.object({
   case_id: z.number().int(),
   case_index: z.number().int(),
-  class_id: z.string(),
+  fec_id: z.string(),
   state: caseStateSchema,
   reason: z.string().nullable(),
   /** The output: a scene, trajectory data with its pointer, or the run's trajectories. Null while the step has not produced it. */
@@ -88,7 +88,7 @@ export type OutputRow = z.infer<typeof outputRowSchema>;
 export interface OutputFilters {
   step: CampaignStep;
   state?: CaseState;
-  class_id?: string;
+  fec_id?: string;
   limit?: number;
   offset?: number;
 }
@@ -124,7 +124,7 @@ export const findingsSchema = z.object({
       first_failure_time_s: z.object({ min: z.number().nullable(), median: z.number().nullable() }),
     })
   ),
-  classes: z.array(z.object({ class_id: z.string(), cases: z.number().int(), passed: z.number().int(), failed: z.number().int() })),
+  fecs: z.array(z.object({ fec_id: z.string(), cases: z.number().int(), passed: z.number().int(), failed: z.number().int() })),
   durations_s: durationSummarySchema,
 });
 

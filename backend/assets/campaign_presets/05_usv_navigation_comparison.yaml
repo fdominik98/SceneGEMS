@@ -1,8 +1,8 @@
 # Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
-format: 2
+format: 3
 name: "USV Navigation against the planned trajectories"
 description: >-
-  Three cases of every two- and three-vessel class, each simulated twice on the kinematic layer:
+  Three cases of every two- and three-vessel FEC, each simulated twice on the kinematic layer:
   once replaying the planned trajectories and once with USV Navigation steering the own ship.
   Comparing the verdicts of the two runs shows where the controller departs from a compliant plan.
 steps: [scene_generation, trajectory_generation, simulation]

@@ -8,13 +8,13 @@ function parameter(key: string, type: string, description: string, extra: Record
 }
 
 export const sampleCatalogClasses = [
-  { class_id: "2vessel_0obstacle_scenarios/functional_model1", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa01" },
-  { class_id: "2vessel_0obstacle_scenarios/functional_model2", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa02" },
-  { class_id: "2vessel_0obstacle_scenarios/functional_model10", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa0a" },
-  { class_id: "2vessel_1obstacle_scenarios/functional_model1", folder: "2vessel_1obstacle_scenarios", vessel_count: 2, obstacle_count: 1, content_hash: "bb01" },
-  { class_id: "3vessel_0obstacle_scenarios/functional_model1", folder: "3vessel_0obstacle_scenarios", vessel_count: 3, obstacle_count: 0, content_hash: "cc01" },
-  { class_id: "3vessel_0obstacle_scenarios/functional_model5", folder: "3vessel_0obstacle_scenarios", vessel_count: 3, obstacle_count: 0, content_hash: "cc05" },
-  { class_id: "4vessel_0obstacle_scenarios/functional_model1", folder: "4vessel_0obstacle_scenarios", vessel_count: 4, obstacle_count: 0, content_hash: "dd01" },
+  { fec_id: "2vessel_0obstacle_scenarios/functional_model1", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa01" },
+  { fec_id: "2vessel_0obstacle_scenarios/functional_model2", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa02" },
+  { fec_id: "2vessel_0obstacle_scenarios/functional_model10", folder: "2vessel_0obstacle_scenarios", vessel_count: 2, obstacle_count: 0, content_hash: "aa0a" },
+  { fec_id: "2vessel_1obstacle_scenarios/functional_model1", folder: "2vessel_1obstacle_scenarios", vessel_count: 2, obstacle_count: 1, content_hash: "bb01" },
+  { fec_id: "3vessel_0obstacle_scenarios/functional_model1", folder: "3vessel_0obstacle_scenarios", vessel_count: 3, obstacle_count: 0, content_hash: "cc01" },
+  { fec_id: "3vessel_0obstacle_scenarios/functional_model5", folder: "3vessel_0obstacle_scenarios", vessel_count: 3, obstacle_count: 0, content_hash: "cc05" },
+  { fec_id: "4vessel_0obstacle_scenarios/functional_model1", folder: "4vessel_0obstacle_scenarios", vessel_count: 4, obstacle_count: 0, content_hash: "dd01" },
 ];
 
 const usvNavigationGroup = {
@@ -126,7 +126,7 @@ export const sampleCatalogStacks = {
   ],
   monitors: [
     { id: "post_hoc", label: "Post hoc", description: "A monitoring job judges the recorded run after the simulation.", job_types: ["monitoring.post_hoc"], supports_early_stop: false },
-    { id: "live", label: "Live", description: "The COLREGS monitor runs inside the simulation step by step.", job_types: ["simulation.kinematic", "simulation.ardupilot"], supports_early_stop: true },
+    { id: "live", label: "Live", description: "The COLREGS monitor runs inside the simulation step by step.", job_types: ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"], supports_early_stop: true },
     { id: "empty", label: "None", description: "Nothing is judged; every verdict is unmonitored.", job_types: [], supports_early_stop: false },
   ],
   trajectory_generators: [
@@ -167,9 +167,9 @@ export const sampleValidationResult = {
   valid: true,
   name: "head-on sweep",
   config_hash: "9f2c1d",
-  classes: [
-    { class_id: "2vessel_0obstacle_scenarios/functional_model1", content_hash: "aa01", vessel_count: 2, obstacle_count: 0, quota: 15, failure_budget: 15 },
-    { class_id: "2vessel_0obstacle_scenarios/functional_model2", content_hash: "aa02", vessel_count: 2, obstacle_count: 0, quota: 15, failure_budget: 15 },
+  fecs: [
+    { fec_id: "2vessel_0obstacle_scenarios/functional_model1", content_hash: "aa01", vessel_count: 2, obstacle_count: 0, quota: 15, failure_budget: 15 },
+    { fec_id: "2vessel_0obstacle_scenarios/functional_model2", content_hash: "aa02", vessel_count: 2, obstacle_count: 0, quota: 15, failure_budget: 15 },
   ],
   cases_planned: 30,
   runs: [{ run_index: 0, name: "usv_navigation", repeatability_tier: "exact", warnings: [] }],

@@ -1,7 +1,11 @@
-"""JSON views of campaigns and their classes, cases, jobs, results and events for the operator API.
+"""JSON views of campaigns and their FECs, cases, jobs, results and events for the operator API.
 
 Plain dictionaries with ISO times (UTC, as stored), in the style of views.py. Enum values
 are their wire strings, and a verdict count map is keyed by the run index as a string.
+
+The API calls what the stores call a class an FEC (functional equivalence class): fec_id,
+fecs, fecs_open and so on, and the event kinds fec_complete and fec_abandoned (stored as
+class_complete and class_abandoned).
 
 A list row (campaign_row_view) also says what the campaign's config says: the steps it runs, its input
 and the campaigns its items came from, read from the stored config JSON so that this module needs no
@@ -31,7 +35,7 @@ STEP_NAMES = ("scene_generation", "trajectory_generation", "simulation")  # the 
 
 VERDICT_COLUMNS = (
     "verdict_id",
-    "class_id",
+    "fec_id",
     "case_id",
     "case_index",
     "step",
@@ -123,7 +127,7 @@ def verdict_counts(coverage: ClassCoverage) -> Dict[str, Dict[str, int]]:
 
 def class_view(record: ClassRecord, coverage: Optional[ClassCoverage] = None) -> Dict[str, Any]:
     return {
-        "class_id": record.class_id,
+        "fec_id": record.class_id,
         "state": record.state.value,
         "state_reason": record.state_reason,
         "content_hash": record.content_hash,
@@ -148,7 +152,7 @@ def classes_view(records: Sequence[ClassRecord], coverage: Iterable[ClassCoverag
 
 
 def campaign_detail_view(campaign: CampaignRecord, classes: List[Dict[str, Any]], config: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
-    """The campaign with its classes (counts and verdicts per run and state) and their totals; given its config, also steps, input and made_from."""
+    """The campaign with its FECs (counts and verdicts per run and state) and their totals; given its config, also steps, input and made_from."""
     verdicts: Dict[str, int] = {}
     for entry in classes:
         for states in entry["verdicts"].values():
@@ -158,17 +162,17 @@ def campaign_detail_view(campaign: CampaignRecord, classes: List[Dict[str, Any]]
     if config is not None:
         view.update(config_view(config))
     view["totals"] = {
-        "classes": len(classes),
-        "classes_open": sum(1 for entry in classes if entry["state"] == "open"),
-        "classes_complete": sum(1 for entry in classes if entry["state"] == "complete"),
-        "classes_abandoned": sum(1 for entry in classes if entry["state"] == "abandoned"),
+        "fecs": len(classes),
+        "fecs_open": sum(1 for entry in classes if entry["state"] == "open"),
+        "fecs_complete": sum(1 for entry in classes if entry["state"] == "complete"),
+        "fecs_abandoned": sum(1 for entry in classes if entry["state"] == "abandoned"),
         "quota": sum(entry["quota"] for entry in classes),
         "complete": sum(entry["complete"] for entry in classes),
         "dropped": sum(entry["dropped"] for entry in classes),
         "in_flight": sum(entry["in_flight"] for entry in classes),
         "verdicts": verdicts,
     }
-    view["classes"] = classes
+    view["fecs"] = classes
     return view
 
 
@@ -176,7 +180,7 @@ def case_view(case: CaseRecord) -> Dict[str, Any]:
     return {
         "case_id": case.case_id,
         "campaign_id": case.campaign_id,
-        "class_id": case.class_id,
+        "fec_id": case.class_id,
         "case_index": case.case_index,
         "seed": case.seed,
         "config_version": case.config_version,
@@ -230,7 +234,7 @@ def run_record_view(record: RunRecord) -> Dict[str, Any]:
         "case_id": record.case_id,
         "case_index": record.case_index,
         "campaign_id": record.campaign_id,
-        "class_id": record.class_id,
+        "fec_id": record.class_id,
         "run_index": record.run_index,
         "repeat_index": record.repeat_index,
         "trajectory_generator": None if record.trajectory_generator is None else record.trajectory_generator.value,  # None for a recorded live session
@@ -258,7 +262,7 @@ def verdict_view(verdict: VerdictRecord) -> Dict[str, Any]:
         "case_id": verdict.case_id,
         "case_index": verdict.case_index,
         "campaign_id": verdict.campaign_id,
-        "class_id": verdict.class_id,
+        "fec_id": verdict.class_id,
         "step": verdict.step.value,
         "run_index": verdict.run_index,
         "run_record_id": verdict.run_record_id,
@@ -281,8 +285,14 @@ def verdict_row(verdict: VerdictRecord) -> List[Any]:
     return ["" if values[column] is None else values[column] for column in VERDICT_COLUMNS]
 
 
+# Event kinds and detail keys the API names after FECs; the stored ones keep their names
+EVENT_KIND_NAMES = {"class_complete": "fec_complete", "class_abandoned": "fec_abandoned"}
+EVENT_DETAIL_KEYS = {"classes": "fecs"}
+
+
 def event_view(event: CampaignEventRecord) -> Dict[str, Any]:
-    return {"event_id": event.event_id, "at": iso(event.at), "kind": event.kind.value, "class_id": event.class_id, "detail": event.detail}
+    detail = {EVENT_DETAIL_KEYS.get(key, key): value for key, value in event.detail.items()} if isinstance(event.detail, Mapping) else event.detail
+    return {"event_id": event.event_id, "at": iso(event.at), "kind": EVENT_KIND_NAMES.get(event.kind.value, event.kind.value), "fec_id": event.class_id, "detail": detail}
 
 
 def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lambda campaign_id: True) -> Dict[str, Any]:
@@ -297,7 +307,7 @@ def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lam
     return {
         "case_id": output.case_id,
         "case_index": output.case_index,
-        "class_id": output.class_id,
+        "fec_id": output.class_id,
         "state": output.state.value,
         "reason": output.reason,
         "artifact": reference,
@@ -328,20 +338,20 @@ def findings_view(step: str, findings: StepFindings) -> Dict[str, Any]:
         "failed_rules": [
             {"rule": rule.rule, "count": rule.count, "first_failure_time_s": {"min": rule.first_failure_time_min_s, "median": rule.first_failure_time_median_s}} for rule in findings.failed_rules
         ],
-        "classes": [{"class_id": entry.class_id, "cases": entry.cases, "passed": entry.passed, "failed": entry.failed} for entry in findings.classes],
+        "fecs": [{"fec_id": entry.class_id, "cases": entry.cases, "passed": entry.passed, "failed": entry.failed} for entry in findings.classes],
         "durations_s": {"median": findings.duration_median_s, "p90": findings.duration_p90_s},
     }
 
 
 def validated_campaign_view(validated: Any) -> Dict[str, Any]:
-    """What validating a config found: its hash, the classes it selects and the runs it plans (a ValidatedCampaign; nothing is stored)."""
+    """What validating a config found: its hash, the FECs it selects and the runs it plans (a ValidatedCampaign; nothing is stored)."""
     return {
         "valid": True,
         "name": validated.config.name,
         "config_hash": validated.config_hash,
-        "classes": [
+        "fecs": [
             {
-                "class_id": spec.class_id,
+                "fec_id": spec.class_id,
                 "content_hash": spec.content_hash,
                 "vessel_count": spec.vessel_count,
                 "obstacle_count": spec.obstacle_count,

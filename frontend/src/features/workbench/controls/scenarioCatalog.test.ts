@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogClass } from "../../../domain/cluster/campaignApi";
-import { ANY_COUNT, countOptions, filterCatalogClasses } from "./scenarioCatalog";
+import { ANY_COUNT, countOptions, filterCatalogClasses, hiddenSelections, listedValue, selectListed } from "./scenarioCatalog";
 
 function catalogClass(classId: string, vessels: number, obstacles: number): CatalogClass {
-  return { class_id: classId, folder: classId.split("/")[0], vessel_count: vessels, obstacle_count: obstacles, content_hash: "a".repeat(64) };
+  return { fec_id: classId, folder: classId.split("/")[0], vessel_count: vessels, obstacle_count: obstacles, content_hash: "a".repeat(64) };
 }
 
 const classes = [
@@ -14,16 +14,47 @@ const classes = [
 
 describe("filterCatalogClasses", () => {
   it("filters by vessel and obstacle count", () => {
-    expect(filterCatalogClasses(classes, "", "3", "0").map((entry) => entry.class_id)).toEqual(["3vessel_0obstacle_scenarios/functional_model10"]);
+    expect(filterCatalogClasses(classes, "", "3", "0").map((entry) => entry.fec_id)).toEqual(["3vessel_0obstacle_scenarios/functional_model10"]);
     expect(filterCatalogClasses(classes, "", "3", ANY_COUNT)).toHaveLength(2);
   });
 
   it("finds a text in the class id, ignoring case", () => {
-    expect(filterCatalogClasses(classes, " Model1", ANY_COUNT, ANY_COUNT).map((entry) => entry.class_id)).toEqual([
+    expect(filterCatalogClasses(classes, " Model1", ANY_COUNT, ANY_COUNT).map((entry) => entry.fec_id)).toEqual([
       "3vessel_1obstacle_scenarios/functional_model1",
       "3vessel_0obstacle_scenarios/functional_model10",
     ]);
     expect(filterCatalogClasses(classes, "", ANY_COUNT, ANY_COUNT)).toEqual(classes);
+  });
+});
+
+describe("listedValue", () => {
+  const oneVessel = [catalogClass("1vessel_0obstacle_scenarios/functional_model0", 1, 0)];
+
+  it("shows the loaded scenario only while it is listed", () => {
+    expect(listedValue(classes, "3vessel_1obstacle_scenarios/functional_model1")).toBe("3vessel_1obstacle_scenarios/functional_model1");
+    expect(listedValue(classes, null)).toBe("");
+  });
+
+  it("shows the placeholder over a list of one scenario that is not loaded, so picking it loads it", () => {
+    expect(listedValue(oneVessel, "2vessel_0obstacle_scenarios/functional_model0")).toBe("");
+    expect(listedValue(oneVessel, "1vessel_0obstacle_scenarios/functional_model0 (edited)")).toBe("");
+    expect(listedValue(oneVessel, "head_on.problem")).toBe("");
+  });
+});
+
+describe("batch selection", () => {
+  it("adds the listed classes to the selection and keeps the hidden ones", () => {
+    const listed = classes.slice(1);
+    expect(selectListed(["other/functional_model9", classes[1].fec_id], listed)).toEqual([
+      "other/functional_model9",
+      "3vessel_1obstacle_scenarios/functional_model1",
+      "3vessel_0obstacle_scenarios/functional_model10",
+    ]);
+  });
+
+  it("counts the selected classes the filters hide", () => {
+    expect(hiddenSelections(["other/functional_model9", classes[0].fec_id], classes)).toBe(1);
+    expect(hiddenSelections([], classes)).toBe(0);
   });
 });
 

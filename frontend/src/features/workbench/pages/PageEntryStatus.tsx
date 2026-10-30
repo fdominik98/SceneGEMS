@@ -1,10 +1,25 @@
 import "./pages.css";
 import type { PageStore } from "./pageStore";
 import { useStore } from "zustand";
+import { showHistoryEntry } from "../../history/showHistory";
+
+/** The first block of an entry id: enough to tell entries apart on the page; the whole id is its tooltip. */
+function shortEntryId(campaignId: string): string {
+  return campaignId.split("-")[0] ?? campaignId;
+}
+
+function EntryLink({ campaignId }: { campaignId: string }) {
+  return (
+    <button type="button" className="link-btn" title={`Open entry ${campaignId} in Campaign History`} onClick={() => showHistoryEntry(campaignId)}>
+      entry {shortEntryId(campaignId)}
+    </button>
+  );
+}
 
 /**
- * What a page shows of its entries: the latest loaded entry, a run or a followed entry in
- * progress, or why the page is empty (a deleted entry, a failed load).
+ * What a page shows of its entries, as one line of its Result row: the latest loaded entry (a
+ * link to it in Campaign History), a run or a followed entry in progress, or why the page is
+ * empty (a deleted entry, a failed load).
  */
 export function PageEntryStatus({ store }: { store: PageStore }) {
   const loaded = useStore(store, (s) => s.loaded);
@@ -14,26 +29,31 @@ export function PageEntryStatus({ store }: { store: PageStore }) {
 
   if (status === "failed" && message) {
     return (
-      <p className="error page-entry-status" role="alert">
+      <p className="step-line error page-entry-status" role="alert">
         {message}
       </p>
     );
   }
   if ((status === "running" || status === "following" || status === "loading") && (message || activeEntryId)) {
     return (
-      <p className="meta page-entry-status" role="status">
+      <p className="step-line page-entry-status" role="status">
         {message ?? "Running"}
-        {activeEntryId ? ` Entry ${activeEntryId}.` : ""}
+        {activeEntryId ? (
+          <>
+            {" "}
+            <EntryLink campaignId={activeEntryId} />
+          </>
+        ) : null}
       </p>
     );
   }
   if (loaded !== null) {
     return (
-      <p className="meta page-entry-status">
-        Shows case {loaded.caseId} of entry {loaded.campaignId}
-        {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""}.
+      <p className="step-line page-entry-status">
+        Case {loaded.caseId}
+        {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""} of <EntryLink campaignId={loaded.campaignId} />
       </p>
     );
   }
-  return message ? <p className="meta page-entry-status">{message}</p> : null;
+  return message ? <p className="step-line page-entry-status">{message}</p> : null;
 }

@@ -1,8 +1,8 @@
 # Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
-format: 2
+format: 3
 name: "Two-vessel encounters on the kinematic layer"
 description: >-
-  Five cases of every two-vessel class, with and without a static obstacle (14 classes, 70 cases),
+  Five cases of every two-vessel FEC, with and without a static obstacle (14 FECs, 70 cases),
   through the whole chain with a kinematic replay and the post hoc monitor. The everyday
   regression run for head-on, crossing and overtaking situations.
 steps: [scene_generation, trajectory_generation, simulation]

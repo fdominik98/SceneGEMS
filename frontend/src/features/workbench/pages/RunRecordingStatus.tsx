@@ -17,14 +17,14 @@ export function RunRecordingStatus() {
   }
   if (status === "recording") {
     return (
-      <p className="meta page-entry-status" role="status">
+      <p className="step-line page-entry-status" role="status">
         Recording the live session{campaignId ? ` as entry ${campaignId}` : ""}.
       </p>
     );
   }
   if (status === "saved") {
     return (
-      <p className="meta page-entry-status" role="status">
+      <p className="step-line page-entry-status" role="status">
         The live session is saved{campaignId ? ` as entry ${campaignId}` : ""}.{" "}
         {campaignId !== null && caseId !== null ? (
           <button type="button" className="link-btn" onClick={() => openInWorkbench({ page: "simulation", campaignId, caseId, step: "simulation" })}>
@@ -36,13 +36,13 @@ export function RunRecordingStatus() {
   }
   if (status === "failed") {
     return (
-      <p className="error page-entry-status" role="alert">
+      <p className="step-line error page-entry-status" role="alert">
         The live session could not be recorded{message ? `: ${message}` : "."}
       </p>
     );
   }
   return (
-    <p className="meta page-entry-status" role="status">
+    <p className="step-line page-entry-status" role="status">
       Live sessions are not recorded here{message ? `: ${message}` : "."}
     </p>
   );

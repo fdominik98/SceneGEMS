@@ -35,7 +35,7 @@ function clientWith(fetchImpl: (url: string, init?: RequestInit) => Promise<Resp
 describe("catalog schemas", () => {
   it("parses the sample class catalog", () => {
     for (const entry of sampleCatalogClasses) {
-      expect(catalogClassSchema.parse(entry).class_id).toBe(entry.class_id);
+      expect(catalogClassSchema.parse(entry).fec_id).toBe(entry.fec_id);
     }
   });
 
@@ -70,8 +70,14 @@ describe("validation result schema", () => {
   it("parses the sample answer", () => {
     const parsed = validationResultSchema.parse(sampleValidationResult);
     expect(parsed.cases_planned).toBe(30);
-    expect(parsed.classes).toHaveLength(2);
+    expect(parsed.fecs).toHaveLength(2);
     expect(parsed.runs[0].repeatability_tier).toBe("exact");
+  });
+
+  it("reads an unlimited failure budget as null", () => {
+    const [first, ...rest] = sampleValidationResult.fecs;
+    const parsed = validationResultSchema.parse({ ...sampleValidationResult, fecs: [{ ...first, failure_budget: null }, ...rest] });
+    expect(parsed.fecs[0].failure_budget).toBeNull();
   });
 
   it("requires valid to be true", () => {
@@ -95,7 +101,7 @@ describe("catalog calls", () => {
     expect(result.total).toBe(sampleCatalogClasses.length);
     expect(result.items).toHaveLength(sampleCatalogClasses.length);
     expect(spy.mock.calls).toHaveLength(2);
-    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/catalog/classes?folder=2vessel_0obstacle_scenarios&limit=1000&offset=0`);
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/catalog/fecs?folder=2vessel_0obstacle_scenarios&limit=1000&offset=0`);
     expect(spy.mock.calls[1][0]).toContain("offset=4");
   });
 

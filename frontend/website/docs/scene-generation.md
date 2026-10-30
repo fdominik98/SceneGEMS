@@ -11,12 +11,12 @@ Scene Generation combines a central 3D/nautical canvas with a right sidebar for 
 
 A CodeMirror editor with Refinery `.problem` language support holds the functional scenario specification. The functional scenarios to start from are the master's catalog (`backend/assets/generated_functional_models/all/`, read through the active cluster), so every browser offers the same ones. Above the editor:
 
-- **Search presets**: Filter the master's functional scenarios by class id
+- **Search presets**: Filter the master's functional scenarios by FEC id
 - **Vessel / obstacle filters**: Narrow them by actor counts
-- **Single scene generation** tab: Load one into the editor, edit inline, load from file, export, or open in [Refinery](https://refinery.services/) (copies spec to clipboard)
-- **Batch scene generation** tab: Select several, visualize individual results, download valid scenes as ZIP, open one in Refinery
+- **Single scene generation** tab: Load one into the editor, edit inline, load from file, export, or open in [Refinery](https://refinery.services/) (copies spec to clipboard). The list shows the scenario the editor holds, or "Load preset…" when the editor holds another one or an edited text, so any listed scenario can be picked, also the only one a filter leaves. Generating waits until a picked scenario has loaded
+- **Batch scene generation** tab: Select several, visualize individual results, download valid scenes as ZIP, open one in Refinery. **Select all shown** adds the listed scenarios to the selection; selected scenarios a filter hides stay selected and run too, and the tab says how many
 
-When the page loads a generated scene (a batch result, or an output opened from Campaign History), the functional scenario the scene was generated from is loaded into the editor as well: the uploaded or written scenario of a workbench run, or the catalog class of a campaign. The domain configuration (COLREGS constants, vessel and obstacle types) is the cluster's; see [Domain Configuration](./domain-configuration.md).
+When the page loads a generated scene (a batch result, or an output opened from Campaign History), the functional scenario the scene was generated from is loaded into the editor as well: the uploaded or written scenario of a workbench run, or the catalog FEC of a campaign. The domain configuration (COLREGS constants, vessel and obstacle types) is the cluster's; see [Domain Configuration](./domain-configuration.md).
 
 ## Scene validity badge
 

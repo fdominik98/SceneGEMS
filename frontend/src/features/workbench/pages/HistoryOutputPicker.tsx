@@ -136,7 +136,7 @@ export function HistoryOutputPicker({ client, step, onPick, onClose }: Props) {
                     <li key={`${row.case_id}-${row.run_record_id ?? "case"}`}>
                       <button type="button" className="history-output-row" disabled={row.artifact === null} onClick={() => onPick(entry, row)}>
                         <span>
-                          {row.class_id}, case {row.case_index + 1}
+                          {row.fec_id}, case {row.case_index + 1}
                           {row.run_index !== null ? `, run ${row.run_index + 1}` : ""}
                         </span>
                         <span className="meta">

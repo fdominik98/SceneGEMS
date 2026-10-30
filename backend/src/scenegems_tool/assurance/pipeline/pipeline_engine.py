@@ -507,7 +507,7 @@ class PipelineEngine:
         by_id = {case.case_id: case for case in cases}
         if not all(self._complete(machine, session, context, by_id[case_id]) for case_id in decision.complete):
             return False
-        cut_reason = "above the class's quota" if decision.close == CampaignClassState.COMPLETE else "its class was abandoned"
+        cut_reason = "above the FEC's quota" if decision.close == CampaignClassState.COMPLETE else "its FEC was abandoned"
         for case_id in decision.cancel:
             machine.cancel(context, self.stores.cases.get_case(case_id, session=session), cut_reason)
         if decision.close is not None:
@@ -562,8 +562,8 @@ class PipelineEngine:
             if count <= 0:
                 continue
             # The simulate stage queues one job type per distinct stack of the runs (kinematic, ArduPilot SITL, Gazebo)
-            for job_type, images in context.graph.stage_jobs(stage):
-                fingerprints = required_fingerprints(job_type, images, context.pinned)
+            for job_type in context.graph.stage_jobs(stage):
+                fingerprints = required_fingerprints(job_type, context.pinned)
                 if job_type not in missing and not any(node.runs(job_type, fingerprints, labels, allowed) for node in nodes):
                     missing.append(job_type)
         return missing

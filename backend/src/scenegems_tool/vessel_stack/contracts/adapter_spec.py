@@ -7,6 +7,7 @@ declared as an UnsupportedConnection, so the resolver can say why it is missing.
 """
 
 import dataclasses
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import FrozenSet, Optional, Tuple, Union
@@ -22,6 +23,7 @@ class SpecStatus(str, Enum):
 
 
 UPSTREAM_PINS_FILE = "deploy/images/upstream_pins.env"  # upstream commits the simulator images build from
+_IMAGE_VARIABLE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]+)\}")  # a compose image reference with a default
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,12 @@ class ContainerSpec:
     def build_fingerprint_sources(self) -> Tuple[str, ...]:
         """Every repo path whose content stamps the image build."""
         return tuple(source for source in (self.build_fingerprint_source, self.upstream_pins_file, *self.extra_fingerprint_sources) if source)
+
+    @property
+    def default_image(self) -> str:
+        """The image tag the reference falls back to: the default of ${VAR:-tag}, or the reference itself without a variable."""
+        match = _IMAGE_VARIABLE.fullmatch(self.image)
+        return match.group(1) if match else self.image
 
 
 @dataclass(frozen=True)

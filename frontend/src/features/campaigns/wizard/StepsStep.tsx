@@ -6,7 +6,7 @@ import { CAMPAIGN_STEP_LABELS, CAMPAIGN_STEP_OUTPUTS, CHAIN, firstStep, itemKind
 import type { StepProps } from "./stepTypes";
 
 const STEP_HINTS: Record<CampaignStep, string> = {
-  scene_generation: "Generates scenes from classes of the catalog or from functional scenario files.",
+  scene_generation: "Generates scenes from FECs of the catalog or from functional scenario files.",
   trajectory_generation: "Plans the trajectories of scenes, generated here or taken from Campaign History or files.",
   simulation: "Simulates trajectories, generated here or taken from Campaign History or files, once per run you define.",
 };

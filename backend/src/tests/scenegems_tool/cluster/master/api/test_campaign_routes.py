@@ -85,8 +85,8 @@ def test_creating_a_campaign_from_yaml_pins_the_expected_fingerprints_and_waits_
     assert view["desired_state"] == "paused" and view["actual_state"] == "created" and view["config_version"] == 1
     assert view["pinned_fingerprints"] == EXPECTED
     assert view["name"] == "phase 4 exit campaign"
-    assert [entry["class_id"] for entry in view["classes"]] == [CLASS_A, CLASS_B]
-    assert view["totals"]["quota"] == 4 and view["totals"]["classes_open"] == 2
+    assert [entry["fec_id"] for entry in view["fecs"]] == [CLASS_A, CLASS_B]
+    assert view["totals"]["quota"] == 4 and view["totals"]["fecs_open"] == 2
     stored = stores.campaigns.get_campaign(view["campaign_id"])
     assert stored is not None and stores.campaigns.config_version(view["campaign_id"]).config["scope"][0]["quota"] == 2
 
@@ -107,7 +107,7 @@ def test_creating_from_a_json_body(client):
 
 def test_creating_the_full_exit_campaign(client):
     view = create(client, EXIT_CAMPAIGN.read_text(encoding="utf-8")).json()
-    assert view["totals"]["classes"] == 70 and view["totals"]["quota"] == 1050
+    assert view["totals"]["fecs"] == 70 and view["totals"]["quota"] == 1050
 
 
 def test_a_master_without_a_listing_stores_no_fingerprints(session_factory, clock, stores):
@@ -140,7 +140,7 @@ def test_a_config_the_catalog_refuses_answers_422_with_every_reason(client):
     response = create(client, yaml.safe_dump(config))
     reasons = response.json()["detail"]["reasons"]
     assert response.status_code == 422 and len(reasons) == 2
-    assert "no class" in reasons[0] and "matches no class" in reasons[1]
+    assert "no FEC" in reasons[0] and "matches no FEC" in reasons[1]
 
 
 def test_a_config_the_resolver_refuses_answers_422(client):
@@ -178,16 +178,27 @@ def test_showing_a_campaign_gives_coverage_per_class(client, stores):
     campaign_id = create(client).json()["campaign_id"]
     seed_cases(stores, campaign_id)
     view = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}").json()
-    by_class = {entry["class_id"]: entry for entry in view["classes"]}
+    by_class = {entry["fec_id"]: entry for entry in view["fecs"]}
     assert by_class[CLASS_A]["complete"] == 2 and by_class[CLASS_A]["verdicts"] == {"0": {"passed": 1, "failed": 1}}
     assert by_class[CLASS_B]["in_flight"] == 1 and by_class[CLASS_B]["verdicts"] == {} and by_class[CLASS_B]["state"] == "open"
     assert by_class[CLASS_A]["failure_budget_left"] == 1
     assert view["totals"]["verdicts"] == {"passed": 1, "failed": 1} and view["totals"]["complete"] == 2
-    assert client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/classes").json() == view["classes"]
+    assert client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/fecs").json() == view["fecs"]
+
+
+def test_an_unlimited_failure_budget_is_null_in_the_views(client):
+    config = small_config(scope=[{"classes": [CLASS_A], "quota": 2, "failure_budget": "unlimited"}])
+    validated = client.post(f"{CAMPAIGNS_PATH}/validate", content=config, headers=YAML).json()
+    assert [(entry["fec_id"], entry["failure_budget"]) for entry in validated["fecs"]] == [(CLASS_A, None)]
+    campaign_id = create(client, config).json()["campaign_id"]
+    (entry,) = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/fecs").json()
+    assert (entry["quota"], entry["failure_budget"], entry["failure_budget_left"]) == (2, None, None)
+    (version,) = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/config").json()["versions"]
+    assert version["config"]["scope"][0]["failure_budget"] == "unlimited"
 
 
 def test_unknown_campaigns_answer_404_on_every_route(client):
-    for suffix in ("", "/classes", "/cases", "/cases/1", "/verdicts", "/run-records", "/events", "/config"):
+    for suffix in ("", "/fecs", "/cases", "/cases/1", "/verdicts", "/run-records", "/events", "/config"):
         assert client.get(f"{CAMPAIGNS_PATH}/no-such{suffix}").status_code == 404, suffix
     assert client.post(f"{CAMPAIGNS_PATH}/no-such/pause").status_code == 404
 
@@ -196,9 +207,9 @@ def test_cases_are_filtered_and_paged(client, stores):
     campaign_id = create(client).json()["campaign_id"]
     seed_cases(stores, campaign_id)
     cases = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases").json()
-    assert [(case["class_id"], case["case_index"]) for case in cases] == [(CLASS_A, 0), (CLASS_A, 1), (CLASS_B, 0)]
+    assert [(case["fec_id"], case["case_index"]) for case in cases] == [(CLASS_A, 0), (CLASS_A, 1), (CLASS_B, 0)]
     assert cases[0]["state"] == "complete" and cases[0]["stage"] == "verdict" and cases[0]["seed"] == 100
-    assert [case["case_index"] for case in client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases", params={"class_id": CLASS_B}).json()] == [0]
+    assert [case["case_index"] for case in client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases", params={"fec_id": CLASS_B}).json()] == [0]
     assert len(client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases", params={"state": "active"}).json()) == 1
     assert len(client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases", params={"stage": "generate_scene"}).json()) == 1
     assert len(client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases", params={"limit": 2, "offset": 1}).json()) == 2
@@ -235,8 +246,8 @@ def test_verdicts_are_filtered_and_paged(client, stores):
     assert [verdict["state"] for verdict in client.get(path).json()] == ["passed", "failed"]
     assert [verdict["state"] for verdict in client.get(path, params={"state": "failed"}).json()] == ["failed"]
     assert [verdict["sensitive"] for verdict in client.get(path, params={"sensitive": "true"}).json()] == [True]
-    assert client.get(path, params={"class_id": CLASS_B}).json() == []
-    assert len(client.get(path, params={"class_id": CLASS_A, "run_index": 0}).json()) == 2
+    assert client.get(path, params={"fec_id": CLASS_B}).json() == []
+    assert len(client.get(path, params={"fec_id": CLASS_A, "run_index": 0}).json()) == 2
     assert client.get(path, params={"run_index": 1}).json() == []
     assert len(client.get(path, params={"limit": 1, "offset": 1}).json()) == 1
     assert client.get(path, params={"format": "xml"}).status_code == 422
@@ -251,11 +262,11 @@ def test_verdicts_stream_as_csv(client, stores):
     rows = list(csv.DictReader(io.StringIO(response.text)))
     assert [row["state"] for row in rows] == ["passed", "failed"]
     failed = rows[1]
-    assert failed["class_id"] == CLASS_A and failed["failed_rules"] == "rule_15" and failed["first_failure_time_s"] == "4.5" and failed["sensitive"] == "True"
+    assert failed["fec_id"] == CLASS_A and failed["failed_rules"] == "rule_15" and failed["first_failure_time_s"] == "4.5" and failed["sensitive"] == "True"
     assert rows[0]["first_failure_time_s"] == "" and rows[0]["margin"] == "" and rows[0]["failed_rules"] == ""
     filtered = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts", params={"format": "csv", "state": "failed"})
     assert len(list(csv.DictReader(io.StringIO(filtered.text)))) == 1
-    assert client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts", params={"format": "csv", "class_id": CLASS_B}).text.count("\n") == 1  # the header alone
+    assert client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts", params={"format": "csv", "fec_id": CLASS_B}).text.count("\n") == 1  # the header alone
 
 
 def test_the_csv_pages_through_every_verdict(client, stores, monkeypatch):
@@ -275,7 +286,7 @@ def test_run_records_are_filtered(client, stores):
     seed_cases(stores, campaign_id)
     path = f"{CAMPAIGNS_PATH}/{campaign_id}/run-records"
     assert len(client.get(path).json()) == 2
-    assert client.get(path, params={"class_id": CLASS_B}).json() == []
+    assert client.get(path, params={"fec_id": CLASS_B}).json() == []
     assert client.get(path, params={"run_index": 3}).json() == []
     assert len(client.get(path, params={"limit": 1}).json()) == 1
 
@@ -360,8 +371,8 @@ def test_validating_a_config_creates_nothing_and_describes_what_a_campaign_would
     view = response.json()
     assert view["valid"] is True and view["name"] == "phase 4 exit campaign"
     assert len(view["config_hash"]) == 64
-    assert [(entry["class_id"], entry["quota"], entry["failure_budget"]) for entry in view["classes"]] == [(CLASS_A, 2, 1), (CLASS_B, 2, 1)]
-    assert all(len(entry["content_hash"]) == 64 and entry["vessel_count"] == 2 and entry["obstacle_count"] == 0 for entry in view["classes"])
+    assert [(entry["fec_id"], entry["quota"], entry["failure_budget"]) for entry in view["fecs"]] == [(CLASS_A, 2, 1), (CLASS_B, 2, 1)]
+    assert all(len(entry["content_hash"]) == 64 and entry["vessel_count"] == 2 and entry["obstacle_count"] == 0 for entry in view["fecs"])
     assert view["cases_planned"] == 4
     assert [(run["run_index"], run["repeatability_tier"], run["warnings"]) for run in view["runs"]] == [(0, "exact", [])]
     assert stores.campaigns.list_campaigns() == []
@@ -430,9 +441,9 @@ def test_cases_have_their_filtered_total(client, stores):
     path = f"{CAMPAIGNS_PATH}/{campaign_id}/cases"
     assert total(client.get(path)) == 3
     assert total(client.get(path, params={"limit": 1})) == 3
-    assert total(client.get(path, params={"class_id": CLASS_A})) == 2
+    assert total(client.get(path, params={"fec_id": CLASS_A})) == 2
     assert total(client.get(path, params={"state": "active"})) == 1
-    assert total(client.get(path, params={"state": ["active", "complete"], "class_id": CLASS_B})) == 1
+    assert total(client.get(path, params={"state": ["active", "complete"], "fec_id": CLASS_B})) == 1
     assert total(client.get(path, params={"stage": "generate_scene"})) == 1
     assert total(client.get(path, params={"stage": ["verdict", "generate_scene"]})) == 3
     assert total(client.get(path, params={"stage": "monitor"})) == 0
@@ -446,8 +457,8 @@ def test_verdicts_have_their_filtered_total(client, stores):
     assert total(client.get(path, params={"limit": 1, "offset": 1})) == 2
     assert total(client.get(path, params={"state": "failed"})) == 1
     assert total(client.get(path, params={"sensitive": "false"})) == 1
-    assert total(client.get(path, params={"class_id": CLASS_B})) == 0
-    assert total(client.get(path, params={"run_index": 0, "class_id": CLASS_A})) == 2
+    assert total(client.get(path, params={"fec_id": CLASS_B})) == 0
+    assert total(client.get(path, params={"run_index": 0, "fec_id": CLASS_A})) == 2
     assert total(client.get(path, params={"run_index": 1})) == 0
     csv_response = client.get(path, params={"format": "csv", "state": "failed"})
     assert total(csv_response) == 1 and csv_response.headers["content-disposition"].startswith("attachment")
@@ -459,7 +470,7 @@ def test_run_records_have_their_filtered_total(client, stores):
     path = f"{CAMPAIGNS_PATH}/{campaign_id}/run-records"
     assert total(client.get(path)) == 2
     assert total(client.get(path, params={"limit": 1})) == 2
-    assert total(client.get(path, params={"class_id": CLASS_B})) == 0
+    assert total(client.get(path, params={"fec_id": CLASS_B})) == 0
     assert total(client.get(path, params={"run_index": 3})) == 0
 
 

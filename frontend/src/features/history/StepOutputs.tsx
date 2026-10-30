@@ -53,7 +53,7 @@ function OutputRowView({ campaignId, step, row, onOpenEntry }: { campaignId: str
   return (
     <tr>
       <td>
-        <span className="camp-class-name" title={row.class_id}>
+        <span className="camp-class-name" title={row.fec_id}>
           {caseLabel.title}
         </span>
         {caseLabel.detail && <span className="camp-class-folder">{caseLabel.detail}</span>}

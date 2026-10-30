@@ -5,7 +5,7 @@ import { sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
 import { buildCampaignConfig, buildCampaignYaml, stagesOf, type BuilderCatalog } from "./configBuilder";
 import { emptyDraft, emptyRun, type InputItemDraft, type ScenarioFileDraft, type WizardDraft } from "./wizardState";
 
-/** The config for every choice of steps and every kind of input (design doc 6.3, format 2). */
+/** The config for every choice of steps and every kind of input (design doc 6.3, format 3). */
 
 const parsedCatalog = catalogStacksSchema.parse(sampleCatalogStacks);
 const catalog: BuilderCatalog = { stacks: parsedCatalog.stacks, generators: parsedCatalog.trajectory_generators };
@@ -51,9 +51,9 @@ function keysOf(draft: WizardDraft): string[] {
 }
 
 describe("buildCampaignConfig steps", () => {
-  it("writes format 2 and the steps in chain order", () => {
+  it("writes format 3 and the steps in chain order", () => {
     const config = buildCampaignConfig(baseDraft(), catalog);
-    expect(config.format).toBe(2);
+    expect(config.format).toBe(3);
     expect(config.steps).toEqual(["scene_generation", "trajectory_generation", "simulation"]);
   });
 
@@ -147,6 +147,7 @@ describe("buildCampaignConfig input", () => {
     draft.input.scenarios = [
       scenario(),
       scenario({ id: "sc2", name: "second", ref: { sha256: SHA_C, size_bytes: 9, kind: "functional_scenario", media_type: "application/json" }, quota: 1, failureBudget: null }),
+      scenario({ id: "sc3", name: "third", ref: { sha256: SHA_C, size_bytes: 9, kind: "functional_scenario" }, quota: 2, failureBudget: "unlimited" }),
     ];
     const config = buildCampaignConfig(draft, catalog);
     expect(Object.keys(config)).toEqual(["format", "name", "steps", "scope", "input", "domain", "resources", "policy"]);
@@ -154,6 +155,7 @@ describe("buildCampaignConfig input", () => {
       functional_scenarios: [
         { name: "my_head_on", ref: { sha256: SHA_A, size_bytes: 812, kind: "functional_scenario", media_type: "text/plain" }, quota: 3, failure_budget: 1 },
         { name: "second", ref: { sha256: SHA_C, size_bytes: 9, kind: "functional_scenario" }, quota: 1 },
+        { name: "third", ref: { sha256: SHA_C, size_bytes: 9, kind: "functional_scenario" }, quota: 2, failure_budget: "unlimited" },
       ],
     });
   });
@@ -165,7 +167,7 @@ describe("buildCampaignConfig input", () => {
     draft.input.scenarios = [scenario()];
     expect(keysOf(draft)).not.toContain("scope");
     draft.scope.push({ id: "real", classes: ["a/b"], patterns: [], quota: 2, failureBudget: 0 });
-    expect(buildCampaignConfig(draft, catalog).scope).toEqual([{ classes: ["a/b"], quota: 2, failure_budget: 0 }]);
+    expect(buildCampaignConfig(draft, catalog).scope).toEqual([{ fecs: ["a/b"], quota: 2, failure_budget: 0 }]);
   });
 
   it("keeps an empty scope entry when there are no scenario files, so the master and the draft check report it", () => {

@@ -47,7 +47,7 @@ export function toApiFilters(filters: VerdictFilterState, step?: VerdictStep): V
     query.step = step;
   }
   if (filters.classId !== "") {
-    query.class_id = filters.classId;
+    query.fec_id = filters.classId;
   }
   if (filters.state !== "any") {
     query.state = filters.state;
@@ -261,7 +261,7 @@ export function percent(part: number, whole: number): number {
 /** The run indexes the campaign has verdicts for, from its class counts. */
 export function runIndexesOf(detail: CampaignDetail | undefined): number[] {
   const runs = new Set<number>();
-  for (const view of detail?.classes ?? []) {
+  for (const view of detail?.fecs ?? []) {
     for (const run of Object.keys(view.verdicts)) {
       const index = Number(run);
       if (Number.isInteger(index)) {

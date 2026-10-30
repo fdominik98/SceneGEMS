@@ -22,6 +22,6 @@ def test_mismatch_message_names_both_versions_and_the_fix():
     assert "same SceneGEMS revision" in message
 
 
-def test_the_trusted_vpn_protocol_is_version_4():
-    # Version 4: no pairing, credentials or TLS; a node names itself in its Hello and in the node id header
-    assert PROTOCOL_VERSION == 4
+def test_the_split_ardupilot_simulation_is_version_5():
+    # Version 5: simulation.ardupilot_sim and simulation.gazebo replace simulation.ardupilot, so an older node is refused by its version
+    assert PROTOCOL_VERSION == 5

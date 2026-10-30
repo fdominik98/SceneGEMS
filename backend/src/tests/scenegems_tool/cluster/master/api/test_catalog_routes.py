@@ -23,7 +23,7 @@ from scenegems_tool.cluster.protocol.routes import CATALOG_PATH
 from scenegems_tool.persistence.schema import MonitorImplementation, TrajectoryGeneratorImplementation
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 
-CLASSES = f"{CATALOG_PATH}/classes"
+CLASSES = f"{CATALOG_PATH}/fecs"
 STACKS = f"{CATALOG_PATH}/stacks"
 
 
@@ -55,7 +55,7 @@ def test_the_classes_are_the_catalogs_with_their_counts_and_hashes(operator, sma
     response = operator.get(CLASSES)
     assert response.status_code == 200 and response.headers["x-total-count"] == "4"
     classes = response.json()
-    assert [entry["class_id"] for entry in classes] == [
+    assert [entry["fec_id"] for entry in classes] == [
         "2vessel_0obstacle_scenarios/functional_model1",
         "2vessel_0obstacle_scenarios/functional_model2",
         "2vessel_0obstacle_scenarios/functional_model10",  # numbers in numeric order
@@ -63,11 +63,11 @@ def test_the_classes_are_the_catalogs_with_their_counts_and_hashes(operator, sma
     ]
     last = classes[-1]
     assert last == {
-        "class_id": "3vessel_1obstacle_scenarios/functional_model1",
+        "fec_id": "3vessel_1obstacle_scenarios/functional_model1",
         "folder": "3vessel_1obstacle_scenarios",
         "vessel_count": 3,
         "obstacle_count": 1,
-        "content_hash": small_catalog.get(last["class_id"]).content_hash,
+        "content_hash": small_catalog.get(last["fec_id"]).content_hash,
     }
     assert len(last["content_hash"]) == 64 and classes[0]["content_hash"] == classes[2]["content_hash"]  # the same content, the same hash, whatever the line endings
 
@@ -75,7 +75,7 @@ def test_the_classes_are_the_catalogs_with_their_counts_and_hashes(operator, sma
 def test_the_classes_can_be_filtered_by_folder_and_pattern(operator, small_catalog):
     def ids(**params):
         response = operator.get(CLASSES, params=params)
-        return [entry["class_id"] for entry in response.json()], int(response.headers["x-total-count"])
+        return [entry["fec_id"] for entry in response.json()], int(response.headers["x-total-count"])
 
     assert ids(folder="3vessel_1obstacle_scenarios") == (["3vessel_1obstacle_scenarios/functional_model1"], 1)
     assert ids(folder="nothing")[1] == 0
@@ -88,7 +88,7 @@ def test_the_classes_can_be_filtered_by_folder_and_pattern(operator, small_catal
 
 def test_the_classes_are_paged_and_the_total_stays(operator, small_catalog):
     second = operator.get(CLASSES, params={"limit": 2, "offset": 1})
-    assert [entry["class_id"] for entry in second.json()] == ["2vessel_0obstacle_scenarios/functional_model2", "2vessel_0obstacle_scenarios/functional_model10"]
+    assert [entry["fec_id"] for entry in second.json()] == ["2vessel_0obstacle_scenarios/functional_model2", "2vessel_0obstacle_scenarios/functional_model10"]
     assert second.headers["x-total-count"] == "4"
     assert operator.get(CLASSES, params={"offset": 10}).json() == []
     assert len(operator.get(CLASSES, params={"limit": 0}).json()) == 1  # at least one, like the other lists
@@ -107,7 +107,7 @@ def test_the_real_catalog_is_served_in_full(operator):
     assert int(response.headers["x-total-count"]) == len(catalog) == len(response.json())
     first = response.json()[0]
     scenario_class = catalog.classes()[0]
-    assert (first["class_id"], first["content_hash"], first["vessel_count"]) == (scenario_class.class_id, scenario_class.content_hash, scenario_class.vessel_count)
+    assert (first["fec_id"], first["content_hash"], first["vessel_count"]) == (scenario_class.class_id, scenario_class.content_hash, scenario_class.vessel_count)
     assert {entry["folder"] for entry in response.json()} == set(catalog.folders())
 
 
@@ -170,7 +170,7 @@ def test_the_ardupilot_stacks_report_the_environment_the_job_applies(stacks):
     for layer in ARDUPILOT_LAYERS:
         replay = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId(layer))
         support = _environment_support(resolver, {"own_ship": replay})
-        assert support["waves"] == "supported", "the resolver's stack could carry waves; simulation.ardupilot runs calm water and a campaign refuses them"
+        assert support["waves"] == "supported", "the resolver's stack could carry waves; the ArduPilot simulation jobs run calm water and a campaign refuses them"
         assert by_id(stacks["stacks"])[f"{layer}.replay"]["environment"] == {"wind": "unsupported", "waves": "unsupported", "interactive_only": False}
 
 
@@ -199,7 +199,7 @@ def test_the_monitors_are_the_ones_a_run_names(stacks):
     assert set(monitors) == {monitor.value for monitor in MonitorImplementation}
     assert {name for name, monitor in monitors.items() if monitor["supports_early_stop"]} == {"live"}
     assert monitors["post_hoc"]["job_types"] == ["monitoring.post_hoc"] and monitors["empty"]["job_types"] == []
-    assert monitors["live"]["job_types"] == ["simulation.kinematic", "simulation.ardupilot"]  # both simulation jobs judge a run in process
+    assert monitors["live"]["job_types"] == ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"]  # every simulation job judges a run in process
     assert all(monitor["label"] and monitor["description"] for monitor in monitors.values())
 
 

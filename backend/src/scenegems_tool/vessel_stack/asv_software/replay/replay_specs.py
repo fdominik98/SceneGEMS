@@ -4,6 +4,7 @@ from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, Laye
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef
+from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER
 
 REPLAY_LAYER = LayerSpec(
     layer=LayerRef.of(AsvSoftwareId.REPLAY),
@@ -30,6 +31,7 @@ REPLAY_ARDUAGENT_FOLLOWER = AdapterSpec(
     capabilities=Capabilities(lockstep=False),
     provides_ports=frozenset({Port.WAYPOINT_MISSION, Port.MAVLINK}),
     requires_ports=frozenset({Port.VESSEL_STATE}),
+    containers=(MAVPROXY_CONTAINER, ARDUAGENT_CONTAINER),
 )
 
 # The default from replay to ardupilot. ArduAgent stays registered as the alternative the

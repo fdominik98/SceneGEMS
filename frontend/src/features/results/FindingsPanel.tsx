@@ -50,10 +50,10 @@ function RankedRules({ rules }: { rules: FindingsView["failedRules"] }) {
 function ClassTable({ view }: { view: FindingsView }) {
   return (
     <div className="results-table-wrap">
-      <table className="results-table results-table--plain results-table--compact" aria-label="Findings per class">
+      <table className="results-table results-table--plain results-table--compact" aria-label="Findings per FEC">
         <thead>
           <tr>
-            <th>Class</th>
+            <th>FEC</th>
             <th>Cases</th>
             {view.monitored && <th>Passed</th>}
             {view.monitored && <th>Failed</th>}
@@ -185,12 +185,12 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
 
       <Disclosure
         id="results:findings-classes"
-        title="Per class"
-        hint={`${view.classes.length} ${view.classes.length === 1 ? "class" : "classes"}${view.monitored ? ", most failures first" : ""}`}
+        title="Per FEC"
+        hint={`${view.classes.length} ${view.classes.length === 1 ? "FEC" : "FECs"}${view.monitored ? ", most failures first" : ""}`}
         variant="plain"
         headingLevel={4}
       >
-        {view.classes.length === 0 ? <p className="meta">No class reached this step yet.</p> : <ClassTable view={view} />}
+        {view.classes.length === 0 ? <p className="meta">No FEC reached this step yet.</p> : <ClassTable view={view} />}
       </Disclosure>
     </section>
   );

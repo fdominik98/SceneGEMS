@@ -52,7 +52,7 @@ function checkInput(draft: WizardDraft, reasons: Reason[], now: number): void {
       if (scenario.quota === null || scenario.quota < 1) {
         reasons.push(local("input", index, "quota", "The quota is at least 1.", "scenario"));
       }
-      if (scenario.failureBudget !== null && scenario.failureBudget < 0) {
+      if (typeof scenario.failureBudget === "number" && scenario.failureBudget < 0) {
         reasons.push(local("input", index, "failure_budget", "The failure budget is 0 or more.", "scenario"));
       }
       if (uploadExpired(scenario.uploadedAt, now)) {
@@ -63,14 +63,14 @@ function checkInput(draft: WizardDraft, reasons: Reason[], now: number): void {
     draft.scope.forEach((entry, index) => {
       if (isEmptyScopeEntry(entry)) {
         if (scenarios.length === 0) {
-          reasons.push(local("input", index, null, "Choose classes or a folder pattern, or add a functional scenario file."));
+          reasons.push(local("input", index, null, "Choose FECs or a folder pattern, or add a functional scenario file."));
         }
         return;
       }
       if (entry.quota === null || entry.quota < 1) {
         reasons.push(local("input", index, "quota", "The quota is at least 1."));
       }
-      if (entry.failureBudget !== null && entry.failureBudget < 0) {
+      if (typeof entry.failureBudget === "number" && entry.failureBudget < 0) {
         reasons.push(local("input", index, "failure_budget", "The failure budget is 0 or more."));
       }
     });

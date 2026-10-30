@@ -16,8 +16,24 @@ describe("DetailPanel", () => {
     expect(html).toContain("A stack of three layers.");
     expect(html).toContain("6");
     expect(html).toContain("4 of 6");
+    expect(html).toContain("Run as cluster jobs");
+    expect(html).toContain("2 of 4");
     expect(html).toContain("A note on the stack.");
     expect(html).not.toContain("Back to the overview");
+  });
+
+  it("leaves the cluster job count out for a document of an older master", () => {
+    const older = { ...document, combinations: document.combinations.map((combination) => ({ ...combination, facts: combination.facts.filter((fact) => fact.key !== "cluster_job") })) };
+    const html = renderToStaticMarkup(<DetailPanel document={older} view="concrete" selection={null} onShow={vi.fn()} />);
+    expect(html).not.toContain("Run as cluster jobs");
+  });
+
+  it("names the cluster job of each stack through an implementation, or none", () => {
+    const html = panel("concrete", { kind: "node", id: "bottom/e" });
+    expect(html).toContain(">Job<");
+    expect(html).toContain(">sim.e<");
+    expect(html).toContain(">none<");
+    expect(html).toContain('title="no job type runs it yet"');
   });
 
   it("describes a selected implementation with its values, where they come from and the stacks through it", () => {
@@ -80,6 +96,13 @@ describe("MatrixView", () => {
     expect(html).toContain("wind unsupported");
     expect(html).toContain("waves supported");
     expect((html.match(/<tr>/g) ?? []).length).toBe(1 + 4);
+  });
+
+  it("names the cluster job of an available stack, or says it runs as a live session", () => {
+    const html = renderToStaticMarkup(<MatrixView document={document} />);
+    expect(html).toContain("job sim.e");
+    expect(html).toContain("job sim.f");
+    expect((html.match(/no cluster job, live session/g) ?? []).length).toBe(2);
   });
 
   it("says so when a document has no matrix", () => {

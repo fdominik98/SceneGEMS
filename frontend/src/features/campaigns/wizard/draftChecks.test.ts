@@ -38,6 +38,12 @@ describe("checkDraft", () => {
     expect(messages(draft)).toEqual(["input/0/quota", "input/1/quota", "input/1/failure_budget"]);
   });
 
+  it("accepts an unlimited failure budget", () => {
+    const draft = validDraft();
+    draft.scope[0].failureBudget = "unlimited";
+    expect(messages(draft)).toEqual([]);
+  });
+
   it("parses customized domain text and flags what is not a YAML mapping", () => {
     const draft = validDraft();
     draft.domain.custom = true;

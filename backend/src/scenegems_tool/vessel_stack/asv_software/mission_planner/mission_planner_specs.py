@@ -15,6 +15,7 @@ from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, Laye
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef
+from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER
 
 MISSION_PLANNER_LAYER = LayerSpec(
     layer=LayerRef.of(AsvSoftwareId.MISSION_PLANNER),
@@ -33,6 +34,7 @@ MISSION_PLANNER_MAVLINK_PORT = AdapterSpec(
     description="Exposed MAVLink port: MAVProxy forwards each vessel to a UDP ground control station port, and ArduAgent sends the vessel toward its last waypoint.",
     capabilities=Capabilities(lockstep=False),
     provides_ports=frozenset({Port.MAVLINK}),
+    containers=(MAVPROXY_CONTAINER, ARDUAGENT_CONTAINER),
 )
 
 GCS_CONTAINER_PORT = 5770  # MAVProxy's TCP endpoint for the ground control station, inside its container
@@ -48,4 +50,5 @@ MISSION_PLANNER_GCS_PORT = AdapterSpec(
     ),
     capabilities=Capabilities(lockstep=False),
     provides_ports=frozenset({Port.MAVLINK}),
+    containers=(MAVPROXY_CONTAINER,),
 )

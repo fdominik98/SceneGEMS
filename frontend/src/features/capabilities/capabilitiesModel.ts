@@ -8,6 +8,8 @@ export type DocumentView = GraphView | "matrix";
 export type Tone = "ok" | "warn" | "bad" | "neutral";
 
 export const UNBOUNDED = "unbounded";
+/** The fact of an available stack that names the job type running it on a node, null when it runs on the workbench only (vessel_stack_description.CLUSTER_JOB_FACT). */
+export const CLUSTER_JOB_FACT = "cluster_job";
 
 /** How good a capability value is: green for what a run can rely on, amber for what is limited or unconfirmed, red for what is missing. */
 export function factTone(fact: Fact): Tone {
@@ -23,6 +25,8 @@ export function factTone(fact: Fact): Tone {
       return value === true ? "ok" : "bad";
     case "interactive_only":
       return value === true ? "warn" : "neutral";
+    case CLUSTER_JOB_FACT:
+      return value === null ? "warn" : "ok";
     default:
       return "neutral";
   }
@@ -145,6 +149,17 @@ export function parallelIndex(edges: readonly EdgeEnds[]): Map<string, { index: 
 /** The available stacks through a node (all of them without one), in the document's order. */
 export function stacksThrough(document: ArchitectureDocument, nodeId: string | null): Combination[] {
   return document.combinations.filter((combination) => combination.status === "available" && (nodeId === null || combination.path.includes(nodeId)));
+}
+
+/** The cluster job fact of a stack; undefined when the document does not say (an older master, or a stack that is not available). */
+export function clusterJobOf(combination: Combination): Fact | undefined {
+  return combination.facts.find((fact) => fact.key === CLUSTER_JOB_FACT);
+}
+
+/** How many available stacks a cluster job runs, or null when the document names no cluster jobs. */
+export function stacksRunAsJobs(document: ArchitectureDocument): number | null {
+  const described = document.combinations.map(clusterJobOf).filter((fact): fact is Fact => fact !== undefined);
+  return described.length === 0 ? null : described.filter((fact) => fact.value !== null).length;
 }
 
 export interface MatrixCell {

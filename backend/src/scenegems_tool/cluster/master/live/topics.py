@@ -8,7 +8,7 @@
                       campaign routes (create, control, delete) tell it which campaigns changed; it publishes
                       the row of each that differs from the last one sent, and the id of a deleted one
     campaign:<id>     CampaignTopics: PipelineEngine.on_change after each committed tick, then the
-                      new events, the summary when it changed and the classes that changed
+                      new events, the summary when it changed and the FECs that changed
     instance:...      ObservationHub (observation_hub.py)
 
 Every hook first checks LiveChannel.has_subscribers and returns when nobody listens. What a
@@ -35,9 +35,9 @@ from scenegems_tool.cluster.protocol.live import (
     CAMPAIGNS_TOPIC,
     NODES_TOPIC,
     CampaignChanged,
-    CampaignClassesChanged,
     CampaignDeleted,
     CampaignEventAdded,
+    CampaignFecsChanged,
     CampaignRowChanged,
     JobChanged,
     JobLogsAdded,
@@ -314,7 +314,7 @@ class CampaignTopics:
             watch.primed = True
             watch.last_event_id = last_event_id
             watch.summary = campaign_view(campaign)
-            watch.classes = {entry["class_id"]: entry for entry in classes}
+            watch.classes = {entry["fec_id"]: entry for entry in classes}
             self.worker.mark(campaign_id)  # what changed between this read and the priming
         return {**campaign_detail_view(campaign, classes, config), "last_event_id": last_event_id}
 
@@ -359,10 +359,10 @@ class CampaignTopics:
             if summary != watch.summary:
                 watch.summary = summary
                 self._channel.publish(topic, CampaignChanged(campaign=summary).model_dump())
-            changed = [entry for entry in classes if watch.classes.get(entry["class_id"]) != entry]
+            changed = [entry for entry in classes if watch.classes.get(entry["fec_id"]) != entry]
             if changed:
-                watch.classes.update({entry["class_id"]: entry for entry in changed})
-                self._channel.publish(topic, CampaignClassesChanged(classes=changed).model_dump())
+                watch.classes.update({entry["fec_id"]: entry for entry in changed})
+                self._channel.publish(topic, CampaignFecsChanged(fecs=changed).model_dump())
 
     def _read_changes(self, campaign_id: str, after_event_id: int) -> tuple:
         stores = self._stores

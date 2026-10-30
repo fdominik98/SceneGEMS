@@ -51,8 +51,8 @@ describe("filter state", () => {
     expect(toApiFilters(DEFAULT_VERDICT_FILTERS)).toEqual({});
     const filters = { classId: "a/1", state: "failed" as const, runIndex: 0, sensitive: "yes" as const };
     expect(hasActiveFilters(filters)).toBe(true);
-    expect(toApiFilters(filters)).toEqual({ class_id: "a/1", state: "failed", run_index: 0, sensitive: true });
-    expect(toApiFilters({ ...filters, runIndex: null, sensitive: "no" })).toEqual({ class_id: "a/1", state: "failed", sensitive: false });
+    expect(toApiFilters(filters)).toEqual({ fec_id: "a/1", state: "failed", run_index: 0, sensitive: true });
+    expect(toApiFilters({ ...filters, runIndex: null, sensitive: "no" })).toEqual({ fec_id: "a/1", state: "failed", sensitive: false });
   });
 
   it("narrows the query to one step when given", () => {

@@ -37,7 +37,7 @@ export async function sceneInputSpecification(
   options: { signal?: AbortSignal; fetch?: typeof fetch } = {}
 ): Promise<InputSpecification | null> {
   const detail = await client.getCase(target.campaignId, target.caseId, options.signal);
-  const classId = detail.class_id;
+  const classId = detail.fec_id;
   if (classId.startsWith(ITEM_CLASS_PREFIX)) {
     return null;
   }

@@ -9,6 +9,8 @@ import {
   emptyScopeEntry,
   newEntryId,
   QUEUE_DEPTH_DEFAULTS,
+  UNLIMITED_FAILURE_BUDGET,
+  type FailureBudgetDraft,
   type ParamValues,
   type RetentionPolicy,
   type RunDraft,
@@ -39,15 +41,20 @@ function numberOr<T>(value: unknown, fallback: T): number | T {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function failureBudgetOf(value: unknown): FailureBudgetDraft {
+  return value === UNLIMITED_FAILURE_BUDGET ? UNLIMITED_FAILURE_BUDGET : numberOr(value, 0);
+}
+
 function scopeOf(config: ConfigObject): ScopeEntryDraft[] {
   const entries = list(config.scope).map((item) => {
     const entry = record(item);
     return {
       id: newEntryId("scope"),
-      classes: strings(entry.classes),
+      // Format 3 lists an entry's FECs under fecs, a preset saved in format 2 under classes
+      classes: strings(entry.fecs ?? entry.classes),
       patterns: strings(entry.patterns),
       quota: numberOr(entry.quota, null),
-      failureBudget: numberOr(entry.failure_budget, 0),
+      failureBudget: failureBudgetOf(entry.failure_budget),
     };
   });
   return entries.length > 0 ? entries : [emptyScopeEntry()];

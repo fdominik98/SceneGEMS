@@ -1,6 +1,5 @@
 import { useScenePlaybackStore } from "../../../domain/playback/playbackStore";
 import { BasicActorInfoPanel } from "../monitor/BasicActorInfoPanel";
-import { ActorVisibilityPanel } from "./ActorVisibilityPanel";
 import { SceneGenerationPaneViewSelect } from "./SceneGenerationPaneViewSelect";
 
 /**
@@ -17,7 +16,6 @@ export function SceneMonitorPreview() {
       <SceneGenerationPaneViewSelect />
       <div className="right-trajectory-column-scroll">
         {waitingForMonitor ? <p className="meta">Waiting for the monitor result…</p> : null}
-        <ActorVisibilityPanel stream="animation" />
         <BasicActorInfoPanel stream="animation" frame={scene} />
       </div>
     </aside>

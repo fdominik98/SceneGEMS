@@ -232,7 +232,7 @@ async def test_the_campaign_topic_sends_new_events_summary_changes_and_changed_c
     (subscribed,) = await browser.messages(1)
     snapshot = subscribed["snapshot"]
     assert snapshot["campaign_id"] == campaign.campaign_id and snapshot["actual_state"] == "created"
-    assert [entry["class_id"] for entry in snapshot["classes"]] == [CLASS_A, CLASS_B] and snapshot["totals"]["quota"] == 4
+    assert [entry["fec_id"] for entry in snapshot["fecs"]] == [CLASS_A, CLASS_B] and snapshot["totals"]["quota"] == 4
     last_event_id = snapshot["last_event_id"]
     await campaigns.worker.idle()  # the priming read finds nothing newer
     await settle()
@@ -246,10 +246,10 @@ async def test_the_campaign_topic_sends_new_events_summary_changes_and_changed_c
     campaigns.campaigns_changed({campaign.campaign_id, "a-campaign-nobody-watches"})
     await campaigns.worker.idle()
     started, abandoned, summary, classes = await browser.messages(4)
-    assert [started["data"]["event"]["kind"], abandoned["data"]["event"]["kind"]] == ["started", "class_abandoned"]
+    assert [started["data"]["event"]["kind"], abandoned["data"]["event"]["kind"]] == ["started", "fec_abandoned"]
     assert started["data"]["event"]["event_id"] > last_event_id
-    assert summary["data"]["campaign"]["actual_state"] == "running" and "classes" not in summary["data"]["campaign"]
-    assert [(entry["class_id"], entry["state"]) for entry in classes["data"]["classes"]] == [(CLASS_B, "abandoned")]
+    assert summary["data"]["campaign"]["actual_state"] == "running" and "fecs" not in summary["data"]["campaign"]
+    assert [(entry["fec_id"], entry["state"]) for entry in classes["data"]["fecs"]] == [(CLASS_B, "abandoned")]
     assert [message["seq"] for message in (started, abandoned, summary, classes)] == [1, 2, 3, 4]
 
     campaigns.campaigns_changed({campaign.campaign_id})  # nothing new

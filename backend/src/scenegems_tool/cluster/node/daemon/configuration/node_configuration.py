@@ -44,6 +44,8 @@ MAX_MACHINE_LENGTH = 256  # the registry column
 
 _LABEL_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _JOB_TYPES = {job_type.value: job_type for job_type in JobType}
+# Job types of earlier releases and what replaced them, named in the error
+_REPLACED_JOB_TYPES = {"simulation.ardupilot": (JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO)}
 
 
 class ConfigurationError(ValueError):
@@ -195,6 +197,16 @@ def parse_port(text: str) -> int:
     return port
 
 
+def _job_type_named(name: str) -> JobType:
+    if name in _REPLACED_JOB_TYPES:
+        replacements = " and ".join(replacement.value for replacement in _REPLACED_JOB_TYPES[name])
+        raise ValueError(f"{name} is split into {replacements}; list the ones this node runs")
+    job_type = _JOB_TYPES.get(name)
+    if job_type is None:
+        raise ValueError(f"unknown job type {name!r}; known: {', '.join(sorted(_JOB_TYPES))}")
+    return job_type
+
+
 def parse_capabilities(text: str) -> Dict[JobType, int]:
     capabilities: Dict[JobType, int] = {}
     for item in (part.strip() for part in text.split(",")):
@@ -204,9 +216,7 @@ def parse_capabilities(text: str) -> Dict[JobType, int]:
         name = name.strip()
         if not separator or not name:
             raise ValueError(f"{item!r} must read <job type>:<slots>")
-        job_type = _JOB_TYPES.get(name)
-        if job_type is None:
-            raise ValueError(f"unknown job type {name!r}; known: {', '.join(sorted(_JOB_TYPES))}")
+        job_type = _job_type_named(name)
         if job_type in capabilities:
             raise ValueError(f"{name} is listed twice")
         try:

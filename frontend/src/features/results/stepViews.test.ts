@@ -87,9 +87,9 @@ describe("findings of a step", () => {
 
   it("ranks classes by failures, then by name with numbers in order", () => {
     const rows = rankClasses([
-      { class_id: "item/10", cases: 1, passed: 1, failed: 0 },
-      { class_id: "item/2", cases: 1, passed: 1, failed: 0 },
-      { class_id: "item/3", cases: 2, passed: 0, failed: 2 },
+      { fec_id: "item/10", cases: 1, passed: 1, failed: 0 },
+      { fec_id: "item/2", cases: 1, passed: 1, failed: 0 },
+      { fec_id: "item/3", cases: 2, passed: 0, failed: 2 },
     ]);
     expect(rows.map((row) => row.classId)).toEqual(["item/3", "item/2", "item/10"]);
   });

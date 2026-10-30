@@ -1,5 +1,5 @@
 # Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
-format: 2
+format: 3
 name: "Scene generation over the whole catalog"
 description: >-
   One scene for every functional scenario of the catalog, from one to six vessels, each judged by

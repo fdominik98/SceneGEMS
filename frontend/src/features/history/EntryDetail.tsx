@@ -4,7 +4,7 @@ import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import type { CampaignDetail as CampaignDetailView, CampaignStep } from "../../domain/cluster/schemas";
 import { showCampaignResults } from "../results/showResults";
 import { formatDateTime, plural, runDuration } from "../campaigns/campaignFormat";
-import { campaignProgress, isFinalState, runNames } from "./campaignModel";
+import { baseSeed, campaignProgress, isFinalState, runNames } from "./campaignModel";
 import { EmptyState, ProgressBar, StateBadge, Tile, ToneBadge } from "./campaignParts";
 import { ConfigPanel } from "./ConfigPanel";
 import { ControlsBar } from "./ControlsBar";
@@ -51,17 +51,17 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
           detail={`${verdicts.passed ?? 0} passed, ${failed} failed`}
           tone={failed > 0 ? "warn" : undefined}
         />
-        {totals.classes_abandoned > 0 && <Tile label="Abandoned classes" value={totals.classes_abandoned} detail="out of failure budget" tone="bad" />}
+        {totals.fecs_abandoned > 0 && <Tile label="Abandoned FECs" value={totals.fecs_abandoned} detail="out of failure budget" tone="bad" />}
       </div>
       <Disclosure id="campaign:more-numbers" variant="link" headingLevel={null} title="More numbers" openTitle="Fewer numbers">
         <div className="stat-tiles camp-tiles">
           <Tile label="In flight" value={progress.inFlight} detail="cases being worked on" />
           <Tile label="Dropped" value={progress.dropped} detail="count against the failure budgets" tone={progress.dropped > 0 ? "warn" : undefined} />
           <Tile
-            label="Classes"
-            value={totals.classes}
-            detail={`${totals.classes_open} open, ${totals.classes_complete} complete, ${totals.classes_abandoned} abandoned`}
-            tone={totals.classes_abandoned > 0 ? "bad" : undefined}
+            label="FECs"
+            value={totals.fecs}
+            detail={`${totals.fecs_open} open, ${totals.fecs_complete} complete, ${totals.fecs_abandoned} abandoned`}
+            tone={totals.fecs_abandoned > 0 ? "bad" : undefined}
           />
           <Tile label="Unmonitored verdicts" value={verdicts.unmonitored ?? 0} detail="runs without a monitor result" />
         </div>
@@ -149,6 +149,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
   const steps = entrySteps(detail);
   const step = initialStep(steps, rememberedStep);
   const names = runNames(config.data);
+  const seed = baseSeed(config.data);
   const isCampaign = kind === "campaign";
   const final = isFinalState(detail.actual_state);
 
@@ -184,9 +185,13 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
               {detail.input && detail.input.item_count > 0
                 ? `${plural(detail.input.item_count, "item")} for ${STEP_LABELS[detail.input.first_step].toLowerCase()}`
                 : steps[0] === "scene_generation"
-                  ? "catalog classes or scenarios"
+                  ? "catalog FECs or scenarios"
                   : "not reported"}
             </dd>
+          </div>
+          <div title="Case k of every FEC runs with this seed + k in every step">
+            <dt>Base seed</dt>
+            <dd className="mono">{seed ?? (config.isLoading ? "loading" : "not reported")}</dd>
           </div>
         </dl>
         {detail.state_reason && (
@@ -253,7 +258,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           <StepOutputs key={step} campaignId={campaignId} step={step} running={!final} onOpenEntry={onOpenEntry} />
         </div>
       </section>
-      {isCampaign && <CoverageTable classes={detail.classes} runNames={names} />}
+      {isCampaign && <CoverageTable classes={detail.fecs} runNames={names} />}
       <Disclosure id="campaign:events" title="Activity log" hint={`${events.length} ${events.length === 1 ? "event" : "events"}${feed.source === "live" ? ", live" : ""}`} headingLevel={3}>
         <EventsFeed events={events} live={feed.source === "live"} />
       </Disclosure>

@@ -182,7 +182,7 @@ def test_campaigns_through_every_stage_survive_a_master_restart(cluster, api):
     # The straight campaign: every class complete with exactly its quota, one verdict per case and run
     view = finished[straight["campaign_id"]]
     assert view["actual_state"] == "completed"
-    assert {entry["class_id"]: (entry["state"], entry["complete"]) for entry in view["classes"]} == {class_id: ("complete", QUOTA) for class_id in STRAIGHT_CLASSES}
+    assert {entry["fec_id"]: (entry["state"], entry["complete"]) for entry in view["fecs"]} == {class_id: ("complete", QUOTA) for class_id in STRAIGHT_CLASSES}
     verdicts = _all(api, f"/cluster/campaigns/{straight['campaign_id']}/verdicts")
     assert len(verdicts) == len(STRAIGHT_CLASSES) * QUOTA * len(RUNS)
     states_by_run = {run_index: {verdict["state"] for verdict in verdicts if verdict["run_index"] == run_index} for run_index in range(len(RUNS))}
@@ -191,8 +191,8 @@ def test_campaigns_through_every_stage_survive_a_master_restart(cluster, api):
     cases = _all(api, f"/cluster/campaigns/{straight['campaign_id']}/cases")
     assert all(case["state"] in ("complete", "dropped", "failed", "cancelled") for case in cases)  # nothing left active
     assert sum(case["state"] == "complete" for case in cases) == len(STRAIGHT_CLASSES) * QUOTA
-    # A run record is written when its simulation ends, so spare cases cut above the quota keep the
-    # records of the runs they had: each complete case has exactly one per run, the rest are cut cases'
+    # A run record is written when its simulation ends: each complete case has exactly one per run, the
+    # rest belong to cases that were cut
     records = _all(api, f"/cluster/campaigns/{straight['campaign_id']}/run-records")
     assert all(record["state_digest"] for record in records)
     assert len({(record["case_id"], record["run_index"], record["repeat_index"]) for record in records}) == len(records)
@@ -218,5 +218,5 @@ def test_campaigns_through_every_stage_survive_a_master_restart(cluster, api):
     # The RRT campaign finished too; a class may be abandoned when its searches find no complete plan
     view = finished[rrt["campaign_id"]]
     assert view["actual_state"] == "completed"
-    assert all(entry["state"] in ("complete", "abandoned") for entry in view["classes"])
-    assert all(entry["complete"] == 1 for entry in view["classes"] if entry["state"] == "complete")
+    assert all(entry["state"] in ("complete", "abandoned") for entry in view["fecs"])
+    assert all(entry["complete"] == 1 for entry in view["fecs"] if entry["state"] == "complete")

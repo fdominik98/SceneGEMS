@@ -9,7 +9,7 @@ Per case, the stages of the steps the campaign runs (config.steps), in chain ord
       generate_trajectories   trajectory_generation job (monitor_driven_rrt or straight)
       monitor_trajectories    monitoring.post_hoc job over the planned trajectories (trajectories.monitor post_hoc)
     simulation, per run, per repeat:
-      simulate                simulation.kinematic job, or simulation.ardupilot for a run on an ArduPilot stack
+      simulate                simulation.kinematic job, or simulation.ardupilot_sim or simulation.gazebo for a run on an ArduPilot stack
                               (StageGraph.job_type_of); with the live monitor the job judges the run itself
     simulation, per run:
       monitor                 monitoring.post_hoc job over repeat 0's state log (post_hoc only)
@@ -42,7 +42,7 @@ verdicts) or cancels it (above the quota).
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional
 
 from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, RunConfig, StackConfig
 from scenegems_tool.cluster.protocol.jobs import JobType
@@ -85,14 +85,13 @@ def stage_priority_offsets(scene_monitored: bool = False, trajectories_monitored
     return {stage: offset for offset, stage in enumerate(chain)}
 
 
+# The job type of each ArduPilot layer; the job type decides the images (job_images), so a Gazebo run needs Gazebo
+ARDUPILOT_LAYER_JOB_TYPES = {"ardupilot_sim": JobType.SIMULATION_ARDUPILOT_SIM, "gazebo": JobType.SIMULATION_GAZEBO}
+
+
 def simulation_job_type(stack: StackConfig) -> JobType:
-    """The job type that simulates a run on this stack: simulation.ardupilot on the ArduPilot layers, simulation.kinematic otherwise."""
-    return JobType.SIMULATION_ARDUPILOT if isinstance(stack, ArdupilotStackConfig) else JobType.SIMULATION_KINEMATIC
-
-
-def simulation_images_hint(stack: StackConfig) -> Dict[str, Any]:
-    """The payload fields that decide a simulation job's images (job_images): the layer of an ArduPilot run, so a Gazebo run needs Gazebo."""
-    return {"simulation_layer": stack.simulation_layer} if isinstance(stack, ArdupilotStackConfig) else {}
+    """The job type that simulates a run on this stack: simulation.ardupilot_sim or simulation.gazebo by the ArduPilot layer, simulation.kinematic otherwise."""
+    return ARDUPILOT_LAYER_JOB_TYPES[stack.simulation_layer] if isinstance(stack, ArdupilotStackConfig) else JobType.SIMULATION_KINEMATIC
 
 
 @dataclass(frozen=True)
@@ -222,23 +221,22 @@ class StageGraph:
             return simulation_job_type(self.runs[step.run_index].stack)
         return STAGE_JOB_TYPES[step.stage]
 
-    def stage_jobs(self, stage: PipelineStage) -> List[Tuple[JobType, Dict[str, Any]]]:
-        """The job types a stage may queue, each with the payload fields that decide its images; the simulate stage has one per distinct stack of the runs."""
+    def stage_jobs(self, stage: PipelineStage) -> List[JobType]:
+        """The job types a stage may queue; the simulate stage has one per distinct simulation layer of the runs."""
         if stage not in STAGE_JOB_TYPES:
             return []
         if stage != PipelineStage.SIMULATE or not self.runs:
-            return [(STAGE_JOB_TYPES[stage], {})]
-        jobs: List[Tuple[JobType, Dict[str, Any]]] = []
+            return [STAGE_JOB_TYPES[stage]]
+        jobs: List[JobType] = []
         for run in self.runs:
-            job = (simulation_job_type(run.stack), simulation_images_hint(run.stack))
-            if job not in jobs:
-                jobs.append(job)
+            job_type = simulation_job_type(run.stack)
+            if job_type not in jobs:
+                jobs.append(job_type)
         return jobs
 
-    def run_job(self, run_index: int) -> Tuple[JobType, Dict[str, Any]]:
-        """The run's simulation job type and the payload fields that decide its images."""
-        stack = self.runs[run_index].stack
-        return simulation_job_type(stack), simulation_images_hint(stack)
+    def run_job_type(self, run_index: int) -> JobType:
+        """The run's simulation job type, which decides its images."""
+        return simulation_job_type(self.runs[run_index].stack)
 
     def run_tier(self, run_index: int) -> Optional[str]:
         """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (replay_mavlink_lockstep), unknown on the kinematic layer."""

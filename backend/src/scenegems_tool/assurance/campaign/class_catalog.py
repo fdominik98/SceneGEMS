@@ -81,7 +81,7 @@ class ClassCatalog:
     def get(self, class_id: str) -> ScenarioClass:
         found = self._load().get(class_id)
         if found is None:
-            raise UnknownClassId(f"no class {class_id!r} in the catalog at {self.root}")
+            raise UnknownClassId(f"no FEC {class_id!r} in the catalog at {self.root}")
         return found
 
     def expand(self, pattern: str) -> Tuple[ScenarioClass, ...]:
@@ -102,7 +102,7 @@ class ClassCatalog:
     def _load(self) -> Dict[str, ScenarioClass]:
         if self._classes is None:
             if not self.root.is_dir():
-                raise FileNotFoundError(f"the class catalog folder {self.root} does not exist")
+                raise FileNotFoundError(f"the FEC catalog folder {self.root} does not exist")
             found: List[ScenarioClass] = []
             for path in self.root.glob(f"*/*{PROBLEM_SUFFIX}"):
                 content = read_problem(path)

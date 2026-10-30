@@ -27,7 +27,6 @@ ARDUPILOT_CONTROL_LAYER = LayerSpec(
     description="ArduPilot Rover SITL as the low-level controller. Every vessel gets SITL with a generated parameter file; vessels driven through ArduAgent also get MAVProxy and ArduAgent.",
     provides_ports=frozenset({Port.MAVLINK, Port.ACTUATOR_CMD}),
     requires_ports=frozenset({Port.MAVLINK, Port.WAYPOINT_MISSION, Port.ENVIRONMENT}),
-    # ArduAgent is generated with SITL and MAVProxy in one per-vessel service set today,
-    # so its container is listed here rather than on the ASV-side adapters.
-    containers=(SITL_CONTAINER, MAVPROXY_CONTAINER, ARDUAGENT_CONTAINER),
+    # MAVProxy and ArduAgent are listed on the ASV-side adapters that start them (ArduPilotControlLayer.add_vessel).
+    containers=(SITL_CONTAINER,),
 )

@@ -20,7 +20,7 @@ def _text(value: Any) -> str:
 
 
 def verdicts_of(entry: Dict[str, Any]) -> Dict[str, int]:
-    """A class's verdict counts per state, summed over its runs."""
+    """An FEC's verdict counts per state, summed over its runs."""
     counts: Dict[str, int] = {}
     for states in entry["verdicts"].values():
         for state, count in states.items():
@@ -45,13 +45,13 @@ def campaign_summary(campaign: Dict[str, Any]) -> str:
     totals = campaign.get("totals")
     if totals:
         verdicts = ", ".join(f"{state} {count}" for state, count in sorted(totals["verdicts"].items())) or "none yet"
-        lines.append(f"classes {totals['classes']}: open {totals['classes_open']}, complete {totals['classes_complete']}, abandoned {totals['classes_abandoned']}")
+        lines.append(f"FECs {totals['fecs']}: open {totals['fecs_open']}, complete {totals['fecs_complete']}, abandoned {totals['fecs_abandoned']}")
         lines.append(f"cases: {totals['complete']} complete of quota {totals['quota']}, {totals['dropped']} dropped, {totals['in_flight']} in flight")
         lines.append(f"verdicts: {verdicts}")
     return "\n".join(lines)
 
 
-OUTPUT_HEADERS = ["class", "index", "case", "state", "valid", "complete", "run", "repeat", "verdict", "artifact", "from"]
+OUTPUT_HEADERS = ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "verdict", "artifact", "from"]
 
 
 def _short(sha256: Optional[str]) -> Optional[str]:
@@ -72,7 +72,7 @@ def output_row(output: Dict[str, Any]) -> List[Any]:
     verdict_text = None if verdict is None else verdict["state"] + (f" ({';'.join(verdict['failed_rules'])})" if verdict["failed_rules"] else "")
     artifact = output.get("artifact")
     return [
-        output["class_id"],
+        output["fec_id"],
         output["case_index"],
         output["case_id"],
         output["state"],
@@ -87,7 +87,7 @@ def output_row(output: Dict[str, Any]) -> List[Any]:
 
 
 def findings_summary(findings: Dict[str, Any]) -> str:
-    """The findings of one step as text: cases, outputs, verdicts, failed rules, classes and durations."""
+    """The findings of one step as text: cases, outputs, verdicts, failed rules, FECs and durations."""
     cases = ", ".join(f"{state} {count}" for state, count in sorted(findings["cases"].items())) or "none"
     outputs = findings["outputs"]
     lines = [
@@ -109,19 +109,22 @@ def findings_summary(findings: Dict[str, Any]) -> str:
                 [[r["rule"], r["count"], r["first_failure_time_s"]["min"], r["first_failure_time_s"]["median"]] for r in findings["failed_rules"]],
             )
         )
-    if findings["classes"]:
+    if findings["fecs"]:
         lines.append("")
-        lines.append(table(["class", "cases", "passed", "failed"], [[c["class_id"], c["cases"], c["passed"], c["failed"]] for c in findings["classes"]]))
+        lines.append(table(["FEC", "cases", "passed", "failed"], [[c["fec_id"], c["cases"], c["passed"], c["failed"]] for c in findings["fecs"]]))
     return "\n".join(lines)
+
+
+def _budget_left(entry: Dict[str, Any]) -> Any:
+    """The FEC's failure budget left, or unlimited."""
+    return "unlimited" if entry["failure_budget_left"] is None else entry["failure_budget_left"]
 
 
 def coverage_table(classes: List[Dict[str, Any]]) -> str:
     states = sorted({state for entry in classes for state in verdicts_of(entry)})
-    headers = ["class", "state", "quota", "complete", "dropped", "in flight", "budget left"] + states
+    headers = ["FEC", "state", "quota", "complete", "dropped", "in flight", "budget left"] + states
     rows = []
     for entry in classes:
         counts = verdicts_of(entry)
-        rows.append(
-            [entry["class_id"], entry["state"], entry["quota"], entry["complete"], entry["dropped"], entry["in_flight"], entry["failure_budget_left"]] + [counts.get(state, 0) for state in states]
-        )
+        rows.append([entry["fec_id"], entry["state"], entry["quota"], entry["complete"], entry["dropped"], entry["in_flight"], _budget_left(entry)] + [counts.get(state, 0) for state in states])
     return table(headers, rows)

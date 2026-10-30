@@ -32,98 +32,52 @@
   pointer-events: none;
 }
 
+/* The toolbar spans the canvas (clicks pass through it) so a menu it opens can take the canvas's height and scroll. */
 .enc-canvas-toolbar {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  right: 64px;
+  inset: 8px 64px 8px 8px;
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
   gap: var(--space-2);
-  align-items: center;
   pointer-events: none;
+}
+
+/* No north arrow on the map: the buttons may reach its right edge. */
+.enc-canvas-toolbar--map {
+  right: 8px;
 }
 
 .enc-canvas-toolbar > * {
   pointer-events: auto;
 }
 
-.enc-canvas-toolbar button,
-.enc-canvas-toolbar select {
-  min-height: var(--hit-target);
+.enc-canvas-toolbar .icon-btn {
+  background: rgba(15, 23, 42, 0.86);
+}
+
+.enc-canvas-toolbar .icon-btn.is-active,
+.enc-canvas-toolbar .icon-btn[aria-pressed="true"],
+.enc-canvas-toolbar .icon-btn[aria-expanded="true"] {
+  background: rgba(12, 46, 72, 0.94);
+}
+
+.enc-canvas-toolbar .popover-menu {
+  position: static;
+}
+
+.enc-canvas-toolbar .popover-menu-panel[data-placement="bottom"] {
+  top: calc(var(--hit-target) + var(--space-2));
+  max-width: 100%;
+  max-height: calc(100% - var(--hit-target) - var(--space-2));
+  overflow-y: auto;
+}
+
+.enc-canvas-toolbar .popover-menu-panel > button {
+  justify-content: flex-start;
   padding: 0 var(--space-3);
-  font-size: var(--font-size-sm);
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  border-radius: var(--radius-sm);
-}
-
-.enc-canvas-toolbar button:hover:not(:disabled) {
-  color: var(--text);
-  border-color: var(--border-strong);
-}
-
-.enc-canvas-toolbar button.is-active {
-  color: var(--text);
-  border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.16);
-}
-
-.enc-canvas-toolbar button:disabled {
-  opacity: 0.45;
-}
-
-.enc-seg {
-  display: inline-flex;
-}
-
-.enc-toggle-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.enc-canvas-toolbar .popover-menu-panel button,
-.enc-canvas-toolbar .popover-menu-panel select {
-  background: var(--bg-control);
-}
-
-.enc-canvas-toolbar .popover-menu-panel .enc-select {
-  background: transparent;
-  border: none;
-  padding-left: 0;
-  gap: var(--space-3);
-}
-
-.enc-seg button:first-child {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.enc-seg button:last-child {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  margin-left: -1px;
-}
-
-.enc-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 6px;
-  min-height: var(--hit-target);
-  font-size: var(--font-size-xs);
-  color: var(--text-muted);
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.enc-select select {
-  border: none;
-  min-height: var(--hit-target);
-  background: transparent;
 }
 
 .enc-canvas-actions {
@@ -132,7 +86,7 @@
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--space-2);
 }
 
 .enc-canvas-readout {
@@ -146,67 +100,171 @@
   text-shadow: 0 0 3px #020617;
 }
 
-.enc-layer-menu {
-  position: relative;
-  font-size: var(--font-size-xs);
+/* Layer menu: a row per vessel layer with a switch per stream, then the chart's marks. */
+
+.layer-menu .popover-menu-panel {
+  gap: var(--space-3);
 }
 
-.enc-layer-menu summary {
-  list-style: none;
-  min-height: var(--hit-target);
-  line-height: 1.25;
-  padding: 0 8px;
-  cursor: pointer;
-  color: var(--text-muted);
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.enc-layer-menu summary::-webkit-details-marker {
-  display: none;
-}
-
-.enc-layer-menu[open] summary {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.enc-layer-menu-body {
-  position: absolute;
-  right: 0;
-  top: 26px;
-  z-index: 3;
+.layer-menu-grid {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  width: max-content;
-  padding: 6px 8px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
-.enc-layer-menu-body label {
+.layer-menu-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(var(--layer-columns, 1), 72px);
+  align-items: center;
+  column-gap: var(--space-1);
+  min-height: var(--hit-target);
+  padding: 0 0 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+}
+
+label.layer-menu-row {
+  cursor: pointer;
+}
+
+label.layer-menu-row:hover,
+.layer-menu-cell:hover {
+  background: var(--bg-control-hover);
+}
+
+.layer-menu-head {
+  min-height: 28px;
+}
+
+.layer-menu-title {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.layer-menu-col-label {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.layer-menu-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.layer-menu-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.layer-menu-cell {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--text);
+  justify-content: center;
+  align-self: stretch;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
 }
 
-.enc-canvas-actions .scene-view-toggle-btn {
-  position: static;
-  max-width: none;
+.layer-menu-row input[type="checkbox"] {
+  justify-self: center;
+  width: 18px;
+  height: 18px;
   margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  gap: 4px;
 }
 
-.enc-canvas-toolbar .enc-canvas-actions .scene-view-toggle-btn {
-  border: 1px solid var(--accent);
+.layer-menu-row input.is-off {
+  opacity: 0.45;
+}
+
+.layer-menu-chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.layer-menu-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.layer-chip {
+  min-height: var(--hit-target);
+  padding: 0 var(--space-3);
+  color: var(--text-muted);
+  border-color: var(--border);
+  border-radius: 999px;
+}
+
+.layer-chip.is-active {
   color: var(--text);
-  padding: 0 8px;
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.layer-menu-select {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+/* Nautical map: the tiles, the drawing over them (clicks pass to the map), the toolbar on top. */
+
+/* Sized, not placed: Leaflet makes its container `position: relative` when it does not see a position yet. */
+.nautical-map-tiles {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  isolation: isolate;
+  background: #0a1628;
+  font-family: inherit;
+}
+
+/* The chart darkened to the canvas's sea, so the canvas colors read the same on it. */
+.nautical-map-tiles .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55);
+}
+
+.nautical-map-tiles .leaflet-control-attribution {
+  background: rgba(2, 6, 23, 0.72);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+}
+
+.nautical-map-tiles .leaflet-control-attribution a {
+  color: var(--accent);
+}
+
+.nautical-map-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  pointer-events: none;
+}
+
+.nautical-map-empty {
+  z-index: 1;
+  text-shadow: 0 0 4px #020617;
+}
+
+.nautical-map-readout {
+  z-index: 1;
+  bottom: 48px;
 }

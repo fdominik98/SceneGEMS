@@ -56,7 +56,7 @@ def build_parser() -> argparse.ArgumentParser:
     listing.add_argument("--kind", choices=CAMPAIGN_KINDS, help="only campaigns or only workbench entries")
     _paging(listing)
 
-    show = sub.add_parser("show", help="a campaign with its coverage per class")
+    show = sub.add_parser("show", help="a campaign with its coverage per FEC")
     show.add_argument("campaign")
 
     for name, help_text in CONTROL_HELP.items():
@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
     outputs = sub.add_parser("outputs", help="the outputs of one step of a campaign")
     outputs.add_argument("campaign")
     outputs.add_argument("--step", required=True, choices=CAMPAIGN_STEPS)
-    outputs.add_argument("--class", dest="class_id", help="only this class id")
+    outputs.add_argument("--fec", dest="fec_id", help="only this FEC id")
     outputs.add_argument("--state", choices=CASE_STATES)
     _paging(outputs)
 
@@ -79,14 +79,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     cases = sub.add_parser("cases", help="the cases of a campaign")
     cases.add_argument("campaign")
-    cases.add_argument("--class", dest="class_id", help="only this class id")
+    cases.add_argument("--fec", dest="fec_id", help="only this FEC id")
     cases.add_argument("--state", choices=CASE_STATES)
     cases.add_argument("--stage", choices=CASE_STAGES)
     _paging(cases)
 
     verdicts = sub.add_parser("verdicts", help="the verdicts of a campaign")
     verdicts.add_argument("campaign")
-    verdicts.add_argument("--class", dest="class_id", help="only this class id")
+    verdicts.add_argument("--fec", dest="fec_id", help="only this FEC id")
     verdicts.add_argument("--state", choices=VERDICT_STATES)
     verdicts.add_argument("--run", type=int, help="only this run index")
     verdicts.add_argument("--sensitive", action="store_true", help="only sensitive verdicts")

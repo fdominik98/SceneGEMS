@@ -1,6 +1,6 @@
 import { Document, isSeq, visit, type YAMLSeq } from "yaml";
 import type { CatalogGenerator, CatalogParameter, CatalogStack, ConfigArtifactRef } from "../../../domain/cluster/campaignApi";
-import { ARDUPILOT_JOB, fullUsageQueueDepth, KINEMATIC_JOB } from "../resourcePlan";
+import { fullUsageQueueDepth, KINEMATIC_JOB, simulationJobType } from "../resourcePlan";
 import { activeStages, firstStep, normalizeSteps, runsStep } from "./stepPlan";
 import { QUEUE_DEPTH_DEFAULTS, type InputItemDraft, type ParamValues, type RunDraft, type ScenarioFileDraft, type ScopeEntryDraft, type WizardDraft } from "./wizardState";
 
@@ -21,7 +21,7 @@ export interface BuilderCatalog {
   slots?: Readonly<Record<string, number>>;
 }
 
-export const CONFIG_FORMAT = 2;
+export const CONFIG_FORMAT = 3;
 
 /** The media type the master assumes for a reference that states none. */
 const DEFAULT_MEDIA_TYPE = "application/json";
@@ -88,7 +88,7 @@ function buildScope(draft: WizardDraft): ConfigObject[] {
   return entries.map((entry) => {
     const item: ConfigObject = {};
     if (entry.classes.length > 0) {
-      item.classes = [...entry.classes];
+      item.fecs = [...entry.classes];
     }
     if (entry.patterns.length > 0) {
       item.patterns = [...entry.patterns];
@@ -224,7 +224,7 @@ export function effectiveQueueDepth(draft: WizardDraft, catalog: BuilderCatalog)
     return draft.resources.queueDepth;
   }
   const layers = draft.runs.map((run) => findStack(catalog, run.stackId)?.simulation_layer);
-  const simulators = [...new Set(layers.map((layer) => (layer === "ardupilot_sim" || layer === "gazebo" ? ARDUPILOT_JOB : KINEMATIC_JOB)))];
+  const simulators = [...new Set(layers.map((layer) => simulationJobType({ simulation_layer: layer })))];
   return fullUsageQueueDepth(catalog.slots ?? {}, simulators.length > 0 ? simulators : [KINEMATIC_JOB]);
 }
 
@@ -287,7 +287,7 @@ function buildPolicy(draft: WizardDraft): ConfigObject {
 }
 
 /**
- * The config the draft describes (format 2). Sections of steps the campaign does not run are left out,
+ * The config the draft describes (format 3: a scope entry lists its FECs under `fecs`). Sections of steps the campaign does not run are left out,
  * and the scope only goes in when the campaign starts with scene generation. A run with an unknown
  * stack gets the layer only; `checkDraft` reports it.
  */

@@ -61,10 +61,12 @@ export interface ReviewStepProps {
   createMessage: string | null;
   /** Why the campaign cannot start on the cluster's machines, or null. */
   startBlocker: string | null;
+  /** The base seed the case seeds count up from. */
+  baseSeed: number | null;
 }
 
 /** Review: the generated YAML, the master's check of it (reasons attached to their steps) and the way to create the campaign. */
-export function ReviewStep({ yaml, validation, current, localReasons, serverReasons, onGoTo, onCheck, onCreate, creating, createMessage, startBlocker }: ReviewStepProps) {
+export function ReviewStep({ yaml, validation, current, localReasons, serverReasons, onGoTo, onCheck, onCreate, creating, createMessage, startBlocker, baseSeed }: ReviewStepProps) {
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const all = [...localReasons, ...serverReasons];
@@ -95,8 +97,8 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
         {!blocked && validation.status === "checking" && <p role="status">Checking the config on the master...</p>}
         {!blocked && validation.status === "valid" && result && (
           <p>
-            <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> {plural(result.classes.length, "class", "classes")} selected, <strong>{plural(result.cases_planned, "case")}</strong> planned
-            to complete{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}. Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
+            <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> {plural(result.fecs.length, "FEC")} selected, <strong>{plural(result.cases_planned, "case")}</strong> planned
+            to complete{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}, base seed <code>{baseSeed ?? 0}</code>. Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
           </p>
         )}
         {!blocked && validation.status === "invalid" && (
@@ -131,7 +133,7 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
             <table className="camp-table camp-table--dense">
               <thead>
                 <tr>
-                  <th>Class</th>
+                  <th>FEC</th>
                   <th>Vessels</th>
                   <th>Obstacles</th>
                   <th>Quota</th>
@@ -139,24 +141,24 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
                 </tr>
               </thead>
               <tbody>
-                {(showAll ? result.classes : result.classes.slice(0, CLASSES_SHOWN)).map((entry) => (
-                  <tr key={entry.class_id}>
-                    <td title={entry.class_id}>
-                      <span className="camp-class-name">{splitClassId(entry.class_id).name}</span>
-                      <span className="camp-class-folder">{splitClassId(entry.class_id).folder}</span>
+                {(showAll ? result.fecs : result.fecs.slice(0, CLASSES_SHOWN)).map((entry) => (
+                  <tr key={entry.fec_id}>
+                    <td title={entry.fec_id}>
+                      <span className="camp-class-name">{splitClassId(entry.fec_id).name}</span>
+                      <span className="camp-class-folder">{splitClassId(entry.fec_id).folder}</span>
                     </td>
                     <td className="camp-num">{entry.vessel_count}</td>
                     <td className="camp-num">{entry.obstacle_count}</td>
                     <td className="camp-num">{entry.quota}</td>
-                    <td className="camp-num">{entry.failure_budget}</td>
+                    <td className="camp-num">{entry.failure_budget ?? "unlimited"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {result.classes.length > CLASSES_SHOWN && (
+          {result.fecs.length > CLASSES_SHOWN && (
             <button type="button" onClick={() => setShowAll((value) => !value)}>
-              {showAll ? "Show fewer classes" : `Show all ${result.classes.length} classes`}
+              {showAll ? "Show fewer FECs" : `Show all ${result.fecs.length} FECs`}
             </button>
           )}
           <ul className="wiz-runs-result">

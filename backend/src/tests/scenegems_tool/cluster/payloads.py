@@ -42,14 +42,18 @@ def trajectories_data() -> Dict[str, Any]:
     return TrajectoryBuilder.default_trajectory_from_scene(scene, 1, 10).to_dict()
 
 
+ARDUPILOT_LAYERS = {JobType.SIMULATION_ARDUPILOT_SIM: "ardupilot_sim", JobType.SIMULATION_GAZEBO: "gazebo"}
+
+
 def valid_payload(job_type: JobType, **fields: Any) -> Dict[str, Any]:
     """A payload the job type's model accepts, with `fields` set on top."""
     if job_type == JobType.SCENE_GENERATION:
         base: Dict[str, Any] = {"functional_scenario_content": _functional_scenario(), "colregs_constraints_content": "", "vessel_types_content": "", "obstacle_types_content": ""}
     elif job_type == JobType.TRAJECTORY_GENERATION:
         base = {"scenario_content": "{}", "colregs_constraints_content": ""}
-    elif job_type == JobType.SIMULATION_ARDUPILOT:
-        base = {"simulation_layer": "ardupilot_sim", "trajectories": trajectories_data(), "geofence": {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}}
+    elif job_type in ARDUPILOT_LAYERS:
+        geofence = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
+        base = {"simulation_layer": ARDUPILOT_LAYERS[job_type], "trajectories": trajectories_data(), "geofence": geofence}
     elif job_type == JobType.CALIBRATION_DEVIATION:
         base = {"trajectories": [trajectories_data(), trajectories_data()], "reference": "head_on"}
     else:

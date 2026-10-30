@@ -13,10 +13,10 @@ Above the pages, **Start from a preset** lists the campaign presets of the activ
 
 | Shipped preset | What it runs |
 |----------------|--------------|
-| Smoke test: one case per two-vessel class | The whole chain once per two-vessel class without obstacles, kinematic replay: the check after a deployment |
-| Two-vessel encounters on the kinematic layer | Five cases of each two-vessel class, with and without an obstacle |
-| Three-vessel encounters on the kinematic layer | Three cases of each three-vessel class |
-| Four-vessel encounters on the kinematic layer | One case of each four-vessel class, with longer timeouts |
+| Smoke test: one case per two-vessel FEC | The whole chain once per two-vessel FEC without obstacles, kinematic replay: the check after a deployment |
+| Two-vessel encounters on the kinematic layer | Five cases of each two-vessel FEC, with and without an obstacle |
+| Three-vessel encounters on the kinematic layer | Three cases of each three-vessel FEC |
+| Four-vessel encounters on the kinematic layer | One case of each four-vessel FEC, with longer timeouts |
 | USV Navigation against the planned trajectories | Two runs per case: the planned trajectories replayed, and USV Navigation steering the own ship |
 | ArduPilot SITL replay of two-vessel encounters | The planned trajectories replayed on ArduPilot SITL |
 | ArduPilot SITL repeatability: three repeats per case | Three SITL repeats per case, so calibration measures their deviation |
@@ -34,13 +34,13 @@ The wizard shows only the pages the chosen steps need.
 | Page | Shown when | What it holds |
 |------|------------|---------------|
 | Steps | always | The campaign's name and description, the first and the last step, and the monitor after scene generation and after trajectory generation |
-| Input | always | What the first step starts from: catalog classes and scenario files, scenes, or trajectories |
+| Input | always | What the first step starts from: catalog FECs and scenario files, scenes, or trajectories |
 | Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only. The scene generation timeout and the low TCPA option appear only with scene generation |
 | Trajectories | trajectory generation is a step | The trajectory generator and its parameters |
 | Runs | simulation is a step | The simulation runs: stack (kinematic, or replay on ArduPilot SITL or Gazebo), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
-| Policy | always | Retention, frames, seed and stop conditions |
-| Review | always | The generated YAML, the master's check of it and the buttons that create the campaign |
+| Policy | always | Retention, frames, the base seed and stop conditions |
+| Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the master's check of it and the buttons that create the campaign |
 
 ## Steps
 
@@ -60,10 +60,24 @@ The Input page depends on the first step.
 
 ### Scene generation
 
-- **Catalog classes**: pick folders, patterns or classes from the master's catalog, each scope entry with a quota and a failure budget.
-- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the master when you pick it and becomes a class of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
+A functional equivalence class (FEC) is one functional scenario: a scenario of the master's catalog, or a file you add.
 
-Use either or both. Scope entries without classes are ignored while there are scenario files.
+- **Catalog FECs**: pick folders, patterns or FECs from the master's catalog, each scope entry with a quota and a failure budget.
+- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the master when you pick it and becomes an FEC of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
+
+Use either or both. Scope entries without FECs are ignored while there are scenario files.
+
+#### Quota and failure budget
+
+Both apply to each FEC of the entry or file on its own.
+
+- **Quota**: the complete cases the FEC needs. A case is complete when every run has its verdict. A failed verdict is a finding and counts toward the quota.
+- **Failure budget**: the cases the FEC may lose before it is abandoned. A case is lost when it is dropped (no valid scene within the timeout, or no complete trajectories) or failed (a job ran out of attempts). An FEC runs at most its quota of cases at once and starts no case it may not need; a lost case is replaced by the next one, with the next seed, once it is lost. Once the lost cases exceed the budget, the FEC is abandoned and its running cases are cancelled.
+- **Unlimited**: tick it next to the failure budget and the FEC is never abandoned: it replaces lost cases until its quota is complete. A scenario that never gives a valid scene then runs until a stop condition of the Policy page (a case count or a duration) ends the campaign, or until you stop it. The config says `failure_budget: unlimited`, and Campaign History shows the budget left as unlimited.
+
+#### Seeds
+
+The base seed on the Policy page is where the case seeds start: case k of every FEC gets the base seed + k, and an item (a scene or trajectories a later start takes) gets the base seed + its number in the list. Every step of a case uses its seed: scene generation, trajectory generation and each run, with the ASV software in it. A run can set its own seed on the Runs page instead. The same config and base seed give the same cases again. The review repeats the base seed, and Campaign History shows it in the header of the entry.
 
 ### Trajectory generation and simulation
 

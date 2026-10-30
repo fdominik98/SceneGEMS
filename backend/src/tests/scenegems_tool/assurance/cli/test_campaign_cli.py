@@ -34,9 +34,9 @@ def campaign_json(**changes) -> dict:
 
 def detail_json(**changes) -> dict:
     classes = [
-        {"class_id": CLASS_A, "state": "open", "quota": 5, "complete": 3, "dropped": 1, "in_flight": 2, "failure_budget_left": 4, "verdicts": {"0": {"passed": 2, "failed": 1}}},
+        {"fec_id": CLASS_A, "state": "open", "quota": 5, "complete": 3, "dropped": 1, "in_flight": 2, "failure_budget_left": 4, "verdicts": {"0": {"passed": 2, "failed": 1}}},
         {
-            "class_id": "3vessel_0obstacle_scenarios/functional_model2",
+            "fec_id": "3vessel_0obstacle_scenarios/functional_model2",
             "state": "complete",
             "quota": 5,
             "complete": 5,
@@ -47,12 +47,12 @@ def detail_json(**changes) -> dict:
         },
     ]
     view = campaign_json(**changes)
-    view["classes"] = classes
+    view["fecs"] = classes
     view["totals"] = {
-        "classes": 2,
-        "classes_open": 1,
-        "classes_complete": 1,
-        "classes_abandoned": 0,
+        "fecs": 2,
+        "fecs_open": 1,
+        "fecs_complete": 1,
+        "fecs_abandoned": 0,
         "quota": 10,
         "complete": 8,
         "dropped": 1,
@@ -99,7 +99,7 @@ def test_create_sends_the_yaml_with_its_content_type(tmp_path):
     (request,) = server.requests
     assert request.headers["content-type"] == "application/yaml" and request.content == config.read_bytes()
     assert dict(request.url.params) == {"name": "my name", "start": "true", "kind": "campaign", "origin": "cli"}
-    assert f"campaign smoke ({CAMPAIGN})" in out and "classes 2: open 1, complete 1, abandoned 0" in out
+    assert f"campaign smoke ({CAMPAIGN})" in out and "FECs 2: open 1, complete 1, abandoned 0" in out
 
 
 def test_create_without_options_sends_only_kind_and_origin(tmp_path):
@@ -150,9 +150,18 @@ def test_show_prints_the_summary_and_a_coverage_table():
     assert "desired running, actual running" in out and "started 2026-10-25T12:05:00+00:00" in out
     assert "cases: 8 complete of quota 10, 1 dropped, 2 in flight" in out and "verdicts: failed 1, passed 7" in out
     table_lines = out.split("\n\n", 1)[1].splitlines()
-    assert table_lines[0].split() == ["class", "state", "quota", "complete", "dropped", "in", "flight", "budget", "left", "failed", "passed"]
+    assert table_lines[0].split() == ["FEC", "state", "quota", "complete", "dropped", "in", "flight", "budget", "left", "failed", "passed"]
     assert table_lines[1].split() == [CLASS_A, "open", "5", "3", "1", "2", "4", "1", "2"]
     assert table_lines[2].split()[-2:] == ["0", "5"]
+
+
+def test_show_prints_an_unlimited_failure_budget():
+    detail = detail_json()
+    detail["fecs"][0]["failure_budget_left"] = None
+    server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}"): json_response(detail)})
+    code, out, _ = run(server, "show", CAMPAIGN)
+    assert code == 0
+    assert out.split("\n\n", 1)[1].splitlines()[1].split()[:7] == [CLASS_A, "open", "5", "3", "1", "2", "unlimited"]
 
 
 @pytest.mark.parametrize("control, path", [("start", "start"), ("pause", "pause"), ("drain", "drain"), ("resume", "resume"), ("stop", "stop")])
@@ -175,12 +184,12 @@ def test_an_unknown_campaign_fails_with_the_404_text():
 
 
 def test_cases_send_their_filters_and_print_a_table():
-    cases = [{"class_id": CLASS_A, "case_index": 3, "case_id": 17, "stage": "simulate", "state": "active", "seed": 99, "reason": None}]
+    cases = [{"fec_id": CLASS_A, "case_index": 3, "case_id": 17, "stage": "simulate", "state": "active", "seed": 99, "reason": None}]
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/cases"): json_response(cases)})
-    code, out, _ = run(server, "cases", CAMPAIGN, "--class", CLASS_A, "--state", "active", "--stage", "simulate")
+    code, out, _ = run(server, "cases", CAMPAIGN, "--fec", CLASS_A, "--state", "active", "--stage", "simulate")
     assert code == 0
     params = server.requests[0].url.params
-    assert (params["class_id"], params["state"], params["stage"]) == (CLASS_A, "active", "simulate")
+    assert (params["fec_id"], params["state"], params["stage"]) == (CLASS_A, "active", "simulate")
     assert out.splitlines()[1].split() == [CLASS_A, "3", "17", "simulate", "active", "99", "-"]
 
 
@@ -191,7 +200,7 @@ def test_cases_refuse_an_unknown_state():
 
 
 def test_verdicts_print_a_page():
-    verdicts = [{"class_id": CLASS_A, "case_id": 17, "run_index": 0, "state": "failed", "failed_rules": ["rule_15", "rule_16"], "first_failure_time_s": 4.5, "sensitive": True}]
+    verdicts = [{"fec_id": CLASS_A, "case_id": 17, "run_index": 0, "state": "failed", "failed_rules": ["rule_15", "rule_16"], "first_failure_time_s": 4.5, "sensitive": True}]
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): json_response(verdicts)})
     code, out, _ = run(server, "verdicts", CAMPAIGN, "--state", "failed", "--run", "0", "--sensitive")
     assert code == 0
@@ -201,13 +210,13 @@ def test_verdicts_print_a_page():
 
 
 def test_verdicts_stream_into_a_csv_file(tmp_path):
-    body = "verdict_id,class_id,state\n1,a,passed\n"
+    body = "verdict_id,fec_id,state\n1,a,passed\n"
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): httpx.Response(200, content=body.encode(), headers={"content-type": "text/csv"})})
     target = tmp_path / "out.csv"
-    code, out, _ = run(server, "verdicts", CAMPAIGN, "--csv", str(target), "--class", CLASS_A)
+    code, out, _ = run(server, "verdicts", CAMPAIGN, "--csv", str(target), "--fec", CLASS_A)
     assert code == 0 and target.read_text() == body and f"wrote {len(body)} bytes" in out
     params = server.requests[0].url.params
-    assert (params["format"], params["class_id"]) == ("csv", CLASS_A) and "limit" not in params
+    assert (params["format"], params["fec_id"]) == ("csv", CLASS_A) and "limit" not in params
 
 
 def test_a_failed_csv_download_leaves_no_file(tmp_path):
@@ -219,24 +228,24 @@ def test_a_failed_csv_download_leaves_no_file(tmp_path):
 
 def test_events_print_one_line_each():
     events = [
-        {"event_id": 1, "at": "2026-10-25T12:00:00+00:00", "kind": "created", "class_id": None, "detail": {}},
-        {"event_id": 2, "at": "2026-10-25T12:01:00+00:00", "kind": "class_complete", "class_id": CLASS_A, "detail": {"complete": 5}},
+        {"event_id": 1, "at": "2026-10-25T12:00:00+00:00", "kind": "created", "fec_id": None, "detail": {}},
+        {"event_id": 2, "at": "2026-10-25T12:01:00+00:00", "kind": "fec_complete", "fec_id": CLASS_A, "detail": {"complete": 5}},
     ]
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/events"): json_response(events)})
     code, out, _ = run(server, "events", CAMPAIGN, "--after", "0")
     lines = out.splitlines()
     assert code == 0 and lines[0].split()[:3] == ["1", "2026-10-25T12:00:00+00:00", "created"]
-    assert lines[1].endswith(f"class_complete {CLASS_A} {{'complete': 5}}")
+    assert lines[1].endswith(f"fec_complete {CLASS_A} {{'complete': 5}}")
     assert server.requests[0].url.params["after"] == "0"
 
 
 def test_events_follow_polls_after_the_last_event_until_the_campaign_is_final():
     batches = iter(
         [
-            [{"event_id": 1, "at": "t1", "kind": "created", "class_id": None, "detail": {}}],
-            [{"event_id": 2, "at": "t2", "kind": "started", "class_id": None, "detail": {}}],
+            [{"event_id": 1, "at": "t1", "kind": "created", "fec_id": None, "detail": {}}],
+            [{"event_id": 2, "at": "t2", "kind": "started", "fec_id": None, "detail": {}}],
             [],
-            [{"event_id": 3, "at": "t3", "kind": "stopped", "class_id": None, "detail": {}}],
+            [{"event_id": 3, "at": "t3", "kind": "stopped", "fec_id": None, "detail": {}}],
             [],
         ]
     )
@@ -371,7 +380,7 @@ def output_json(**changes) -> dict:
     output = {
         "case_id": 5,
         "case_index": 2,
-        "class_id": CLASS_A,
+        "fec_id": CLASS_A,
         "state": "complete",
         "reason": None,
         "artifact": {"sha256": "ab" * 32, "size_bytes": 10, "kind": "scene", "media_type": "application/json", "pointer": None},
@@ -390,12 +399,12 @@ def output_json(**changes) -> dict:
 def test_outputs_print_a_table_and_send_the_filters():
     rows = [output_json(), output_json(case_id=6, artifact=None, valid=False, verdict=None, input_source={"file": "head_on.json"}), output_json(case_id=7, input_source={})]
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/outputs"): json_response(rows)})
-    code, out, _ = run(server, "outputs", CAMPAIGN, "--step", "scene_generation", "--class", CLASS_A, "--state", "complete", "--limit", "3", "--offset", "1")
+    code, out, _ = run(server, "outputs", CAMPAIGN, "--step", "scene_generation", "--fec", CLASS_A, "--state", "complete", "--limit", "3", "--offset", "1")
     assert code == 0
     params = server.requests[0].url.params
-    assert (params["step"], params["class_id"], params["state"], params["limit"], params["offset"]) == ("scene_generation", CLASS_A, "complete", "3", "1")
+    assert (params["step"], params["fec_id"], params["state"], params["limit"], params["offset"]) == ("scene_generation", CLASS_A, "complete", "3", "1")
     lines = out.splitlines()
-    assert lines[0].split() == ["class", "index", "case", "state", "valid", "complete", "run", "repeat", "verdict", "artifact", "from"] and len(lines) == 4
+    assert lines[0].split() == ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "verdict", "artifact", "from"] and len(lines) == 4
     assert "failed (rule_15;rule_8)" in lines[1] and "abababababab" in lines[1] and "c1#3" in lines[1]
     assert "head_on.json" in lines[2] and "False" in lines[2]
     assert lines[3].rstrip().endswith("deleted")
@@ -420,7 +429,7 @@ def findings_json(**changes) -> dict:
         "outputs": {"count": 5, "valid": 5, "complete": 3},
         "verdicts": {"passed": 3, "failed": 2, "unmonitored": 0},
         "failed_rules": [{"rule": "rule_15", "count": 2, "first_failure_time_s": {"min": 12.5, "median": 20.1}}],
-        "classes": [{"class_id": CLASS_A, "cases": 5, "passed": 3, "failed": 2}],
+        "fecs": [{"fec_id": CLASS_A, "cases": 5, "passed": 3, "failed": 2}],
         "durations_s": {"median": 4.2, "p90": 9.8},
     }
     findings.update(changes)

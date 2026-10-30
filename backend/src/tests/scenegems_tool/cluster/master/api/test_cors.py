@@ -57,7 +57,7 @@ def test_only_get_post_delete_and_head_and_the_content_type_header_are_allowed(o
 
 
 def test_a_read_from_an_allowed_origin_exposes_the_total_and_download_headers(operator):
-    response = operator.get(f"{CATALOG_PATH}/classes", headers={"Origin": UI})
+    response = operator.get(f"{CATALOG_PATH}/fecs", headers={"Origin": UI})
     assert response.status_code == 200 and response.headers["access-control-allow-origin"] == UI
     exposed = {name.strip().lower() for name in response.headers["access-control-expose-headers"].split(",")}
     assert exposed == {"x-total-count", "content-disposition"}

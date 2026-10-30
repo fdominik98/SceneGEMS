@@ -202,7 +202,7 @@ def test_the_input_is_checked_against_the_artifact_store_and_made_from_follows_t
     ]
     view = create(client, partial_config(["trajectory_generation"], scope=[], input={"items": items})).json()
     assert view["input"] == {"first_step": "trajectory_generation", "item_count": 3} and view["made_from"] == ["c1"]
-    assert [entry["class_id"] for entry in view["classes"]] == ["item/0", "item/1", "item/2"]
+    assert [entry["fec_id"] for entry in view["fecs"]] == ["item/0", "item/1", "item/2"]
     listed = client.get(CAMPAIGNS_PATH).json()[0]
     assert listed["input"] == view["input"] and listed["made_from"] == ["c1"] and listed["steps"] == ["trajectory_generation"]
 
@@ -217,7 +217,7 @@ def test_validating_checks_the_input_against_the_artifact_store_too(client):
     scene = upload(client, scene_document())
     text = partial_config(["trajectory_generation"], scope=[], input={"items": [{"name": "case 5", "ref": scene, "source": {"file": "x.json"}}]})
     validated = client.post(f"{CAMPAIGNS_PATH}/validate", content=text, headers=YAML).json()
-    assert validated["valid"] is True and [entry["class_id"] for entry in validated["classes"]] == ["item/0"]
+    assert validated["valid"] is True and [entry["fec_id"] for entry in validated["fecs"]] == ["item/0"]
 
 
 def test_a_master_without_an_artifact_store_refuses_a_config_with_input(plane, stores):
@@ -240,7 +240,7 @@ def test_a_list_row_carries_the_totals_and_the_config_fields(client, stores):
         "cases": {"active": 1, "complete": 1, "dropped": 1},
         "verdicts": {"scene": {"passed": 1}, "trajectories": {"failed": 1}, "simulation": {"failed": 1, "passed": 1}},
     }
-    assert "classes" not in row  # the detail has the classes, the row stays small
+    assert "fecs" not in row  # the detail has the classes, the row stays small
 
 
 def test_the_list_filters_by_kind_origin_name_and_state_and_counts_the_matches(client, stores):
@@ -286,7 +286,7 @@ def test_the_detail_carries_kind_origin_and_the_config_fields(client):
     created = create(client, partial_config(["scene_generation"]), origin="cli").json()
     detail = client.get(f"{CAMPAIGNS_PATH}/{created['campaign_id']}").json()
     assert (detail["kind"], detail["origin"], detail["steps"], detail["input"]) == ("campaign", "cli", ["scene_generation"], {"first_step": "scene_generation", "item_count": 0})
-    assert detail["totals"]["classes"] == 2 and "cases" not in detail["totals"]  # the detail keeps its own totals
+    assert detail["totals"]["fecs"] == 2 and "cases" not in detail["totals"]  # the detail keeps its own totals
 
 
 # Delete
@@ -339,7 +339,7 @@ def test_outputs_list_the_cases_of_a_step_with_the_verdict_and_the_artifact(clie
     scenes = client.get(path, params={"step": "scene_generation"})
     assert scenes.status_code == 200 and scenes.headers["x-total-count"] == "3"
     first, dropped, running = scenes.json()
-    assert first["case_id"] == a0.case_id and first["class_id"] == CLASS_A and first["case_index"] == 0 and first["state"] == "complete"
+    assert first["case_id"] == a0.case_id and first["fec_id"] == CLASS_A and first["case_index"] == 0 and first["state"] == "complete"
     assert first["artifact"] == {"sha256": SCENE_0, "size_bytes": 100, "kind": "scene", "media_type": "application/json", "pointer": None}
     assert first["valid"] is True and first["complete"] is None and first["verdict"] == {"state": "passed", "failed_rules": []}
     assert (first["run_index"], first["repeat_index"], first["run_record_id"], first["input_source"]) == (None, None, None, None)
@@ -355,7 +355,7 @@ def test_outputs_list_the_cases_of_a_step_with_the_verdict_and_the_artifact(clie
 def test_simulation_outputs_are_one_row_per_run_with_its_record_and_verdict(client, stores):
     campaign_id = create(client).json()["campaign_id"]
     a0, _a1, _b0, runs = seed_outputs(stores, campaign_id)
-    response = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/outputs", params={"step": "simulation", "class_id": CLASS_A})
+    response = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/outputs", params={"step": "simulation", "fec_id": CLASS_A})
     assert response.headers["x-total-count"] == "2"
     first, second = response.json()
     assert [(row["run_index"], row["repeat_index"], row["run_record_id"]) for row in (first, second)] == [(0, 0, runs[0].run_record_id), (1, 0, runs[1].run_record_id)]
@@ -373,7 +373,7 @@ def test_outputs_are_filtered_by_state_and_paged(client, stores):
     assert both.headers["x-total-count"] == "2"
     page = client.get(path, params={"step": "scene_generation", "limit": 1, "offset": 1})
     assert len(page.json()) == 1 and page.headers["x-total-count"] == "3"
-    assert client.get(path, params={"step": "scene_generation", "class_id": CLASS_B}).headers["x-total-count"] == "1"
+    assert client.get(path, params={"step": "scene_generation", "fec_id": CLASS_B}).headers["x-total-count"] == "1"
     assert client.get(path, params={"step": "scene_generation", "state": "bogus"}).status_code == 422
 
 
@@ -425,7 +425,7 @@ def test_findings_summarize_a_step(client, stores):
     assert scene["step"] == "scene_generation" and scene["monitored"] is True  # the config monitors the scenes
     assert scene["cases"] == {"active": 1, "complete": 1, "dropped": 1} and scene["outputs"] == {"count": 2, "valid": 1, "complete": 1}  # the case still generating has no output yet
     assert scene["verdicts"] == {"passed": 1, "failed": 0, "unmonitored": 0} and scene["failed_rules"] == []
-    assert {entry["class_id"]: (entry["cases"], entry["passed"], entry["failed"]) for entry in scene["classes"]}[CLASS_A] == (2, 1, 0)
+    assert {entry["fec_id"]: (entry["cases"], entry["passed"], entry["failed"]) for entry in scene["fecs"]}[CLASS_A] == (2, 1, 0)
 
     trajectories = client.get(path, params={"step": "trajectory_generation"}).json()
     assert trajectories["monitored"] is False  # the config's trajectory monitor is empty: statistics only, whatever the rows hold

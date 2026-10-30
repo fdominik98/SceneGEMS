@@ -3,12 +3,15 @@ import { campaignConfigSchema, campaignEventSchema, campaignSummarySchema, class
 import { sampleCampaignSummary, sampleClass } from "../../test/fixtures/clusterViews";
 import {
   actualStateTone,
+  baseSeed,
   campaignProgress,
   classProgress,
   controlAvailability,
   countByState,
   EMPTY_EVENT_FEED,
   eventDetails,
+  eventLabel,
+  eventTone,
   eventFeedReducer,
   EVENTS_KEPT,
   filterAndSortClasses,
@@ -26,7 +29,7 @@ import {
 
 const summary = (overrides: Record<string, unknown> = {}) => campaignSummarySchema.parse({ ...sampleCampaignSummary, ...overrides });
 const event = (id: number, kind = "note", detail: Record<string, unknown> = {}) =>
-  campaignEventSchema.parse({ event_id: id, at: "2026-10-26T09:00:00+00:00", kind, class_id: null, detail });
+  campaignEventSchema.parse({ event_id: id, at: "2026-10-26T09:00:00+00:00", kind, fec_id: null, detail });
 const classView = (overrides: Record<string, unknown> = {}) => classViewSchema.parse(sampleClass(overrides));
 
 describe("progress and state", () => {
@@ -114,6 +117,11 @@ describe("newerSummary", () => {
 });
 
 describe("event feed", () => {
+  it("names and colors the FEC events the master sends", () => {
+    expect([eventLabel("fec_complete"), eventTone("fec_complete")]).toEqual(["FEC complete", "ok"]);
+    expect([eventLabel("fec_abandoned"), eventTone("fec_abandoned")]).toEqual(["FEC abandoned", "bad"]);
+  });
+
   it("joins histories and pushes by id, oldest first, with the later copy winning", () => {
     const merged = mergeEvents([event(1), event(2, "started")], [event(2, "paused"), event(3), event(0)]);
     expect(merged.map((entry) => entry.event_id)).toEqual([0, 1, 2, 3]);
@@ -154,9 +162,9 @@ describe("event feed", () => {
 
 describe("coverage rows", () => {
   const classes = [
-    classView({ class_id: "a/1", state: "open", quota: 10, complete: 2, dropped: 0, failure_budget_left: 5 }),
-    classView({ class_id: "a/2", state: "complete", quota: 10, complete: 10, dropped: 3, failure_budget_left: 1, verdicts: { "0": { passed: 9, failed: 1 }, "1": { passed: 10 } } }),
-    classView({ class_id: "b/1", state: "abandoned", quota: 10, complete: 4, dropped: 6, failure_budget_left: 0 }),
+    classView({ fec_id: "a/1", state: "open", quota: 10, complete: 2, dropped: 0, failure_budget_left: 5 }),
+    classView({ fec_id: "a/2", state: "complete", quota: 10, complete: 10, dropped: 3, failure_budget_left: 1, verdicts: { "0": { passed: 9, failed: 1 }, "1": { passed: 10 } } }),
+    classView({ fec_id: "b/1", state: "abandoned", quota: 10, complete: 4, dropped: 6, failure_budget_left: 0 }),
   ];
 
   it("counts the classes per state", () => {
@@ -164,20 +172,27 @@ describe("coverage rows", () => {
   });
 
   it("filters by state and by a part of the class id", () => {
-    expect(filterAndSortClasses(classes, { state: "all", search: "" }, "class").map((entry) => entry.class_id)).toEqual(["a/1", "a/2", "b/1"]);
-    expect(filterAndSortClasses(classes, { state: "complete", search: "" }, "class").map((entry) => entry.class_id)).toEqual(["a/2"]);
-    expect(filterAndSortClasses(classes, { state: "all", search: " B/ " }, "class").map((entry) => entry.class_id)).toEqual(["b/1"]);
+    expect(filterAndSortClasses(classes, { state: "all", search: "" }, "class").map((entry) => entry.fec_id)).toEqual(["a/1", "a/2", "b/1"]);
+    expect(filterAndSortClasses(classes, { state: "complete", search: "" }, "class").map((entry) => entry.fec_id)).toEqual(["a/2"]);
+    expect(filterAndSortClasses(classes, { state: "all", search: " B/ " }, "class").map((entry) => entry.fec_id)).toEqual(["b/1"]);
   });
 
   it("sorts by progress, dropped cases, failure budget left and state", () => {
     const ids = (sort: Parameters<typeof filterAndSortClasses>[2], descending = false) =>
-      filterAndSortClasses(classes, { state: "all", search: "" }, sort, descending).map((entry) => entry.class_id);
+      filterAndSortClasses(classes, { state: "all", search: "" }, sort, descending).map((entry) => entry.fec_id);
     expect(ids("progress")).toEqual(["a/1", "b/1", "a/2"]);
     expect(ids("progress", true)).toEqual(["a/2", "b/1", "a/1"]);
     expect(ids("dropped", true)).toEqual(["b/1", "a/2", "a/1"]);
     expect(ids("budget")).toEqual(["b/1", "a/2", "a/1"]);
     expect(ids("state")).toEqual(["a/1", "b/1", "a/2"]);
     expect(classProgress(classes[0])).toBe(0.2);
+  });
+
+  it("sorts an unlimited failure budget as the most left", () => {
+    const unlimited = [classView({ fec_id: "u/1", failure_budget: null, failure_budget_left: null }), ...classes, classView({ fec_id: "u/2", failure_budget: null, failure_budget_left: null })];
+    const ids = (descending: boolean) => filterAndSortClasses(unlimited, { state: "all", search: "" }, "budget", descending).map((entry) => entry.fec_id);
+    expect(ids(false)).toEqual(["b/1", "a/2", "a/1", "u/1", "u/2"]);
+    expect(ids(true)).toEqual(["u/2", "u/1", "a/1", "a/2", "b/1"]);
   });
 
   it("finds the runs of the verdicts and reads their counts", () => {
@@ -197,6 +212,19 @@ describe("coverage rows", () => {
     });
     expect(runNames(config)).toEqual(["usv", "Run 1", "Run 2"]);
     expect(runNames(null)).toEqual([]);
+  });
+
+  it("reads the base seed of the current config version", () => {
+    const config = campaignConfigSchema.parse({
+      current_version: 2,
+      versions: [
+        { version: 1, config_hash: "a", created_at: "2026-10-26T09:00:00+00:00", config: { policy: { seed: 7 } } },
+        { version: 2, config_hash: "b", created_at: "2026-10-26T10:00:00+00:00", config: { policy: { seed: 20261029 } } },
+      ],
+    });
+    expect(baseSeed(config)).toBe(20261029);
+    expect(baseSeed(campaignConfigSchema.parse({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-26T09:00:00+00:00", config: {} }] }))).toBeNull();
+    expect(baseSeed(null)).toBeNull();
   });
 });
 

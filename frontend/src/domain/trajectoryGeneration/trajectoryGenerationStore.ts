@@ -41,8 +41,6 @@ export const DEFAULT_STRAIGHT_TIMESPAN = 3600;
 
 export type TrajectoryGenerationStatus = "idle" | "running" | "done" | "error";
 
-export type TrajectoryGenerationTab = "generate" | "advanced" | "preview";
-
 /** Monitor results ride along with every preview by default. */
 export const DEFAULT_INCLUDE_MONITOR_RESULTS = true;
 
@@ -52,7 +50,6 @@ type TrajectoryGenerationPersisted = {
   includeMonitorResults: boolean;
   generator: TrajectoryGeneratorWire;
   timespan: number;
-  activeTab: TrajectoryGenerationTab;
   handoffScene: GeneratedSceneData | null;
   handoffSourceName: string | null;
   status: TrajectoryGenerationStatus;
@@ -90,9 +87,6 @@ interface TrajectoryGenerationState {
    */
   resultComplete: boolean | null;
   errorMessage: string | null;
-  /** Which bottom-panel tab is shown on the trajectory generation page. */
-  activeTab: TrajectoryGenerationTab;
-  setActiveTab: (tab: TrajectoryGenerationTab) => void;
   setHandoffScene: (scene: GeneratedSceneData | null, sourceName: string | null) => void;
   setParam: (key: keyof TrajectoryGenerationParams, value: number) => void;
   setIncludeMonitorResults: (value: boolean) => void;
@@ -127,8 +121,6 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
       resultValid: false,
       resultComplete: null,
       errorMessage: null,
-      activeTab: "generate",
-      setActiveTab: (activeTab) => set({ activeTab }),
       // The page's input; the shown trajectories stay until a run or a loaded entry replaces them (design doc 6.6).
       setHandoffScene: (scene, sourceName) => set({ handoffScene: scene, handoffSourceName: sourceName }),
       setParam: (key, value) =>
@@ -179,7 +171,7 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
     {
       name: "scenegems:trajectory-generation",
       version: 2,
-      // Persist the advanced-parameter form, the selected tab, the handoff scene and
+      // Persist the advanced-parameter form, the handoff scene and
       // the last generated trajectory so the page restores on reload. A run that was
       // still in flight is downgraded to "idle" (there is no live request to resume).
       partialize: (state): TrajectoryGenerationPersisted => ({
@@ -187,7 +179,6 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
         includeMonitorResults: state.includeMonitorResults,
         generator: state.generator,
         timespan: state.timespan,
-        activeTab: state.activeTab,
         handoffScene: state.handoffScene,
         handoffSourceName: state.handoffSourceName,
         status: state.status === "running" ? "idle" : state.status,

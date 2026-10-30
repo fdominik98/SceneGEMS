@@ -8,7 +8,7 @@ import { usePersistedState } from "../../../app/usePersistedState";
 import { useUiStore } from "../../../app/uiStore";
 import problemLanguageSupport from "../../../language/refineryProblem/problemLanguageSupport";
 import { useCatalogClasses } from "../../campaigns/useCampaignData";
-import { ANY_COUNT, countOptions, filterCatalogClasses } from "./scenarioCatalog";
+import { ANY_COUNT, countOptions, filterCatalogClasses, listedValue } from "./scenarioCatalog";
 import { Disclosure } from "../../../components/Disclosure";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { BatchPresetRunner } from "./BatchPresetRunner";
@@ -50,6 +50,8 @@ const PRESETS_PAGE_SIZE = 40;
 
 interface Props {
   functionalSpecText: string;
+  /** What the editor holds: the class id of a loaded catalog scenario, another label, or null. */
+  functionalSpecLabel: string | null;
   onFunctionalSpecTextChange: (value: string) => void;
   /** Loads a functional scenario of the master's catalog into the editor, by class id. */
   onLoadFunctionalSpecFromPreset: (classId: string) => void;
@@ -66,6 +68,7 @@ interface Props {
 
 export function SceneGenerationSidebar({
   functionalSpecText,
+  functionalSpecLabel,
   onFunctionalSpecTextChange,
   onLoadFunctionalSpecFromPreset,
   loadScenarioText,
@@ -260,20 +263,21 @@ export function SceneGenerationSidebar({
           <>
             <div className="toolbar-row">
               <select
+                aria-label="Load a functional scenario of the master"
+                value={listedValue(pagePresets, functionalSpecLabel)}
                 onChange={(event) => {
-                  const path = event.target.value;
-                  if (path) {
-                    onLoadFunctionalSpecFromPreset(path);
+                  const classId = event.target.value;
+                  if (classId) {
+                    onLoadFunctionalSpecFromPreset(classId);
                   }
                 }}
-                defaultValue=""
               >
                 <option value="" disabled>
                   Load preset…
                 </option>
                 {pagePresets.map((preset) => (
-                  <option key={preset.class_id} value={preset.class_id}>
-                    {preset.class_id}
+                  <option key={preset.fec_id} value={preset.fec_id}>
+                    {preset.fec_id}
                   </option>
                 ))}
               </select>

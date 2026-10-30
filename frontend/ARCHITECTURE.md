@@ -31,6 +31,42 @@ canvas, and native `details` (given the same chevron and row size globally) in t
 A screen has one primary action (`primary-btn accent`), shown in its `PageHeader` or at the top of its
 control panel.
 
+A button that only acts and tells nothing by itself (fit the view, hide or show a panel, export, switch
+to the map) is an `IconButton` (`components/IconButton.tsx`, icons in `components/icons.tsx`): the icon
+alone, its name as the tooltip and the accessible name; `PopoverMenu` takes `iconLabel` for the same.
+
+## Canvas and nautical map
+
+`features/workbench/scene/`: the encounter canvas (`EncounterCanvas.tsx`) and the nautical map
+(`NauticalMapView.tsx`) draw the same layers (`EncounterLayers.tsx`, built from `nauticalLayers.tsx`)
+under the same toolbar (`CanvasToolbar.tsx`: fit, north up or head up on the canvas, the layer menu, then
+the caller's buttons). Every layer is in the one menu (`LayerMenu.tsx`): a row per vessel layer with a
+switch per stream (the workbench's preview and simulation side by side, each of which can be hidden),
+then the chart's marks (range rings, CPA, labels, legend) and the vector length (`canvasSettings.ts`,
+kept per browser and shared by the canvas and the map). The monitor panels hold no layer switches.
+
+The map is Leaflet with the OpenStreetMap tiles and the OpenSeaMap seamarks, darkened by a CSS filter to
+the canvas's sea. The layers are an SVG over it, drawn with a canvas view transform that
+`geoTransform.mapViewTransform` takes from the map at each move (linearized at its center: the frames'
+local meters are UTM easting and northing from the reference geofence, as the backend's `Geofence` has
+them). Clicks pass through the drawing to the map; a click near a vessel selects its pair.
+
+## The workbench pages' panels
+
+The panel under the canvas of the Scene Generation, Trajectory Generation and Simulation pages is the
+same `StepPanel` (`features/workbench/pages/StepPanel.tsx`): a header with the step, a status chip, where
+the run happens and the run button (Stop replaces it while running), a list of what blocks the run
+elsewhere (the cluster, the domain configuration, the MQTT broker), then three `StepRow`s: Input (what
+the next run takes; `PageInputPanel` offers the previous page's output, Campaign History or a file),
+Setup (settings on one line, `Setting` and `NumberSetting`; rarely changed ones behind a link
+disclosure), and Result (what the page shows, its entry as a link to Campaign History with
+`PageEntryStatus`, Export and the button on to the next page). What the Input row already says is not
+repeated as a notice; a disabled run button says in its tooltip what it waits for. The panel takes the
+height it needs, at most half the page, until the resizer sets one. Playback is the bar under the
+canvas on the trajectory and simulation pages (`WorkbenchEncounterStrip`, on the shown page's store).
+Every run is kept as an entry of Campaign History, so the pages record nothing themselves; frames
+export from the monitoring panel and the canvas's Export menu.
+
 ## Sections
 
 The left pane has seven sections: Workbench (with the views Scene Generation, Trajectory
@@ -46,7 +82,7 @@ The workbench pages (design doc 6.6, `features/workbench/pages/`): Scene Generat
 Generation and Simulation each hold `{input, loaded}` in a persisted page store (`pageStore.ts`): the
 input (from the previous page's output, a Campaign History output or a file, `PageInputPanel`) and
 the target of the latest loaded entry. Every run is a one-step workbench entry (`entryConfig.ts`
-builds its format 2 config; `WorkbenchJobDriver` creates it with `kind: "workbench"` and the page
+builds its format 3 config; `WorkbenchJobDriver` creates it with `kind: "workbench"` and the page
 as origin, follows its case with `entryFollower.ts`, then loads its output). `entryLoader.ts` fetches
 a target's output from the master; a 404 clears the page. The shown page takes queued targets with
 `useTargetConsumer`, and every page fetches its loaded entry again on start (`useLoadedRefresh`). The left
@@ -65,7 +101,7 @@ keeps the list (name and operator URL, per browser). A master's operator API lis
   with backoff and resubscribe, ping. `liveTopics.ts` has the reducers per topic.
 - `useLiveTopic(topic, reducer)`: a topic of the selected cluster as React state.
 - `presetsApi.ts`: everything the console starts from comes from the master; the frontend ships no
-  presets. The class catalog's functional scenarios (`GET /cluster/catalog/classes/<class id>` as
+  presets. The FEC catalog's functional scenarios (`GET /cluster/catalog/fecs/<fec id>` as
   text), the domain presets (`GET /cluster/catalog/domain-presets`), the cluster's domain
   configuration (`GET` and `POST /cluster/domain`) and the campaign presets (`GET`, `POST` and
   `DELETE /cluster/campaign-presets`), all read from `backend/assets/` in the master image or the
@@ -107,7 +143,9 @@ lanes. The page has one tab per document and three views: the implemented graph,
 for the vessel stack, the availability matrix. Nothing in the frontend lists implementations: a new
 simulator or generator declared in the backend specs appears after the master restarts.
 
-- `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix).
+- `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix, the
+  `cluster_job` fact of an available stack: the job type that runs it on a node, or none for a stack the
+  workbench runs only as a live session).
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
 - `ArchitectureGraph.tsx` (React Flow canvas, custom edge with a label), `GraphNodes.tsx` (cards and
   lane bands), `cardSizes.ts`, `DetailPanel.tsx`, `MatrixView.tsx`, `CapabilitiesSection.tsx`.
@@ -135,7 +173,7 @@ flowchart LR
 2. **Generate scenes and trajectories**: jobs on the active cluster (`features/workbench/cluster/`: `WorkbenchJobDriver` submits `scene_generation`, `trajectory_generation` and `monitoring.post_hoc` jobs through the operator API, follows them on the live channel and reports them to the stores as `generated_scene`, `trajectory_generation_preview` and `trajectory_generation_result`). A job type no usable node offers is not submitted; `workbenchResources.ts` says why.
 3. **Load scenario**: `load_scenario_file` -> `preview_trajectory_chunk`(s), then the cluster's post-hoc monitor replaces the preview with monitored frames
    A bare scene loads as its initial scene only (`initial_state` with trajectory length 0); trajectories come from the trajectory generator, and the simulation refuses to run without them.
-4. **Run on the cluster**: a kinematic setup runs as one `simulation.kinematic` job, a replay on ArduPilot SITL or Gazebo as one `simulation.ardupilot` job (`simulationJobs.ts`), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<node>/job-<id>-<attempt>`
+4. **Run on the cluster**: a kinematic setup runs as one `simulation.kinematic` job, a replay on ArduPilot SITL or Gazebo as one `simulation.ardupilot_sim` or `simulation.gazebo` job (`simulationJobs.ts`), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<node>/job-<id>-<attempt>`
 5. **Live session**: `connect_to_mqtt_broker` (the master's broker by default), `initialize_simulation` -> `initial_state`, `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
 
 `playbackStore.ts` makes one store per page (`createPlaybackStore`): `useScenePlaybackStore` (the

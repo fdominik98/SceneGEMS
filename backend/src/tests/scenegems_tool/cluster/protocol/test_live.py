@@ -10,9 +10,9 @@ from scenegems_tool.cluster.protocol.live import (
     LIVE_PATH,
     LIVE_VERSION,
     CampaignChanged,
-    CampaignClassesChanged,
     CampaignDeleted,
     CampaignEventAdded,
+    CampaignFecsChanged,
     CampaignRowChanged,
     Configure,
     Error,
@@ -114,7 +114,7 @@ def test_update_data_shapes():
     assert NodeRemoved(removed="n1").model_dump() == {"removed": "n1"}
     assert CampaignEventAdded(event={"event_id": 4}).model_dump() == {"event": {"event_id": 4}}
     assert CampaignChanged(campaign={"actual_state": "running"}).model_dump() == {"campaign": {"actual_state": "running"}}
-    assert CampaignClassesChanged(classes=[{"class_id": "a"}]).model_dump() == {"classes": [{"class_id": "a"}]}
+    assert CampaignFecsChanged(fecs=[{"fec_id": "a"}]).model_dump() == {"fecs": [{"fec_id": "a"}]}
     assert CampaignRowChanged(campaign={"campaign_id": "c1", "totals": {}}).model_dump() == {"campaign": {"campaign_id": "c1", "totals": {}}}
     assert CampaignDeleted(deleted="c1").model_dump() == {"deleted": "c1"}
     status = JobStatusChanged(status=JobProgressView(progress=0.5, message="half", at=at)).model_dump(mode="json")

@@ -122,14 +122,14 @@ describe("outputs", () => {
 
   it("pages with the step and filters and reads the total", async () => {
     const { client, spy } = clientWith(async () => jsonResponse(sampleOutputRows, { headers: { "X-Total-Count": String(SAMPLE_OUTPUTS_TOTAL) } }));
-    const page = await listOutputs(client, "c 1", { step: "scene_generation", state: "complete", class_id: "class-a", limit: 2, offset: 4 });
+    const page = await listOutputs(client, "c 1", { step: "scene_generation", state: "complete", fec_id: "class-a", limit: 2, offset: 4 });
     expect(page.total).toBe(SAMPLE_OUTPUTS_TOTAL);
     expect(page.items).toHaveLength(2);
     const url = new URL(spy.mock.calls[0][0]);
     expect(url.pathname).toBe("/cluster/campaigns/c%201/outputs");
     expect(url.searchParams.get("step")).toBe("scene_generation");
     expect(url.searchParams.get("state")).toBe("complete");
-    expect(url.searchParams.get("class_id")).toBe("class-a");
+    expect(url.searchParams.get("fec_id")).toBe("class-a");
     expect(url.searchParams.get("limit")).toBe("2");
     expect(url.searchParams.get("offset")).toBe("4");
   });
@@ -146,7 +146,7 @@ describe("findings", () => {
     const findings = await getFindings(client, "c1", "trajectory_generation");
     expect(findings.verdicts).toEqual({ passed: 3, failed: 2, unmonitored: 0 });
     expect(findings.failed_rules[0].first_failure_time_s).toEqual({ min: 12.5, median: 20.1 });
-    expect(findings.classes[0]).toEqual({ class_id: "class-a", cases: 5, passed: 3, failed: 2 });
+    expect(findings.fecs[0]).toEqual({ fec_id: "class-a", cases: 5, passed: 3, failed: 2 });
     expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/campaigns/c1/findings?step=trajectory_generation`);
   });
 

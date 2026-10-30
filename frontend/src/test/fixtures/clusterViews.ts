@@ -69,7 +69,7 @@ export const sampleLogLine = {
 
 export function sampleClass(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    class_id: "class-a",
+    fec_id: "class-a",
     state: "open",
     state_reason: null,
     content_hash: "f00d",
@@ -107,17 +107,17 @@ export function sampleCampaignDetail(): Record<string, unknown> {
   return {
     ...sampleCampaignSummary,
     totals: {
-      classes: 1,
-      classes_open: 1,
-      classes_complete: 0,
-      classes_abandoned: 0,
+      fecs: 1,
+      fecs_open: 1,
+      fecs_complete: 0,
+      fecs_abandoned: 0,
       quota: 10,
       complete: 3,
       dropped: 1,
       in_flight: 2,
       verdicts: { passed: 2, failed: 1 },
     },
-    classes: [sampleClass()],
+    fecs: [sampleClass()],
   };
 }
 
@@ -125,7 +125,7 @@ export const sampleEvent = {
   event_id: 7,
   at: "2026-10-26T09:00:10+00:00",
   kind: "started",
-  class_id: null,
+  fec_id: null,
   detail: {},
 };
 
@@ -133,7 +133,7 @@ export const sampleRunRecord = {
   run_record_id: 11,
   case_id: 5,
   campaign_id: "c1",
-  class_id: "class-a",
+  fec_id: "class-a",
   run_index: 0,
   repeat_index: 0,
   trajectory_generator: "straight",
@@ -157,7 +157,7 @@ export const sampleVerdict = {
   verdict_id: 3,
   case_id: 5,
   campaign_id: "c1",
-  class_id: "class-a",
+  fec_id: "class-a",
   run_index: 0,
   run_record_id: 11,
   state: "failed",
@@ -174,7 +174,7 @@ export const sampleVerdict = {
 export const sampleCase = {
   case_id: 5,
   campaign_id: "c1",
-  class_id: "class-a",
+  fec_id: "class-a",
   case_index: 2,
   seed: 42,
   config_version: 1,

@@ -43,7 +43,7 @@ describe("the master's presets", () => {
   it("reads a class's functional scenario as text, its id kept as a path", async () => {
     const { client: operator, calls } = client(() => new Response("OS(os1).\n", { headers: { "Content-Type": "text/plain" } }));
     expect(await getClassContent(operator, "2vessel_0obstacle_scenarios/functional_model1")).toBe("OS(os1).\n");
-    expect(calls[0].url.pathname).toBe("/cluster/catalog/classes/2vessel_0obstacle_scenarios/functional_model1");
+    expect(calls[0].url.pathname).toBe("/cluster/catalog/fecs/2vessel_0obstacle_scenarios/functional_model1");
   });
 
   it("reads the domain presets per text", async () => {

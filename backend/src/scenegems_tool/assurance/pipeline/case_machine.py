@@ -182,7 +182,7 @@ class CaseMachine:
             return [(SCENE_STEP, builder.scene_generation(case.class_id, context.content_hashes[case.class_id], case.seed))]
         item = context.input_of(case.class_id)
         if not isinstance(item, InputItem):
-            raise PayloadError(f"class {case.class_id} has no input item")
+            raise PayloadError(f"FEC {case.class_id} has no input item")
         if graph.first_step == CampaignStep.TRAJECTORY_GENERATION:
             return [(TRAJECTORIES_STEP, builder.trajectory_generation_of_item(case.seed, item))]
         return [(simulate, builder.simulation_of_item(case.seed, simulate.run_index, item)) for simulate in graph.simulate_steps()]
@@ -298,7 +298,7 @@ class CaseMachine:
                 trajectories_complete=self._trajectories_complete(context, case),
                 stack=context.stack(run_index),
                 environment=context.environment(run_index),
-                seed=run.seed_for(case.seed, run_index),
+                seed=run.seed_for(case.seed),
                 simulation_result=result,
                 input_trajectories_hash=self._input_trajectories(context, case),
                 job_id=event.job_id,
@@ -419,9 +419,9 @@ class CaseMachine:
             raise ValueError("a recorded run's state log must be stored as an artifact first")
         record = self.stores.cases.get_class(campaign_id, class_id, session=self.session)
         if record is None or record.state != CampaignClassState.OPEN:
-            raise ValueError(f"campaign {campaign_id} has no open class {class_id}")
+            raise ValueError(f"campaign {campaign_id} has no open FEC {class_id}")
         if self.stores.cases.list_cases(campaign_id, class_id, session=self.session):
-            raise ValueError(f"class {class_id} of campaign {campaign_id} has its case already")
+            raise ValueError(f"FEC {class_id} of campaign {campaign_id} has its case already")
         (case,) = self.stores.cases.create_cases(campaign_id, [self._new_case(context, class_id, 0)], session=self.session)
         self.outbox.touched_classes.add((campaign_id, class_id))
         simulate = Step(PipelineStage.SIMULATE, 0, 0)
@@ -443,7 +443,7 @@ class CaseMachine:
                 trajectories_complete=run.trajectories_complete,
                 stack=run.stack,
                 environment=run.environment,
-                seed=run.seed if run.seed is not None else run_config.seed_for(case.seed, 0),
+                seed=run.seed if run.seed is not None else run_config.seed_for(case.seed),
                 simulation_result=result,
                 input_trajectories_hash=case.input_artifact,
                 job_id=None,

@@ -144,15 +144,21 @@ def test_invalid_capabilities_fail(text, problem):
 
 
 def test_capabilities_cover_every_job_type():
-    text = "scene_generation:1,trajectory_generation:2,simulation.kinematic:3,simulation.ardupilot:1,monitoring.post_hoc:5,calibration.deviation:2"
+    text = "scene_generation:1,trajectory_generation:2,simulation.kinematic:3,simulation.ardupilot_sim:1,simulation.gazebo:1,monitoring.post_hoc:5,calibration.deviation:2"
     assert parse_capabilities(text) == {
         JobType.SCENE_GENERATION: 1,
         JobType.TRAJECTORY_GENERATION: 2,
         JobType.SIMULATION_KINEMATIC: 3,
-        JobType.SIMULATION_ARDUPILOT: 1,
+        JobType.SIMULATION_ARDUPILOT_SIM: 1,
+        JobType.SIMULATION_GAZEBO: 1,
         JobType.MONITORING_POST_HOC: 5,
         JobType.CALIBRATION_DEVIATION: 2,
     }
+
+
+def test_the_job_type_of_earlier_releases_names_its_replacements():
+    with pytest.raises(ValueError, match="simulation.ardupilot is split into simulation.ardupilot_sim and simulation.gazebo"):
+        parse_capabilities("simulation.kinematic:2,simulation.ardupilot:1")
 
 
 @pytest.mark.parametrize("text", ["gpu", "gpu=", "=true", "gpu=true,gpu=false", "g pu=true"])

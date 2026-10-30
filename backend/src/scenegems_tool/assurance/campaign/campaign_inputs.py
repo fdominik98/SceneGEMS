@@ -14,13 +14,12 @@ The content comes from the artifact store; these functions take it as bytes.
 import json
 from typing import Any, Dict, Mapping, Optional, Tuple, Union
 
-from scenegems_tool.assurance.campaign.campaign_config import CampaignConfig, FunctionalScenarioInput, InputItem
+from scenegems_tool.assurance.campaign.campaign_config import ITEM_CLASS_PREFIX, CampaignConfig, FunctionalScenarioInput, InputItem, budget_limit
 from scenegems_tool.assurance.campaign.class_catalog import count_instances
 from scenegems_tool.cluster.protocol.artifacts import json_pointer
 from scenegems_tool.persistence.stores import ClassSpec
 
 SCENARIO_CLASS_PREFIX = "scenario/"
-ITEM_CLASS_PREFIX = "item/"
 SCENE_KEYS = ("best_scene", "scene", "initial_scene")  # where a document keeps its scene (EvaluationData uses best_scene)
 
 
@@ -112,7 +111,7 @@ def scenario_class_spec(scenario: FunctionalScenarioInput, content: bytes) -> Cl
         vessel_count=vessels,
         obstacle_count=obstacles,
         quota=scenario.quota,
-        failure_budget=scenario.failure_budget,
+        failure_budget=budget_limit(scenario.failure_budget),
     )
 
 

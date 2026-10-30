@@ -111,3 +111,21 @@ describe("uiStore sections", () => {
     expect(ui.useUiStore.persist.getOptions().version).toBe(7);
   });
 });
+
+describe("rightPaneShown", () => {
+  it("always shows the scene page's specification pane", () => {
+    expect(ui.rightPaneShown("sceneGeneration", true)).toBe(true);
+    expect(ui.rightPaneShown("sceneGeneration", false)).toBe(true);
+  });
+
+  it("hides the monitoring panel of the trajectory and simulation pages when asked", () => {
+    expect(ui.rightPaneShown("trajectoryGeneration", true)).toBe(true);
+    expect(ui.rightPaneShown("trajectoryGeneration", false)).toBe(false);
+    expect(ui.rightPaneShown("simulation", true)).toBe(true);
+    expect(ui.rightPaneShown("simulation", false)).toBe(false);
+  });
+
+  it("never shows a right pane on Connections", () => {
+    expect(ui.rightPaneShown("connections", true)).toBe(false);
+  });
+});

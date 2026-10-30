@@ -101,7 +101,7 @@ describe("Input for a start with scene generation", () => {
 
   it("keeps the catalog scope below the scenario files", () => {
     setup(() => undefined);
-    expect(screen.getByRole("heading", { name: "Catalog classes" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Catalog FECs" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Functional scenario files" })).toBeVisible();
   });
 });

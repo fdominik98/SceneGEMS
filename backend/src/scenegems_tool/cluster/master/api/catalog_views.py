@@ -12,12 +12,12 @@ the job type modules, which the master keeps out of its startup.
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-CAMPAIGN_STACKS_NOTE = "Campaign configs offer the kinematic layer and replay on ArduPilot SITL or Gazebo (simulation.ardupilot); the other stacks of the resolver follow with their adapters."
+CAMPAIGN_STACKS_NOTE = "Campaign configs offer the kinematic layer (simulation.kinematic) and replay on ArduPilot SITL (simulation.ardupilot_sim) or Gazebo (simulation.gazebo); the other stacks of the resolver follow with their jobs."
 
 
 def class_view(scenario_class: Any) -> Dict[str, Any]:
     return {
-        "class_id": scenario_class.class_id,
+        "fec_id": scenario_class.class_id,
         "folder": scenario_class.folder,
         "vessel_count": scenario_class.vessel_count,
         "obstacle_count": scenario_class.obstacle_count,
@@ -121,7 +121,7 @@ def _ardupilot_parameters() -> List[Dict[str, Any]]:
 
 
 def _ardupilot_environment(resolver: Any, vessels: Dict[str, Any]) -> Dict[str, Any]:
-    """What a run on the stack can apply: the resolver's support, cut to what simulation.ardupilot does (it runs calm water, so a configured wind or wave is refused)."""
+    """What a run on the stack can apply: the resolver's support, cut to what simulation.ardupilot_sim and simulation.gazebo do (they run calm water, so a configured wind or wave is refused)."""
     support = _environment_support(resolver, vessels)
     return {"wind": "unsupported", "waves": "unsupported", "interactive_only": support["interactive_only"]}
 
@@ -260,7 +260,7 @@ def monitors_view() -> List[Dict[str, Any]]:
         MonitorImplementation.LIVE: (
             "Live",
             "The COLREGS monitor runs inside the simulation step by step; on the kinematic layer it can stop the run early once every rule is decided.",
-            ["simulation.kinematic", "simulation.ardupilot"],
+            ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"],
             True,
         ),
         MonitorImplementation.EMPTY: ("None", "Nothing is judged; every verdict is unmonitored.", [], False),
@@ -325,7 +325,7 @@ def run_parameters_view() -> List[Dict[str, Any]]:
 
     return [
         parameter("name", "string", "label of the run in the campaign and its results"),
-        parameter("seed", "integer", "one seed for the run in every case; derived per case from the case seed and the run index when absent", minimum=0, maximum=MAX_SEED),
+        parameter("seed", "integer", "one seed for the run in every case; the case seed when absent", minimum=0, maximum=MAX_SEED),
         parameter("repeats", "integer", "runs with the same seed, for the calibration of a bounded stack", RunConfig.model_fields["repeats"].default, minimum=1),
         parameter("early_stop", "boolean", "stop the run once every rule is decided; the live monitor on a kinematic stack only", RunConfig.model_fields["early_stop"].default),
         parameter("environment.wind_vector", "number_triple", "wind [east, north, up]", [0.0, 0.0, 0.0], unit="m/s"),

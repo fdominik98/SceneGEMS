@@ -104,7 +104,7 @@ def _submission(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, 
         "include_frames": True,
     }
     pinned = campaign.pinned_fingerprints if campaign is not None else {}
-    fingerprints = {image: pinned[image] for image in job_images(JobType.MONITORING_POST_HOC, payload) if image in pinned}
+    fingerprints = {image: pinned[image] for image in job_images(JobType.MONITORING_POST_HOC) if image in pinned}
     resources = config.get("resources", {})
     labels = dict(resources.get("required_labels", {}))
     return JobSubmission(

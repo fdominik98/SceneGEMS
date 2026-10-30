@@ -13,9 +13,12 @@ live (Observe from the master, ObservationFrames from the node).
 
 Version 4: no pairing, credentials or TLS. A node names itself in its Hello (its node id is its
 node name) and in the node id header of the artifact routes; master and nodes trust the VPN.
+
+Version 5: simulation.ardupilot is split into simulation.ardupilot_sim and simulation.gazebo, so a
+node offers SITL's own physics and Gazebo as separate capabilities.
 """
 
-PROTOCOL_VERSION = 4
+PROTOCOL_VERSION = 5
 
 
 class ProtocolVersionMismatch(ValueError):

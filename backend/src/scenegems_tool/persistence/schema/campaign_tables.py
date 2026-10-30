@@ -215,7 +215,7 @@ class CampaignClassRow(Base):
     vessel_count: Mapped[int] = mapped_column(Integer)
     obstacle_count: Mapped[int] = mapped_column(Integer)
     quota: Mapped[int] = mapped_column(Integer)
-    failure_budget: Mapped[int] = mapped_column(Integer)
+    failure_budget: Mapped[Optional[int]] = mapped_column(Integer)  # NULL: unlimited, the class is never abandoned
     complete_count: Mapped[int] = mapped_column(Integer)
     dropped_count: Mapped[int] = mapped_column(Integer)
     in_flight_count: Mapped[int] = mapped_column(Integer)

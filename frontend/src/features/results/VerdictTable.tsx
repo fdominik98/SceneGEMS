@@ -39,7 +39,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
   const page = clampPage(paging.page, known, paging.pageSize);
   const next: SortDirection = paging.direction === "asc" ? "desc" : "asc";
   const ariaSort = paging.direction === "asc" ? "ascending" : "descending";
-  const orderHint = `Ordered by class, case and run, ${paging.direction === "asc" ? "ascending" : "descending"}. Select to ${next === "asc" ? "ascend" : "descend"}.`;
+  const orderHint = `Ordered by FEC, case and run, ${paging.direction === "asc" ? "ascending" : "descending"}. Select to ${next === "asc" ? "ascend" : "descend"}.`;
   const sortHeader = (label: string) => (
     <button type="button" className="results-sort" onClick={() => onDirection(next)} title={orderHint}>
       {label}
@@ -53,7 +53,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
         <table className="results-table" aria-busy={loading}>
           <thead>
             <tr>
-              <th aria-sort={ariaSort}>{sortHeader("Class")}</th>
+              <th aria-sort={ariaSort}>{sortHeader("FEC")}</th>
               <th aria-sort={ariaSort}>{sortHeader("Case")}</th>
               <th aria-sort={ariaSort}>{sortHeader("Run")}</th>
               <th>State</th>
@@ -78,7 +78,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
                 className={`results-row results-row--${verdict.state}`}
                 onClick={() => onOpenCase(verdict)}
               >
-                <td title={verdict.class_id} className="results-class">
+                <td title={verdict.fec_id} className="results-class">
                   <button
                     type="button"
                     className="results-link"
@@ -87,7 +87,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
                       onOpenCase(verdict);
                     }}
                   >
-                    {shortClassId(verdict.class_id, 38)}
+                    {shortClassId(verdict.fec_id, 38)}
                   </button>
                 </td>
                 <td className="mono">{verdict.case_index ?? `id ${verdict.case_id}`}</td>

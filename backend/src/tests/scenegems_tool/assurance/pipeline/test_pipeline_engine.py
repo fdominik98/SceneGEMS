@@ -69,8 +69,7 @@ def test_a_post_hoc_campaign_completes_with_its_quota(harness):
     campaign = create_campaign(harness.stores, config_dict(classes=(CLASS_A, CLASS_B), quota=2))
     finished = harness.drive(campaign.campaign_id)
     assert finished.actual_state == CampaignActualState.COMPLETED and finished.finished_at is not None
-    # one spare case per class runs ahead and is cut once the quota is known
-    assert assert_consistent(harness.stores, campaign.campaign_id) == {"complete": 4, "cancelled": 2}
+    assert assert_consistent(harness.stores, campaign.campaign_id) == {"complete": 4}  # no case beyond the quota starts
     assert [(case.class_id, case.case_index) for case in _cases(harness, campaign, states=[CaseState.COMPLETE])] == [(CLASS_A, 0), (CLASS_A, 1), (CLASS_B, 0), (CLASS_B, 1)]
     assert {verdict.state for verdict in harness.stores.results.list_verdicts(campaign.campaign_id)} == {VerdictState.PASSED}
     assert all(record.state == CampaignClassState.COMPLETE for record in harness.stores.cases.list_classes(campaign.campaign_id))
@@ -272,7 +271,7 @@ def test_stop_cancels_active_cases_and_unfinished_jobs(harness):
     stopped = harness.drive(campaign.campaign_id)
     assert stopped.actual_state == CampaignActualState.STOPPED
     states = assert_consistent(harness.stores, campaign.campaign_id)
-    assert states == {"cancelled": 8}
+    assert states == {"cancelled": 6}  # the quota of each FEC was running, nothing beyond it
     assert all(case.reason == "the campaign was stopped" for case in _cases(harness, campaign))
     assert {harness.job_store.get(lease.job.job_id).state for lease in leased} == {JobState.CANCELLED}
     assert all(record.state == CampaignClassState.ABANDONED for record in harness.stores.cases.list_classes(campaign.campaign_id))
@@ -333,6 +332,26 @@ def test_a_class_is_abandoned_once_its_budget_is_used_up(make_harness):
     assert states == {CLASS_A: (CampaignClassState.ABANDONED, 2), CLASS_B: (CampaignClassState.COMPLETE, 0)}
     abandoned = [event for event in harness.stores.campaigns.list_events(campaign.campaign_id) if event.kind == CampaignEventKind.CLASS_ABANDONED]
     assert [event.class_id for event in abandoned] == [CLASS_A] and "exceed the failure budget of 1" in abandoned[0].detail["reason"]
+
+
+def test_an_unlimited_budget_replaces_every_drop_until_the_quota_is_complete(make_harness):
+    harness = make_harness(scripts={(CLASS_A, index): CaseScript(scene_valid=False) for index in range(6)})
+    campaign = create_campaign(harness.stores, config_dict(quota=2, failure_budget="unlimited"))
+    assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
+    assert_consistent(harness.stores, campaign.campaign_id)
+    (record,) = harness.stores.cases.list_classes(campaign.campaign_id)
+    assert (record.state, record.dropped_count, record.complete_count, record.failure_budget) == (CampaignClassState.COMPLETE, 6, 2, None)
+    assert [case.case_index for case in _cases(harness, campaign) if case.state == CaseState.COMPLETE] == [6, 7]
+
+
+def test_a_stop_condition_ends_a_class_with_an_unlimited_budget_that_never_completes(make_harness):
+    harness = make_harness(scripts={(CLASS_A, index): CaseScript(scene_valid=False) for index in range(40)})
+    campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget="unlimited", policy={"seed": 7, "stop": {"max_cases": 5}}))
+    paused = harness.drive(campaign.campaign_id)
+    assert (paused.desired_state, paused.actual_state, paused.state_reason) == (CampaignDesiredState.DRAINING, CampaignActualState.PAUSED, "drained")
+    assert len(_cases(harness, campaign)) == 5
+    (record,) = harness.stores.cases.list_classes(campaign.campaign_id)
+    assert (record.state, record.dropped_count) == (CampaignClassState.OPEN, 5)
 
 
 def test_a_job_cancelled_by_someone_else_fails_its_case(harness):
@@ -428,11 +447,11 @@ def test_retention_keeps_what_its_policy_says(make_harness, policy):
 
 
 def test_a_cut_case_keeps_no_trajectories_under_the_failures_policy(make_harness):
-    harness = make_harness(references=True)
-    campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=1, policy={"retention": "failures"}))
+    harness = make_harness(references=True, scripts={(CLASS_A, 0): CaseScript(scene_valid=False)})
+    campaign = create_campaign(harness.stores, config_dict(quota=2, failure_budget=0, policy={"retention": "failures"}))
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
-    complete, cut = _cases(harness, campaign)
-    assert (complete.state, cut.state, cut.reason) == (CaseState.COMPLETE, CaseState.CANCELLED, "above the class's quota")
+    dropped, cut = _cases(harness, campaign)
+    assert (dropped.state, cut.state, cut.reason) == (CaseState.DROPPED, CaseState.CANCELLED, "its FEC was abandoned")
     assert _references(harness, ArtifactHolderKind.CASE, cut.case_id) == ["scene"]
     assert _job_references(harness, campaign) == []  # results that arrived after the cut are not kept either
 

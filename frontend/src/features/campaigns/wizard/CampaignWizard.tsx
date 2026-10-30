@@ -193,6 +193,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
           yaml={yaml}
           validation={validation}
           current={validation.yaml === yaml}
+          baseSeed={draft.policy.seed}
           localReasons={localReasons}
           serverReasons={serverReasons}
           onGoTo={setStep}

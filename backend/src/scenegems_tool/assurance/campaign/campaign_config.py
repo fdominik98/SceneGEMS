@@ -1,10 +1,12 @@
 """The campaign config: what a campaign runs, as an immutable, hashed pydantic model.
 
 Sections:
-    format          1 (the default) or 2
+    format          1 (the default), 2 or 3
     steps           format 2: the consecutive part of the chain scene_generation, trajectory_generation,
                     simulation the campaign runs, in chain order; all three by default
-    scope           classes (catalog ids or folder patterns), each entry with a quota and a failure budget
+    scope           FECs, functional equivalence classes (catalog ids or folder patterns), each entry
+                    with a quota and a failure budget (a number of cases, or unlimited: the FEC is never
+                    abandoned); format 3 lists them under fecs, formats 1 and 2 under classes
     input           format 2: functional scenarios given as content (a campaign that starts with scene
                     generation) or items, outputs of earlier steps or uploaded files (one that starts later)
     domain          COLREGS constants, vessel types and obstacle types as content (defaults: the
@@ -28,32 +30,35 @@ config hashes the same from a Windows and a Linux checkout.
 A format 1 config is the full chain with the fields it always had: it takes none of the
 format 2 fields, and its JSON (and so its hash) leaves them out, so a campaign created
 before format 2 keeps its stored hash. Sections of steps a campaign does not run are kept
-but not used.
+but not used. Format 3 is format 2 with a scope entry's FECs under fecs instead of
+classes; formats 1 and 2 keep the name classes in their JSON, so their hashes stay.
 
-Every case seed derives from the campaign seed, the class id and the case index
-(case_seed), and every run seed from the case seed and the run index unless the run fixes
-one (RunConfig.seed_for).
+The campaign seed (policy.seed) is the base the case seeds count up from: case k of a class
+gets the campaign seed + k, an item's one case the campaign seed + its item number
+(case_seed). Every step of a case uses its case seed: scene generation, trajectory
+generation and every run, unless the run fixes its own seed (RunConfig.seed_for).
 """
 
-import hashlib
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, ValidatorFunctionWrapHandler, WrapValidator, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, ValidatorFunctionWrapHandler, WrapValidator, field_validator, model_validator
 
+from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
 from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode, UsvNavigationPayload
 from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
-from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TrajectoryGenerationParams
 
 CONFIG_FORMAT = 1  # the format of a config that names none
+LATEST_FORMAT = 3  # the format the console writes
 MAX_SEED = 2**31 - 1  # seeds are 31-bit, so every consumer (numpy included) takes them
+ITEM_CLASS_PREFIX = "item/"  # the class of input.items[n] is item/<n>
 
 DEFAULT_COLREGS_CONSTANTS_FILE = default_preset_file("colregs_constants")
 DEFAULT_VESSEL_TYPES_FILE = default_preset_file("vessel_types")
@@ -87,6 +92,31 @@ class CampaignStep(str, Enum):
 CHAIN = tuple(CampaignStep)
 
 
+# Failure budget
+
+UNLIMITED_FAILURE_BUDGET = "unlimited"  # the failure budget of a class that is never abandoned
+_CASE_COUNT: TypeAdapter[int] = TypeAdapter(Annotated[int, Field(ge=0)])
+
+
+def _case_count_or_unlimited(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
+    """Validates a failure budget as a number of cases or unlimited, so an error names the field once and not each union member."""
+    if value == UNLIMITED_FAILURE_BUDGET:
+        return handler(value)
+    try:
+        return _CASE_COUNT.validate_python(value)
+    except ValidationError as error:
+        raise ValueError(f"a failure budget is a number of cases from 0 up or {UNLIMITED_FAILURE_BUDGET!r}, not {value!r}") from error
+
+
+# The dropped and failed cases a class may use up before it is abandoned; unlimited: it is never abandoned
+FailureBudget = Annotated[Union[int, Literal["unlimited"]], WrapValidator(_case_count_or_unlimited)]
+
+
+def budget_limit(failure_budget: Union[int, str]) -> Optional[int]:
+    """The dropped and failed cases a class may use up before it is abandoned; None for an unlimited failure budget."""
+    return failure_budget if isinstance(failure_budget, int) else None
+
+
 def _generation_step_monitor(monitor: MonitorImplementation) -> MonitorImplementation:
     if monitor == MonitorImplementation.LIVE:
         raise ValueError("a generated scene or trajectory set is monitored post_hoc or not at all (empty)")
@@ -97,21 +127,22 @@ def _generation_step_monitor(monitor: MonitorImplementation) -> MonitorImplement
 
 
 class ScopeEntry(ConfigModel):
-    """Classes by id (`3vessel_0obstacle_scenarios/functional_model5`) or pattern, with their quota and failure budget.
+    """FECs by id (`3vessel_0obstacle_scenarios/functional_model5`) or pattern, with their quota and failure budget.
 
     A pattern without a slash matches catalog folders (`3vessel_*_scenarios`), one with a
-    slash matches class ids (`2vessel_*/functional_model1`), both with shell wildcards.
+    slash matches FEC ids (`2vessel_*/functional_model1`), both with shell wildcards. Formats 1
+    and 2 call the list classes; CampaignConfig reads and writes that name for them.
     """
 
-    classes: Tuple[str, ...] = ()
+    fecs: Tuple[str, ...] = ()
     patterns: Tuple[str, ...] = ()
-    quota: int = Field(ge=1)  # complete cases (with a verdict per run) the class needs
-    failure_budget: int = Field(default=0, ge=0)  # dropped and failed cases the class may use up before it is abandoned
+    quota: int = Field(ge=1)  # complete cases (with a verdict per run) the FEC needs
+    failure_budget: FailureBudget = 0  # dropped and failed cases the FEC may use up before it is abandoned
 
     @model_validator(mode="after")
-    def _names_classes(self) -> "ScopeEntry":
-        if not self.classes and not self.patterns:
-            raise ValueError("a scope entry needs classes or patterns")
+    def _names_fecs(self) -> "ScopeEntry":
+        if not self.fecs and not self.patterns:
+            raise ValueError("a scope entry needs fecs (classes before format 3) or patterns")
         return self
 
 
@@ -151,7 +182,7 @@ class FunctionalScenarioInput(ConfigModel):
     name: str = Field(min_length=1, max_length=200, pattern=r"^[^/]+$")
     ref: InputRef
     quota: int = Field(ge=1)
-    failure_budget: int = Field(default=0, ge=0)
+    failure_budget: FailureBudget = 0
 
     @field_validator("ref")
     @classmethod
@@ -317,7 +348,7 @@ class ArdupilotStackConfig(ConfigModel):
     """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays its trajectory.
 
     The ASV software is replay over the replay_mavlink_lockstep adapter, in the bounded repeatability
-    tier, as simulation.ardupilot runs it. The job applies no environment, so a run on this stack is calm.
+    tier, as simulation.ardupilot_sim and simulation.gazebo run it. The job applies no environment, so a run on this stack is calm.
     """
 
     simulation_layer: Literal["ardupilot_sim", "gazebo"]
@@ -352,7 +383,7 @@ class RunConfig(ConfigModel):
     name: Optional[str] = None
     stack: StackConfig = Field(default_factory=KinematicStackConfig)
     environment: EnvironmentSettings = Field(default_factory=EnvironmentSettings)
-    seed: Optional[int] = Field(default=None, ge=0, le=MAX_SEED)  # one run seed for every case; derived per case when absent
+    seed: Optional[int] = Field(default=None, ge=0, le=MAX_SEED)  # one run seed for every case; the case seed when absent
     repeats: int = Field(default=1, ge=1)  # runs with the same seed, for calibration
     monitor: MonitorImplementation = MonitorImplementation.POST_HOC
     early_stop: bool = False  # live only: stop the run once every rule is decided
@@ -365,8 +396,9 @@ class RunConfig(ConfigModel):
             raise ValueError("the ArduPilot stacks do not stop early: the lockstep run always finishes")
         return self
 
-    def seed_for(self, case_seed_value: int, run_index: int) -> int:
-        return self.seed if self.seed is not None else run_seed(case_seed_value, run_index)
+    def seed_for(self, case_seed_value: int) -> int:
+        """The seed the run uses for a case: its own when it fixes one, else the case seed."""
+        return self.seed if self.seed is not None else case_seed_value
 
 
 class ExecutionConfig(ConfigModel):
@@ -428,11 +460,24 @@ class StopConditions(ConfigModel):
 class PolicyConfig(ConfigModel):
     retention: RetentionPolicy = RetentionPolicy.ALL
     keep_frames: bool = False  # store the monitor's frames as artifacts
-    seed: int = Field(default=0, ge=0, le=MAX_SEED)  # the campaign seed
+    seed: int = Field(default=0, ge=0, le=MAX_SEED)  # the campaign seed: the base the case seeds count up from
     stop: StopConditions = Field(default_factory=StopConditions)
 
 
 # The config
+
+
+# A scope entry's FECs: fecs from format 3 on, classes in formats 1 and 2 (and in their JSON, so their hashes stay)
+FEC_KEY = "fecs"
+LEGACY_FEC_KEY = "classes"
+LEGACY_FORMATS = (1, 2)
+
+
+def _renamed_scope(scope: Any, old: str, new: str) -> Any:
+    """The scope entries with the key old renamed to new; anything that is not a list of mappings as it is, for validation to report."""
+    if not isinstance(scope, (list, tuple)):
+        return scope
+    return [{(new if key == old else key): value for key, value in entry.items()} if isinstance(entry, Mapping) else entry for entry in scope]
 
 
 # The format 2 fields; a format 1 config takes none of them and its JSON leaves them out
@@ -442,11 +487,11 @@ FORMAT_1_EXCLUDED: Dict[str, Any] = {**{name: True for name in FORMAT_2_FIELDS},
 
 
 class CampaignConfig(ConfigModel):
-    format: Literal[1, 2] = CONFIG_FORMAT
+    format: Literal[1, 2, 3] = CONFIG_FORMAT
     name: str = Field(min_length=1, max_length=256)
     description: str = ""
     steps: Tuple[CampaignStep, ...] = CHAIN
-    scope: Tuple[ScopeEntry, ...] = ()  # catalog classes; a format 1 config needs at least one entry
+    scope: Tuple[ScopeEntry, ...] = ()  # catalog FECs; a format 1 config needs at least one entry
     input: InputConfig = Field(default_factory=InputConfig)
     domain: DomainConfig = Field(default_factory=DomainConfig)
     scene_generation: SceneGenerationConfig = Field(default_factory=SceneGenerationConfig)
@@ -454,6 +499,21 @@ class CampaignConfig(ConfigModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     resources: ResourcesConfig = Field(default_factory=ResourcesConfig)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fec_key_of_the_format(cls, data: Any) -> Any:
+        """Takes a scope entry's FECs under the name of the config's format: classes in formats 1 and 2, fecs from format 3 on."""
+        config_format = data.get("format", CONFIG_FORMAT) if isinstance(data, Mapping) else None
+        if config_format not in (*LEGACY_FORMATS, LATEST_FORMAT) or not isinstance(data.get("scope"), (list, tuple)):
+            return data  # an unknown format is reported by the format field
+        legacy = config_format in LEGACY_FORMATS
+        wrong = FEC_KEY if legacy else LEGACY_FEC_KEY
+        misnamed = [str(index) for index, entry in enumerate(data["scope"]) if isinstance(entry, Mapping) and wrong in entry]
+        if misnamed:
+            hint = "fecs need format 3; formats 1 and 2 call them classes" if legacy else "format 3 calls them fecs, not classes"
+            raise ValueError(f"scope.{', scope.'.join(misnamed)}: {hint}")
+        return {**data, "scope": _renamed_scope(data["scope"], LEGACY_FEC_KEY, FEC_KEY)} if legacy else data
 
     @field_validator("steps")
     @classmethod
@@ -486,11 +546,13 @@ class CampaignConfig(ConfigModel):
     def to_json(self) -> Dict[str, Any]:
         """The config as JSON with every default filled in: what the database stores and the hash covers.
 
-        A format 1 config leaves the format 2 fields out, so its hash is the one it always had.
+        A format 1 config leaves the format 2 fields out, so its hash is the one it always had;
+        formats 1 and 2 write a scope entry's FECs as classes, as they always did.
         """
-        if self.format == 1:
-            return self.model_dump(mode="json", exclude=FORMAT_1_EXCLUDED)
-        return self.model_dump(mode="json")
+        data = self.model_dump(mode="json", exclude=FORMAT_1_EXCLUDED) if self.format == 1 else self.model_dump(mode="json")
+        if self.format in LEGACY_FORMATS:
+            data["scope"] = _renamed_scope(data["scope"], FEC_KEY, LEGACY_FEC_KEY)
+        return data
 
     def config_hash(self) -> str:
         return canonical_json_sha256(self.to_json())
@@ -502,22 +564,19 @@ class CampaignConfig(ConfigModel):
 # Seeds
 
 
-def _seed_of(text: str) -> int:
-    return int.from_bytes(hashlib.sha256(text.encode("utf-8")).digest()[:4], "big") & MAX_SEED
-
-
 def case_seed(campaign_seed: int, class_id: str, case_index: int) -> int:
-    """The seed of a case: the first 31 bits of sha256 over the campaign seed, the class id and the index."""
+    """The seed of a case: the campaign seed plus the case index, within 31 bits.
+
+    Case k of every class gets campaign seed + k. An item class (item/<n>) has one case and
+    counts from its item number instead, so the items of a campaign get seeds apart.
+    """
     if case_index < 0:
         raise ValueError(f"case indexes start at 0, got {case_index}")
-    return _seed_of(f"{campaign_seed}:{class_id}:{case_index}")
-
-
-def run_seed(case_seed_value: int, run_index: int) -> int:
-    """The seed of a case's run, derived from the case seed and the run index in the same way."""
-    if run_index < 0:
-        raise ValueError(f"run indexes start at 0, got {run_index}")
-    return _seed_of(f"{case_seed_value}:run:{run_index}")
+    offset = case_index
+    item = class_id[len(ITEM_CLASS_PREFIX) :] if class_id.startswith(ITEM_CLASS_PREFIX) else ""
+    if item.isdigit():
+        offset += int(item)
+    return (campaign_seed + offset) % (MAX_SEED + 1)
 
 
 # Loading

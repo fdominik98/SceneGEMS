@@ -81,6 +81,13 @@ class TestSpecs:
         container = ContainerSpec(image="img", build_fingerprint_source="deploy/images/mavproxy", entrypoint="/x")
         assert container.build_fingerprint_sources == ("deploy/images/mavproxy",)
 
+    def test_container_default_image_is_the_tag_the_reference_falls_back_to(self):
+        def default(image):
+            return ContainerSpec(image=image, build_fingerprint_source="deploy/images/sitl", entrypoint="/x").default_image
+
+        assert default("${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}") == "scenegems-ardupilot-sitl:latest"
+        assert default("scenegems-mavproxy:latest") == "scenegems-mavproxy:latest"
+
 
 class TestPorts:
     def test_the_seven_ports_of_the_design(self):

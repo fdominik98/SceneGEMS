@@ -160,7 +160,7 @@ class ClassCoverage:
     class_id: str
     state: CampaignClassState
     quota: int
-    failure_budget: int
+    failure_budget: Optional[int]  # None: unlimited
     complete: int
     dropped: int
     in_flight: int

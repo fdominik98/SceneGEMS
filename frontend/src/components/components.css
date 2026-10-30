@@ -210,6 +210,35 @@
   gap: var(--space-3);
 }
 
+/* Icon button: square, icon only, the name in its tooltip */
+
+.icon-btn {
+  flex-shrink: 0;
+  min-width: var(--hit-target);
+  min-height: var(--hit-target);
+  padding: 0;
+  color: var(--text-muted);
+  background: var(--bg-control);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.icon-btn.is-active,
+.icon-btn[aria-pressed="true"],
+.icon-btn[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(56, 189, 248, 0.16);
+}
+
+.icon-btn svg {
+  flex-shrink: 0;
+}
+
 /* Popover menu */
 
 .popover-menu {

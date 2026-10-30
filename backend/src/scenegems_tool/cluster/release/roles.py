@@ -34,7 +34,7 @@ because they become MQTT topic levels and Docker names.
 
 from typing import Any, Dict, List
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, JOB_TYPE_IMAGES
+from scenegems_tool.cluster.fingerprints.job_images import job_type_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN
 
@@ -54,10 +54,9 @@ DEFAULT_NODE_ARTIFACT_CACHE_MAX_BYTES = str(2 * 1024 * 1024 * 1024)
 
 
 def capability_item_images() -> Dict[str, List[str]]:
-    """The images a node needs for each job type it offers. A simulation.ardupilot node gets Gazebo as well, so it runs both layers."""
-    images = {job_type.value: list(JOB_TYPE_IMAGES[job_type]) for job_type in JobType}
-    images[JobType.SIMULATION_ARDUPILOT.value].append(GAZEBO_IMAGE)
-    return images
+    """The images a node needs for each job type it offers; a simulation type's come from the vessel stack matrix (job_images.SIMULATION_JOB_STACKS)."""
+    images = job_type_images()
+    return {job_type.value: list(images[job_type]) for job_type in JobType}
 
 
 def master_role() -> Dict[str, Any]:

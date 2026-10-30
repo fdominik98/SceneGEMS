@@ -2,7 +2,7 @@
 
 import pytest
 
-from scenegems_tool.architecture.vessel_stack_description import META_ASV_TO_CONTROL, META_CONTROL_TO_SIMULATION, vessel_stack_document
+from scenegems_tool.architecture.vessel_stack_description import CLUSTER_JOB_FACT, META_ASV_TO_CONTROL, META_CONTROL_TO_SIMULATION, vessel_stack_document
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, LayerRef, Role
@@ -106,3 +106,34 @@ def test_built_in_adapters_and_on_board_layers_are_marked(document):
     nodes = {node.id: node for node in document.nodes}
     assert any(fact.key == "on_board_asv_software" for fact in nodes["control_layer/real_vessel"].facts)
     assert not any(fact.key == "on_board_asv_software" for fact in nodes["control_layer/ardupilot"].facts)
+
+
+def _combination(document, asv_software, control_layer, simulation_layer):
+    path = (f"asv_software/{asv_software}", f"control_layer/{control_layer}", f"simulation_layer/{simulation_layer}")
+    return next(combination for combination in document.combinations if combination.path == path)
+
+
+def test_an_available_stack_names_the_cluster_job_that_runs_it(document):
+    assert fact(_combination(document, "replay", "ardupilot", "gazebo"), CLUSTER_JOB_FACT).value == "simulation.gazebo"
+    assert fact(_combination(document, "usv_navigation", "none", "kinematic"), CLUSTER_JOB_FACT).value == "simulation.kinematic"
+    no_job = fact(_combination(document, "replay", "custom", "gazebo"), CLUSTER_JOB_FACT)
+    assert no_job.value is None and "no job type runs it yet" in no_job.note
+    workbench_only = fact(_combination(document, "mission_planner", "ardupilot", "gazebo"), CLUSTER_JOB_FACT)
+    assert workbench_only.value is None and workbench_only.note.startswith("workbench only")
+    assert not any(item.key == CLUSTER_JOB_FACT for item in _combination(document, "replay", "custom", "kinematic").facts), "a stack that is not available names none"
+    assert any("only when a cluster job type runs it" in note for note in document.notes)
+
+
+def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
+    def images(owner):
+        return {item.value for item in owner.facts if item.key.startswith("container_")}
+
+    nodes, edges = {node.id: node for node in document.nodes}, {edge.id: edge for edge in document.edges}
+    assert images(nodes["control_layer/ardupilot"]) == {"${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}"}
+    assert (
+        images(edges["replay_arduagent_follower"])
+        == images(edges["mission_planner_mavlink_port"])
+        == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}", "${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}"}
+    )
+    assert images(edges["mission_planner_gcs_port"]) == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}"}
+    assert images(edges["replay_mavlink_lockstep"]) == set()

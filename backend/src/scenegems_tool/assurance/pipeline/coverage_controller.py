@@ -1,24 +1,25 @@
 """Which cases a class starts, completes and cuts, so the selected set does not depend on timing.
 
-Cases of a class are numbered 0, 1, 2, ... and started in that order, each with its seed from
-the campaign seed, the class and the index. The outcome of a case (complete, dropped) is a
-function of its seed, so the selection below is too:
+Cases of a class are numbered 0, 1, 2, ... and started in that order, case k with the seed
+campaign seed + k. The outcome of a case (complete, dropped) is a function of its seed, so
+the selection below is too:
 
 - A case whose runs all have their verdicts is ready, not complete. Walking the class's cases
   by index, a ready case is completed while fewer than quota cases are complete, and the
   walk stops at the first case still running. Once quota cases are complete the class is
-  complete; started cases above that point are cancelled. A complete class has exactly its
-  quota of complete cases, the first quota by index that did not drop or fail.
-- A class is abandoned when its dropped and failed cases exceed its failure budget.
-- A class keeps quota + spare cases complete or in flight, where spare is one more than its
-  dropped cases so far, but never more than its failure budget left. Drops are replaced at
-  once; the spare runs ahead in case another one drops, and grows when the class drops
-  often. Started cases that were not cancelled never exceed quota + failure budget, so no
-  case starts that could not be needed, and the case set stays a prefix of the indexes.
-  Both rules keep the outcome independent of timing: a class is abandoned exactly when, in
-  index order, more cases than its budget drop before quota cases complete.
-- An item class (item/<n>, an output of an earlier step or an uploaded file) runs its one case
-  and no spare: the same item gives the same outcome again.
+  complete. A complete class has exactly its quota of complete cases, the first quota by
+  index that did not drop or fail. Active cases above that point are cancelled, a guard
+  only: the start rule below never starts them.
+- A class is abandoned when its dropped and failed cases exceed its failure budget. A class
+  with an unlimited failure budget (None) is never abandoned: it replaces every drop until
+  its quota is complete, or the campaign's stop conditions or the operator end it.
+- A class keeps at most quota cases complete or in flight, so no case runs that may not be
+  needed. A dropped or failed case is replaced once it is final, while the failure budget
+  lasts, so started cases never exceed quota + failure budget and the case set stays a
+  prefix of the indexes. The outcome is independent of timing: a class is abandoned
+  exactly when, in index order, more cases than its budget drop before quota cases complete.
+- An item class (item/<n>, an output of an earlier step or an uploaded file) has quota 1 and
+  failure budget 0: the same item gives the same outcome again, so it is not retried.
 
 Backpressure: a new case starts only while every stage has fewer queued jobs (and intents)
 of the campaign than its cap; how many start is bounded by the cap of the first configured
@@ -29,7 +30,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from scenegems_tool.assurance.campaign.campaign_config import QueueDepthCaps
-from scenegems_tool.assurance.campaign.campaign_inputs import ITEM_CLASS_PREFIX
 from scenegems_tool.assurance.pipeline.stage_graph import JOB_STAGES
 from scenegems_tool.persistence.schema import CampaignClassState, CaseState, PipelineStage
 from scenegems_tool.persistence.stores import CaseRecord, ClassRecord
@@ -48,8 +48,8 @@ class ClassDecision:
     reason: Optional[str] = None
 
 
-def decide_class(cases: Sequence[CaseRecord], quota: int, failure_budget: int, dropped: int) -> ClassDecision:
-    """The decision for one open class, from all its cases (any order) and its dropped count (dropped and failed)."""
+def decide_class(cases: Sequence[CaseRecord], quota: int, failure_budget: Optional[int], dropped: int) -> ClassDecision:
+    """The decision for one open class, from all its cases (any order) and its dropped count (dropped and failed); failure_budget None is unlimited."""
     ordered = sorted(cases, key=lambda case: case.case_index)
     complete = sum(1 for case in ordered if case.state == CaseState.COMPLETE)
     to_complete: List[int] = []
@@ -71,25 +71,19 @@ def decide_class(cases: Sequence[CaseRecord], quota: int, failure_budget: int, d
     if boundary is not None:
         cut = tuple(case.case_id for case in ordered if case.case_index > boundary and case.state == CaseState.ACTIVE)
         return ClassDecision(tuple(to_complete), cut, CampaignClassState.COMPLETE, f"{quota} complete cases up to index {boundary}")
-    if dropped > failure_budget:
+    if failure_budget is not None and dropped > failure_budget:
         rest = tuple(case.case_id for case in ordered if case.state == CaseState.ACTIVE and case.case_id not in to_complete)
         reason = f"{dropped} dropped or failed cases exceed the failure budget of {failure_budget} ({complete + len(to_complete)} of {quota} complete)"
         return ClassDecision(tuple(to_complete), rest, CampaignClassState.ABANDONED, reason)
     return ClassDecision(tuple(to_complete))
 
 
-def spare_cases(record: ClassRecord) -> int:
-    """Cases a class runs beyond its quota: one more than it dropped so far, within the failure budget left; none for an item class."""
-    if record.class_id.startswith(ITEM_CLASS_PREFIX):
-        return 0
-    return max(0, min(record.failure_budget_left, record.dropped_count + 1))
-
-
 def startable(record: ClassRecord) -> int:
-    """How many more cases the open class may start now."""
-    if record.state != CampaignClassState.OPEN or record.dropped_count > record.failure_budget:
+    """How many more cases the open class may start now: up to its quota complete or in flight, while its failure budget holds."""
+    budget_left = record.failure_budget_left
+    if record.state != CampaignClassState.OPEN or (budget_left is not None and budget_left < 0):
         return 0
-    return max(0, record.quota + spare_cases(record) - record.complete_count - record.in_flight_count)
+    return max(0, record.quota - record.complete_count - record.in_flight_count)
 
 
 @dataclass

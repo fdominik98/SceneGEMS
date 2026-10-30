@@ -8,7 +8,7 @@ import { PairCardList } from "../workbench/monitor/PairCards";
 import { RuleTimeline } from "../workbench/monitor/RuleTimeline";
 import { buildRuleTimeline } from "../workbench/monitor/ruleTimelineModel";
 import { EncounterCanvas, type EncounterCanvasStream } from "../workbench/scene/EncounterCanvas";
-import { LayerMenu } from "../workbench/scene/LayerMenu";
+import type { LayerColumn } from "../workbench/scene/LayerMenu";
 import { buildShipColorsByActorId } from "../workbench/scene/shipColors";
 import { PlaybackBar } from "./PlaybackBar";
 import { useEncounterPlayback } from "./useEncounterPlayback";
@@ -80,6 +80,15 @@ export function EncounterView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameTimestamp]);
 
+  const layerColumns: LayerColumn[] = [
+    {
+      key: "run",
+      label: title ?? "Run",
+      layers: { ...ENCOUNTER_VIEW_DEFAULT_LAYERS, ...layers },
+      onChange: (key, value) => setLayers((prev) => ({ ...ENCOUNTER_VIEW_DEFAULT_LAYERS, ...prev, [key]: value })),
+    },
+  ];
+
   const streams = useMemo<EncounterCanvasStream[]>(
     () => [
       {
@@ -110,12 +119,11 @@ export function EncounterView({
         <div className="enc-view-canvas">
           <EncounterCanvas
             streams={streams}
+            layerColumns={layerColumns}
             selectedRelationId={selectedRelationId}
             onSelectRelation={setSelectedRelationId}
             emptyMessage={live ? "Waiting for the first frame." : "No frames to show."}
-          >
-            <LayerMenu layers={{ ...ENCOUNTER_VIEW_DEFAULT_LAYERS, ...layers }} onChange={(key, value) => setLayers((prev) => ({ ...ENCOUNTER_VIEW_DEFAULT_LAYERS, ...prev, [key]: value }))} />
-          </EncounterCanvas>
+          />
         </div>
         <aside className="enc-view-cards" aria-label="Vessel pairs">
           <PairCardList

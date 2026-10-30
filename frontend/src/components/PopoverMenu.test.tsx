@@ -28,6 +28,17 @@ describe("PopoverMenu", () => {
     expect(html).toContain('data-placement="top"');
   });
 
+  it("makes an icon-only button with iconLabel: its name, tooltip and the group's name, no chevron", () => {
+    const html = renderToStaticMarkup(
+      <PopoverMenu label={<svg aria-hidden />} iconLabel="Export">
+        x
+      </PopoverMenu>
+    );
+    expect(html).toMatch(/<button[^>]*class="popover-menu-button icon-btn"[^>]*aria-label="Export"[^>]*title="Export"/);
+    expect(html).toMatch(/role="group" aria-label="Export"/);
+    expect(html).not.toContain("popover-menu-chevron");
+  });
+
   it("uses the ariaLabel when the label is not plain text", () => {
     const html = renderToStaticMarkup(
       <PopoverMenu label={<span>Layers</span>} ariaLabel="Layer options">

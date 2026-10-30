@@ -67,7 +67,7 @@ export type CampaignPreset = z.infer<typeof campaignPresetSchema>;
 
 /** A class's functional scenario (`.problem` text with LF line endings). */
 export async function getClassContent(client: Pick<OperatorClient, "request">, classId: string, signal?: AbortSignal): Promise<string> {
-  const path = `${CATALOG_PATH}/classes/${classId.split("/").map(encodeURIComponent).join("/")}`;
+  const path = `${CATALOG_PATH}/fecs/${classId.split("/").map(encodeURIComponent).join("/")}`;
   return (await client.request("GET", path, z.string(), { signal })).data;
 }
 

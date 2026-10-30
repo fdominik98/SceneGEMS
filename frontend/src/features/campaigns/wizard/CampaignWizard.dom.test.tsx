@@ -27,7 +27,7 @@ vi.mock("../../../domain/cluster/campaignApi", async (importOriginal) => ({
   validateCampaignConfig: mocks.validateCampaignConfig,
 }));
 
-const VALID = { valid: true, name: "n", config_hash: "f".repeat(64), classes: [], cases_planned: 2, runs: [] };
+const VALID = { valid: true, name: "n", config_hash: "f".repeat(64), fecs: [], cases_planned: 2, runs: [] };
 
 function pages(): string[] {
   const nav = screen.getByRole("navigation", { name: "Wizard steps" });
@@ -87,7 +87,7 @@ describe("the wizard's pages follow the chosen steps", () => {
 });
 
 describe("creating the campaign", () => {
-  it("sends the format 2 config with kind campaign and origin wizard", async () => {
+  it("sends the format 3 config with kind campaign and origin wizard", async () => {
     mocks.validateCampaignConfig.mockResolvedValue(VALID);
     mocks.createCampaign.mockResolvedValue({ campaign_id: "new-1" });
     const draft = emptyDraft();
@@ -100,7 +100,7 @@ describe("creating the campaign", () => {
 
     await waitFor(() => expect(mocks.validateCampaignConfig).toHaveBeenCalled());
     const sent = mocks.validateCampaignConfig.mock.calls[0][1] as string;
-    expect(parse(sent)).toMatchObject({ format: 2, name: "scenes only", steps: ["scene_generation"], scene_generation: { monitor: "post_hoc" } });
+    expect(parse(sent)).toMatchObject({ format: 3, name: "scenes only", steps: ["scene_generation"], scene_generation: { monitor: "post_hoc" } });
     expect(parse(sent)).not.toHaveProperty("execution");
     expect(parse(sent)).not.toHaveProperty("trajectories");
 

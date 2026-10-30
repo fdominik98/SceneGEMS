@@ -1,5 +1,7 @@
+import { IconButton } from "../../../components/IconButton";
+import { DownloadIcon, MapIcon, PanelRightOpenIcon, RadarIcon } from "../../../components/icons";
 import { PopoverMenu } from "../../../components/PopoverMenu";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   captureSvgScreenshot,
   exportFramesAsCsv,
@@ -11,13 +13,12 @@ import {
   getCurrentSimulationFrame,
 } from "../../../domain/playback/playbackStore";
 import { useShownPlayback } from "../../../domain/playback/playbackContext";
-import { useUiStore, type OverlayVisibility } from "../../../app/uiStore";
+import { useUiStore } from "../../../app/uiStore";
 import { useEncounterSelectionStore } from "../monitor/encounterSelectionStore";
 import { buildShipColorsByActorId, getShipColor, getSimulationStreamColor } from "./shipColors";
-import { buildTrajectoryPathsByActor } from "./buildTrajectoryPaths";
 import { EncounterCanvas, type EncounterCanvasStream } from "./EncounterCanvas";
+import type { LayerColumn } from "./LayerMenu";
 import { NauticalMapView } from "./NauticalMapView";
-import { RecenterControl } from "./RecenterControl";
 
 interface SceneCanvasProps {
   /** When provided, visualizes this generated scene instead of playback preview frames. */
@@ -26,8 +27,9 @@ interface SceneCanvasProps {
 
 /**
  * The workbench's scene view: the encounter canvas (or the nautical map) fed from the global
- * playback store, with the preview stream and the simulation stream overlaid, the export
- * buttons and the map switch.
+ * playback store, with the preview stream and the simulation stream overlaid, the layer
+ * menu with a column per stream, the export menu, the map switch and, while the monitoring
+ * panel is hidden, the button that shows it again.
  */
 export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const isGeneratedMode = generatedScene !== undefined;
@@ -45,16 +47,21 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const controlPanelMode = useUiStore((s) => s.controlPanelMode);
   const previewOverlays = useUiStore((s) => s.previewOverlays);
   const simulationOverlays = useUiStore((s) => s.simulationOverlays);
+  const setPreviewOverlay = useUiStore((s) => s.setPreviewOverlay);
+  const setSimulationOverlay = useUiStore((s) => s.setSimulationOverlay);
   const hidePreviewStream = useUiStore((s) => s.hidePreviewStream);
   const hideSimulationStream = useUiStore((s) => s.hideSimulationStream);
+  const setHidePreviewStream = useUiStore((s) => s.setHidePreviewStream);
+  const setHideSimulationStream = useUiStore((s) => s.setHideSimulationStream);
   const sceneViewMode = useUiStore((s) => s.sceneViewMode);
   const setSceneViewMode = useUiStore((s) => s.setSceneViewMode);
+  const rightPaneVisible = useUiStore((s) => s.rightPaneVisible);
+  const setRightPaneVisible = useUiStore((s) => s.setRightPaneVisible);
   const referenceGeofence = useUiStore((s) => s.referenceGeofence);
   const selectedRelationId = useEncounterSelectionStore((s) => s.selectedRelationId);
   const setSelectedRelationId = useEncounterSelectionStore((s) => s.setSelectedRelationId);
 
   const [fitSignal, setFitSignal] = useState(0);
-  const [nauticalRecenterSignal, setNauticalRecenterSignal] = useState(0);
 
   const showPreview = isGeneratedMode
     ? generatedScene != null
@@ -124,19 +131,43 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
     simulationStreamColorByActorId,
   ]);
 
-  // Fit when a new generated scene is shown or the store asks for it (a new trajectory), and
-  // recenter the map when it is opened; derived from the previous values while rendering.
+  // A generated scene has one stream that is always shown; playback has the preview and, once a
+  // simulation sent frames, the simulation, each of which can be hidden.
+  const layerColumns: LayerColumn[] = isGeneratedMode
+    ? [{ key: "preview", label: "Scene", layers: previewOverlays, onChange: setPreviewOverlay }]
+    : [
+        {
+          key: "preview",
+          label: "Preview",
+          layers: previewOverlays,
+          onChange: setPreviewOverlay,
+          shown: !hidePreviewStream,
+          onShownChange: (shown) => setHidePreviewStream(!shown),
+        },
+        ...(hasSimulationTrajectoryChunk
+          ? [
+              {
+                key: "simulation",
+                label: "Simulation",
+                layers: simulationOverlays,
+                onChange: setSimulationOverlay,
+                shown: !hideSimulationStream,
+                onShownChange: (shown: boolean) => setHideSimulationStream(!shown),
+              },
+            ]
+          : []),
+      ];
+
+  // Fit when a new generated scene is shown or the store asks for it (a new trajectory);
+  // derived from the previous values while rendering.
   const wantsAutoFit = !isGeneratedMode && autoFitPending && hasTrajectoryChunk && playbackFrame !== null;
-  const [seen, setSeen] = useState({ scene: generatedScene, wantsAutoFit, sceneViewMode });
-  if (seen.scene !== generatedScene || seen.wantsAutoFit !== wantsAutoFit || seen.sceneViewMode !== sceneViewMode) {
+  const [seen, setSeen] = useState({ scene: generatedScene, wantsAutoFit });
+  if (seen.scene !== generatedScene || seen.wantsAutoFit !== wantsAutoFit) {
     const newScene = isGeneratedMode && generatedScene != null && seen.scene !== generatedScene;
     if (newScene || (wantsAutoFit && !seen.wantsAutoFit)) {
       setFitSignal((v) => v + 1);
     }
-    if (newScene || (sceneViewMode === "nautical" && seen.sceneViewMode !== "nautical")) {
-      setNauticalRecenterSignal((v) => v + 1);
-    }
-    setSeen({ scene: generatedScene, wantsAutoFit, sceneViewMode });
+    setSeen({ scene: generatedScene, wantsAutoFit });
   }
 
   const exportActiveFrames = isGeneratedMode
@@ -156,52 +187,62 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
     }
   };
 
-  const viewToggle = (
-    <button
-      type="button"
-      className="scene-view-toggle-btn"
-      onClick={() => {
-        setSceneViewMode(sceneViewMode === "cartesian" ? "nautical" : "cartesian");
-      }}
-    >
-      {sceneViewMode === "cartesian" ? "Show nautical map" : "Show encounter canvas"}
-    </button>
-  );
-  const exportToolbar = (
-    <PopoverMenu
-      label="Export"
-      ariaLabel="Export scene"
-      align="end"
-      placement={sceneViewMode === "cartesian" ? "bottom" : "top"}
-      className="scene-export-menu"
-    >
-      {sceneViewMode === "cartesian" ? (
-        <button type="button" onClick={onScreenshot}>
-          Screenshot (image)
+  const onMap = sceneViewMode === "nautical";
+  const actions = (
+    <>
+      <PopoverMenu label={<DownloadIcon />} iconLabel="Export" align="end" className="scene-export-menu">
+        {!onMap ? (
+          <button type="button" onClick={onScreenshot}>
+            Screenshot (image)
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={exportActiveFrames.length === 0}
+          onClick={() => exportFramesAsCsv(exportActiveFrames, exportPrefix)}
+        >
+          Table (CSV)
         </button>
+        <button
+          type="button"
+          disabled={exportActiveFrames.length === 0}
+          onClick={() => exportFramesAsGeoJson(exportActiveFrames, exportPrefix)}
+        >
+          Map data (GeoJSON)
+        </button>
+      </PopoverMenu>
+      <IconButton
+        label={onMap ? "Show encounter canvas" : "Show nautical map"}
+        icon={onMap ? <RadarIcon /> : <MapIcon />}
+        onClick={() => setSceneViewMode(onMap ? "cartesian" : "nautical")}
+      />
+      {!isGeneratedMode && !rightPaneVisible ? (
+        <IconButton label="Show monitoring panel" icon={<PanelRightOpenIcon />} onClick={() => setRightPaneVisible(true)} />
       ) : null}
-      <button
-        type="button"
-        disabled={exportActiveFrames.length === 0}
-        onClick={() => exportFramesAsCsv(exportActiveFrames, exportPrefix)}
-      >
-        Table (CSV)
-      </button>
-      <button
-        type="button"
-        disabled={exportActiveFrames.length === 0}
-        onClick={() => exportFramesAsGeoJson(exportActiveFrames, exportPrefix)}
-      >
-        Map data (GeoJSON)
-      </button>
-    </PopoverMenu>
+    </>
   );
 
-  if (sceneViewMode === "cartesian") {
-    return (
-      <div className="scene-panel">
+  const emptyMessage = isGeneratedMode ? "No scene generated or loaded yet." : "Load a scenario to see the encounter.";
+
+  return (
+    <div className="scene-panel">
+      {onMap ? (
+        <NauticalMapView
+          streams={streams}
+          layerColumns={layerColumns}
+          reference={referenceGeofence}
+          fitSignal={fitSignal}
+          onFit={isGeneratedMode ? undefined : consumeAutoFit}
+          selectedRelationId={isGeneratedMode ? null : selectedRelationId}
+          onSelectRelation={isGeneratedMode ? undefined : setSelectedRelationId}
+          emptyMessage={emptyMessage}
+        >
+          {actions}
+        </NauticalMapView>
+      ) : (
         <EncounterCanvas
           streams={streams}
+          layerColumns={layerColumns}
           fitSignal={fitSignal}
           onFit={isGeneratedMode ? undefined : consumeAutoFit}
           selectedRelationId={isGeneratedMode ? null : selectedRelationId}
@@ -209,123 +250,11 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
           svgRef={(element) => {
             svgRef.current = element;
           }}
-          emptyMessage={isGeneratedMode ? "No scene generated or loaded yet." : "Load a scenario to see the encounter."}
+          emptyMessage={emptyMessage}
         >
-          {viewToggle}
-          {exportToolbar}
+          {actions}
         </EncounterCanvas>
-      </div>
-    );
-  }
-
-  return (
-    <NauticalScene
-      showPreview={showPreview}
-      showSimulation={showSimulation}
-      previewFrames={previewFrames}
-      previewFrame={previewFrame ?? null}
-      simulationFrames={simulationFrames}
-      simulationFrame={simulationFrame}
-      colorByActorId={colorByActorId}
-      simulationColorByActorId={simulationStreamColorByActorId}
-      previewOverlays={previewOverlays}
-      simulationOverlays={simulationOverlays}
-      reference={referenceGeofence}
-      recenterSignal={nauticalRecenterSignal}
-      onRecenter={() => setNauticalRecenterSignal((v) => v + 1)}
-    >
-      {viewToggle}
-      {exportToolbar}
-    </NauticalScene>
-  );
-}
-
-function NauticalScene({
-  showPreview,
-  showSimulation,
-  previewFrames,
-  previewFrame,
-  simulationFrames,
-  simulationFrame,
-  colorByActorId,
-  simulationColorByActorId,
-  previewOverlays,
-  simulationOverlays,
-  reference,
-  recenterSignal,
-  onRecenter,
-  children,
-}: {
-  showPreview: boolean;
-  showSimulation: boolean;
-  previewFrames: SimulationFrame[];
-  previewFrame: SimulationFrame | null;
-  simulationFrames: SimulationFrame[];
-  simulationFrame: SimulationFrame | null;
-  colorByActorId: Record<string, string>;
-  simulationColorByActorId: Record<string, string>;
-  previewOverlays: OverlayVisibility;
-  simulationOverlays: OverlayVisibility;
-  reference: { latitude: number; longitude: number };
-  recenterSignal: number;
-  onRecenter: () => void;
-  children: ReactNode;
-}) {
-  const trajectoriesByActorId = useMemo(
-    () => buildTrajectoryPathsByActor(previewFrames, previewFrame),
-    [previewFrames, previewFrame]
-  );
-  const simulationTrajectoriesByActorId = useMemo(
-    () => buildTrajectoryPathsByActor(simulationFrames, simulationFrame),
-    [simulationFrames, simulationFrame]
-  );
-  return (
-    <div className="scene-panel">
-      <div className="canvas-rulers">
-        <div className="ruler-top">
-          <span>Geofence center lat {reference.latitude.toFixed(6)}</span>
-          <span>Nautical map mode</span>
-          <span>lon {reference.longitude.toFixed(6)}</span>
-        </div>
-        <div className="ruler-left">
-          <span>Reference (0,0) at geofence center</span>
-          <span>Rendered as WGS84</span>
-        </div>
-        <RecenterControl className="axis-legend" legendMode="nautical" onRecenter={onRecenter} />
-      </div>
-      <NauticalMapView
-        layers={[
-          ...(showPreview && previewFrame
-            ? [
-                {
-                  actors: previewFrame.actors,
-                  statesByActorId: previewFrame.statesByActorId,
-                  trajectoriesByActorId,
-                  colorByActorId,
-                  showVelocity: previewOverlays.velocity,
-                  situationContexts: previewFrame.situationContexts,
-                  showManeuveringDomain: previewOverlays.maneuveringDomain,
-                },
-              ]
-            : []),
-          ...(showSimulation && simulationFrame
-            ? [
-                {
-                  actors: simulationFrame.actors,
-                  statesByActorId: simulationFrame.statesByActorId,
-                  trajectoriesByActorId: simulationTrajectoriesByActorId,
-                  colorByActorId: simulationColorByActorId,
-                  showVelocity: simulationOverlays.velocity,
-                  situationContexts: simulationFrame.situationContexts,
-                  showManeuveringDomain: simulationOverlays.maneuveringDomain,
-                },
-              ]
-            : []),
-        ]}
-        reference={reference}
-        recenterSignal={recenterSignal}
-      />
-      {children}
+      )}
     </div>
   );
 }

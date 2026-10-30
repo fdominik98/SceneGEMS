@@ -21,7 +21,8 @@ describe("cluster formatting", () => {
     expect(shortHash("sha256:0123456789abcdef")).toBe("0123456789ab");
     expect(shortHash("abc")).toBe("abc");
     expect(shortHash(null)).toBe("none");
-    expect(jobTypeLabel("simulation.ardupilot")).toBe("Simulation, ArduPilot");
+    expect(jobTypeLabel("simulation.ardupilot_sim")).toBe("Simulation, ArduPilot SITL");
+    expect(jobTypeLabel("simulation.gazebo")).toBe("Simulation, Gazebo");
     expect(jobTypeLabel("future.kind")).toBe("future.kind");
     expect(memoryUseFraction(1000, 250)).toBe(0.75);
     expect(memoryUseFraction(0, 0)).toBe(0);

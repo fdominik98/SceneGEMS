@@ -18,11 +18,11 @@ const CLASS_STATE_TONE: Record<ClassView["state"], Tone> = { open: "info", compl
 const CLASS_STATE_LABEL: Record<ClassView["state"], string> = { open: "Open", complete: "Complete", abandoned: "Abandoned" };
 
 const COLUMNS: { key: CoverageSortKey; label: string; title: string }[] = [
-  { key: "class", label: "Class", title: "Catalog order" },
+  { key: "class", label: "FEC", title: "Catalog order" },
   { key: "state", label: "State", title: "Open, complete or abandoned" },
   { key: "progress", label: "Complete of quota", title: "Cases with a verdict for every run, against the quota" },
   { key: "dropped", label: "Dropped", title: "Cases that could not be completed and count against the failure budget" },
-  { key: "budget", label: "Budget left", title: "Failure budget left before the class is abandoned" },
+  { key: "budget", label: "Budget left", title: "Failure budget left before the FEC is abandoned" },
 ];
 
 function Verdicts({ entry, run }: { entry: ClassView; run: number }) {
@@ -63,22 +63,22 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
   const visible = rows.slice(0, limit);
 
   return (
-    <section className="panel camp-coverage" aria-label="Coverage per class">
+    <section className="panel camp-coverage" aria-label="Coverage per FEC">
       <div className="camp-section-head">
-        <h3>Coverage per class</h3>
-        <div className="camp-filters" role="group" aria-label="Filter classes by state">
+        <h3>Coverage per FEC</h3>
+        <div className="camp-filters" role="group" aria-label="Filter FECs by state">
           {(["all", "open", "complete", "abandoned"] as const).map((key) => (
             <button key={key} type="button" className={`camp-chip${state === key ? " camp-chip--on" : ""}`} aria-pressed={state === key} onClick={() => setState(key)}>
               {key === "all" ? "All" : CLASS_STATE_LABEL[key]} {counts[key]}
             </button>
           ))}
-          <input type="search" className="camp-search" placeholder="Find a class" aria-label="Find a class" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input type="search" className="camp-search" placeholder="Find an FEC" aria-label="Find an FEC" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
       </div>
       {classes.length === 0 ? (
-        <p className="meta">This campaign has no classes.</p>
+        <p className="meta">This campaign has no FECs.</p>
       ) : rows.length === 0 ? (
-        <p className="meta">No class matches the filter.</p>
+        <p className="meta">No FEC matches the filter.</p>
       ) : (
         <div className="camp-table-wrap camp-coverage-scroll">
           <table className="camp-table camp-table--dense">
@@ -102,10 +102,10 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
             </thead>
             <tbody>
               {visible.map((entry) => {
-                const id = splitClassId(entry.class_id);
+                const id = splitClassId(entry.fec_id);
                 return (
-                  <tr key={entry.class_id} className={`camp-class camp-class--${entry.state}`}>
-                    <td className="camp-cell-class" title={entry.class_id}>
+                  <tr key={entry.fec_id} className={`camp-class camp-class--${entry.state}`}>
+                    <td className="camp-cell-class" title={entry.fec_id}>
                       <span className="camp-class-name">{id.name}</span>
                       <span className="camp-class-folder">{id.folder}</span>
                       <span className="camp-class-counts">
@@ -131,9 +131,15 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                       />
                     </td>
                     <td className={`camp-num${entry.dropped > 0 ? " camp-num--warn" : ""}`}>{entry.dropped}</td>
-                    <td className={`camp-num${entry.failure_budget_left === 0 && entry.failure_budget > 0 ? " camp-num--bad" : ""}`}>
-                      {entry.failure_budget_left} <span className="camp-num-of">of {entry.failure_budget}</span>
-                    </td>
+                    {entry.failure_budget === null || entry.failure_budget_left === null ? (
+                      <td className="camp-num" title="Never abandoned: dropped and failed cases are replaced until the quota is complete">
+                        unlimited
+                      </td>
+                    ) : (
+                      <td className={`camp-num${entry.failure_budget_left === 0 && entry.failure_budget > 0 ? " camp-num--bad" : ""}`}>
+                        {entry.failure_budget_left} <span className="camp-num-of">of {entry.failure_budget}</span>
+                      </td>
+                    )}
                     <td className="camp-num">{entry.in_flight}</td>
                     {runs.map((run) => (
                       <td key={run}>
@@ -150,7 +156,7 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
       {rows.length > visible.length && (
         <div className="camp-more">
           <span className="meta">
-            Showing {visible.length} of {plural(rows.length, "class", "classes")}.
+            Showing {visible.length} of {plural(rows.length, "FEC")}.
           </span>
           <button type="button" onClick={() => setLimit((value) => value + COVERAGE_PAGE)}>
             Show {Math.min(COVERAGE_PAGE, rows.length - visible.length)} more

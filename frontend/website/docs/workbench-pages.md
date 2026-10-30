@@ -9,7 +9,7 @@ The Scene Generation, Trajectory Generation and Simulation pages are independent
 
 ## Every run is an entry
 
-Every scene generation, trajectory generation and simulation on the cluster is saved as a one-step **workbench entry** of [Campaign History](./navigation): a batch scene generation is one entry with a case per scenario. The entry records the input it used, so Campaign History shows what it was made from. Each entry gets a fresh seed, so two runs of the same input give different results. A page says which entry it shows, such as "Shows case 12 of entry 4f2c...".
+Every scene generation, trajectory generation and simulation on the cluster is saved as a one-step **workbench entry** of [Campaign History](./navigation): a batch scene generation is one entry with a case per scenario. The entry records the input it used, so Campaign History shows what it was made from. Each entry gets a fresh random base seed, so two runs of the same input give different results. To repeat a run, type a seed into **Base seed** next to the page's run controls (or **Keep** the seed the last run used): every entry then takes it, in every step. Empty the field to go back to random seeds. A page says which entry it shows, such as "Shows case 12 of entry 4f2c...".
 
 A replay on ArduPilot SITL or Gazebo is an entry too: its run is the ArduPilot stack with the setup's real-time factor as SITL's pace and the Connections page's reference area. Loading such a run fills the setup again with the simulator, the pace and replay on ArduPilot.
 

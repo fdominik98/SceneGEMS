@@ -1,6 +1,7 @@
 import { useId, useState, type ReactNode } from "react";
 import type { CatalogParameter } from "../../../domain/cluster/campaignApi";
 import type { Reason } from "./reasons";
+import { UNLIMITED_FAILURE_BUDGET, type FailureBudgetDraft } from "./wizardState";
 
 /** Form pieces of the wizard: labelled fields with their reasons, number inputs, and an input for each catalog parameter type. */
 
@@ -60,12 +61,13 @@ export interface NumberFieldProps {
   max?: number;
   placeholder?: string;
   invalid?: boolean;
+  disabled?: boolean;
   ariaLabel?: string;
   suffix?: string;
 }
 
 /** A number input that keeps what is typed until it reads as a number; an empty box is null. */
-export function NumberField({ id, value, onChange, integer, min, max, placeholder, invalid, ariaLabel, suffix }: NumberFieldProps) {
+export function NumberField({ id, value, onChange, integer, min, max, placeholder, invalid, disabled, ariaLabel, suffix }: NumberFieldProps) {
   const [draft, setDraft] = useState(formatNumber(value));
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
@@ -102,12 +104,46 @@ export function NumberField({ id, value, onChange, integer, min, max, placeholde
         max={max}
         value={draft}
         placeholder={placeholder}
+        disabled={disabled}
         aria-label={ariaLabel}
         aria-invalid={invalid || unreadable ? true : undefined}
         className={invalid || unreadable ? "wiz-input-invalid" : undefined}
         onChange={(event) => commit(event.target.value)}
       />
       {suffix && <span className="wiz-unit">{suffix}</span>}
+    </span>
+  );
+}
+
+/**
+ * A failure budget: a number of cases, or unlimited. Unticking Unlimited brings back the number it replaced. An
+ * unlimited class is never abandoned, so a scenario that never gives a valid scene runs until a stop condition or
+ * the operator ends the campaign.
+ */
+export function FailureBudgetField({ id, value, invalid, onChange }: { id: string; value: FailureBudgetDraft; invalid?: boolean; onChange: (value: FailureBudgetDraft) => void }) {
+  const unlimited = value === UNLIMITED_FAILURE_BUDGET;
+  const [replaced, setReplaced] = useState<number | null>(null);
+  return (
+    <span className="wiz-budget">
+      <span className="wiz-budget-row">
+        <NumberField id={id} integer min={0} value={unlimited ? null : value} placeholder={unlimited ? "unlimited" : undefined} disabled={unlimited} invalid={invalid} onChange={onChange} />
+        <label className="wiz-check">
+          <input
+            type="checkbox"
+            checked={unlimited}
+            onChange={(event) => {
+              if (event.target.checked) {
+                setReplaced(typeof value === "number" ? value : null);
+                onChange(UNLIMITED_FAILURE_BUDGET);
+              } else {
+                onChange(replaced ?? 0);
+              }
+            }}
+          />
+          Unlimited
+        </label>
+      </span>
+      {unlimited && <span className="wiz-hint wiz-hint--warn wiz-budget-note">Never abandoned: it runs until its quota is complete, a stop condition of the Policy step ends the campaign, or you stop it.</span>}
     </span>
   );
 }

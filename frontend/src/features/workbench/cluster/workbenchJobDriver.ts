@@ -18,7 +18,6 @@ import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGenerati
 import { useUiStore } from "../../../app/uiStore";
 import {
   entryName,
-  newEntrySeed,
   scenarioClassId,
   scenarioInputName,
   sceneEntryConfig,
@@ -27,6 +26,7 @@ import {
   trajectoryEntryConfig,
   WORKBENCH_ORIGIN,
 } from "../pages/entryConfig";
+import { takeEntrySeed } from "../pages/entrySeedStore";
 import { caseEndMessage, createCaseWaiter, isGone, pollCase, waitForCase, waitForCaseEnd, waitForStageJob, type EntryFollowOptions } from "../pages/entryFollower";
 import { framesOfRun, loadEntryOutput, type LoadedOutput, type LoadedRun } from "../pages/entryLoader";
 import { resolveInputItem, uploadedRef } from "../pages/pageInputs";
@@ -264,7 +264,7 @@ export class WorkbenchJobDriver {
         domain: input,
         timeoutSeconds: input.timeoutSeconds,
         enforceLowTcpa: input.enforceLowTcpa,
-        seed: newEntrySeed(),
+        seed: takeEntrySeed(),
         monitor: this.stepMonitor(),
       });
       const entryId = await this.createEntry(cluster, toConfigYaml(config), config.name, WORKBENCH_ORIGIN.sceneGeneration, task);
@@ -390,7 +390,7 @@ export class WorkbenchJobDriver {
         domain: input,
         timeoutSeconds: input.timeoutSeconds,
         enforceLowTcpa: input.enforceLowTcpa,
-        seed: newEntrySeed(),
+        seed: takeEntrySeed(),
         monitor: this.stepMonitor(),
       });
       const entryId = await this.createEntry(cluster, toConfigYaml(config), config.name, WORKBENCH_ORIGIN.sceneGeneration, task);
@@ -557,7 +557,7 @@ export class WorkbenchJobDriver {
         scene: item,
         colregsConstraintsContent: request.colregsConstraintsContent,
         params: request.params,
-        seed: newEntrySeed(),
+        seed: takeEntrySeed(),
         monitor: this.stepMonitor(),
       });
       const entryId = await this.createEntry(cluster, toConfigYaml(config), config.name, WORKBENCH_ORIGIN.trajectoryGeneration, task);
@@ -647,7 +647,7 @@ export class WorkbenchJobDriver {
         trajectories: item,
         plan,
         colregsConstraintsContent: request.colregsConstraintsContent,
-        seed: newEntrySeed(),
+        seed: takeEntrySeed(),
         geofence: request.geofence,
       });
       const entryId = await this.createEntry(cluster, toConfigYaml(config), config.name, WORKBENCH_ORIGIN.simulation, task);

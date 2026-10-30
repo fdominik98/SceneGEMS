@@ -11,7 +11,7 @@ const catalog: BuilderCatalog = { stacks: parsedCatalog.stacks, generators: pars
 
 /** `backend/assets/campaign_presets/05_usv_navigation_comparison.yaml` as the master serves it (a preset holds no input). */
 const USV_PRESET = parse(`
-format: 2
+format: 3
 name: "USV Navigation against the planned trajectories"
 description: Three cases of every two- and three-vessel class, each simulated twice.
 steps: [scene_generation, trajectory_generation, simulation]
@@ -76,6 +76,26 @@ describe("draftFromConfig", () => {
     expect(draft.resources.queueDepth.simulate).toBe(4);
     expect(draft.policy).toMatchObject({ retention: "failures", keepFrames: true, seed: 3, maxCases: 10 });
     expect(draft.steps).toEqual(["simulation"]);
+  });
+
+  it("keeps an unlimited failure budget and reads a missing one as 0", () => {
+    const scope = [
+      { patterns: ["2vessel_*_scenarios"], quota: 3, failure_budget: "unlimited" },
+      { patterns: ["3vessel_*_scenarios"], quota: 1 },
+    ];
+    const draft = draftFromConfig({ ...USV_PRESET, scope }, catalog);
+    expect(draft.scope.map((entry) => entry.failureBudget)).toEqual(["unlimited", 0]);
+    expect(buildCampaignConfig(draft, catalog).scope).toEqual([
+      { patterns: ["2vessel_*_scenarios"], quota: 3, failure_budget: "unlimited" },
+      { patterns: ["3vessel_*_scenarios"], quota: 1, failure_budget: 0 },
+    ]);
+  });
+
+  it("reads a preset saved in format 2, whose entries list their FECs under classes, and writes it as format 3", () => {
+    const draft = draftFromConfig({ ...USV_PRESET, format: 2, scope: [{ classes: ["2vessel_0obstacle_scenarios/functional_model1"], quota: 2 }] }, catalog);
+    expect(draft.scope.map((entry) => entry.classes)).toEqual([["2vessel_0obstacle_scenarios/functional_model1"]]);
+    const config = buildCampaignConfig(draft, catalog);
+    expect([config.format, config.scope]).toEqual([3, [{ fecs: ["2vessel_0obstacle_scenarios/functional_model1"], quota: 2, failure_budget: 0 }]]);
   });
 
   it("leaves a run without a stack the master does not offer", () => {

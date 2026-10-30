@@ -3,12 +3,12 @@
 They are read-only and need no database, so the master mounts them whether or not it has the
 campaign stores. Like the other operator routes they have no authentication yet.
 
-    GET CATALOG_PATH/classes?folder=&pattern=&limit=&offset=   the class catalog's classes in catalog order: id, folder, vessel and
-                                           obstacle counts, content hash. folder is a catalog folder, pattern a scope pattern (a folder
-                                           pattern without a slash, a class id pattern with one); both narrow the list. The number of
-                                           matching classes is in X-Total-Count. 503 when the master has no catalog folder
-    GET CATALOG_PATH/classes/<class id>    the class's functional scenario (.problem text, LF line endings, text/plain): the preset the
-                                           workbench's scene generation loads into its editor. 404 for an unknown class, 503 without a catalog
+    GET CATALOG_PATH/fecs?folder=&pattern=&limit=&offset=   the catalog's FECs (functional equivalence classes) in catalog order:
+                                           fec_id, folder, vessel and obstacle counts, content hash. folder is a catalog folder, pattern a
+                                           scope pattern (a folder pattern without a slash, an FEC id pattern with one); both narrow the
+                                           list. The number of matching FECs is in X-Total-Count. 503 when the master has no catalog folder
+    GET CATALOG_PATH/fecs/<fec id>         the FEC's functional scenario (.problem text, LF line endings, text/plain): the preset the
+                                           workbench's scene generation loads into its editor. 404 for an unknown FEC, 503 without a catalog
     GET CATALOG_PATH/domain-presets        the domain presets of backend/assets/domain_config/: {"colregs_constants": [...],
                                            "vessel_types": [...], "obstacle_types": [...]}, each preset {"name", "default", "content"}
     GET CATALOG_PATH/stacks                the stack options a campaign config accepts with their repeatability tier and parameters,
@@ -68,14 +68,14 @@ def class_content(class_id: str) -> str:
     try:
         return ClassCatalog.default().get(class_id).read_content()
     except UnknownClassId:
-        raise HTTPException(status_code=404, detail=f"no class {class_id} in the catalog")
+        raise HTTPException(status_code=404, detail=f"no FEC {class_id} in the catalog")
 
 
 def _class_routes() -> APIRouter:
     router = APIRouter()
 
-    @router.get(CATALOG_PATH + "/classes")
-    async def list_classes(response: Response, folder: Optional[str] = None, pattern: Optional[str] = None, limit: int = 100, offset: int = 0) -> list:
+    @router.get(CATALOG_PATH + "/fecs")
+    async def list_fecs(response: Response, folder: Optional[str] = None, pattern: Optional[str] = None, limit: int = 100, offset: int = 0) -> list:
         try:
             found = await anyio.to_thread.run_sync(classes, folder, pattern)
         except FileNotFoundError as error:
@@ -84,10 +84,10 @@ def _class_routes() -> APIRouter:
         start = max(0, offset)
         return [class_view(scenario_class) for scenario_class in found[start : start + max(1, min(limit, MAX_LISTED))]]
 
-    @router.get(CATALOG_PATH + "/classes/{class_id:path}", response_class=PlainTextResponse)
-    async def get_class_content(class_id: str) -> PlainTextResponse:
+    @router.get(CATALOG_PATH + "/fecs/{fec_id:path}", response_class=PlainTextResponse)
+    async def get_fec_content(fec_id: str) -> PlainTextResponse:
         try:
-            content = await anyio.to_thread.run_sync(class_content, class_id)
+            content = await anyio.to_thread.run_sync(class_content, fec_id)
         except FileNotFoundError as error:
             raise HTTPException(status_code=503, detail=str(error))
         return PlainTextResponse(content, media_type="text/plain; charset=utf-8")

@@ -28,14 +28,14 @@ from scenegems_tool.persistence.schema import (
 
 @dataclass(frozen=True)
 class ClassSpec:
-    """A class as a new campaign takes it: from the catalog, with its quota and failure budget."""
+    """A class as a new campaign takes it: from the catalog, with its quota and failure budget (None: unlimited)."""
 
     class_id: str
     content_hash: str
     vessel_count: int
     obstacle_count: int
     quota: int
-    failure_budget: int
+    failure_budget: Optional[int]
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ class ClassRecord:
     vessel_count: int
     obstacle_count: int
     quota: int
-    failure_budget: int
+    failure_budget: Optional[int]  # None: unlimited, the class is never abandoned
     complete_count: int
     dropped_count: int  # dropped and failed cases: the failure budget's use
     in_flight_count: int
@@ -113,8 +113,8 @@ class ClassRecord:
     finished_at: Optional[datetime]
 
     @property
-    def failure_budget_left(self) -> int:
-        return self.failure_budget - self.dropped_count
+    def failure_budget_left(self) -> Optional[int]:
+        return None if self.failure_budget is None else self.failure_budget - self.dropped_count
 
     @classmethod
     def from_row(cls, row: CampaignClassRow) -> "ClassRecord":

@@ -552,9 +552,7 @@
 }
 
 .workbench-encounter-strip-toggle {
-  flex: 0 0 auto;
-  font-size: var(--font-size-xs);
-  padding: 0 8px;
+  align-self: center;
 }
 
 .workbench-encounter-timeline {

@@ -12,7 +12,7 @@ import { campaignDetailSchema, campaignStepSchema, type CampaignKind, type Campa
 // Catalog: classes
 
 export const catalogClassSchema = z.object({
-  class_id: z.string(),
+  fec_id: z.string(),
   folder: z.string(),
   vessel_count: z.number().int(),
   obstacle_count: z.number().int(),
@@ -123,19 +123,20 @@ export type CatalogStacks = z.infer<typeof catalogStacksSchema>;
 // Validating a config
 
 export const validatedClassSchema = z.object({
-  class_id: z.string(),
+  fec_id: z.string(),
   content_hash: z.string(),
   vessel_count: z.number().int(),
   obstacle_count: z.number().int(),
   quota: z.number().int(),
-  failure_budget: z.number().int(),
+  /** Null when the failure budget is unlimited. */
+  failure_budget: z.number().int().nullable(),
 });
 
 export const validationResultSchema = z.object({
   valid: z.literal(true),
   name: z.string(),
   config_hash: z.string(),
-  classes: z.array(validatedClassSchema),
+  fecs: z.array(validatedClassSchema),
   /** The sum of the quotas: the complete cases the campaign aims for. */
   cases_planned: z.number().int(),
   runs: z.array(
@@ -170,7 +171,7 @@ export async function listCatalogClasses(
   const items: CatalogClass[] = [];
   let total = 0;
   for (;;) {
-    const { data, total: reported } = await client.request("GET", `${CATALOG_PATH}/classes`, z.array(catalogClassSchema), {
+    const { data, total: reported } = await client.request("GET", `${CATALOG_PATH}/fecs`, z.array(catalogClassSchema), {
       query: { ...filters, limit: CATALOG_PAGE_LIMIT, offset: items.length },
       signal,
     });
@@ -250,7 +251,7 @@ export const functionalScenarioInputSchema = z.object({
   name: z.string(),
   ref: configArtifactRefSchema,
   quota: z.number().int().positive().optional(),
-  failure_budget: z.number().int().nonnegative().optional(),
+  failure_budget: z.union([z.number().int().nonnegative(), z.literal("unlimited")]).optional(),
 });
 
 /** A scene (trajectory generation) or a trajectory set (simulation) to start from. Its class id is `item/<n>`. */
@@ -267,16 +268,17 @@ export const campaignInputSchema = z.object({
 export type CampaignInput = z.infer<typeof campaignInputSchema>;
 
 /**
- * The parts of a format 2 config that Phase 6 adds. The rest (`domain`, `execution`, `resources`,
- * `policy`, `scene_generation` fields other than `monitor`, ...) are as in format 1 and stay loose
- * here; the wizard's `configBuilder.ts` owns their shape.
+ * The parts of a format 2 or 3 config that Phase 6 adds (format 3 names a scope entry's FECs `fecs`,
+ * format 2 `classes`). The rest (`domain`, `execution`, `resources`, `policy`, `scene_generation`
+ * fields other than `monitor`, ...) are as in format 1 and stay loose here; the wizard's
+ * `configBuilder.ts` owns their shape.
  */
 export interface CampaignConfigFormat2 {
-  format: 2;
+  format: 2 | 3;
   name: string;
   /** Consecutive, in chain order. */
   steps: CampaignStep[];
-  /** Catalog classes, as today; only when `steps` start with scene generation. */
+  /** Catalog FECs; only when `steps` start with scene generation. */
   scope?: unknown[];
   input?: CampaignInput;
   scene_generation?: { monitor?: StepMonitor; [key: string]: unknown };

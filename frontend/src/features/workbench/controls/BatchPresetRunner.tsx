@@ -6,6 +6,7 @@ import {
 import type { CatalogClass } from "../../../domain/cluster/campaignApi";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { downloadValidBatchScenesZip } from "./batchSceneExport";
+import { hiddenSelections, selectListed } from "./scenarioCatalog";
 
 export type { BatchRunResult };
 
@@ -34,6 +35,8 @@ export function BatchPresetRunner({
   const clearSelectedClassIds = useBatchGenerationStore((s) => s.clearSelectedClassIds);
 
   const selected = new Set(selectedClassIds);
+  // Selected classes the filters hide still run; the hint says so, so a filter change does not hide them silently
+  const hidden = hiddenSelections(selectedClassIds, presets);
 
   const validResultCount = results.filter(
     (r) => r.status === "success" && r.evaluationData && r.scene
@@ -43,27 +46,31 @@ export function BatchPresetRunner({
     <div className="batch-preset-runner batch-preset-runner--tab">
       <div className="batch-preset-runner-body">
         {presets.length === 0 ? (
-          <p className="meta">The master offers no functional scenarios that match the filters.</p>
+          <p className="meta">
+            The master offers no functional scenarios that match the filters.
+            {selected.size > 0 ? ` ${selected.size} selected earlier still run.` : ""}
+          </p>
         ) : (
           <>
             <p className="meta">
-              Select presets to queue, then use “Generate Initial Scenes” below. Only valid scenes
-              are kept. {selected.size} selected.
+              Select the functional scenarios to run, then generate their scenes below. Only valid
+              scenes are kept. {selected.size} selected
+              {hidden > 0 ? `, ${hidden} of them not shown by the filters (they run too)` : ""}.
             </p>
             <div className="toolbar-row batch-preset-toolbar">
               <button
                 type="button"
                 disabled={running}
-                onClick={() => setSelectedClassIds(presets.map((p) => p.class_id))}
+                onClick={() => setSelectedClassIds(selectListed(selectedClassIds, presets))}
               >
-                Select all ({presets.length})
+                Select all shown ({presets.length})
               </button>
               <button
                 type="button"
                 disabled={running || selected.size === 0}
                 onClick={clearSelectedClassIds}
               >
-                Clear
+                Clear selection
               </button>
               <button
                 type="button"
@@ -75,22 +82,22 @@ export function BatchPresetRunner({
             </div>
             <div className="batch-preset-list">
               {presets.map((preset) => (
-                <div key={preset.class_id} className="batch-preset-item">
+                <div key={preset.fec_id} className="batch-preset-item">
                   <label className="batch-preset-item-label">
                     <input
                       type="checkbox"
-                      checked={selected.has(preset.class_id)}
-                      onChange={() => toggleSelectedClassId(preset.class_id)}
+                      checked={selected.has(preset.fec_id)}
+                      onChange={() => toggleSelectedClassId(preset.fec_id)}
                       disabled={running}
                     />
-                    <span>{preset.class_id}</span>
+                    <span>{preset.fec_id}</span>
                   </label>
                   <button
                     type="button"
                     className="batch-preset-refinery-icon-btn"
                     title="Open in Refinery"
-                    aria-label={`Open ${preset.class_id} in Refinery`}
-                    onClick={() => onOpenPresetInRefinery(preset.class_id)}
+                    aria-label={`Open ${preset.fec_id} in Refinery`}
+                    onClick={() => onOpenPresetInRefinery(preset.fec_id)}
                   >
                     <img src="/refinery-icon.svg" alt="" width={14} height={14} />
                   </button>

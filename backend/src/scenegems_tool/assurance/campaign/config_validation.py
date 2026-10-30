@@ -28,6 +28,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     InputRef,
     RunConfig,
     StackConfig,
+    budget_limit,
 )
 from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, item_class_spec, scenario_class_spec
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
@@ -91,7 +92,7 @@ def vessel_stacks(stack: StackConfig) -> Dict[str, VesselStackConfig]:
 
 
 def _vessel_config(agent_id: str, stack: VesselStackConfig, run_stack: StackConfig) -> VesselConfig:
-    """A vessel of the run's instance; on ArduPilot the lockstep adapter is named, as simulation.ardupilot's instance names it."""
+    """A vessel of the run's instance; on ArduPilot the lockstep adapter is named, as the ArduPilot simulation jobs' instance names it."""
     adapters = (REPLAY_MAVLINK_LOCKSTEP.id,) if isinstance(run_stack, ArdupilotStackConfig) else ()
     return VesselConfig(agent_id=agent_id, stack=stack, adapter_ids=adapters)
 
@@ -105,13 +106,13 @@ def _environment(run: RunConfig) -> EnvironmentConfig:
 
 
 def _calm_only(run: RunConfig) -> List[str]:
-    """Why a run on an ArduPilot stack cannot carry this environment: simulation.ardupilot runs calm water, so wind and waves would be dropped silently."""
+    """Why a run on an ArduPilot stack cannot carry this environment: the ArduPilot simulation jobs run calm water, so wind and waves would be dropped silently."""
     environment = run.environment
     reasons = []
     if any(component != 0.0 for component in environment.wind_vector):
-        reasons.append("the ArduPilot stacks run without wind: simulation.ardupilot applies no environment, so environment.wind_vector must stay zero")
+        reasons.append("the ArduPilot stacks run without wind: the ArduPilot simulation jobs apply no environment, so environment.wind_vector must stay zero")
     if environment.waves is not None:
-        reasons.append("the ArduPilot stacks run without waves: simulation.ardupilot applies no environment, so environment.waves must stay absent")
+        reasons.append("the ArduPilot stacks run without waves: the ArduPilot simulation jobs apply no environment, so environment.waves must stay absent")
     return reasons
 
 
@@ -141,21 +142,21 @@ def resolve_scope(config: CampaignConfig, catalog: ClassCatalog) -> Tuple[Tuple[
     chosen: Dict[str, Tuple[int, ClassSpec]] = {}
     for entry_index, entry in enumerate(config.scope):
         named = []
-        for class_id in entry.classes:
+        for class_id in entry.fecs:
             if class_id in catalog:
                 named.append(catalog.get(class_id))
             else:
-                reasons.append(f"scope.{entry_index}: no class {class_id!r} in the catalog")
+                reasons.append(f"scope.{entry_index}: no FEC {class_id!r} in the catalog")
         for pattern in entry.patterns:
             matched = catalog.expand(pattern)
             if not matched:
-                reasons.append(f"scope.{entry_index}: the pattern {pattern!r} matches no class")
+                reasons.append(f"scope.{entry_index}: the pattern {pattern!r} matches no FEC")
             named.extend(matched)
         for scenario_class in named:
             earlier = chosen.get(scenario_class.class_id)
             if earlier is not None:
                 if earlier[0] != entry_index:
-                    reasons.append(f"scope.{entry_index}: class {scenario_class.class_id!r} is in scope.{earlier[0]} already")
+                    reasons.append(f"scope.{entry_index}: FEC {scenario_class.class_id!r} is in scope.{earlier[0]} already")
                 continue
             spec = ClassSpec(
                 class_id=scenario_class.class_id,
@@ -163,7 +164,7 @@ def resolve_scope(config: CampaignConfig, catalog: ClassCatalog) -> Tuple[Tuple[
                 vessel_count=scenario_class.vessel_count,
                 obstacle_count=scenario_class.obstacle_count,
                 quota=entry.quota,
-                failure_budget=entry.failure_budget,
+                failure_budget=budget_limit(entry.failure_budget),
             )
             chosen[scenario_class.class_id] = (entry_index, spec)
     return tuple(spec for _, spec in chosen.values()), reasons
@@ -177,10 +178,10 @@ def check_input(config: CampaignConfig) -> List[str]:
         if not config.scope and not scenarios:
             reasons.append("input: a campaign that starts with scene_generation needs scope entries or input.functional_scenarios")
         if items:
-            reasons.append("input.items: a campaign that starts with scene_generation takes catalog classes or functional scenarios, not items")
+            reasons.append("input.items: a campaign that starts with scene_generation takes catalog FECs or functional scenarios, not items")
         return reasons
     if config.scope:
-        reasons.append(f"scope: a campaign that starts with {first.value} takes input.items, not catalog classes")
+        reasons.append(f"scope: a campaign that starts with {first.value} takes input.items, not catalog FECs")
     if scenarios:
         reasons.append(f"input.functional_scenarios: a campaign that starts with {first.value} takes input.items, not functional scenarios")
     if not items:

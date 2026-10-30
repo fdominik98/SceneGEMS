@@ -83,7 +83,7 @@ function fakeMaster() {
       }
       throw new Error(`unexpected ${method} ${path}`);
     },
-    listCases: async () => ({ items: [{ ...sampleCase, campaign_id: "wb1", case_id: 1, class_id: "item/0", state: "active", stage: "generate_trajectories" }], total: 1 }),
+    listCases: async () => ({ items: [{ ...sampleCase, campaign_id: "wb1", case_id: 1, fec_id: "item/0", state: "active", stage: "generate_trajectories" }], total: 1 }),
     getCampaign: async () => ({ ...sampleCampaignSummary, campaign_id: "wb1" }),
     getCase: async () => {
       caseGets += 1;
@@ -92,7 +92,7 @@ function fakeMaster() {
         ...sampleCase,
         campaign_id: "wb1",
         case_id: 1,
-        class_id: "item/0",
+        fec_id: "item/0",
         stage: done ? "verdict" : "generate_trajectories",
         state: done ? "complete" : "active",
         scene_artifact: null,
@@ -156,7 +156,7 @@ describe("workbench job driver", () => {
     expect(body).toMatchObject({ kind: "workbench", origin: "trajectory_generation", start: true });
     const config = parse(body.config as string);
     expect(config).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["trajectory_generation"],
       input: { items: [{ name: "head_on.json", ref: { sha256: UPLOAD_SHA, kind: "scene" }, source: { file: "head_on.json" } }] },
       trajectories: { generator: "straight", timespan_s: 600 },
@@ -201,14 +201,14 @@ describe("workbench job driver", () => {
         }
         throw new Error(`unexpected ${method} ${path}`);
       },
-      listCases: async () => ({ items: [{ ...sampleCase, campaign_id: "wb2", case_id: 1, class_id: "item/0", state: "active", stage: "simulate" }], total: 1 }),
+      listCases: async () => ({ items: [{ ...sampleCase, campaign_id: "wb2", case_id: 1, fec_id: "item/0", state: "active", stage: "simulate" }], total: 1 }),
       getCampaign: async () => ({ ...sampleCampaignSummary, campaign_id: "wb2" }),
       getCase: async () =>
         caseDetailSchema.parse({
           ...sampleCase,
           campaign_id: "wb2",
           case_id: 1,
-          class_id: "item/0",
+          fec_id: "item/0",
           stage: "verdict",
           state: "complete",
           progress: {},
@@ -233,7 +233,7 @@ describe("workbench job driver", () => {
     driver.jobPollMs = 1;
     const ref = { sha256: TRAJECTORY_SHA, size_bytes: 9, kind: "trajectories", media_type: "application/json", pointer: null };
     await driver.runSimulationEntry(
-      { where: "cluster", jobType: "simulation.ardupilot", simulationLayer: "gazebo", speedup: 3, summary: "" },
+      { where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 3, summary: "" },
       {
         input: { label: "planned", origin: "history", ref, source: { campaign_id: "c1", case_id: 5, step: "trajectory_generation" } },
         scenarioContent: null,
@@ -242,11 +242,11 @@ describe("workbench job driver", () => {
       }
     );
 
-    expect(requested).toContain("simulation.ardupilot");
+    expect(requested).toContain("simulation.gazebo");
     const [body] = created;
     expect(body).toMatchObject({ kind: "workbench", origin: "simulation", start: true });
     expect(parse(body.config as string)).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["simulation"],
       input: { items: [{ name: "planned", ref: { sha256: TRAJECTORY_SHA }, source: { campaign_id: "c1", case_id: 5, step: "trajectory_generation" } }] },
       execution: { runs: [{ stack: { simulation_layer: "gazebo", mode: "replay", speedup: 3, geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 } }, monitor: "live" }] },

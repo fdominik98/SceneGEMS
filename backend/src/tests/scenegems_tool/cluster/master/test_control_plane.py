@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE, SITL_IMAGE
+from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.master.control_plane import InvalidPayload
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobRequirements, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import Cancel, Drain, LeaseOffer, LeaseRelease, LeaseRenewed, ProtocolError, ProtocolErrorCode, Welcome
@@ -20,9 +20,11 @@ from scenegems_tool.persistence.schema import JobEventKind, NodeStatus
 from scenegems_tool.persistence.stores import AssuranceStores
 from tests.scenegems_tool.cluster.master.conftest import EXPECTED, KINEMATIC, SCENE
 from tests.scenegems_tool.cluster.payloads import valid_payload
+from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_resources
 
-ARDUPILOT = JobType.SIMULATION_ARDUPILOT
+SITL = JobType.SIMULATION_ARDUPILOT_SIM
+GAZEBO = JobType.SIMULATION_GAZEBO
 
 
 def _submit(on_loop, plane, job_type=SCENE, **fields):
@@ -165,16 +167,21 @@ def test_labels_must_match(make_node, plane, on_loop, schedule):
     assert gpu.expect(LeaseOffer).job.job_id == job.job_id
 
 
-def test_a_gazebo_job_needs_the_gazebo_image_and_an_ardupilot_sim_job_does_not(make_node, plane, stores, on_loop, schedule):
+def test_a_gazebo_job_goes_to_a_gazebo_node_with_the_gazebo_image(make_node, plane, stores, on_loop, schedule):
     without_gazebo = {image: fingerprint for image, fingerprint in EXPECTED.items() if image != GAZEBO_IMAGE}
-    sitl_only = make_node("sitl only", slots={ARDUPILOT: 2}, fingerprints=without_gazebo)
+    sitl_only = make_node("sitl only", slots={SITL: 2}, fingerprints=without_gazebo)
     sitl_only.connect()
-    gazebo_job = _submit(on_loop, plane, job_type=ARDUPILOT, payload=valid_payload(ARDUPILOT, simulation_layer="gazebo"))
-    sim_job = _submit(on_loop, plane, job_type=ARDUPILOT, payload=valid_payload(ARDUPILOT, simulation_layer="ardupilot_sim"))
+    gazebo_job = _submit(on_loop, plane, job_type=GAZEBO, payload=valid_payload(GAZEBO))
+    sim_job = _submit(on_loop, plane, job_type=SITL, payload=valid_payload(SITL))
     assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}
+    assert stores.jobs.get(sim_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}
     assert schedule() == 1
     assert sitl_only.expect(LeaseOffer).job.job_id == sim_job.job_id
-    with_gazebo = make_node("with gazebo", slots={ARDUPILOT: 1})
+    # a Gazebo node without the Gazebo image is out of date and gets nothing
+    gazebo_without_image = make_node("gazebo without its image", slots={GAZEBO: 1}, fingerprints=without_gazebo)
+    gazebo_without_image.connect()
+    assert schedule() == 0
+    with_gazebo = make_node("with gazebo", slots={GAZEBO: 1})
     with_gazebo.connect()
     assert schedule() == 1
     assert with_gazebo.expect(LeaseOffer).job.job_id == gazebo_job.job_id
@@ -408,6 +415,8 @@ def test_a_payload_that_does_not_match_its_job_type_is_refused_before_it_is_stor
     assert {error["loc"][0] for error in refusal.value.errors} >= {"functional_scenario_content", "scene"}
     with pytest.raises(InvalidPayload):
         _submit(on_loop, plane, job_type=KINEMATIC, payload=valid_payload(KINEMATIC, monitor="post_hoc"))
+    with pytest.raises(InvalidPayload):  # each ArduPilot job type runs its own layer only
+        _submit(on_loop, plane, job_type=SITL, payload=valid_payload(SITL, simulation_layer="gazebo"))
     assert stores.jobs.list_jobs() == []
 
 

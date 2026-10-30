@@ -32,7 +32,7 @@ function json(body: unknown, total?: number, status = 200): Response {
 
 function detailOf(row: Record<string, unknown>): Record<string, unknown> {
   const detail = sampleCampaignDetail();
-  return { ...row, totals: detail.totals, classes: row.kind === "campaign" ? detail.classes : [] };
+  return { ...row, totals: detail.totals, fecs: row.kind === "campaign" ? detail.fecs : [] };
 }
 
 async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {

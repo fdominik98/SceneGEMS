@@ -47,7 +47,7 @@ function client(pages: CaseView[][], options: { finalAfter?: number; details?: R
 
 describe("following an entry", () => {
   it("waits for the entry's first case of a class", async () => {
-    const found = await waitForCase(client([[], [view({ case_id: 4, class_id: "item/0" }), view({ case_id: 2, class_id: "item/0" })]]), "wb1", "item/0", { sleep: noSleep });
+    const found = await waitForCase(client([[], [view({ case_id: 4, fec_id: "item/0" }), view({ case_id: 2, fec_id: "item/0" })]]), "wb1", "item/0", { sleep: noSleep });
     expect(found.case_id).toBe(2);
   });
 
@@ -66,13 +66,13 @@ describe("following an entry", () => {
   });
 
   it("waits for the cases of a batch with one list per poll", async () => {
-    const waiter = createCaseWaiter(client([[view({ case_id: 1, class_id: "scenario/a" })], [view({ case_id: 1, class_id: "scenario/a" }), view({ case_id: 2, class_id: "scenario/b" })]]), "wb1", { sleep: noSleep });
+    const waiter = createCaseWaiter(client([[view({ case_id: 1, fec_id: "scenario/a" })], [view({ case_id: 1, fec_id: "scenario/a" }), view({ case_id: 2, fec_id: "scenario/b" })]]), "wb1", { sleep: noSleep });
     const [a, b] = await Promise.all([waiter.waitFor("scenario/a"), waiter.waitFor("scenario/b")]);
     expect([a.case_id, b.case_id]).toEqual([1, 2]);
   });
 
   it("rejects the batch rows whose cases never came", async () => {
-    const waiter = createCaseWaiter(client([[view({ case_id: 1, class_id: "scenario/a" })]], { finalAfter: 1 }), "wb1", { sleep: noSleep });
+    const waiter = createCaseWaiter(client([[view({ case_id: 1, fec_id: "scenario/a" })]], { finalAfter: 1 }), "wb1", { sleep: noSleep });
     const [a, b] = await Promise.allSettled([waiter.waitFor("scenario/a"), waiter.waitFor("scenario/b")]);
     expect(a.status).toBe("fulfilled");
     expect(b.status).toBe("rejected");

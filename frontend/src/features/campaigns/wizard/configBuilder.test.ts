@@ -5,9 +5,9 @@ import { sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
 import { buildCampaignConfig, buildCampaignYaml, configToYaml, supportsEnvironment, type BuilderCatalog } from "./configBuilder";
 import { emptyDraft, emptyRun, type WizardDraft } from "./wizardState";
 
-/** `backend/src/tests/scenegems_tool/assurance/campaign/data/exit_campaign.yaml` (the Phase 4 exit campaign) as the wizard writes it: format 2 with the whole chain. */
+/** `backend/src/tests/scenegems_tool/assurance/campaign/data/exit_campaign.yaml` (the Phase 4 exit campaign) as the wizard writes it: format 3 with the whole chain. */
 const EXIT_CAMPAIGN_YAML = `
-format: 2
+format: 3
 name: phase 4 exit campaign
 description: Two- and three-vessel classes at quota 15 with USV Navigation on the kinematic layer.
 steps: [scene_generation, trajectory_generation, simulation]
@@ -202,9 +202,15 @@ describe("buildCampaignConfig", () => {
       { id: "b", classes: [], patterns: ["4vessel_*_scenarios"], quota: 1, failureBudget: null },
     ];
     expect(buildCampaignConfig(draft, catalog).scope).toEqual([
-      { classes: ["3vessel_0obstacle_scenarios/functional_model5"], quota: 3, failure_budget: 0 },
+      { fecs: ["3vessel_0obstacle_scenarios/functional_model5"], quota: 3, failure_budget: 0 },
       { patterns: ["4vessel_*_scenarios"], quota: 1 },
     ]);
+  });
+
+  it("writes an unlimited failure budget as unlimited", () => {
+    const draft = exitDraft();
+    draft.scope = [{ id: "a", classes: [], patterns: ["2vessel_*_scenarios"], quota: 2, failureBudget: "unlimited" }];
+    expect(buildCampaignConfig(draft, catalog).scope).toEqual([{ patterns: ["2vessel_*_scenarios"], quota: 2, failure_budget: "unlimited" }]);
   });
 });
 

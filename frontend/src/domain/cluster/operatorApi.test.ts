@@ -48,13 +48,13 @@ describe("operator API client", () => {
   });
 
   it("builds query strings with repeated keys and skips empty values", async () => {
-    expect(buildQueryString({ state: ["running", "paused"], limit: 10, class_id: undefined, sensitive: false })).toBe(
+    expect(buildQueryString({ state: ["running", "paused"], limit: 10, fec_id: undefined, sensitive: false })).toBe(
       "?state=running&state=paused&limit=10&sensitive=false"
     );
     expect(buildQueryString({})).toBe("");
     const { client, spy } = clientWith(async () => jsonResponse([]));
-    await client.listVerdicts("c 1", { class_id: "a", run_index: 0 });
-    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/campaigns/c%201/verdicts?class_id=a&run_index=0`);
+    await client.listVerdicts("c 1", { fec_id: "a", run_index: 0 });
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/campaigns/c%201/verdicts?fec_id=a&run_index=0`);
     expect(client.verdictsCsvUrl("c1", { state: "failed" })).toBe(`${BASE}/cluster/campaigns/c1/verdicts?state=failed&format=csv`);
   });
 

@@ -30,7 +30,7 @@ describe("globToRegExp", () => {
 
 describe("expandPattern", () => {
   it("matches folders without a slash and class ids with one, in catalog order", () => {
-    expect(expandPattern("2vessel_*_scenarios", catalog).map((entry) => entry.class_id)).toEqual([
+    expect(expandPattern("2vessel_*_scenarios", catalog).map((entry) => entry.fec_id)).toEqual([
       "2vessel_0obstacle_scenarios/functional_model1",
       "2vessel_0obstacle_scenarios/functional_model2",
       "2vessel_0obstacle_scenarios/functional_model10",
@@ -61,7 +61,7 @@ describe("planScope", () => {
       catalog
     );
     expect(plan.entries[0].classes).toHaveLength(2);
-    expect(plan.entries[1].classes.map((item) => item.class_id)).toEqual(["4vessel_0obstacle_scenarios/functional_model1"]);
+    expect(plan.entries[1].classes.map((item) => item.fec_id)).toEqual(["4vessel_0obstacle_scenarios/functional_model1"]);
     expect(plan.entries[1].duplicates).toEqual(["3vessel_0obstacle_scenarios/functional_model1"]);
     expect(plan.casesPlanned).toBe(4 + 5);
   });

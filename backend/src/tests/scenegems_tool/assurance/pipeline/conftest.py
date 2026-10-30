@@ -12,7 +12,7 @@ import hashlib
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterator, List, Mapping, Optional
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Union
 
 import pytest
 
@@ -30,7 +30,7 @@ CLASS_B = "2vessel_0obstacle_scenarios/functional_model1"
 CLASS_C = "3vessel_0obstacle_scenarios/functional_model0"
 
 
-def config_dict(classes=(CLASS_A,), quota: int = 2, failure_budget: int = 2, runs: Optional[List[Dict[str, Any]]] = None, **sections: Any) -> Dict[str, Any]:
+def config_dict(classes=(CLASS_A,), quota: int = 2, failure_budget: Union[int, str] = 2, runs: Optional[List[Dict[str, Any]]] = None, **sections: Any) -> Dict[str, Any]:
     """A small campaign: the classes with one quota and budget, straight trajectories unless sections say otherwise."""
     config: Dict[str, Any] = {
         "name": "pipeline test",
@@ -43,7 +43,7 @@ def config_dict(classes=(CLASS_A,), quota: int = 2, failure_budget: int = 2, run
     return config
 
 
-def format2_dict(steps, classes=(CLASS_A,), quota: int = 2, failure_budget: int = 2, runs: Optional[List[Dict[str, Any]]] = None, **sections: Any) -> Dict[str, Any]:
+def format2_dict(steps, classes=(CLASS_A,), quota: int = 2, failure_budget: Union[int, str] = 2, runs: Optional[List[Dict[str, Any]]] = None, **sections: Any) -> Dict[str, Any]:
     """config_dict in format 2 with the given steps; a campaign that starts after scene generation has no scope."""
     config = config_dict(classes, quota, failure_budget, runs)
     config.update(format=2, steps=list(steps))

@@ -175,8 +175,8 @@ function RunCard({
         </Field>
       </div>
       <div className="wiz-row">
-        <Field label="Seed" htmlFor={`run-seed-${run.id}`} hint={seedParameter?.description} issues={byField.get("seed")}>
-          <NumberField id={`run-seed-${run.id}`} integer min={0} max={seedParameter?.maximum ?? undefined} placeholder="derived per case" value={run.seed} invalid={byField.has("seed")} onChange={(value) => onChange((item) => void (item.seed = value))} />
+        <Field label="Seed" htmlFor={`run-seed-${run.id}`} hint="One seed for this run in every case. Leave it empty and the run takes the case seed, like the other steps." issues={byField.get("seed")}>
+          <NumberField id={`run-seed-${run.id}`} integer min={0} max={seedParameter?.maximum ?? undefined} placeholder="the case seed" value={run.seed} invalid={byField.has("seed")} onChange={(value) => onChange((item) => void (item.seed = value))} />
         </Field>
         <Field label="Repeats" htmlFor={`run-repeats-${run.id}`} hint={repeatsParameter?.description} issues={byField.get("repeats")}>
           <NumberField id={`run-repeats-${run.id}`} integer min={1} value={run.repeats} invalid={byField.has("repeats")} onChange={(value) => onChange((item) => void (item.repeats = value))} />

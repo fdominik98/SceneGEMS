@@ -75,7 +75,7 @@ export const nodesReducer: LiveTopicReducer<NodeView[]> = {
 export const campaignUpdateSchema = z.union([
   z.object({ event: campaignEventSchema }),
   z.object({ campaign: campaignSummarySchema }),
-  z.object({ classes: z.array(classViewSchema) }),
+  z.object({ fecs: z.array(classViewSchema) }),
 ]);
 
 export const campaignSnapshotSchema = campaignDetailSchema.extend({
@@ -93,7 +93,7 @@ export interface CampaignTopicState {
 
 const CAMPAIGN_EVENTS_KEPT = 500;
 
-/** The totals of a campaign detail over its classes, as `campaign_views.campaign_detail_view` computes them. */
+/** The totals of a campaign detail over its FECs, as `campaign_views.campaign_detail_view` computes them. */
 export function campaignTotals(classes: readonly ClassView[]): CampaignTotals {
   const verdicts: Record<string, number> = {};
   for (const entry of classes) {
@@ -105,10 +105,10 @@ export function campaignTotals(classes: readonly ClassView[]): CampaignTotals {
   }
   const sum = (pick: (entry: ClassView) => number) => classes.reduce((total, entry) => total + pick(entry), 0);
   return {
-    classes: classes.length,
-    classes_open: classes.filter((entry) => entry.state === "open").length,
-    classes_complete: classes.filter((entry) => entry.state === "complete").length,
-    classes_abandoned: classes.filter((entry) => entry.state === "abandoned").length,
+    fecs: classes.length,
+    fecs_open: classes.filter((entry) => entry.state === "open").length,
+    fecs_complete: classes.filter((entry) => entry.state === "complete").length,
+    fecs_abandoned: classes.filter((entry) => entry.state === "abandoned").length,
     quota: sum((entry) => entry.quota),
     complete: sum((entry) => entry.complete),
     dropped: sum((entry) => entry.dropped),
@@ -134,14 +134,14 @@ export const campaignReducer: LiveTopicReducer<CampaignTopicState> = {
     if ("campaign" in update) {
       return { ...state, detail: { ...state.detail, ...update.campaign } };
     }
-    const changed = new Map(update.classes.map((entry) => [entry.class_id, entry]));
-    const classes = state.detail.classes.map((entry) => changed.get(entry.class_id) ?? entry);
-    for (const entry of update.classes) {
-      if (!state.detail.classes.some((existing) => existing.class_id === entry.class_id)) {
+    const changed = new Map(update.fecs.map((entry) => [entry.fec_id, entry]));
+    const classes = state.detail.fecs.map((entry) => changed.get(entry.fec_id) ?? entry);
+    for (const entry of update.fecs) {
+      if (!state.detail.fecs.some((existing) => existing.fec_id === entry.fec_id)) {
         classes.push(entry);
       }
     }
-    return { ...state, detail: { ...state.detail, classes, totals: campaignTotals(classes) } };
+    return { ...state, detail: { ...state.detail, fecs: classes, totals: campaignTotals(classes) } };
   },
 };
 

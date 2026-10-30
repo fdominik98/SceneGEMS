@@ -15,9 +15,9 @@ function EventRow({ event }: { event: CampaignEvent }) {
       </time>
       <ToneBadge tone={eventTone(event.kind)}>{eventLabel(event.kind)}</ToneBadge>
       <span className="camp-event-body">
-        {event.class_id && (
-          <span className="camp-event-class" title={event.class_id}>
-            {splitClassId(event.class_id).name}
+        {event.fec_id && (
+          <span className="camp-event-class" title={event.fec_id}>
+            {splitClassId(event.fec_id).name}
           </span>
         )}
         {details.map((detail) => (

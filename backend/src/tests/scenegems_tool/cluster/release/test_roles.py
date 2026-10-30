@@ -1,8 +1,9 @@
 import re
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, JOB_TYPE_IMAGES
+from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE, job_type_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.release.roles import NAME_PATTERN, NODE_IMAGE, POSTGRES_IMAGE, capability_item_images, role_images, scenegems_roles
+from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
 FIELDS = {"description", "count", "stack", "project", "images", "env", "parameters", "secrets", "setup", "outputs", "ready"}
 PLACEHOLDERS = {"cluster", "name", "machine.vpn_ip", "machine.name", "release.revision", "dependent.name"}
@@ -54,12 +55,14 @@ def test_there_are_no_secrets_but_the_database_password():
     assert scenegems_roles()["master"]["secrets"] == ["POSTGRES_PASSWORD"] and scenegems_roles()["node"]["secrets"] == []
 
 
-def test_capability_items_cover_every_job_type_and_ardupilot_gets_gazebo():
+def test_capability_items_are_the_job_types_with_their_images_from_the_vessel_stack_matrix():
     images = capability_item_images()
     assert set(images) == {job_type.value for job_type in JobType}
     for job_type in JobType:
-        assert set(JOB_TYPE_IMAGES[job_type]) <= set(images[job_type.value])
-    assert GAZEBO_IMAGE in images[JobType.SIMULATION_ARDUPILOT.value]
+        assert images[job_type.value] == list(job_type_images()[job_type])
+    assert images["simulation.ardupilot_sim"] == [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE]
+    assert images["simulation.gazebo"] == [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]
+    assert "simulation.ardupilot" not in images
 
 
 def test_role_images_include_every_image_a_role_may_need():

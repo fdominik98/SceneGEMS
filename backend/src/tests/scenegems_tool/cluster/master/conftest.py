@@ -13,7 +13,7 @@ from typing import Callable, Dict, Iterator, Optional
 import pytest
 from starlette.testclient import TestClient
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, SITL_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.job_images import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.master.api.master_apps import create_node_api_app
 from scenegems_tool.cluster.master.api.operator_routes import operator_router
 from scenegems_tool.cluster.master.control_plane import ControlPlane
@@ -22,6 +22,7 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.stores import JobStore, NodeStore
 from tests.scenegems_tool.cluster.master.fake_node import FakeNode
 from tests.scenegems_tool.cluster.master.fake_stores import InMemoryJobStore, InMemoryNodeStore
+from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_hello
 
 # The master's expected fingerprints in these tests; a node built from the same checkout reports them

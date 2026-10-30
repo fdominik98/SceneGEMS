@@ -42,6 +42,14 @@ def test_create_a_campaign_with_its_config_and_classes(stores, campaign):
     assert created.kind == CampaignEventKind.CREATED and created.detail == {"config_hash": CONFIG_HASH, "classes": 2, "desired_state": "paused", "kind": "campaign"}
 
 
+def test_a_class_with_an_unlimited_failure_budget(stores):
+    created = stores.campaigns.create_campaign("unlimited", {}, CONFIG_HASH, [make_class_spec(CLASS_A, quota=2, failure_budget=None)])
+    (record,) = stores.cases.list_classes(created.campaign_id)
+    assert (record.quota, record.failure_budget, record.failure_budget_left) == (2, None, None)
+    (coverage,) = stores.results.coverage(created.campaign_id)
+    assert coverage.failure_budget is None
+
+
 def test_creation_is_one_transaction(stores):
     # The second class breaks a constraint, so neither the campaign nor its first class remain
     broken = ClassSpec(class_id=CLASS_B, content_hash=sha256_of(CLASS_B), vessel_count=2, obstacle_count=0, quota=0, failure_budget=0)

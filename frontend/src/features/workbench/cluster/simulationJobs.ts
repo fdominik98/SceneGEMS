@@ -12,9 +12,10 @@ import type { AsvSoftware, ControlLayer, GlobalSimulatorType, SimulationContext 
  */
 
 export const KINEMATIC_SIMULATION_JOB = "simulation.kinematic";
-export const ARDUPILOT_SIMULATION_JOB = "simulation.ardupilot";
-
 export type ArduPilotSimulationLayer = "ardupilot_sim" | "gazebo";
+
+/** The job type of each ArduPilot layer: SITL's own physics, or SITL against a Gazebo world. */
+export const ARDUPILOT_SIMULATION_JOBS = { ardupilot_sim: "simulation.ardupilot_sim", gazebo: "simulation.gazebo" } as const satisfies Record<ArduPilotSimulationLayer, string>;
 
 export interface SimulationVesselSetup {
   vesselId: string;
@@ -43,7 +44,7 @@ export type KinematicRunPlan = {
 
 export type ArduPilotRunPlan = {
   where: "cluster";
-  jobType: typeof ARDUPILOT_SIMULATION_JOB;
+  jobType: (typeof ARDUPILOT_SIMULATION_JOBS)[ArduPilotSimulationLayer];
   simulationLayer: ArduPilotSimulationLayer;
   speedup: number;
   summary: string;
@@ -123,7 +124,7 @@ function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimu
   }
   return {
     where: "cluster",
-    jobType: ARDUPILOT_SIMULATION_JOB,
+    jobType: ARDUPILOT_SIMULATION_JOBS[simulationLayer],
     simulationLayer,
     speedup: Math.max(1, Math.round(setup.speedup)),
     summary: "every vessel replays its trajectory through ArduPilot",

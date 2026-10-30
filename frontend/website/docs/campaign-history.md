@@ -16,7 +16,7 @@ Each row shows:
 | Entry | The name, the kind (campaign or workbench run) and where it was made (the wizard, the command line, a workbench page or a live session; entries made before Campaign History existed say "not recorded") |
 | Steps | The steps the entry runs, in chain order |
 | State | Created, running, paused, draining, stalled, stopped or completed, with what it is asked to become when that differs |
-| Made from | Links to the entries whose outputs this one took as its input; "its own input" when it started from catalog classes, scenarios or files |
+| Made from | Links to the entries whose outputs this one took as its input; "its own input" when it started from catalog FECs, scenarios or files |
 | Totals | Cases by state, and the verdicts of each monitored step |
 | Created | When the entry was made |
 
@@ -36,14 +36,14 @@ Clicking a row opens the entry:
 - **Controls** (campaigns only): Start, Pause, Drain, Resume and Stop, each with what it does. A stop is confirmed and cannot be undone.
 - **Numbers**: complete cases against the quota, cases in flight and dropped, and the verdicts.
 - **Outputs per step**: a tab per executed step with its outputs, a page of 20 at a time.
-- **Coverage** (campaigns only): the classes with their progress, failure budgets and verdicts per run.
+- **Coverage** (campaigns only): the FECs (functional equivalence classes) with their progress, failure budgets and verdicts per run.
 - **Activity log** and **Config**: the entry's events and its config versions as YAML.
 
 ### Outputs of a step
 
 | Column | Description |
 |--------|-------------|
-| Case | The case, its class, and the run and repeat of a simulated run |
+| Case | The case, its FEC, and the run and repeat of a simulated run |
 | State | In progress, complete, dropped, failed or cancelled, with the reason |
 | Output | **valid** or **not valid** (the case dropped at this step), and **complete** or **partial** (a trajectory set in which not every vessel reached its goal) |
 | Verdict | The monitor's verdict of the step and the rules that failed, or "not monitored" |

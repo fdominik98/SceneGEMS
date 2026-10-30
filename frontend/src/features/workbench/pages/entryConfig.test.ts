@@ -25,7 +25,7 @@ describe("scene generation entries", () => {
   it("runs one step over a functional scenario with the scene monitor, kept frames and the seed", () => {
     const config = sceneEntryConfig({ name: "Scene generation", scenarios: [{ name: "head_on", ref: scenarioRef }], domain, timeoutSeconds: 240.4, enforceLowTcpa: true, seed: 77 });
     expect(config).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["scene_generation"],
       input: { functional_scenarios: [{ name: "head_on", ref: scenarioRef, quota: 1, failure_budget: 0 }] },
       domain: { colregs_constants: "colregs: 1\n", vessel_types: "vessels: 1\n", obstacle_types: "obstacles: 1\n", scene_generation_timeout_s: 240, enforce_low_tcpa: true },
@@ -77,7 +77,7 @@ describe("trajectory generation entries", () => {
       seed: 9,
     });
     expect(config).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["trajectory_generation"],
       input: { items: [scene] },
       domain: { colregs_constants: "colregs: 1\n" },
@@ -108,7 +108,7 @@ describe("simulation entries", () => {
       seed: 5,
     });
     expect(config).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["simulation"],
       input: { items: [{ name: "planned", ref: trajectoriesRef }] },
       execution: { runs: [{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" }, monitor: "live" }] },
@@ -124,23 +124,23 @@ describe("ArduPilot simulation entries", () => {
     const config = simulationEntryConfig({
       name: "Simulation",
       trajectories,
-      plan: { where: "cluster", jobType: "simulation.ardupilot", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" },
+      plan: { where: "cluster", jobType: "simulation.ardupilot_sim", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" },
       colregsConstraintsContent: "colregs: 1\n",
       seed: 5,
       geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 },
     });
     expect(config).toMatchObject({
-      format: 2,
+      format: 3,
       steps: ["simulation"],
       input: { items: [{ name: "planned", ref: trajectoriesRef }] },
       execution: { runs: [{ stack: { simulation_layer: "ardupilot_sim", mode: "replay", speedup: 4, geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 } }, monitor: "live" }] },
       policy: { keep_frames: true, seed: 5 },
     });
-    expect(config.execution).toEqual({ runs: [{ stack: simulationStack({ where: "cluster", jobType: "simulation.ardupilot", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" }, { latitude: 58.1, longitude: 15.2, radius_meters: 35 }), monitor: "live" }] });
+    expect(config.execution).toEqual({ runs: [{ stack: simulationStack({ where: "cluster", jobType: "simulation.ardupilot_sim", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" }, { latitude: 58.1, longitude: 15.2, radius_meters: 35 }), monitor: "live" }] });
   });
 
   it("uses the workbench's default reference area when none is given, and Gazebo as its own layer", () => {
-    const stack = simulationStack({ where: "cluster", jobType: "simulation.ardupilot", simulationLayer: "gazebo", speedup: 1, summary: "" });
+    const stack = simulationStack({ where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 1, summary: "" });
     expect(stack).toEqual({ simulation_layer: "gazebo", mode: "replay", speedup: 1, geofence: { ...defaultReferenceGeofence } });
   });
 

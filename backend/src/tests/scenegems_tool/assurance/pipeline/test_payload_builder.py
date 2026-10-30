@@ -8,7 +8,6 @@ from scenegems_tool.assurance.campaign import ClassCatalog, campaign_config_from
 from scenegems_tool.assurance.pipeline.payload_builder import (
     PayloadBuilder,
     PayloadError,
-    derived_seed,
     required_fingerprints,
     scenario_content_of,
     trajectories_of_trajectory_result,
@@ -45,7 +44,7 @@ def test_the_trajectory_payload_takes_the_scene_inline_as_text_or_as_its_referen
     builder = _builder()
     inline = builder.trajectory_generation(5, {"valid": True, "evaluation_data": {"best_scene": {"b": 1, "a": 2}}})
     assert json.loads(inline["scenario_content"]) == {"best_scene": {"b": 1, "a": 2}}
-    assert inline["params"] == {"generator": "straight", "timespan": 10.0} and inline["seed"] == derived_seed(5, "trajectories") and inline["timeout_s"] == 1800.0
+    assert inline["params"] == {"generator": "straight", "timespan": 10.0} and inline["seed"] == 5 and inline["timeout_s"] == 1800.0  # the case seed
     referenced = builder.trajectory_generation(5, {"valid": True, "evaluation_data": dict(REFERENCE, kind="scene")})
     assert referenced["scenario_content"]["sha256"] == REFERENCE["sha256"]
     for payload in (inline, referenced):
@@ -66,7 +65,7 @@ def test_the_simulation_takes_the_trajectories_inline_or_through_a_pointer():
     inline = builder.simulation(5, 0, {"trajectory_data": {"trajectories": trajectories_data()}})
     assert inline["trajectories"] == trajectories_data()
     assert (inline["mode"], inline["monitor"], inline["early_stop"], inline["dt"]) == ("usv_navigation", "live", True, 1.0)
-    assert inline["seed"] == builder.config.execution.runs[0].seed_for(5, 0)
+    assert inline["seed"] == 5  # the case seed
     assert inline["colregs_constraints_content"] == builder.config.domain.colregs_constants
     referenced = builder.simulation(5, 0, {"trajectory_data": REFERENCE})
     assert referenced["trajectories"] == dict(REFERENCE, pointer="/trajectories")
@@ -98,7 +97,7 @@ def test_a_submission_requires_the_pinned_fingerprints_of_its_images_and_the_lab
     assert submission.requirements.fingerprints == {SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]}
     assert submission.requirements.labels == {"site": "lab"} and submission.priority == 5 and submission.idempotency_key == "key"
     assert submission.allowed_nodes == []  # any node
-    assert required_fingerprints(JobType.CALIBRATION_DEVIATION, {}, EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution"}
+    assert required_fingerprints(JobType.CALIBRATION_DEVIATION, EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution"}
     with pytest.raises(PayloadError, match="invalid simulation.kinematic payload"):
         builder.submission(Step(PipelineStage.SIMULATE, 0, 0), {"trajectories": {"scene_list": []}}, "key", EXPECTED)
 
@@ -110,10 +109,12 @@ def test_a_submission_names_the_campaigns_selected_nodes():
     assert submission.allowed_nodes == ["lab-1", "lab-3"] and submission.requirements.labels == {}
 
 
-def test_derived_seeds_are_stable_and_distinct():
-    assert derived_seed(1, "trajectories") == derived_seed(1, "trajectories")
-    assert derived_seed(1, "trajectories") != derived_seed(2, "trajectories")
-    assert 0 <= derived_seed(99, "trajectories") < 2**31
+def test_every_step_of_a_case_runs_with_the_case_seed_unless_a_run_fixes_its_own():
+    builder = _builder(runs=[{"monitor": "post_hoc"}, {"monitor": "post_hoc", "seed": 17}])
+    scene = builder.scene_generation(CLASS_A, ClassCatalog.default().get(CLASS_A).content_hash, 42)
+    trajectories = builder.trajectory_generation(42, {"valid": True, "evaluation_data": {"best_scene": {}}})
+    runs = [builder.simulation(42, run_index, {"trajectory_data": {"trajectories": trajectories_data()}}) for run_index in (0, 1)]
+    assert [scene["seed"], trajectories["seed"], runs[0]["seed"], runs[1]["seed"]] == [42, 42, 42, 17]
 
 
 # Partial campaigns
@@ -146,7 +147,7 @@ def test_a_scene_item_feeds_trajectory_generation():
     builder = _format2_builder(["trajectory_generation", "simulation"], input={"items": [_item(SCENE_REF)]})
     item = builder.config.input.items[0]
     payload = builder.trajectory_generation_of_item(5, item)
-    assert payload["scenario_content"] == SCENE_REF and payload["seed"] == derived_seed(5, "trajectories")
+    assert payload["scenario_content"] == SCENE_REF and payload["seed"] == 5
     validate_payload(JobType.TRAJECTORY_GENERATION, payload)
     with pytest.raises(PayloadError, match="not trajectories"):
         builder.simulation_of_item(5, 0, item)
@@ -163,7 +164,7 @@ def test_a_trajectories_item_feeds_the_simulation(kind, pointer, sent):
     builder = _format2_builder(["simulation"], input={"items": [_item(ref)]})
     item = builder.config.input.items[0]
     payload = builder.simulation_of_item(5, 0, item)
-    assert payload["trajectories"] == dict(ref, pointer=sent) and payload["seed"] == builder.config.execution.runs[0].seed_for(5, 0)
+    assert payload["trajectories"] == dict(ref, pointer=sent) and payload["seed"] == 5
     validate_payload(JobType.SIMULATION_KINEMATIC, payload)
     with pytest.raises(PayloadError, match="not a scene"):
         builder.trajectory_generation_of_item(5, item)
@@ -196,4 +197,4 @@ def test_monitor_submissions_take_their_graphs_priorities():
     planned = builder.submission(TRAJECTORIES_MONITOR_STEP, builder.trajectory_monitoring("c", {"trajectory_data": REFERENCE}), "k2", EXPECTED)
     simulate = builder.submission(Step(PipelineStage.SIMULATE, 0, 0), builder.simulation(1, 0, {"trajectory_data": REFERENCE}), "k3", EXPECTED)
     assert (scene.priority, planned.priority, simulate.priority) == (11, 13, 14)
-    assert scene.job_type == JobType.MONITORING_POST_HOC and set(scene.requirements.fingerprints) == set(required_fingerprints(JobType.MONITORING_POST_HOC, {}, EXPECTED))
+    assert scene.job_type == JobType.MONITORING_POST_HOC and set(scene.requirements.fingerprints) == set(required_fingerprints(JobType.MONITORING_POST_HOC, EXPECTED))

@@ -38,7 +38,7 @@ function master(url: URL): Response {
     return json({ ...sampleCampaignDetail(), ...CAMPAIGN, totals: (sampleCampaignDetail() as { totals: unknown }).totals });
   }
   if (path === "/cluster/campaigns/wb1") {
-    return json({ ...sampleCampaignDetail(), ...WORKBENCH, campaign_id: "wb1", classes: [], totals: (sampleCampaignDetail() as { totals: unknown }).totals });
+    return json({ ...sampleCampaignDetail(), ...WORKBENCH, campaign_id: "wb1", fecs: [], totals: (sampleCampaignDetail() as { totals: unknown }).totals });
   }
   const findings = path.match(/^\/cluster\/campaigns\/([^/]+)\/findings$/);
   if (findings) {

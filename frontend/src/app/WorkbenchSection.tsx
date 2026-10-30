@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Disclosure } from "../components/Disclosure";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { usePlaybackTicker } from "../domain/playback/usePlaybackTicker";
 import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../domain/playback/playbackStore";
@@ -9,12 +8,12 @@ import { getClassContent } from "../domain/cluster/presetsApi";
 import { useOperatorClient } from "../features/campaigns/useCampaignData";
 import { useClusterDomain } from "../features/domain/useClusterDomain";
 import { sceneInputSpecification } from "../features/workbench/pages/inputSpecification";
-import { PageEntryStatus } from "../features/workbench/pages/PageEntryStatus";
-import { inputOfFile, sceneOfScenePage, setTrajectoryInput } from "../features/workbench/pages/pageHandoff";
+import { useEditorLoads, type EditorLoad } from "../features/workbench/controls/useEditorLoads";
+import { sceneOfScenePage, setTrajectoryInput } from "../features/workbench/pages/pageHandoff";
 import { useScenePageStore } from "../features/workbench/pages/pageStore";
 import { useLoadedRefresh, useTargetConsumer } from "../features/workbench/pages/useWorkbenchTargets";
 import type { WorkbenchPage, WorkbenchTarget } from "../features/workbench/pages/workbenchTarget";
-import { useUiStore, type WorkbenchView } from "./uiStore";
+import { rightPaneShown, useUiStore, type WorkbenchView } from "./uiStore";
 import { usePersistedState } from "./usePersistedState";
 import {
   buildConnectMessage,
@@ -24,6 +23,7 @@ import {
 import { useSimulationWorkflow } from "../domain/simulation/useSimulationWorkflow";
 import type { ClientToServerMessage } from "../domain/simulation/wireTypes";
 import { SimulationRunPanel } from "../features/workbench/controls/SimulationRunPanel";
+import { SceneGenerationControls } from "../features/workbench/controls/SceneGenerationControls";
 import { SceneGenerationSidebar } from "../features/workbench/controls/SceneGenerationSidebar";
 import { SceneMonitorPreview } from "../features/workbench/controls/SceneMonitorPreview";
 import { runBatchGeneration } from "../features/workbench/controls/runBatchGeneration";
@@ -32,7 +32,6 @@ import { TrajectoryMonitorSidebar } from "../features/workbench/controls/Traject
 import { MqttBrokerPanel } from "../features/workbench/connection/MqttBrokerPanel";
 import { buildInitializeMonitorMessage, canInitializeMonitor } from "../features/workbench/controls/monitorConfig";
 import { SCENE_GENERATION_JOB } from "../features/workbench/cluster/workbenchJobs";
-import { describeResources } from "../features/workbench/cluster/workbenchResources";
 import { SceneCanvas } from "../features/workbench/scene/SceneCanvas";
 import { WorkbenchEncounterStrip } from "../features/workbench/monitor/WorkbenchEncounterPanels";
 import { useBatchGenerationStore } from "../domain/sceneGeneration/batchGenerationStore";
@@ -40,7 +39,6 @@ import {
   formatScenarioJsonForExport,
   parseScenarioFile,
 } from "../domain/sceneGeneration/parseEvaluationDataFile";
-import type { EvaluationData, SimulationFrame } from "../domain/simulation/types";
 import { resolveGlobalErrorMessage } from "./globalErrorMessage";
 
 interface WorkbenchSectionProps {
@@ -78,11 +76,8 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   usePlaybackTicker(useScenePlaybackStore);
   usePlaybackTicker(useTrajectoryPlaybackStore);
   const rightPaneVisible = useUiStore((s) => s.rightPaneVisible);
-  const setRightPaneVisible = useUiStore((s) => s.setRightPaneVisible);
   const errorMessage = usePlaybackStore((s) => s.errorMessage);
   const setError = usePlaybackStore((s) => s.setError);
-  const streamStatus = usePlaybackStore((s) => s.streamStatus);
-  const simulationInitializing = usePlaybackStore((s) => s.simulationInitializing);
   const activeSceneGenerationRequestId = useScenePlaybackStore((s) => s.activeSceneGenerationRequestId);
   const batchGenerationRunning = useBatchGenerationStore((s) => s.running);
   const selectedBatchClassIds = useBatchGenerationStore((s) => s.selectedClassIds);
@@ -90,14 +85,12 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const sceneGenerationLivePreview = useUiStore((s) => s.sceneGenerationLivePreview);
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
   const sceneGenerationPaneView = useUiStore((s) => s.sceneGenerationPaneView);
+  const setSceneGenerationPaneView = useUiStore((s) => s.setSceneGenerationPaneView);
   const setControlPanelMode = useUiStore((s) => s.setControlPanelMode);
   const isSceneGenerationBusy =
     activeSceneGenerationRequestId !== null || batchGenerationRunning;
   const latestGeneratedScene = useScenePlaybackStore((s) => s.latestGeneratedScene);
 
-  useEffect(() => {
-    setSceneValidityBadgeDismissed(false);
-  }, [latestGeneratedScene]);
   const clearVisualizedScenario = useScenePlaybackStore((s) => s.clearVisualizedScenario);
   const setVisualizedScenario = useScenePlaybackStore((s) => s.setVisualizedScenario);
   const requestAutoFit = usePlaybackStore((s) => s.requestAutoFit);
@@ -135,11 +128,9 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     false
   );
   const [sceneGenerationError, setSceneGenerationError] = useState<string | null>(null);
-  const [sceneValidityBadgeDismissed, setSceneValidityBadgeDismissed] = useState(false);
   const mainLayoutRef = useRef<HTMLElement | null>(null);
   const simulationCenterRef = useRef<HTMLDivElement | null>(null);
   const previousViewRef = useRef<WorkbenchView>("simulation");
-  const scenarioFileInputRef = useRef<HTMLInputElement | null>(null);
 
   /** A functional scenario of the master's catalog, by class id. */
   const loadScenarioText = useCallback(
@@ -217,24 +208,27 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     colregsTextRef.current = colregsConstraintsText;
   }, [colregsConstraintsText]);
 
+  // Only the latest load into the editor counts; while it runs the scenario list shows the pick and generating
+  // waits, so a generation never pairs the old text with the new name (useEditorLoads.ts).
+  const applyEditorLoad = useCallback(
+    (loaded: EditorLoad) => {
+      setFunctionalSpecText(loaded.text);
+      setFunctionalSpecLabel(loaded.label);
+      setSceneGenerationError(null);
+    },
+    [setFunctionalSpecLabel, setFunctionalSpecText]
+  );
+  const { pending: pendingLoad, load: loadIntoEditor, cancel: cancelEditorLoads } = useEditorLoads(applyEditorLoad, setSceneGenerationError);
+
   // A scene loaded on the scene page brings its functional scenario into the editor, so it can be generated again or changed.
   const loadInputSpecification = useCallback(
     (target: WorkbenchTarget) => {
       if (target.page !== "sceneGeneration" || operatorClient === null) {
         return;
       }
-      void sceneInputSpecification(operatorClient, target)
-        .then((specification) => {
-          if (specification !== null) {
-            setFunctionalSpecText(specification.text);
-            setFunctionalSpecLabel(specification.label);
-          }
-        })
-        .catch((error: unknown) => {
-          setSceneGenerationError(`The scene's functional scenario could not be loaded: ${error instanceof Error ? error.message : String(error)}`);
-        });
+      loadIntoEditor(null, () => sceneInputSpecification(operatorClient, target), "The scene's functional scenario could not be loaded");
     },
-    [operatorClient, setFunctionalSpecLabel, setFunctionalSpecText]
+    [loadIntoEditor, operatorClient]
   );
 
   // Outputs other sections open here (`openInWorkbench`), and the pages' loaded entries after a reload.
@@ -243,9 +237,8 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       if (target.page === "simulation") {
         usePlaybackStore.getState().requestAutoFit();
       }
-      if (!target.live) {
-        loadInputSpecification(target);
-      }
+      // A live entry's scenario is known before its scene is: it loads into the editor too
+      loadInputSpecification(target);
       void streamControlsRef.current.openTarget(target, colregsTextRef.current);
     },
     [loadInputSpecification]
@@ -332,13 +325,12 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     return Math.min(maxHeight, Math.max(BOTTOM_PANEL_MIN_HEIGHT, heightFromBottom));
   }, []);
 
-  // The simulation view gives the encounter canvas and its timeline three fifths by default.
-  const defaultTopFraction = activeView === "simulation" ? 3 : 1;
-  const defaultBottomFraction = activeView === "simulation" ? 2 : 1;
-  const simulationBottomPanelGridRows =
+  // Every page's panel takes the height it needs, at most half the page, and the canvas the rest, until the
+  // resizer sets a height.
+  const bottomPanelGridRows =
     bottomPanelHeight !== null
       ? `minmax(0, 1fr) ${BOTTOM_PANEL_RESIZER_HEIGHT}px ${bottomPanelHeight}px`
-      : `minmax(0, ${defaultTopFraction}fr) ${BOTTOM_PANEL_RESIZER_HEIGHT}px minmax(0, ${defaultBottomFraction}fr)`;
+      : `minmax(0, 1fr) ${BOTTOM_PANEL_RESIZER_HEIGHT}px fit-content(50%)`;
 
   const onBottomPaneResizeStart = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -364,12 +356,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
 
   const readTextFile = useCallback(async (file: File): Promise<string> => file.text(), []);
 
-  const canGenerateScene =
-    functionalSpecText.trim().length > 0 &&
-    colregsConstraintsText.trim().length > 0 &&
-    vesselTypesText.trim().length > 0 &&
-    obstacleTypesText.trim().length > 0;
-
   const domainReadyForGeneration =
     colregsConstraintsText.trim().length > 0 &&
     vesselTypesText.trim().length > 0 &&
@@ -383,10 +369,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const globalErrorMessage = resolveGlobalErrorMessage(sceneGenerationError, errorMessage);
   const sceneGenerationResources = streamControls.clusterResources(SCENE_GENERATION_JOB);
 
-  const showRightPane =
-    activeView === "sceneGeneration" ||
-    activeView === "trajectoryGeneration" ||
-    (activeView === "simulation" && rightPaneVisible);
+  const showRightPane = rightPaneShown(activeView, rightPaneVisible);
 
   const simulationRightPaneGridColumns =
     rightPaneWidth !== null
@@ -472,23 +455,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     ]
   );
 
-  const loadScenarioOnBackend = useCallback(
-    async (
-      evaluationData: EvaluationData,
-      scene: SimulationFrame,
-      fileName = "generated_scene.json",
-      fileContent?: string
-    ) => {
-      const content =
-        fileContent ?? formatScenarioJsonForExport(evaluationData, scene);
-      await streamControls.setSimulationInput(inputOfFile(fileName), content, { colregsConstraintsContent: colregsConstraintsText });
-      setControlPanelMode("animation");
-      setActiveView("simulation");
-      requestAutoFit();
-    },
-    [colregsConstraintsText, streamControls, requestAutoFit, setActiveView, setControlPanelMode]
-  );
-
   const handleScenarioFileSelected = useCallback(
     async (file: File) => {
       try {
@@ -519,26 +485,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       streamControls,
     ]
   );
-
-  const initializeVisualizedScenario = useCallback(async () => {
-    const visualized = useScenePlaybackStore.getState().latestGeneratedScene;
-    if (!visualized?.valid || !visualized.evaluationData) {
-      return;
-    }
-    try {
-      await loadScenarioOnBackend(
-        visualized.evaluationData,
-        visualized.scene,
-        scenarioSourceName ?? "generated_scene.json",
-        loadedScenarioFileContent ?? undefined
-      );
-      setSceneGenerationError(null);
-    } catch (error) {
-      setSceneGenerationError(
-        error instanceof Error ? error.message : "Failed to load scenario on backend."
-      );
-    }
-  }, [loadScenarioOnBackend, loadedScenarioFileContent, scenarioSourceName]);
 
   const exportTextFile = useCallback((content: string, fileName: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
@@ -571,35 +517,11 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             <div
               ref={simulationCenterRef}
               className={`simulation-center-layout${isResizingBottomPanel ? " is-resizing-bottom" : ""}`}
-              style={{
-                gridTemplateRows:
-                  bottomPanelHeight !== null
-                    ? `minmax(0, 1fr) ${BOTTOM_PANEL_RESIZER_HEIGHT}px ${bottomPanelHeight}px`
-                    : `minmax(0, 1fr) ${BOTTOM_PANEL_RESIZER_HEIGHT}px 380px`,
-              }}
+              style={{ gridTemplateRows: bottomPanelGridRows }}
             >
               <div className="simulation-center-stage">
                 {activeSceneGenerationRequestId && (
                   <LoadingSpinner label="Generating scene…" />
-                )}
-                {latestGeneratedScene && !sceneValidityBadgeDismissed && (
-                  <p
-                    className={`scene-validity-badge${latestGeneratedScene.valid ? " scene-validity-badge--valid" : " scene-validity-badge--invalid"}`}
-                    role="button"
-                    tabIndex={0}
-                    title="Click to dismiss"
-                    onClick={() => setSceneValidityBadgeDismissed(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        setSceneValidityBadgeDismissed(true);
-                      }
-                    }}
-                  >
-                    {latestGeneratedScene.valid
-                      ? "Displayed scene: valid (complies with specification)"
-                      : "Displayed scene: invalid (generation in progress)"}
-                  </p>
                 )}
                 <div className="scene-host">
                   <SceneCanvas generatedScene={latestGeneratedScene?.scene ?? null} />
@@ -614,231 +536,63 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
               />
               <footer className="bottom-toolbar bottom-toolbar-compact bottom-toolbar-single">
                 <div className="bottom-slot bottom-slot-controls">
-                  <div className="control-panel-heading">
-                    <div>
-                      <p className="control-panel-eyebrow">Step 1 of 3</p>
-                      <h3>Scene Generation</h3>
-                    </div>
-                    <div className="control-panel-status">
-                      <span className="meta" role="status">
-                        Scene:{" "}
-                        {latestGeneratedScene
-                          ? scenarioSourceName
-                            ? `from file (${scenarioSourceName})`
-                            : "generated"
-                          : "none yet"}
-                      </span>
-                      <span className="meta" title="Scene generation runs as jobs on the active cluster">
-                        Cluster: {describeResources(sceneGenerationResources)}
-                      </span>
-                    </div>
-                  </div>
-                  {sceneGenerationResources.blocker !== null && (
-                    <p className="meta resource-blocker" role="status">
-                      {sceneGenerationResources.blocker}
-                    </p>
-                  )}
-                  <PageEntryStatus store={useScenePageStore} />
-                  <p className="meta">
-                    Scenario: {functionalSpecLabel ?? (functionalSpecText.trim().length > 0 ? "written in the editor" : "none yet")}. Every
-                    generation is saved as an entry of Campaign History.
-                  </p>
-                  <div className="toolbar-row scene-generation-toolbar">
-                    {(() => {
-                      const isBatch = sceneGenerationTab === "batch";
-                      const sceneCount = isBatch ? selectedBatchClassIds.length : 1;
-                      const disabled =
-                        sceneGenerationResources.blocker !== null ||
-                        (isBatch
-                          ? !domainReadyForGeneration ||
-                            isSceneGenerationBusy ||
-                            selectedBatchClassIds.length === 0
-                          : !canGenerateScene || isSceneGenerationBusy);
-                      return (
-                        <button
-                          className="primary-btn accent"
-                          type="button"
-                          disabled={disabled}
-                          onClick={() => {
-                            setSceneGenerationError(null);
-                            if (isBatch) {
-                              void runBatchGeneration({
-                                selectedClassIds: selectedBatchClassIds,
-                                loadScenarioText,
-                                generateBatch,
-                                sceneGenerationTimeoutSeconds,
-                                isAborted: () =>
-                                  !useBatchGenerationStore.getState().running,
-                              });
-                              return;
-                            }
-                            void (async () => {
-                              const outcome = await runSceneGeneration(functionalSpecText);
-                              if (!outcome.ok && !outcome.superseded) {
-                                setSceneGenerationError(
-                                  outcome.message ?? "Scene generation failed."
-                                );
-                              } else if (outcome.ok) {
-                                setScenarioSourceName(null);
-                              }
-                            })();
-                          }}
-                        >
-                          {sceneCount === 1 ? "Generate scene" : `Generate ${sceneCount} scenes`}
-                        </button>
+                  <SceneGenerationControls
+                    resources={sceneGenerationResources}
+                    busy={isSceneGenerationBusy}
+                    batch={sceneGenerationTab === "batch"}
+                    batchCount={selectedBatchClassIds.length}
+                    scenarioLabel={functionalSpecLabel}
+                    hasScenario={functionalSpecText.trim().length > 0}
+                    loadingLabel={pendingLoad !== null ? (pendingLoad.label ?? "the scene's scenario") : null}
+                    domainProblem={domainReadyForGeneration ? null : domainProblem}
+                    specificationHidden={sceneGenerationPaneView === "monitor"}
+                    onShowSpecification={() => setSceneGenerationPaneView("specification")}
+                    onGenerate={() => {
+                      setSceneGenerationError(null);
+                      if (sceneGenerationTab === "batch") {
+                        void runBatchGeneration({
+                          selectedClassIds: selectedBatchClassIds,
+                          loadScenarioText,
+                          generateBatch,
+                          sceneGenerationTimeoutSeconds,
+                          isAborted: () => !useBatchGenerationStore.getState().running,
+                        });
+                        return;
+                      }
+                      void (async () => {
+                        const outcome = await runSceneGeneration(functionalSpecText);
+                        if (!outcome.ok && !outcome.superseded) {
+                          setSceneGenerationError(outcome.message ?? "Scene generation failed.");
+                        } else if (outcome.ok) {
+                          setScenarioSourceName(null);
+                        }
+                      })();
+                    }}
+                    onStop={() => {
+                      streamControls.stopSceneGeneration();
+                      setSceneGenerationError("Scene generation stopped.");
+                    }}
+                    timeoutSeconds={sceneGenerationTimeoutSeconds}
+                    onTimeoutSecondsChange={setSceneGenerationTimeoutSeconds}
+                    enforceLowTcpa={enforceLowTcpa}
+                    onEnforceLowTcpaChange={setEnforceLowTcpa}
+                    livePreview={sceneGenerationLivePreview}
+                    onLivePreviewChange={setSceneGenerationLivePreview}
+                    scene={latestGeneratedScene}
+                    sceneFileName={scenarioSourceName}
+                    onOpenFile={(file) => void handleScenarioFileSelected(file)}
+                    onExport={() => {
+                      if (!latestGeneratedScene?.valid || !latestGeneratedScene.evaluationData) {
+                        return;
+                      }
+                      exportTextFile(
+                        loadedScenarioFileContent ?? formatScenarioJsonForExport(latestGeneratedScene.evaluationData, latestGeneratedScene.scene),
+                        scenarioSourceName ?? "generated_scene.json",
+                        "application/json"
                       );
-                    })()}
-                    <button
-                      type="button"
-                      disabled={!isSceneGenerationBusy}
-                      onClick={() => {
-                        streamControls.stopSceneGeneration();
-                        setSceneGenerationError("Scene generation stopped.");
-                      }}
-                    >
-                      Stop
-                    </button>
-                    <button
-                      type="button"
-                      className={
-                        latestGeneratedScene?.valid && latestGeneratedScene.evaluationData
-                          ? "primary-btn accent"
-                          : undefined
-                      }
-                      disabled={
-                        isSceneGenerationBusy ||
-                        !latestGeneratedScene?.valid ||
-                        !latestGeneratedScene.evaluationData
-                      }
-                      onClick={loadForTrajectoryGeneration}
-                    >
-                      Next: Trajectory Generation
-                    </button>
-                  </div>
-                  {!domainReadyForGeneration ? (
-                    <p className="meta">{domainProblem}</p>
-                  ) : (
-                    !canGenerateScene &&
-                    sceneGenerationTab === "single" && <p className="meta">Choose or write a scenario specification on the right to enable generating.</p>
-                  )}
-                  <Disclosure
-                    id="scene-gen:options"
-                    variant="plain"
-                    headingLevel={4}
-                    title="Generation options"
-                    hint={`${sceneGenerationTimeoutSeconds} s timeout${enforceLowTcpa ? ", low TCPA" : ""}${sceneGenerationLivePreview ? "" : ", no live preview"}`}
-                  >
-                    <div className="scene-generation-trigger-group">
-                      <label className="check scene-generation-preview-toggle">
-                        <input
-                          type="checkbox"
-                          checked={sceneGenerationLivePreview}
-                          onChange={(e) => setSceneGenerationLivePreview(e.target.checked)}
-                          aria-label="Live preview visualization during scene generation"
-                        />
-                        <span>Live preview</span>
-                      </label>
-                      <label className="check scene-generation-preview-toggle">
-                        <input
-                          type="checkbox"
-                          checked={enforceLowTcpa}
-                          onChange={(e) => setEnforceLowTcpa(e.target.checked)}
-                          aria-label="Enforce low TCPA when generating a COLREGS situation"
-                        />
-                        <span>Enforce low TCPA</span>
-                      </label>
-                      <label className="toolbar-timeout">
-                        <span className="toolbar-timeout-label">Timeout (s)</span>
-                        <input
-                          className="toolbar-timeout-input"
-                          type="number"
-                          min={1}
-                          max={86400}
-                          step={1}
-                          value={sceneGenerationTimeoutSeconds}
-                          onChange={(e) => {
-                            const v = Number.parseInt(e.target.value, 10);
-                            if (Number.isFinite(v)) {
-                              setSceneGenerationTimeoutSeconds(Math.min(86400, Math.max(1, v)));
-                            }
-                          }}
-                          aria-label="Scene generation timeout in seconds"
-                        />
-                      </label>
-                    </div>
-                  </Disclosure>
-                  <Disclosure
-                    id="scene-gen:more-actions"
-                    variant="plain"
-                    headingLevel={4}
-                    title="More scene actions"
-                    hint="Load or export a scenario file, skip to simulation"
-                    keepMounted
-                  >
-                    <div className="scene-scenario-actions">
-                      <input
-                        ref={scenarioFileInputRef}
-                        type="file"
-                        accept="application/json,.json"
-                        hidden
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            void handleScenarioFileSelected(file);
-                          }
-                          e.target.value = "";
-                        }}
-                      />
-                      <button
-                        type="button"
-                        disabled={isSceneGenerationBusy}
-                        onClick={() => scenarioFileInputRef.current?.click()}
-                      >
-                        Load Scenario File...
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          simulationInitializing ||
-                          streamStatus !== "connected" ||
-                          !latestGeneratedScene?.valid ||
-                          !latestGeneratedScene.evaluationData
-                        }
-                        onClick={() => {
-                          void initializeVisualizedScenario();
-                        }}
-                      >
-                        Load for Simulation
-                      </button>
-                      <button
-                        type="button"
-                        disabled={
-                          isSceneGenerationBusy ||
-                          !latestGeneratedScene?.valid ||
-                          !latestGeneratedScene.evaluationData
-                        }
-                        onClick={() => {
-                          if (
-                            !latestGeneratedScene?.valid ||
-                            !latestGeneratedScene.evaluationData
-                          ) {
-                            return;
-                          }
-                          exportTextFile(
-                            loadedScenarioFileContent ??
-                              formatScenarioJsonForExport(
-                                latestGeneratedScene.evaluationData,
-                                latestGeneratedScene.scene
-                              ),
-                            scenarioSourceName ?? "generated_scene.json",
-                            "application/json"
-                          );
-                        }}
-                      >
-                        Export Scenario
-                      </button>
-                    </div>
-                  </Disclosure>
+                    }}
+                    onNext={loadForTrajectoryGeneration}
+                  />
                 </div>
               </footer>
             </div>
@@ -846,12 +600,13 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             <div
               ref={simulationCenterRef}
               className={`simulation-center-layout${isResizingBottomPanel ? " is-resizing-bottom" : ""}`}
-              style={{ gridTemplateRows: simulationBottomPanelGridRows }}
+              style={{ gridTemplateRows: bottomPanelGridRows }}
             >
               <div className="simulation-center-stage">
                 <div className="scene-host">
                   <SceneCanvas />
                 </div>
+                <WorkbenchEncounterStrip />
               </div>
               <div
                 className="bottom-pane-resizer"
@@ -878,13 +633,13 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             <div
               ref={simulationCenterRef}
               className={`simulation-center-layout${isResizingBottomPanel ? " is-resizing-bottom" : ""}`}
-              style={{ gridTemplateRows: simulationBottomPanelGridRows }}
+              style={{ gridTemplateRows: bottomPanelGridRows }}
             >
               <div className="simulation-center-stage">
                 <div className="scene-host">
                   <SceneCanvas />
                 </div>
-                <WorkbenchEncounterStrip streamControls={streamControls} />
+                <WorkbenchEncounterStrip />
               </div>
               <div
                 className="bottom-pane-resizer"
@@ -902,21 +657,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
           )}
         </section>
 
-        {activeView === "simulation" && !rightPaneVisible && (
-          <button
-            type="button"
-            className="right-pane-show-btn"
-            onClick={() => setRightPaneVisible(true)}
-            aria-label="Show monitoring panel"
-            title="Show monitoring panel"
-          >
-            <span className="right-pane-show-icon" aria-hidden>
-              ◀
-            </span>
-            <span className="right-pane-show-label">Monitor</span>
-          </button>
-        )}
-
         {showRightPane && (
           <>
             <div
@@ -933,33 +673,20 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             ) : (
               <SceneGenerationSidebar
                 functionalSpecText={functionalSpecText}
+                functionalSpecLabel={pendingLoad?.label ?? functionalSpecLabel}
                 onFunctionalSpecTextChange={(text) => {
+                  // Typing wins over a load still running
+                  cancelEditorLoads();
                   setFunctionalSpecText(text);
                   setFunctionalSpecLabel((label) => (label === null || label.endsWith(" (edited)") ? label : `${label} (edited)`));
                 }}
-                onLoadFunctionalSpecFromPreset={(classId) => {
-                  void (async () => {
-                    try {
-                      const text = await loadScenarioText(classId);
-                      setFunctionalSpecText(text);
-                      setFunctionalSpecLabel(classId);
-                      setSceneGenerationError(null);
-                    } catch (error) {
-                      setSceneGenerationError(
-                        error instanceof Error ? `The functional scenario could not be loaded: ${error.message}` : "The functional scenario could not be loaded."
-                      );
-                    }
-                  })();
-                }}
+                onLoadFunctionalSpecFromPreset={(classId) =>
+                  loadIntoEditor(classId, async () => ({ label: classId, text: await loadScenarioText(classId) }), "The functional scenario could not be loaded")
+                }
                 loadScenarioText={loadScenarioText}
-                onLoadFunctionalSpecFromFile={(file) => {
-                  void (async () => {
-                    const text = await readTextFile(file);
-                    setFunctionalSpecText(text);
-                    setFunctionalSpecLabel(file.name);
-                    setSceneGenerationError(null);
-                  })();
-                }}
+                onLoadFunctionalSpecFromFile={(file) =>
+                  loadIntoEditor(file.name, async () => ({ label: file.name, text: await readTextFile(file) }), "The file could not be read")
+                }
                 onExportFunctionalSpec={() =>
                   exportTextFile(functionalSpecText, "functional_scenario.problem", "text/plain")
                 }

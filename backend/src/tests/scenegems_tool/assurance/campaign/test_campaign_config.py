@@ -21,11 +21,11 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     RetentionPolicy,
     RunConfig,
     SceneGenerationConfig,
+    budget_limit,
     campaign_config_from_dict,
     case_seed,
     load_campaign_config,
     parse_campaign_config,
-    run_seed,
     with_domain_defaults,
 )
 from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
@@ -109,11 +109,13 @@ def test_live_monitor_with_early_stop_and_usv_navigation_parameters():
         (dict(MINIMAL, colour="blue"), "colour: Extra inputs are not permitted"),
         (_with(scope=[{"classes": ["a/b"], "quota": 1, "weight": 2}]), "scope.0.weight: Extra inputs are not permitted"),
         (_with(scope=[]), "a format 1 config needs at least one scope entry"),
-        (_with(scope=[{"quota": 1}]), "a scope entry needs classes or patterns"),
+        (_with(scope=[{"quota": 1}]), "a scope entry needs fecs (classes before format 3) or patterns"),
         (_with(scope=[{"classes": ["a/b"], "quota": 0}]), "scope.0.quota: Input should be greater than or equal to 1"),
-        (_with(scope=[{"classes": ["a/b"], "quota": 1, "failure_budget": -1}]), "scope.0.failure_budget"),
+        (_with(scope=[{"classes": ["a/b"], "quota": 1, "failure_budget": -1}]), "scope.0.failure_budget: Value error, a failure budget is a number of cases from 0 up or 'unlimited', not -1"),
+        (_with(scope=[{"classes": ["a/b"], "quota": 1, "failure_budget": "forever"}]), "a failure budget is a number of cases from 0 up or 'unlimited', not 'forever'"),
+        (_with(scope=[{"classes": ["a/b"], "quota": 1, "failure_budget": 2.5}]), "scope.0.failure_budget: Value error"),
         ({"scope": MINIMAL["scope"]}, "name: Field required"),
-        (_with(format=3), "format: Input should be 1 or 2"),
+        (_with(format=4), "format: Input should be 1, 2 or 3"),
         (_with(trajectories={"generator": "straight"}), "the straight generator needs timespan_s"),
         (_with(trajectories={"generator": "straight", "timespan_s": 60, "params": {"maxIterations": 5}}), "the straight generator takes no search parameters"),
         (_with(trajectories={"timespan_s": 60}), "timespan_s applies to the straight generator only"),
@@ -142,6 +144,17 @@ def test_live_monitor_with_early_stop_and_usv_navigation_parameters():
 )
 def test_invalid_configs_are_rejected_with_the_reason(data, reason):
     assert reason in _reasons(data)
+
+
+def test_an_unlimited_failure_budget():
+    config = parse_campaign_config("name: lab\nscope:\n  - patterns: [2vessel_*_scenarios]\n    quota: 3\n    failure_budget: unlimited\n")
+    (entry,) = config.scope
+    assert entry.failure_budget == "unlimited" and budget_limit(entry.failure_budget) is None
+    assert config.to_json()["scope"][0]["failure_budget"] == "unlimited"
+    assert campaign_config_from_dict(config.to_json()) == config
+    numbered = campaign_config_from_dict(_with(scope=[{"patterns": ["2vessel_*_scenarios"], "quota": 3, "failure_budget": 0}]))
+    assert config.config_hash() != numbered.config_hash()
+    assert budget_limit(numbered.scope[0].failure_budget) == 0 and numbered.to_json()["scope"][0]["failure_budget"] == 0
 
 
 def test_every_problem_is_reported():
@@ -208,31 +221,30 @@ def test_the_hash_is_the_same_in_another_process():
 # Seeds
 
 
-def test_case_seeds_are_31_bit_sha256_prefixes():
-    expected = int.from_bytes(hashlib.sha256(b"20261025:3vessel_0obstacle_scenarios/functional_model5:7").digest()[:4], "big") & MAX_SEED
-    assert case_seed(20261025, "3vessel_0obstacle_scenarios/functional_model5", 7) == expected
-    seeds = [case_seed(seed, class_id, index) for seed in (0, 1) for class_id in ("a/b", "a/c") for index in range(50)]
-    assert all(0 <= seed <= MAX_SEED for seed in seeds)
-    assert len(set(seeds)) == len(seeds)
+def test_case_seeds_count_up_from_the_campaign_seed():
+    assert [case_seed(20261025, "3vessel_0obstacle_scenarios/functional_model5", index) for index in range(3)] == [20261025, 20261026, 20261027]
+    assert case_seed(20261025, "2vessel_0obstacle_scenarios/functional_model1", 0) == 20261025  # every class starts at the campaign seed
+    assert case_seed(MAX_SEED, "a/b", 2) == 1  # 31 bits, wrapping around
+
+
+def test_an_item_counts_from_its_item_number():
+    assert [case_seed(100, f"item/{index}", 0) for index in range(3)] == [100, 101, 102]
+    assert case_seed(100, "scenario/item/5", 1) == 101  # only an item class id counts its number
 
 
 def test_seeds_are_deterministic():
     config = load_campaign_config(EXIT_CAMPAIGN)
-    assert config.case_seed("2vessel_0obstacle_scenarios/functional_model1", 3) == case_seed(20261025, "2vessel_0obstacle_scenarios/functional_model1", 3)
-    assert run_seed(123, 0) == run_seed(123, 0) != run_seed(123, 1)
-    assert run_seed(123, 0) == int.from_bytes(hashlib.sha256(b"123:run:0").digest()[:4], "big") & MAX_SEED
+    assert config.case_seed("2vessel_0obstacle_scenarios/functional_model1", 3) == case_seed(20261025, "2vessel_0obstacle_scenarios/functional_model1", 3) == 20261028
 
 
-def test_a_run_seed_is_derived_unless_the_run_fixes_one():
-    assert RunConfig().seed_for(555, 2) == run_seed(555, 2)
-    assert RunConfig(seed=17).seed_for(555, 2) == 17
+def test_a_run_takes_the_case_seed_unless_it_fixes_one():
+    assert RunConfig().seed_for(555) == 555
+    assert RunConfig(seed=17).seed_for(555) == 17
 
 
 def test_indexes_start_at_zero():
     with pytest.raises(ValueError):
         case_seed(0, "a/b", -1)
-    with pytest.raises(ValueError):
-        run_seed(0, -1)
 
 
 def test_the_model_is_immutable():
@@ -307,6 +319,38 @@ def test_format_2_defaults():
     assert config.config_hash() != campaign_config_from_dict(MINIMAL).config_hash()  # the format and the new fields are hashed
 
 
+def test_format_3_lists_a_scope_entry_s_fecs_under_fecs():
+    entry = {"fecs": ["2vessel_0obstacle_scenarios/functional_model0"], "patterns": ["3vessel_*"], "quota": 2}
+    config = campaign_config_from_dict(_format2(format=3, scope=[entry]))
+    assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+    stored = config.to_json()
+    assert stored["format"] == 3 and stored["scope"][0]["fecs"] == ["2vessel_0obstacle_scenarios/functional_model0"] and "classes" not in stored["scope"][0]
+    assert campaign_config_from_dict(stored) == config and campaign_config_from_dict(stored).config_hash() == config.config_hash()
+    yaml_text = "format: 3\nname: lab\nscope:\n  - fecs: [2vessel_0obstacle_scenarios/functional_model0]\n    quota: 1\n"
+    assert parse_campaign_config(yaml_text).scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+
+
+def test_formats_1_and_2_keep_the_name_classes():
+    for config_format in (1, 2):
+        config = campaign_config_from_dict(dict(MINIMAL, format=config_format))
+        assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+        stored = config.to_json()
+        assert stored["scope"][0]["classes"] == ["2vessel_0obstacle_scenarios/functional_model0"] and "fecs" not in stored["scope"][0]
+        assert campaign_config_from_dict(stored).config_hash() == config.config_hash()
+
+
+@pytest.mark.parametrize(
+    "data, reason",
+    [
+        (_format2(format=3, scope=[{"classes": ["a/b"], "quota": 1}]), "scope.0: format 3 calls them fecs, not classes"),
+        (_format2(scope=[{"fecs": ["a/b"], "quota": 1}, {"fecs": ["a/c"], "quota": 1}]), "scope.0, scope.1: fecs need format 3; formats 1 and 2 call them classes"),
+        (_with(scope=[{"fecs": ["a/b"], "quota": 1}]), "fecs need format 3"),
+    ],
+)
+def test_a_scope_entry_takes_the_name_of_its_format(data, reason):
+    assert reason in _reasons(data)
+
+
 def test_the_step_kinds():
     assert [step.step_kind for step in CHAIN] == [StepKind.SCENE, StepKind.TRAJECTORIES, StepKind.SIMULATION]
 
@@ -320,6 +364,8 @@ def test_input_with_scenarios_and_items():
     scenarios = campaign_config_from_dict(_format2(input={"functional_scenarios": [{"name": "my_head_on", "ref": SCENARIO_REF, "quota": 3, "failure_budget": 1}]}))
     (scenario,) = scenarios.input.functional_scenarios
     assert (scenario.name, scenario.quota, scenario.failure_budget, scenario.ref.sha256) == ("my_head_on", 3, 1, SHA)
+    unlimited = campaign_config_from_dict(_format2(input={"functional_scenarios": [{"name": "my_head_on", "ref": SCENARIO_REF, "quota": 3, "failure_budget": "unlimited"}]}))
+    assert budget_limit(unlimited.input.functional_scenarios[0].failure_budget) is None
 
 
 @pytest.mark.parametrize(
@@ -339,6 +385,7 @@ def test_input_with_scenarios_and_items():
             "functional scenario names must be distinct: ['a']",
         ),
         (_format2(input={"functional_scenarios": [{"name": "a", "ref": SCENARIO_REF, "quota": 0}]}), "input.functional_scenarios.0.quota"),
+        (_format2(input={"functional_scenarios": [{"name": "a", "ref": SCENARIO_REF, "quota": 1, "failure_budget": "none"}]}), "input.functional_scenarios.0.failure_budget: Value error"),
         (_format2(input={"items": [dict(SCENE_ITEM, ref={"sha256": "AB" * 32, "size_bytes": 1, "kind": "scene"})]}), "input.items.0.ref.sha256: String should match pattern"),
         (_format2(input={"items": [dict(SCENE_ITEM, ref={"sha256": SHA, "kind": "scene"})]}), "input.items.0.ref.size_bytes: Field required"),
         (_format2(input={"items": [dict(SCENE_ITEM, ref={"sha256": SHA, "size_bytes": 1, "kind": "frames"})]}), "input.items.0.ref.kind"),

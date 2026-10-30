@@ -54,7 +54,7 @@ def show(session: Session, arguments: Namespace) -> int:
     campaign = session.api.get(campaign_path(arguments.campaign))
     session.say(campaign_summary(campaign))
     session.say()
-    session.say(coverage_table(campaign["classes"]))
+    session.say(coverage_table(campaign["fecs"]))
     return 0
 
 
@@ -74,7 +74,7 @@ def delete(session: Session, arguments: Namespace) -> int:
 
 
 def outputs(session: Session, arguments: Namespace) -> int:
-    found = session.api.get(campaign_path(arguments.campaign, "/outputs"), step=arguments.step, state=arguments.state, class_id=arguments.class_id, limit=arguments.limit, offset=arguments.offset)
+    found = session.api.get(campaign_path(arguments.campaign, "/outputs"), step=arguments.step, state=arguments.state, fec_id=arguments.fec_id, limit=arguments.limit, offset=arguments.offset)
     if not found:
         session.say(f"no {arguments.step} outputs")
         return 0
@@ -88,17 +88,17 @@ def findings(session: Session, arguments: Namespace) -> int:
 
 
 def cases(session: Session, arguments: Namespace) -> int:
-    found = session.api.get(campaign_path(arguments.campaign, "/cases"), class_id=arguments.class_id, state=arguments.state, stage=arguments.stage, limit=arguments.limit, offset=arguments.offset)
+    found = session.api.get(campaign_path(arguments.campaign, "/cases"), fec_id=arguments.fec_id, state=arguments.state, stage=arguments.stage, limit=arguments.limit, offset=arguments.offset)
     if not found:
         session.say("no cases")
         return 0
-    session.say(table(["class", "index", "case", "stage", "state", "seed", "reason"], [[c["class_id"], c["case_index"], c["case_id"], c["stage"], c["state"], c["seed"], c["reason"]] for c in found]))
+    session.say(table(["FEC", "index", "case", "stage", "state", "seed", "reason"], [[c["fec_id"], c["case_index"], c["case_id"], c["stage"], c["state"], c["seed"], c["reason"]] for c in found]))
     return 0
 
 
 def verdicts(session: Session, arguments: Namespace) -> int:
     path = campaign_path(arguments.campaign, "/verdicts")
-    filters = dict(class_id=arguments.class_id, state=arguments.state, run_index=arguments.run, sensitive=True if arguments.sensitive else None)
+    filters = dict(fec_id=arguments.fec_id, state=arguments.state, run_index=arguments.run, sensitive=True if arguments.sensitive else None)
     if arguments.csv:
         size = session.api.download(path, Path(arguments.csv), format="csv", **filters)
         session.say(f"wrote {size} bytes to {arguments.csv}")
@@ -107,14 +107,14 @@ def verdicts(session: Session, arguments: Namespace) -> int:
     if not found:
         session.say("no verdicts")
         return 0
-    rows = [[v["class_id"], v["case_id"], v["run_index"], v["state"], ";".join(v["failed_rules"]), v["first_failure_time_s"], v["sensitive"]] for v in found]
-    session.say(table(["class", "case", "run", "state", "failed rules", "first failure s", "sensitive"], rows))
+    rows = [[v["fec_id"], v["case_id"], v["run_index"], v["state"], ";".join(v["failed_rules"]), v["first_failure_time_s"], v["sensitive"]] for v in found]
+    session.say(table(["FEC", "case", "run", "state", "failed rules", "first failure s", "sensitive"], rows))
     return 0
 
 
 def _print_events(session: Session, events: list) -> None:
     for event in events:
-        where = f" {event['class_id']}" if event["class_id"] else ""
+        where = f" {event['fec_id']}" if event["fec_id"] else ""
         detail = f" {event['detail']}" if event["detail"] else ""
         session.say(f"{event['event_id']:>6}  {event['at']}  {event['kind']}{where}{detail}")
 

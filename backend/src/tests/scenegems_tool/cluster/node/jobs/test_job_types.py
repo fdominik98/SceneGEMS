@@ -24,7 +24,8 @@ def test_the_declared_fields_are_the_contract_of_the_artifact_transport():
         JobType.SCENE_GENERATION: ({("functional_scenario_content", ArtifactKind.FUNCTIONAL_SCENARIO, text, False)}, {("evaluation_data", ArtifactKind.SCENE)}),
         JobType.TRAJECTORY_GENERATION: ({("scenario_content", ArtifactKind.SCENE, text, False)}, {("trajectory_data", ArtifactKind.TRAJECTORY_DATA)}),
         JobType.SIMULATION_KINEMATIC: ({("trajectories", ArtifactKind.TRAJECTORIES, json, False)}, {("trajectories", ArtifactKind.TRAJECTORIES)}),
-        JobType.SIMULATION_ARDUPILOT: ({("trajectories", ArtifactKind.TRAJECTORIES, json, False)}, {("states", ArtifactKind.TRAJECTORIES), ("trajectories", ArtifactKind.TRAJECTORIES)}),
+        JobType.SIMULATION_ARDUPILOT_SIM: ({("trajectories", ArtifactKind.TRAJECTORIES, json, False)}, {("states", ArtifactKind.TRAJECTORIES), ("trajectories", ArtifactKind.TRAJECTORIES)}),
+        JobType.SIMULATION_GAZEBO: ({("trajectories", ArtifactKind.TRAJECTORIES, json, False)}, {("states", ArtifactKind.TRAJECTORIES), ("trajectories", ArtifactKind.TRAJECTORIES)}),
         JobType.MONITORING_POST_HOC: ({("trajectories", ArtifactKind.TRAJECTORIES, json, False), ("scene", ArtifactKind.SCENE, json, False)}, {("frames", ArtifactKind.FRAMES)}),
         JobType.CALIBRATION_DEVIATION: ({("trajectories", ArtifactKind.TRAJECTORIES, json, True)}, set()),
     }

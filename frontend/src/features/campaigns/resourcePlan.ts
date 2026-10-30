@@ -11,7 +11,8 @@ import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
  */
 
 export const KINEMATIC_JOB = "simulation.kinematic";
-export const ARDUPILOT_JOB = "simulation.ardupilot";
+export const ARDUPILOT_SIM_JOB = "simulation.ardupilot_sim";
+export const GAZEBO_JOB = "simulation.gazebo";
 
 /** The job type of each queued stage, as `assurance/pipeline/stage_graph.py` STAGE_JOB_TYPES; a run on an ArduPilot stack simulates with `simulationJobType`. */
 export const STAGE_JOB_TYPES: Record<string, string> = {
@@ -22,20 +23,23 @@ export const STAGE_JOB_TYPES: Record<string, string> = {
   calibrate: "calibration.deviation",
 };
 
-/** The simulation layers that run as `simulation.ardupilot` (`campaign_config.ARDUPILOT_LAYERS`). */
-const ARDUPILOT_LAYERS = ["ardupilot_sim", "gazebo"];
+/** The job type of each ArduPilot layer (`stage_graph.ARDUPILOT_LAYER_JOB_TYPES`). */
+const ARDUPILOT_LAYER_JOBS: Record<string, string> = { ardupilot_sim: ARDUPILOT_SIM_JOB, gazebo: GAZEBO_JOB };
 
-/** The job type that simulates a run of this stack section (`stage_graph.simulation_job_type`): ArduPilot on its layers, else kinematic. */
+/** The job type that simulates a run of this stack section (`stage_graph.simulation_job_type`): by the ArduPilot layer, else kinematic. */
 export function simulationJobType(stack: unknown): string {
   const layer = typeof stack === "object" && stack !== null ? (stack as { simulation_layer?: unknown }).simulation_layer : undefined;
-  return typeof layer === "string" && ARDUPILOT_LAYERS.includes(layer) ? ARDUPILOT_JOB : KINEMATIC_JOB;
+  return (typeof layer === "string" ? ARDUPILOT_LAYER_JOBS[layer] : undefined) ?? KINEMATIC_JOB;
 }
+
+const SIMULATED_WHERE: Record<string, string> = { [ARDUPILOT_SIM_JOB]: "on ArduPilot SITL", [GAZEBO_JOB]: "on Gazebo" };
 
 const CAPABILITY_LABELS: Record<string, string> = {
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   "simulation.kinematic": "Kinematic simulation",
-  "simulation.ardupilot": "ArduPilot simulation",
+  "simulation.ardupilot_sim": "ArduPilot SITL simulation",
+  "simulation.gazebo": "Gazebo simulation",
   "monitoring.post_hoc": "Post hoc monitoring",
   "calibration.deviation": "Repeat calibration",
 };
@@ -108,7 +112,7 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
   const simulators = [...new Set(runs.map((run) => simulationJobType(run.stack)))];
   for (const jobType of simulators) {
     const names = runs.map((run, index) => (simulationJobType(run.stack) === jobType ? runName(run, index) : null)).filter((name): name is string => name !== null);
-    const where = jobType === ARDUPILOT_JOB ? "on ArduPilot SITL or Gazebo" : "on the kinematic layer";
+    const where = SIMULATED_WHERE[jobType] ?? "on the kinematic layer";
     required.push({
       jobType,
       stage: "simulate",
@@ -116,8 +120,8 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
         simulators.length > 1
           ? `${listed(names)} ${names.length === 1 ? "is" : "are"} simulated ${where}.`
           : runs.length === 1
-            ? `The run is simulated${jobType === ARDUPILOT_JOB ? ` ${where}` : ""}.`
-            : `Each of the ${runs.length} runs is simulated${jobType === ARDUPILOT_JOB ? ` ${where}` : ""}.`,
+            ? `The run is simulated${jobType !== KINEMATIC_JOB ? ` ${where}` : ""}.`
+            : `Each of the ${runs.length} runs is simulated${jobType !== KINEMATIC_JOB ? ` ${where}` : ""}.`,
     });
   }
   const judged: string[] = [];

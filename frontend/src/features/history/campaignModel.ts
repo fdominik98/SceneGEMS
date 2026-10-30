@@ -38,7 +38,7 @@ export const ACTUAL_STATE_HINTS: Record<CampaignActualState, string> = {
   draining: "Started cases finish, no new ones begin.",
   stalled: "Running as asked, but the engine cannot make progress.",
   stopped: "Stopped by an operator or a stop condition. Final.",
-  completed: "Every class is complete or abandoned. Final.",
+  completed: "Every FEC is complete or abandoned. Final.",
 };
 
 export const DESIRED_STATE_LABELS: Record<CampaignDesiredState, string> = {
@@ -116,7 +116,7 @@ export interface ControlSpec {
 }
 
 export const CONTROL_SPECS: readonly ControlSpec[] = [
-  { control: "start", label: "Start", description: "Begins the campaign: cases are generated, simulated and judged until every class is complete or abandoned.", confirm: false, tone: "primary" },
+  { control: "start", label: "Start", description: "Begins the campaign: cases are generated, simulated and judged until every FEC is complete or abandoned.", confirm: false, tone: "primary" },
   { control: "pause", label: "Pause", description: "Holds the queued jobs and starts no new cases. Running jobs finish. Resume continues.", confirm: false, tone: "normal" },
   { control: "drain", label: "Drain", description: "Lets the cases already started finish and begins no new ones. Resume continues.", confirm: false, tone: "normal" },
   { control: "resume", label: "Resume", description: "Continues a paused or draining campaign.", confirm: false, tone: "primary" },
@@ -219,8 +219,8 @@ const EVENT_LABELS: Record<string, string> = {
   stalled: "Stalled",
   stopped: "Stopped",
   completed: "Completed",
-  class_complete: "Class complete",
-  class_abandoned: "Class abandoned",
+  fec_complete: "FEC complete",
+  fec_abandoned: "FEC abandoned",
   engine_started: "Engine started",
   note: "Note",
 };
@@ -233,12 +233,12 @@ export function eventTone(kind: string): Tone {
   switch (kind) {
     case "started":
     case "resumed":
-    case "class_complete":
+    case "fec_complete":
       return "ok";
     case "completed":
       return "info";
     case "stalled":
-    case "class_abandoned":
+    case "fec_abandoned":
     case "stopped":
       return "bad";
     case "paused":
@@ -293,9 +293,14 @@ export function classProgress(entry: Pick<ClassView, "complete" | "quota">): num
 
 const STATE_ORDER: Record<ClassState, number> = { open: 0, abandoned: 1, complete: 2 };
 
+/** The failure budget a class has left; an unlimited one has the most. */
+function budgetLeft(entry: ClassView): number {
+  return entry.failure_budget_left ?? Number.MAX_SAFE_INTEGER;
+}
+
 export function filterAndSortClasses(classes: readonly ClassView[], filter: CoverageFilter, sort: CoverageSortKey, descending = false): ClassView[] {
   const needle = filter.search.trim().toLowerCase();
-  const kept = classes.filter((entry) => (filter.state === "all" || entry.state === filter.state) && (needle === "" || entry.class_id.toLowerCase().includes(needle)));
+  const kept = classes.filter((entry) => (filter.state === "all" || entry.state === filter.state) && (needle === "" || entry.fec_id.toLowerCase().includes(needle)));
   const compare = (a: ClassView, b: ClassView): number => {
     switch (sort) {
       case "progress":
@@ -305,7 +310,7 @@ export function filterAndSortClasses(classes: readonly ClassView[], filter: Cove
       case "dropped":
         return a.dropped - b.dropped;
       case "budget":
-        return a.failure_budget_left - b.failure_budget_left;
+        return budgetLeft(a) - budgetLeft(b);
       default:
         return 0;
     }
@@ -339,6 +344,16 @@ export function runNames(config: CampaignConfig | null | undefined): string[] {
   const current = config.versions.find((version) => version.version === config.current_version) ?? config.versions[config.versions.length - 1];
   const execution = current?.config.execution as { runs?: { name?: string | null }[] } | undefined;
   return (execution?.runs ?? []).map((run, index) => (run.name ? run.name : `Run ${index}`));
+}
+
+/** The base seed of the current config version: case k of every FEC runs with it + k. */
+export function baseSeed(config: CampaignConfig | null | undefined): number | null {
+  if (!config) {
+    return null;
+  }
+  const current = config.versions.find((version) => version.version === config.current_version) ?? config.versions[config.versions.length - 1];
+  const seed = (current?.config.policy as { seed?: unknown } | undefined)?.seed;
+  return typeof seed === "number" ? seed : null;
 }
 
 // The list view

@@ -38,7 +38,15 @@ export function sampleStackDocument(): ArchitectureDocument {
     ...extra,
   });
   const exact = [fact("repeatability_tier", "exact"), fact("max_speedup", "unbounded", { unit: "x" }), fact("wind", "unsupported"), fact("waves", "supported", { measured: true })];
-  const combination = (path: string[], status: string, reasons: string[] = []) => ({ path, status, reasons, facts: status === "available" ? exact : [] });
+  // An available combination names the cluster job that runs it, or none (a workbench live session)
+  const clusterJob = (jobType: string | null) =>
+    fact("cluster_job", jobType, { label: "Cluster job", group: "property", note: jobType === null ? "no job type runs it yet" : "runs as this job on a node" });
+  const combination = (path: string[], status: string, reasons: string[] = [], jobType: string | null = null) => ({
+    path,
+    status,
+    reasons,
+    facts: status === "available" ? [...exact, clusterJob(jobType)] : [],
+  });
   return {
     schema_version: 1,
     id: "stack",
@@ -80,8 +88,8 @@ export function sampleStackDocument(): ArchitectureDocument {
     ],
     unsupported: [{ source: "middle/d", target: "bottom/e", reason: "d has no adapter to e" }],
     combinations: [
-      combination(["top/a", "middle/c", "bottom/e"], "available"),
-      combination(["top/a", "middle/c", "bottom/f"], "available"),
+      combination(["top/a", "middle/c", "bottom/e"], "available", [], "sim.e"),
+      combination(["top/a", "middle/c", "bottom/f"], "available", [], "sim.f"),
       combination(["top/b", "middle/c", "bottom/e"], "available"),
       combination(["top/b", "middle/c", "bottom/f"], "available"),
       combination(["top/a", "middle/d", "bottom/e"], "unavailable", ["no adapter from top/a to middle/d"]),

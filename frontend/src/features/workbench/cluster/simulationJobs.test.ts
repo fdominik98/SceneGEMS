@@ -41,11 +41,11 @@ describe("where a simulation runs", () => {
     const onArduPilot = [vessel("0", { controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot" })];
     expect(planSimulationRun(setup(onArduPilot, { simulatorType: "ArduPilot Sim", speedup: 5 }))).toMatchObject({
       where: "cluster",
-      jobType: "simulation.ardupilot",
+      jobType: "simulation.ardupilot_sim",
       simulationLayer: "ardupilot_sim",
       speedup: 5,
     });
-    expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({ where: "cluster", simulationLayer: "gazebo", speedup: 1 });
+    expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({ where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 1 });
   });
 
   it("keeps ArduPilot setups the job does not run in a live session", () => {
@@ -80,7 +80,7 @@ describe("where a simulation runs", () => {
   it("builds the ArduPilot job with the reference geofence", () => {
     const plan = clusterPlan(planSimulationRun(setup([vessel("0", { controlLayer: "ardupilot" })], { simulatorType: "Gazebo", speedup: 10 })));
     expect(simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules", geofence: GEOFENCE })).toEqual({
-      job_type: "simulation.ardupilot",
+      job_type: "simulation.gazebo",
       payload: {
         simulation_layer: "gazebo",
         trajectories: { scene_list: [] },
@@ -92,7 +92,7 @@ describe("where a simulation runs", () => {
       },
       max_attempts: 1,
     });
-    if (plan.jobType !== "simulation.ardupilot") {
+    if (plan.jobType !== "simulation.gazebo") {
       throw new Error("expected an ArduPilot plan");
     }
     expect(arduPilotSimulationSubmission(plan, {}, { ...GEOFENCE, radius_meters: 20 }, "  ").payload).toMatchObject({ geofence: { radius_meters: 20 }, colregs_constraints_content: null });

@@ -44,6 +44,11 @@ def test_classes_come_as_the_store_takes_them():
     assert spec == ClassSpec(class_id=CLASS, content_hash=ClassCatalog.default().get(CLASS).content_hash, vessel_count=2, obstacle_count=0, quota=2, failure_budget=1)
 
 
+def test_an_unlimited_failure_budget_reaches_the_store_as_none():
+    (spec,) = validate_campaign_config(_config([{"classes": [CLASS], "quota": 2, "failure_budget": "unlimited"}])).classes
+    assert (spec.quota, spec.failure_budget) == (2, None)
+
+
 def test_a_class_named_twice_in_one_entry_counts_once():
     validated = validate_campaign_config(_config([{"classes": [CLASS], "patterns": ["2vessel_0obstacle_scenarios"], "quota": 1}]))
     assert [spec.class_id for spec in validated.classes] == [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in range(7)]
@@ -59,9 +64,9 @@ def test_unknown_classes_and_empty_patterns_are_rejected_together():
             ]
         )
     )
-    assert "scope.0: no class '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
-    assert "scope.1: the pattern '9vessel_*' matches no class" in reasons
-    assert f"scope.2: class '{CLASS}' is in scope.0 already" in reasons
+    assert "scope.0: no FEC '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
+    assert "scope.1: the pattern '9vessel_*' matches no FEC" in reasons
+    assert f"scope.2: FEC '{CLASS}' is in scope.0 already" in reasons
 
 
 def test_the_resolver_refuses_wind_on_the_kinematic_layer():
@@ -167,6 +172,12 @@ def test_scene_generation_takes_catalog_classes_and_scenarios_given_as_content()
     assert validated.config_json["steps"] == ["scene_generation"] and validated.config_hash == config.config_hash()
 
 
+def test_a_scenario_given_as_content_takes_an_unlimited_failure_budget():
+    scenario = dict(_scenario(), failure_budget="unlimited")
+    (spec,) = _validate(_partial(["scene_generation"], input={"functional_scenarios": [scenario]})).classes
+    assert (spec.class_id, spec.failure_budget) == ("scenario/my_head_on", None)
+
+
 def test_scenarios_alone_need_no_scope():
     (scenario,) = _validate(_partial(["scene_generation", "trajectory_generation"], input={"functional_scenarios": [_scenario()]})).classes
     assert scenario.class_id == "scenario/my_head_on"
@@ -191,7 +202,7 @@ def test_simulation_takes_trajectory_items_and_resolves_its_runs():
     "steps, sections, reason",
     [
         (["scene_generation"], {}, "input: a campaign that starts with scene_generation needs scope entries or input.functional_scenarios"),
-        (["scene_generation"], {"scope": [{"classes": [CLASS], "quota": 1}], "input": {"items": [_item()]}}, "input.items: a campaign that starts with scene_generation takes catalog classes"),
+        (["scene_generation"], {"scope": [{"classes": [CLASS], "quota": 1}], "input": {"items": [_item()]}}, "input.items: a campaign that starts with scene_generation takes catalog FECs"),
         (["trajectory_generation"], {}, "input.items: a campaign that starts with trajectory_generation needs at least one item"),
         (["trajectory_generation"], {"scope": [{"classes": [CLASS], "quota": 1}], "input": {"items": [_item()]}}, "scope: a campaign that starts with trajectory_generation takes input.items"),
         (["simulation"], {"input": {"functional_scenarios": [_scenario()], "items": [_item(TRAJECTORIES_SHA, "trajectories")]}}, "input.functional_scenarios: a campaign that starts with simulation"),
@@ -216,7 +227,7 @@ def test_every_input_problem_is_reported_together():
         _partial(["trajectory_generation"], scope=[{"classes": ["2vessel_0obstacle_scenarios/functional_model99"], "quota": 1}], input={"items": [_item(MISSING_SHA), _item(pointer="/x")]})
     )
     assert "scope: a campaign that starts with trajectory_generation takes input.items" in reasons
-    assert "no class '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
+    assert "no FEC '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
     assert "input.items.0 (an item): no artifact" in reasons and "input.items.1 (an item): the pointer /x" in reasons
 
 

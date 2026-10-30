@@ -81,7 +81,8 @@ describe("kinds and viewers", () => {
     expect(jobInstanceKind("scene_generation")).toBe("scene_generation");
     expect(jobInstanceKind("trajectory_generation")).toBe("trajectory_generation");
     expect(jobInstanceKind("simulation.kinematic")).toBe("simulation");
-    expect(jobInstanceKind("simulation.ardupilot")).toBe("simulation");
+    expect(jobInstanceKind("simulation.ardupilot_sim")).toBe("simulation");
+    expect(jobInstanceKind("simulation.gazebo")).toBe("simulation");
     expect(jobInstanceKind("calibration.deviation")).toBe("simulation");
     expect(jobInstanceKind("monitoring.post_hoc")).toBe("monitoring");
   });

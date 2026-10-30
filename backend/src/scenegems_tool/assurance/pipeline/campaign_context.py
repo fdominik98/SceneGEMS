@@ -52,8 +52,7 @@ class CampaignContext:
 
     def run_fingerprints(self, run_index: int) -> Dict[str, str]:
         """The pinned fingerprints of the images a run's simulation job uses (kinematic, or SITL and Gazebo on the ArduPilot layers): what calibration results are keyed by."""
-        job_type, images = self.graph.run_job(run_index)
-        return required_fingerprints(job_type, images, self.pinned)
+        return required_fingerprints(self.graph.run_job_type(run_index), self.pinned)
 
 
 class CampaignContexts:

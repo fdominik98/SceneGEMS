@@ -10,7 +10,6 @@ import {
   mergeFramesInWorker,
   shouldMergeFramesInWorker,
 } from "../playback/mergeFramesInWorker";
-import { useRecordingStore } from "../playback/recordingStore";
 import { useBatchGenerationStore } from "../sceneGeneration/batchGenerationStore";
 import { buildFramesFromTrajectoryData } from "../sceneGeneration/parseEvaluationDataFile";
 import { useTrajectoryGenerationStore } from "../trajectoryGeneration/trajectoryGenerationStore";
@@ -134,21 +133,12 @@ export function useSimulationWorkflow() {
     [setError]
   );
 
-  const recordPreviewFrames = useCallback((frames: SimulationFrame[]) => {
-    const recording = useRecordingStore.getState();
-    if (!recording.isRecording) return;
-    for (const frame of frames) {
-      recording.appendPreviewFrame(frame);
-    }
-  }, []);
-
   const ingestPreviewChunk = useCallback(
     async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
       if (shouldMergeFramesInWorker(incoming.length)) {
         try {
           const merged = await mergeFramesInWorker(existing, incoming);
           applyMergedPreviewFrames(merged);
-          recordPreviewFrames(incoming);
           return;
         } catch (error) {
           // Never drop a chunk on a worker failure: fall back to the equivalent
@@ -157,30 +147,22 @@ export function useSimulationWorkflow() {
         }
       }
       ingestFrames(incoming);
-      recordPreviewFrames(incoming);
     },
-    [applyMergedPreviewFrames, ingestFrames, recordPreviewFrames]
+    [applyMergedPreviewFrames, ingestFrames]
   );
 
   const ingestSimulationChunk = useCallback(
     async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
-      const recording = useRecordingStore.getState();
       if (shouldMergeFramesInWorker(incoming.length)) {
         try {
           const merged = await mergeFramesInWorker(existing, incoming);
           applyMergedSimulationFrames(merged);
-          if (recording.isRecording) {
-            for (const frame of incoming) recording.appendSimulationFrame(frame);
-          }
           return;
         } catch (error) {
           console.error("[SimulationWorkflow] simulation merge worker failed; using main-thread merge", error);
         }
       }
       ingestSimulationFrames(incoming);
-      if (recording.isRecording) {
-        for (const frame of incoming) recording.appendSimulationFrame(frame);
-      }
     },
     [applyMergedSimulationFrames, ingestSimulationFrames]
   );
@@ -347,10 +329,6 @@ export function useSimulationWorkflow() {
         }
         case "frame": {
           ingestPushFrame(message.frame);
-          const recording = useRecordingStore.getState();
-          if (recording.isRecording) {
-            recording.appendPreviewFrame(message.frame);
-          }
           break;
         }
         case "error": {

@@ -297,22 +297,24 @@ payloads = {
     JobType.SCENE_GENERATION: json.load(sys.stdin),  # the test data folders are not in the image
     JobType.TRAJECTORY_GENERATION: {"scenario_content": "{}", "colregs_constraints_content": "", "params": {"maxIterations": 100}},
     JobType.SIMULATION_KINEMATIC: {"mode": "usv_navigation", "trajectories": trajectories},
-    JobType.SIMULATION_ARDUPILOT: {"simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": geofence},
+    JobType.SIMULATION_ARDUPILOT_SIM: {"simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": geofence},
+    JobType.SIMULATION_GAZEBO: {"simulation_layer": "gazebo", "trajectories": trajectories, "geofence": geofence},
     JobType.MONITORING_POST_HOC: {"trajectories": trajectories},
 }
 models = {
     JobType.SCENE_GENERATION: "SceneGenerationPayload",
     JobType.TRAJECTORY_GENERATION: "TrajectoryGenerationPayload",
     JobType.SIMULATION_KINEMATIC: "KinematicSimulationPayload",
-    JobType.SIMULATION_ARDUPILOT: "ArduPilotSimulationPayload",
+    JobType.SIMULATION_ARDUPILOT_SIM: "ArduPilotSimPayload",
+    JobType.SIMULATION_GAZEBO: "GazeboSimulationPayload",
     JobType.MONITORING_POST_HOC: "PostHocMonitoringPayload",
 }
 for job_type, payload in payloads.items():
     model = getattr(job_types.job_type_module(job_type), models[job_type])
     parse_payload(model, JobSpec(job_id="check", job_type=job_type, payload=payload, attempt=1, idempotency_key="check"))
-node = NodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION_ARDUPILOT: 1})
-job = JobSpec(job_id="check", job_type=JobType.SIMULATION_ARDUPILOT, payload=payloads[JobType.SIMULATION_ARDUPILOT], attempt=1, idempotency_key="check")
-stack = simulation_ardupilot_job.build_job_stack(job, node, parse_payload(simulation_ardupilot_job.ArduPilotSimulationPayload, job))
+node = NodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION_ARDUPILOT_SIM: 1})
+job = JobSpec(job_id="check", job_type=JobType.SIMULATION_ARDUPILOT_SIM, payload=payloads[JobType.SIMULATION_ARDUPILOT_SIM], attempt=1, idempotency_key="check")
+stack = simulation_ardupilot_job.build_job_stack(job, node, parse_payload(simulation_ardupilot_job.ArduPilotSimPayload, job))
 assert "runner" in stack.compose["services"] and len(stack.compose["services"]) >= 3, stack.compose["services"].keys()
 print("node side ok:", ", ".join(sorted(job_type.value for job_type in payloads)))
 """
@@ -329,4 +331,4 @@ def test_every_job_type_s_node_side_runs_in_the_node_image():
         timeout=300,
     )
     assert result.returncode == 0, result.stderr[-4000:]
-    assert "node side ok: monitoring.post_hoc, scene_generation, simulation.ardupilot, simulation.kinematic, trajectory_generation" in result.stdout
+    assert "node side ok: monitoring.post_hoc, scene_generation, simulation.ardupilot_sim, simulation.gazebo, simulation.kinematic, trajectory_generation" in result.stdout

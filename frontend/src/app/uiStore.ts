@@ -61,6 +61,17 @@ function isWorkbenchView(value: unknown): value is WorkbenchView {
   return typeof value === "string" && (WORKBENCH_VIEWS as readonly string[]).includes(value);
 }
 
+/**
+ * Whether a workbench view shows its right pane: the scene page always (its specification),
+ * the trajectory and simulation pages while the monitoring panel is not hidden, Connections never.
+ */
+export function rightPaneShown(view: WorkbenchView, rightPaneVisible: boolean): boolean {
+  if (view === "sceneGeneration") {
+    return true;
+  }
+  return (view === "trajectoryGeneration" || view === "simulation") && rightPaneVisible;
+}
+
 /** The view the workbench persisted under its old key, or null when there is none. */
 export function readLegacyWorkbenchView(): WorkbenchView | null {
   try {

@@ -132,11 +132,11 @@ describe("outputs of a step", () => {
   });
 
   it("names the case of an output by its class", () => {
-    expect(outputCaseLabel({ class_id: "item/0", case_index: 0 })).toEqual({ title: "input item 0", detail: null });
-    expect(outputCaseLabel({ class_id: "scenario/my_head_on", case_index: 2 })).toEqual({ title: "case 2 of my_head_on", detail: "scenario given as content" });
-    expect(outputCaseLabel({ class_id: "colregs/head_on", case_index: 1 })).toEqual({ title: "case 1 of head_on", detail: "colregs" });
-    expect(outputCaseLabel({ class_id: "colregs/two/crossing", case_index: 1 })).toEqual({ title: "case 1 of crossing", detail: "colregs/two" });
-    expect(outputCaseLabel({ class_id: "class-a", case_index: 3 })).toEqual({ title: "case 3 of class-a", detail: null });
+    expect(outputCaseLabel({ fec_id: "item/0", case_index: 0 })).toEqual({ title: "input item 0", detail: null });
+    expect(outputCaseLabel({ fec_id: "scenario/my_head_on", case_index: 2 })).toEqual({ title: "case 2 of my_head_on", detail: "scenario given as content" });
+    expect(outputCaseLabel({ fec_id: "colregs/head_on", case_index: 1 })).toEqual({ title: "case 1 of head_on", detail: "colregs" });
+    expect(outputCaseLabel({ fec_id: "colregs/two/crossing", case_index: 1 })).toEqual({ title: "case 1 of crossing", detail: "colregs/two" });
+    expect(outputCaseLabel({ fec_id: "class-a", case_index: 3 })).toEqual({ title: "case 3 of class-a", detail: null });
   });
 
   it("names where the input came from", () => {

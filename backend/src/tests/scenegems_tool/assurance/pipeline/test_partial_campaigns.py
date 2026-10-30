@@ -388,7 +388,7 @@ def test_a_recorded_run_is_refused_where_it_does_not_fit(harness):
     assert recorded.monitor_key is not None and harness.campaign(campaign.campaign_id).pinned_fingerprints  # pinned for the monitor job
     with pytest.raises(ValueError, match="has its case already"):
         harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness)))
-    with pytest.raises(ValueError, match="no open class item/5"):
+    with pytest.raises(ValueError, match="no open FEC item/5"):
         harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness), class_id="item/5"))
     inline = ExternalRun(state_log=trajectories_data(), stack={})
     with pytest.raises(ValueError, match="stored as an artifact"):

@@ -1,12 +1,13 @@
 import anyio
 import pytest
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, SITL_IMAGE
+from scenegems_tool.cluster.fingerprints.job_images import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.master.scheduling.fingerprint_policy import ExpectedFingerprints, ListingState, node_mismatches, with_required_fingerprints
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSubmission, JobType
 from scenegems_tool.cluster.release.manifest import Release, ReleaseImage, write_release
 from tests.scenegems_tool.cluster.master.conftest import EXPECTED
 from tests.scenegems_tool.cluster.master.fake_stores import InMemoryNodeStore
+from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_hello
 
 
@@ -54,7 +55,7 @@ def test_without_a_release_nothing_is_leased_and_the_error_says_why(tmp_path):
 
 
 def test_a_submission_gets_the_fingerprints_of_its_images():
-    submission = with_required_fingerprints(JobSubmission(job_type=JobType.SIMULATION_ARDUPILOT, payload={"simulation_layer": "gazebo"}), EXPECTED)
+    submission = with_required_fingerprints(JobSubmission(job_type=JobType.SIMULATION_GAZEBO, payload={"simulation_layer": "gazebo"}), EXPECTED)
     assert submission.requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}
 
 
@@ -75,3 +76,16 @@ def test_node_mismatches_cover_the_images_of_its_capabilities_only():
     assert node_mismatches(node, EXPECTED) == []
     stale = InMemoryNodeStore(ManualClock()).register(make_hello("n", slots={JobType.MONITORING_POST_HOC: 1}, fingerprints={MONITORING_IMAGE: "old"}))
     assert [(mismatch.image, mismatch.actual) for mismatch in node_mismatches(stale, EXPECTED)] == [(MONITORING_IMAGE, "old")]
+
+
+def _simulation_node(job_type, fingerprints):
+    return InMemoryNodeStore(ManualClock()).register(make_hello("n", slots={job_type: 1}, fingerprints=fingerprints))
+
+
+def test_a_gazebo_node_needs_the_gazebo_image_and_a_sitl_node_does_not():
+    sitl_only = {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}
+    assert node_mismatches(_simulation_node(JobType.SIMULATION_ARDUPILOT_SIM, sitl_only), EXPECTED) == []
+    missing = node_mismatches(_simulation_node(JobType.SIMULATION_GAZEBO, sitl_only), EXPECTED)
+    assert [(mismatch.image, mismatch.missing) for mismatch in missing] == [(GAZEBO_IMAGE, True)]
+    stale = node_mismatches(_simulation_node(JobType.SIMULATION_GAZEBO, {**sitl_only, GAZEBO_IMAGE: "old"}), EXPECTED)
+    assert [(mismatch.image, mismatch.actual) for mismatch in stale] == [(GAZEBO_IMAGE, "old")]

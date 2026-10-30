@@ -11,7 +11,6 @@ import {
   toParamsWire,
   useTrajectoryGenerationStore,
   type TrajectoryGenerationParams,
-  type TrajectoryGenerationTab,
 } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
 import {
   describeTrajectoryRun,
@@ -20,13 +19,16 @@ import {
 } from "../../../domain/trajectoryGeneration/summarizeTrajectoryResult";
 import type { TrajectoryGeneratorWire } from "../../../domain/simulation/wireTypes";
 import { Disclosure } from "../../../components/Disclosure";
-import { AnimationPlaybackControls } from "./AnimationPlaybackControls";
+import { IconButton } from "../../../components/IconButton";
+import { DownloadIcon } from "../../../components/icons";
 import { TRAJECTORY_GENERATION_JOB } from "../cluster/workbenchJobs";
 import { describeResources } from "../cluster/workbenchResources";
+import { EntrySeedField } from "../pages/EntrySeedField";
 import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { PageInputPanel } from "../pages/PageInputPanel";
 import { inputOfFile, sceneOfDocument, sceneOfScenePage, setTrajectoryInput, trajectoriesOfTrajectoryPage } from "../pages/pageHandoff";
 import { useScenePageStore, useTrajectoryPageStore } from "../pages/pageStore";
+import { NumberSetting, Setting, StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
 
 interface TrajectoryGenerationControlsProps {
   streamControls: ReturnType<typeof useSimulationWorkflow>;
@@ -34,23 +36,22 @@ interface TrajectoryGenerationControlsProps {
   onNavigateToSimulation: () => void;
 }
 
-const PARAM_FIELDS: { key: keyof TrajectoryGenerationParams; label: string; step?: number }[] = [
-  { key: "timeStep", label: "Time step (s)" },
-  { key: "timeout", label: "Timeout (s)" },
-  { key: "maxIterations", label: "Max iterations" },
+const PARAM_FIELDS: { key: keyof TrajectoryGenerationParams; label: string; unit?: string; integer?: boolean }[] = [
+  { key: "timeStep", label: "Time step", unit: "s" },
+  { key: "timeout", label: "Timeout", unit: "s", integer: true },
+  { key: "maxIterations", label: "Max iterations", integer: true },
   { key: "goalSampleRate", label: "Goal sample rate" },
   { key: "bestLeafSampleRate", label: "Best-leaf sample rate" },
-  { key: "maxLeafs", label: "Max leafs" },
-  { key: "directionThreshold", label: "Direction threshold (m)", step: 0.1 },
-  { key: "bestRandomNodesK", label: "Best random nodes K" },
-  { key: "previewInterval", label: "Preview interval (iters)" },
+  { key: "maxLeafs", label: "Max leafs", integer: true },
+  { key: "directionThreshold", label: "Direction threshold", unit: "m" },
+  { key: "bestRandomNodesK", label: "Best random nodes K", integer: true },
+  { key: "previewInterval", label: "Preview every", unit: "iterations", integer: true },
 ];
 
-const TABS: { id: TrajectoryGenerationTab; label: string }[] = [
-  { id: "generate", label: "Generate" },
-  { id: "advanced", label: "Advanced settings" },
-  { id: "preview", label: "Preview" },
-];
+const GENERATOR_HINTS: Record<TrajectoryGeneratorWire, string> = {
+  monitor_driven_rrt: "Searches for compliant manoeuvres, guided by the COLREGS monitor. It stops on Stop, the timeout or the iteration cap.",
+  straight: "Every vessel goes straight on from its initial state for the timespan: nothing is searched, so it is ready at once and always complete.",
+};
 
 function downloadJson(text: string, fileName: string) {
   const blob = new Blob([text], { type: "application/json" });
@@ -62,6 +63,11 @@ function downloadJson(text: string, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * The trajectory page's panel: its input scene, the generator and its settings, and the
+ * planned trajectory it shows, with the way on to the simulation page. Playback is in the
+ * bar under the canvas.
+ */
 export function TrajectoryGenerationControls({
   streamControls,
   colregsConstraintsContent,
@@ -86,14 +92,8 @@ export function TrajectoryGenerationControls({
   const resultValid = useTrajectoryGenerationStore((s) => s.resultValid);
   const resultScenarioJson = useTrajectoryGenerationStore((s) => s.resultScenarioJson);
   const resultComplete = useTrajectoryGenerationStore((s) => s.resultComplete);
-  const storedTab = useTrajectoryGenerationStore((s) => s.activeTab);
-  // A tab persisted before the monitor tab moved to the Connections page falls back to Generate.
-  const activeTab = TABS.some((t) => t.id === storedTab) ? storedTab : "generate";
-  const setActiveTab = useTrajectoryGenerationStore((s) => s.setActiveTab);
   const setParam = useTrajectoryGenerationStore((s) => s.setParam);
-  const setIncludeMonitorResults = useTrajectoryGenerationStore(
-    (s) => s.setIncludeMonitorResults
-  );
+  const setIncludeMonitorResults = useTrajectoryGenerationStore((s) => s.setIncludeMonitorResults);
   const setGenerator = useTrajectoryGenerationStore((s) => s.setGenerator);
   const setTimespan = useTrajectoryGenerationStore((s) => s.setTimespan);
   const resetParams = useTrajectoryGenerationStore((s) => s.resetParams);
@@ -106,8 +106,8 @@ export function TrajectoryGenerationControls({
   const connected = streamStatus === "connected";
   // Trajectories are planned by a job on the active cluster: without a node that plans, nothing runs.
   const trajectoryResources = streamControls.clusterResources(TRAJECTORY_GENERATION_JOB);
-  const canGenerate =
-    trajectoryResources.blocker === null && !running && input !== null && handoffScene?.valid === true && (!straight || timespanValid);
+  const hasInput = input !== null && handoffScene?.valid === true;
+  const canGenerate = trajectoryResources.blocker === null && !running && hasInput && (!straight || timespanValid);
   const hasResult = status === "done" && resultValid && !!resultScenarioJson;
 
   // Restore the last generated trajectory as the on-canvas preview after a reload (the page's
@@ -197,308 +197,186 @@ export function TrajectoryGenerationControls({
       return;
     }
     try {
-      downloadJson(
-        JSON.stringify(JSON.parse(resultScenarioJson), null, 2),
-        "planned_trajectory.json"
-      );
+      downloadJson(JSON.stringify(JSON.parse(resultScenarioJson), null, 2), "planned_trajectory.json");
     } catch {
       downloadJson(resultScenarioJson, "planned_trajectory.json");
     }
   }, [resultScenarioJson]);
 
-  const statusLabel = running
-    ? straight
-      ? "Generating straight trajectories…"
-      : `Planning… iteration ${iteration}`
+  const panelStatus: StepStatus = running
+    ? { label: straight ? "Generating" : `Planning, iteration ${iteration}`, tone: "busy" }
     : status === "done"
       ? resultValid
         ? partialPlan || runWarning
-          ? "Stopped early - partial trajectory"
-          : "Planned trajectory ready"
-        : "Finished without a usable trajectory"
+          ? { label: "Partial trajectory", tone: "warn" }
+          : { label: "Trajectory ready", tone: "ok" }
+        : { label: "No usable trajectory", tone: "error" }
       : status === "error"
-        ? "Trajectory generation failed"
-        : "Idle";
+        ? { label: "Failed", tone: "error" }
+        : { label: hasInput ? "Ready to plan" : "Idle", tone: "idle" };
+
+  const notices: StepNotice[] = [];
+  if (trajectoryResources.blocker !== null) {
+    notices.push({ text: trajectoryResources.blocker });
+  }
+  if (straight && !timespanValid) {
+    notices.push({ text: "The straight generator needs a timespan above 0 s." });
+  }
+
+  const runError = localError ?? errorMessage;
 
   return (
-    <div className="panel">
-      <div className="control-panel-heading">
-        <div>
-          <p className="control-panel-eyebrow">Step 2 of 3</p>
-          <h3>Trajectory Generation</h3>
-        </div>
-        <div className="control-panel-status">
-          <span className="meta" role="status">
-            {statusLabel}
-          </span>
-          <span className="meta" title="Trajectory generation runs as jobs on the active cluster">
-            Cluster: {describeResources(trajectoryResources)}
-          </span>
-        </div>
-      </div>
-      {trajectoryResources.blocker !== null && (
-        <p className="meta resource-blocker" role="status">
-          {trajectoryResources.blocker}
-        </p>
-      )}
-
-      <div className="scene-gen-tabs" role="tablist" aria-label="Trajectory generation">
-        {TABS.map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === id}
-            className={`scene-gen-tab${activeTab === id ? " active" : ""}`}
-            onClick={() => setActiveTab(id)}
-          >
-            {label}
+    <StepPanel
+      step={2}
+      title="Trajectory Generation"
+      status={panelStatus}
+      where={`Plans as a job on the cluster: ${describeResources(trajectoryResources)}.`}
+      notices={notices}
+      actions={
+        running ? (
+          <button type="button" onClick={streamControls.stopTrajectoryGeneration}>
+            Stop
           </button>
-        ))}
-      </div>
+        ) : (
+          <button
+            className="primary-btn accent"
+            type="button"
+            disabled={!canGenerate}
+            title={hasInput ? undefined : "Take an input scene first"}
+            onClick={handleGenerate}
+          >
+            Generate trajectories
+          </button>
+        )
+      }
+    >
+      <PageInputPanel
+        noun="Scene"
+        input={handoffScene ? input : null}
+        previousLabel="Scene page"
+        previousTitle="Take the scene shown on the Scene Generation page"
+        previousAvailable={scenePageHasScene}
+        onUsePrevious={() => {
+          const handoff = sceneOfScenePage(scenePageOutput?.ref === null ? scenePageOutput.label : null);
+          if (handoff !== null) {
+            setTrajectoryInput(handoff.input, handoff.scene);
+          }
+        }}
+        historyStep="scene_generation"
+        client={streamControls.operatorClient}
+        onPickHistory={(picked, document) => setTrajectoryInput(picked, sceneOfDocument(document))}
+        onPickFile={async (file) => setTrajectoryInput(inputOfFile(file.name), sceneOfDocument(JSON.parse(await file.text())))}
+        disabled={running}
+      />
 
-      {activeTab === "generate" ? (
-        <div className="animation-control-stack">
-          <PageInputPanel
-            title="Input scene"
-            input={handoffScene ? input : null}
-            emptyText="none yet. Take the scene of the Scene Generation page, an output of Campaign History or a scenario file."
-            previousLabel="Use the scene of the Scene Generation page"
-            previousAvailable={scenePageHasScene}
-            onUsePrevious={() => {
-              const handoff = sceneOfScenePage(scenePageOutput?.ref === null ? scenePageOutput.label : null);
-              if (handoff !== null) {
-                setTrajectoryInput(handoff.input, handoff.scene);
-              }
-            }}
-            historyStep="scene_generation"
-            client={streamControls.operatorClient}
-            onPickHistory={(picked, document) => setTrajectoryInput(picked, sceneOfDocument(document))}
-            onPickFile={async (file) => setTrajectoryInput(inputOfFile(file.name), sceneOfDocument(JSON.parse(await file.text())))}
-            disabled={running}
-          />
-          <PageEntryStatus store={useTrajectoryPageStore} />
-          <div className="toolbar-row" style={{ alignItems: "flex-end" }}>
-            <label className="field">
-              <span>Generator</span>
-              <select
-                value={generator}
+      <StepRow label="Setup">
+        <Setting label="Generator" title={GENERATOR_HINTS[generator]}>
+          <select value={generator} disabled={running} onChange={(e) => setGenerator(e.target.value as TrajectoryGeneratorWire)} aria-label="Trajectory generator">
+            {TRAJECTORY_GENERATORS.map(({ id, label }) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Setting>
+        {straight ? <NumberSetting label="Timespan" unit="s" integer min={1} width={6} value={timespan} disabled={running} onChange={setTimespan} /> : null}
+        <EntrySeedField disabled={running} />
+        <Disclosure
+          id="trajectory:advanced"
+          variant="link"
+          headingLevel={null}
+          title={straight ? "Time step" : "Search settings"}
+          openTitle={straight ? "Hide the time step" : "Hide the search settings"}
+          hint={straight ? `${params.timeStep} s` : `${params.timeStep} s step, ${params.timeout} s timeout`}
+          className="step-more"
+        >
+          <div className="step-more-body">
+            {paramFields.map(({ key, label, unit, integer }) => (
+              <NumberSetting
+                key={key}
+                label={label}
+                unit={unit}
+                integer={integer}
+                width={unit === "iterations" ? 4 : 6}
+                value={params[key]}
                 disabled={running}
-                onChange={(e) => setGenerator(e.target.value as TrajectoryGeneratorWire)}
-                aria-label="Trajectory generator"
-              >
-                {TRAJECTORY_GENERATORS.map(({ id, label }) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {straight && (
-              <label className="toolbar-timeout">
-                <span className="toolbar-timeout-label">Timespan (s)</span>
-                <input
-                  className="toolbar-timeout-input"
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={timespan}
-                  disabled={running}
-                  onChange={(e) => {
-                    const value = Number(e.target.value);
-                    if (Number.isFinite(value)) {
-                      setTimespan(value);
-                    }
-                  }}
-                  aria-label="Timespan (s)"
-                />
-              </label>
-            )}
-            <button
-              className="primary-btn accent"
-              type="button"
-              disabled={!canGenerate}
-              onClick={handleGenerate}
-            >
-              Generate Trajectories
-            </button>
-            <button
-              type="button"
-              disabled={!running}
-              onClick={streamControls.stopTrajectoryGeneration}
-            >
-              Stop
-            </button>
-          </div>
-          <Disclosure
-            id="trajectory:about-generator"
-            variant="link"
-            headingLevel={null}
-            title="About this generator"
-            openTitle="Hide generator details"
-          >
-            {straight
-              ? "Every vessel goes straight on from its initial state for the timespan. Nothing is searched, so the result is ready at once and always complete."
-              : "Searches for compliant manoeuvres, guided by the COLREGS monitor. Tune it on the Advanced settings tab."}
-          </Disclosure>
-
-          {status === "done" && runSummary && (
-            <div className="trajectory-run-report" role="status">
-              <p className="meta">{describeTrajectoryRun(runSummary)}</p>
-              {resultComplete !== null && (
-                <p className={`meta${partialPlan ? " warning" : ""}`} role={partialPlan ? "alert" : undefined}>
-                  {partialPlan
-                    ? "Partial plan: the search ended without reaching a complete trajectory, so this is the best path it found."
-                    : "Complete plan."}
-                </p>
-              )}
-              {runWarning && (
-                <p className="meta warning" role="alert">
-                  {runWarning}
-                </p>
-              )}
-            </div>
-          )}
-          {status === "done" && !resultValid && (
-            <p className="meta warning" role="alert">
-              The planner returned no usable trajectory. It could not find a single
-              compliant step from this scene.
-            </p>
-          )}
-          {(localError || errorMessage) && (
-            <p className="error" role="alert">
-              {localError ?? errorMessage}
-            </p>
-          )}
-
-          <section className="animation-control-group" aria-label="Planned trajectory actions">
-            <h4 className="animation-control-group-title">Next: use the planned trajectory</h4>
-            <div className="toolbar-row">
-              <button
-                type="button"
-                className={hasResult ? "primary-btn accent" : undefined}
-                disabled={
-                  running ||
-                  simulationInitializing ||
-                  !connected ||
-                  !hasResult
-                }
-                onClick={handleLoadForSimulation}
-              >
-                Next: Simulation
-              </button>
-              <button
-                type="button"
-                disabled={!resultScenarioJson}
-                onClick={handleExportTrajectory}
-              >
-                Export Trajectory
-              </button>
-            </div>
-            <p className="meta">
-              {hasResult
-                ? partialPlan || runWarning
-                  ? "The partial trajectory is shown on the canvas and can still be simulated and exported."
-                  : "The trajectory is shown on the canvas. Next: Simulation makes it the input of the simulation page."
-                : "Generate a trajectory, or open one from Campaign History, to enable simulation and export."}
-            </p>
-          </section>
-
-        </div>
-      ) : activeTab === "advanced" ? (
-        <div className="animation-control-stack">
-          <section
-            className="animation-control-group"
-            aria-label={straight ? "Straight generator parameters" : "Advanced RRT parameters"}
-          >
-            <h4 className="animation-control-group-title">
-              {straight ? "Straight parameters" : "RRT parameters"}
-            </h4>
-            <div className="toolbar-row trajectory-advanced-params">
-              {paramFields.map(({ key, label, step }) => (
-                <label key={key} className="toolbar-timeout">
-                  <span className="toolbar-timeout-label">{label}</span>
-                  <input
-                    className="toolbar-timeout-input"
-                    type="number"
-                    step={step ?? 1}
-                    value={params[key]}
-                    disabled={running}
-                    onChange={(e) => {
-                      const value = Number(e.target.value);
-                      if (Number.isFinite(value)) {
-                        setParam(key, value);
-                      }
-                    }}
-                    aria-label={label}
-                  />
-                </label>
-              ))}
-            </div>
-            {straight ? (
-              <p className="meta">
-                The straight generator samples every vessel at this step for the timespan set on
-                the Generate tab. The search settings of the monitor-driven RRT do not apply.
-              </p>
-            ) : (
+                onChange={(value) => setParam(key, value)}
+              />
+            ))}
+            {!straight ? (
               <>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={includeMonitorResults}
-                    disabled={running}
-                    onChange={(e) => setIncludeMonitorResults(e.target.checked)}
-                  />
-                  Include monitor results in previews
+                <label
+                  className="step-check"
+                  title="On, the planner sends the COLREGS monitor output of every scene with the preview: the side panel fills and the domains are drawn while planning. Off keeps previews small on long runs."
+                >
+                  <input type="checkbox" checked={includeMonitorResults} disabled={running} onChange={(e) => setIncludeMonitorResults(e.target.checked)} />
+                  Monitor results in previews
                 </label>
-                <Disclosure
-                  id="trajectory:about-monitor-results"
-                  variant="link"
-                  headingLevel={null}
-                  title="What does this do?"
-                  openTitle="Hide explanation"
-                >
-                  On, the planner attaches the COLREGS monitor output it recorded for every scene,
-                  which fills the side panel and draws the domains on the canvas while planning. Off
-                  keeps previews small on long runs with many encounters: the canvas still shows the
-                  trajectory, but without monitor data.
-                </Disclosure>
-                <div className="toolbar-row">
-                  <button type="button" disabled={running} onClick={resetParams}>
-                    Reset to defaults ({TRAJECTORY_GENERATION_PARAM_DEFAULTS.timeStep}s step)
-                  </button>
-                </div>
-                <Disclosure
-                  id="trajectory:about-termination"
-                  variant="link"
-                  headingLevel={null}
-                  title="When does the search stop?"
-                  openTitle="Hide explanation"
-                >
-                  It stops on Stop, the timeout, or the max-iteration cap, whichever comes first. The
-                  preview interval controls how often the best trajectory so far is streamed to the
-                  canvas.
-                </Disclosure>
+                <button type="button" className="link-btn" disabled={running} onClick={resetParams}>
+                  Reset to the defaults ({TRAJECTORY_GENERATION_PARAM_DEFAULTS.timeStep} s step)
+                </button>
               </>
-            )}
-          </section>
-        </div>
-      ) : (
-        <div className="animation-control-stack">
-          <AnimationPlaybackControls
-            seek={streamControls.seek}
-            setSpeed={streamControls.setSpeed}
-            title="Preview playback"
-          />
-          <p className="meta">
+            ) : null}
+          </div>
+        </Disclosure>
+      </StepRow>
+
+      <StepRow
+        label="Result"
+        aside={
+          <>
+            <IconButton label="Export the trajectory (JSON)" icon={<DownloadIcon />} disabled={!resultScenarioJson} onClick={handleExportTrajectory} />
+            <button
+              type="button"
+              className={hasResult ? "primary-btn accent" : undefined}
+              disabled={running || simulationInitializing || !connected || !hasResult}
+              title={hasResult ? "Make this trajectory the simulation page's input and open it" : "Plan a trajectory, or open one from Campaign History, first"}
+              onClick={handleLoadForSimulation}
+            >
+              Next: Simulation
+            </button>
+          </>
+        }
+      >
+        <span className="step-value">
+          <span className="step-value-name">Trajectory</span>{" "}
+          <span className={`step-value-text${runSummary ? "" : " is-empty"}`}>
             {running
-              ? `Previewing the best trajectory so far (iteration ${iteration}).`
-              : hasResult
-                ? "Previewing the last generated trajectory."
-                : "No trajectory to preview yet."}
+              ? straight
+                ? "being generated"
+                : `best so far, iteration ${iteration}`
+              : runSummary
+                ? partialPlan
+                  ? "partial plan"
+                  : resultComplete === true
+                    ? "complete plan"
+                    : "planned"
+                : "none yet"}
+          </span>
+        </span>
+        {runSummary && status === "done" ? <p className="step-line">{describeTrajectoryRun(runSummary)}</p> : null}
+        <PageEntryStatus store={useTrajectoryPageStore} />
+        {partialPlan && status === "done" ? (
+          <p className="step-line warning step-row-full" role="alert">
+            The search ended without a complete trajectory, so this is the best path it found. It can still be simulated and exported.
           </p>
-        </div>
-      )}
-    </div>
+        ) : null}
+        {runWarning ? (
+          <p className="step-line warning step-row-full" role="alert">
+            {runWarning}
+          </p>
+        ) : null}
+        {status === "done" && !resultValid ? (
+          <p className="step-line warning step-row-full" role="alert">
+            The planner returned no usable trajectory: it found no compliant step from this scene.
+          </p>
+        ) : null}
+        {runError ? (
+          <p className="step-line error step-row-full" role="alert">
+            {runError}
+          </p>
+        ) : null}
+      </StepRow>
+    </StepPanel>
   );
 }

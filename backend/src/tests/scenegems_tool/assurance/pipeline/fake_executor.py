@@ -18,7 +18,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.cluster.fingerprints.job_images import GAZEBO_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, SITL_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.job_images import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.node.jobs.job_types import artifact_input_fields, artifact_result_fields
 from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference, json_pointer, resolve_references, store_results
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
@@ -26,6 +26,7 @@ from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.schema import ArtifactHolderKind, PipelineStage
 from scenegems_tool.persistence.stores import AssuranceStores, JobStore, Lease, NodeStore
 from tests.scenegems_tool.cluster.payloads import trajectories_data
+from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_hello
 
 EXPECTED = {
@@ -222,7 +223,7 @@ def _simulation(executor: FakeExecutor, script: CaseScript, case, payload) -> Di
 
 
 def _ardupilot_simulation(script: CaseScript, payload, digest: str) -> Dict[str, Any]:
-    """A simulation.ardupilot result as the job reports it: a bounded run record, the state digest, the observed run as trajectories and no state rows."""
+    """A simulation.ardupilot_sim or simulation.gazebo result as the job reports it: a bounded run record, the state digest, the observed run as trajectories and no state rows."""
     assert payload["include_trajectories"] is True and payload["include_states"] is False and payload["geofence"]["radius_meters"] > 0
     run_record = {
         "stack": ["replay on ardupilot"],

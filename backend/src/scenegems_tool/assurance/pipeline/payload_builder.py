@@ -8,15 +8,17 @@
                             reference when the result holds one
     trajectory_generation   the scene result's evaluation_data as scenario_content (a reference
                             when the result holds one, otherwise its JSON text), or an input
-                            item's scene reference; the generator choice in params, a seed
-                            derived from the case seed, the timeout
+                            item's scene reference; the generator choice in params, the case
+                            seed, the timeout
     monitoring.post_hoc     (monitor_trajectories) the planned trajectories, as the simulation
                             gets them
     simulation.kinematic    the trajectory result's trajectories (a reference into its
                             trajectory_data with pointer /trajectories, or the inline list), or an
                             input item's trajectories reference; the stack's mode and parameters,
-                            the run seed, the live monitor options
-    simulation.ardupilot    the same trajectories for a run on an ArduPilot stack: its simulation layer,
+                            the run's seed (the case seed unless the run fixes one), the live
+                            monitor options
+    simulation.ardupilot_sim, simulation.gazebo
+                            the same trajectories for a run on an ArduPilot stack: its simulation layer,
                             speedup, geofence, dt, steps and the run seed; the observed run comes back
                             as trajectories (include_trajectories), with the live monitor options when
                             the run is judged live and no state rows (the trajectories are the state log)
@@ -36,7 +38,7 @@ from typing import Any, Dict, Mapping, Optional, Sequence
 
 from pydantic import ValidationError
 
-from scenegems_tool.assurance.campaign.campaign_config import MAX_SEED, ArdupilotStackConfig, CampaignConfig, FunctionalScenarioInput, InputArtifactKind, InputItem, InputRef, RunConfig
+from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, FunctionalScenarioInput, InputArtifactKind, InputItem, InputRef, RunConfig
 from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.stage_graph import StageGraph, Step
@@ -50,11 +52,6 @@ TRAJECTORIES_POINTER = "/trajectories"
 
 class PayloadError(ValueError):
     """A payload that cannot be built from the case's results, or that its job type's model refuses."""
-
-
-def derived_seed(case_seed: int, purpose: str) -> int:
-    """A seed for one use within a case (the trajectory search, say), from the case seed: 31 bits of sha256."""
-    return int.from_bytes(hashlib.sha256(f"{case_seed}:{purpose}".encode("utf-8")).digest()[:4], "big") & MAX_SEED
 
 
 def _wire(reference: Any) -> Dict[str, Any]:
@@ -124,9 +121,9 @@ def validate_payload(job_type: JobType, payload: Mapping[str, Any]) -> None:
         raise PayloadError(f"invalid {job_type.value} payload: {problems}") from error
 
 
-def required_fingerprints(job_type: JobType, payload: Mapping[str, Any], pinned: Mapping[str, str]) -> Dict[str, str]:
-    """The pinned fingerprints of the images the job runs in."""
-    return {image: pinned[image] for image in job_images(job_type, payload) if image in pinned}
+def required_fingerprints(job_type: JobType, pinned: Mapping[str, str]) -> Dict[str, str]:
+    """The pinned fingerprints of the images a job of the type runs in."""
+    return {image: pinned[image] for image in job_images(job_type) if image in pinned}
 
 
 class PayloadBuilder:
@@ -147,10 +144,10 @@ class PayloadBuilder:
             content: Any = self.class_content(class_id, content_hash)
         elif isinstance(scenario, FunctionalScenarioInput):
             if scenario.ref.sha256 != content_hash:
-                raise PayloadError(f"class {class_id} names functional scenario {scenario.ref.sha256}, but the campaign pinned {content_hash}")
+                raise PayloadError(f"FEC {class_id} names functional scenario {scenario.ref.sha256}, but the campaign pinned {content_hash}")
             content = input_reference(scenario.ref)
         else:
-            raise PayloadError(f"class {class_id} is an item; scene generation takes catalog classes and functional scenarios")
+            raise PayloadError(f"FEC {class_id} is an item; scene generation takes catalog FECs and functional scenarios")
         return {
             "functional_scenario_content": content,
             "colregs_constraints_content": domain.colregs_constants,
@@ -180,7 +177,7 @@ class PayloadBuilder:
             "scenario_content": scenario_content,
             "colregs_constraints_content": self.config.domain.colregs_constants,
             "params": params,
-            "seed": derived_seed(case_seed, "trajectories"),
+            "seed": case_seed,
             "timeout_s": trajectories.timeout_s,
         }
 
@@ -194,9 +191,9 @@ class PayloadBuilder:
     def _simulation(self, case_seed: int, run_index: int, trajectories: Any) -> Dict[str, Any]:
         run = self.config.execution.runs[run_index]
         if isinstance(run.stack, ArdupilotStackConfig):
-            return self._ardupilot_simulation(run, run.stack, run.seed_for(case_seed, run_index), trajectories)
+            return self._ardupilot_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         stack = run.stack
-        payload: Dict[str, Any] = {"mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed, run_index)}
+        payload: Dict[str, Any] = {"mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
         if stack.usv_navigation is not None:
             payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
         if stack.dt is not None:
@@ -208,7 +205,7 @@ class PayloadBuilder:
         return payload
 
     def _ardupilot_simulation(self, run: RunConfig, stack: ArdupilotStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:
-        """The simulation.ardupilot payload of a run: the observed run always comes back as trajectories (what the post-hoc monitor, the calibration and the frames take)."""
+        """The simulation.ardupilot_sim or simulation.gazebo payload of a run: the observed run always comes back as trajectories (what the post-hoc monitor, the calibration and the frames take)."""
         payload: Dict[str, Any] = {
             "simulation_layer": stack.simulation_layer,
             "trajectories": trajectories,
@@ -256,7 +253,7 @@ class PayloadBuilder:
         job_type = self.graph.job_type_of(step)
         validate_payload(job_type, payload)
         resources = self.config.resources
-        requirements = JobRequirements(labels=dict(resources.required_labels), fingerprints=required_fingerprints(job_type, payload, pinned))
+        requirements = JobRequirements(labels=dict(resources.required_labels), fingerprints=required_fingerprints(job_type, pinned))
         return JobSubmission(
             job_type=job_type,
             payload=payload,
@@ -275,7 +272,7 @@ class PayloadBuilder:
             self._contents[class_id] = content
         found = hashlib.sha256(content.encode("utf-8")).hexdigest()
         if found != content_hash:
-            raise PayloadError(f"class {class_id} has changed in the catalog since the campaign pinned it (content hash {found}, pinned {content_hash})")
+            raise PayloadError(f"FEC {class_id} has changed in the catalog since the campaign pinned it (content hash {found}, pinned {content_hash})")
         return content
 
 

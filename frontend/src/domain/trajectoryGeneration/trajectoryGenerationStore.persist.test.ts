@@ -32,7 +32,6 @@ describe("trajectory generation persistence", () => {
       includeMonitorResults: false,
       generator: "straight" as const,
       timespan: 600,
-      activeTab: "advanced" as const,
       handoffScene: null,
       handoffSourceName: "demo",
       status: "done" as const,

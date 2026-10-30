@@ -56,15 +56,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0006"]
+    assert scripts.get_heads() == ["0008"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0006", "0005", "0004", "0003", "0002", "0001"]
-    assert revisions[0].down_revision == "0005"
-    assert revisions[1].down_revision == "0004"
-    assert revisions[2].down_revision == "0003"
-    assert revisions[3].down_revision == "0002"
-    assert revisions[4].down_revision == "0001"
-    assert revisions[-1].down_revision is None
+    assert [revision.revision for revision in revisions] == ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -81,9 +76,10 @@ def test_config_needs_a_url(monkeypatch):
 def test_revision_enum_values_match_the_code():
     # The revisions spell the CHECK constraint values out; a new enum value needs a new revision.
     # Each enum is checked against the latest revision that names its values.
-    first, second, fifth = _revision("0001_cluster_tables"), _revision("0002_campaigns"), _revision("0005_partial_campaigns")
+    first, second, fifth, eighth = _revision("0001_cluster_tables"), _revision("0002_campaigns"), _revision("0005_partial_campaigns"), _revision("0008_split_ardupilot_simulation")
     assert set(first.JOB_TYPES) == set(second.PREVIOUS_JOB_TYPES)
-    assert set(second.JOB_TYPES) == _values(JobType)
+    assert set(second.JOB_TYPES) == set(eighth.PREVIOUS_JOB_TYPES)
+    assert set(eighth.JOB_TYPES) == _values(JobType)
     assert set(first.JOB_STATES) == _values(JobState)
     assert set(first.NODE_STATUSES) == _values(NodeStatus)
     assert set(first.JOB_EVENT_KINDS) == _values(JobEventKind)
@@ -121,6 +117,7 @@ def test_offline_upgrade_renders_the_tables(capsys):
     assert "UPDATE verdict SET step = 'simulation'" in sql
     assert "UPDATE run_record SET source = 'job'" in sql
     assert "'monitor_scene'" in sql and "'upload'" in sql
+    assert "UPDATE job SET job_type = 'simulation.gazebo'" in sql and "'simulation.ardupilot_sim'" in sql
 
 
 @pytest.mark.postgres
@@ -130,7 +127,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0006"
+            assert MigrationContext.configure(connection).get_current_revision() == "0008"
     finally:
         engine.dispose()
 
@@ -403,15 +400,84 @@ def test_the_setting_tables_come_and_go_with_revision_0006(empty_database_url):
         assert not {"cluster_domain", "campaign_preset"} & set(inspect(engine).get_table_names())
         command.upgrade(config, "0006")
         with engine.begin() as connection:
-            connection.execute(
-                text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (1, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at}
-            )
+            connection.execute(text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (1, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at})
         with pytest.raises(IntegrityError):  # one domain configuration per cluster
             with engine.begin() as connection:
-                connection.execute(
-                    text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (2, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at}
-                )
+                connection.execute(text("INSERT INTO cluster_domain (id, colregs_constants, vessel_types, obstacle_types, updated_at) VALUES (2, 'A: 1', 'B: 2', 'C: 3', :at)"), {"at": at})
         command.downgrade(config, "0005")
         assert not {"cluster_domain", "campaign_preset"} & set(inspect(engine).get_table_names())
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0007_allows_an_unlimited_failure_budget_and_downgrades_without_one(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0004")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 10, 29, 9, 30, tzinfo=timezone.utc)
+    try:
+        with engine.begin() as connection:
+            _insert_a_campaign_of_revision_0004(connection, at)
+        command.upgrade(config, "0007")
+        with engine.begin() as connection:
+            assert connection.execute(text("SELECT failure_budget FROM campaign_class")).scalar_one() == 0  # existing classes keep their numbers
+            connection.execute(text("UPDATE campaign_class SET failure_budget = NULL"))
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text("UPDATE campaign_class SET failure_budget = -1"))
+        with pytest.raises(IntegrityError):  # an unlimited budget has no place in revision 0006
+            command.downgrade(config, "0006")
+        with engine.begin() as connection:
+            connection.execute(text("UPDATE campaign_class SET failure_budget = 3"))
+        command.downgrade(config, "0006")
+        assert not next(column for column in inspect(engine).get_columns("campaign_class") if column["name"] == "failure_budget")["nullable"]
+        command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+def _insert_an_ardupilot_job(connection, job_id: str, layer: str, at) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+            " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at)"
+            " VALUES (:id, 'simulation.ardupilot', :payload, '{}', '{}', 0, 0, 0, 3, :id, 'queued', 0, 0, :at, :at, :at)"
+        ),
+        {"id": job_id, "payload": f'{{"simulation_layer": "{layer}"}}', "at": at},
+    )
+
+
+@pytest.mark.postgres
+def test_revision_0008_splits_the_ardupilot_jobs_by_their_layer_and_drops_the_old_capability(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0007")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 10, 29, 9, 30, tzinfo=timezone.utc)
+    try:
+        with engine.begin() as connection:
+            _insert_an_ardupilot_job(connection, "on-sitl", "ardupilot_sim", at)
+            _insert_an_ardupilot_job(connection, "on-gazebo", "gazebo", at)
+            connection.execute(
+                text(
+                    "INSERT INTO node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('node-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation.ardupilot', 1, 0), ('node-1', 'simulation.kinematic', 2, 0)"))
+        command.upgrade(config, "0008")
+        with engine.begin() as connection:
+            job_types = dict(connection.execute(text("SELECT id, job_type FROM job")).all())
+            assert job_types == {"on-sitl": "simulation.ardupilot_sim", "on-gazebo": "simulation.gazebo"}
+            capabilities = connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all()
+            assert capabilities == ["simulation.kinematic"], "the node lists its capabilities again in its Hello"
+            connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation.gazebo', 1, 0)"))
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE job SET job_type = 'simulation.ardupilot' WHERE id = 'on-sitl'"))
+        command.downgrade(config, "0007")
+        with engine.connect() as connection:
+            assert set(connection.execute(text("SELECT job_type FROM job")).scalars().all()) == {"simulation.ardupilot"}
+            assert connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all() == ["simulation.kinematic"]
     finally:
         engine.dispose()

@@ -88,7 +88,7 @@ export function sampleSceneOutput(overrides: Record<string, unknown> = {}): Reco
   return {
     case_id: 5,
     case_index: 2,
-    class_id: "class-a",
+    fec_id: "class-a",
     state: "complete",
     reason: null,
     artifact: sampleArtifactRef(),
@@ -108,7 +108,7 @@ export function sampleTrajectoryOutput(overrides: Record<string, unknown> = {}):
   return {
     case_id: 6,
     case_index: 0,
-    class_id: "item/0",
+    fec_id: "item/0",
     state: "complete",
     reason: null,
     artifact: sampleArtifactRef({ sha256: TRAJECTORY_DATA_SHA, kind: "trajectory_data", pointer: "/trajectories" }),
@@ -128,7 +128,7 @@ export function sampleSimulationOutput(overrides: Record<string, unknown> = {}):
   return {
     case_id: 7,
     case_index: 0,
-    class_id: "item/0",
+    fec_id: "item/0",
     state: "complete",
     reason: null,
     artifact: sampleArtifactRef({ sha256: STATE_LOG_SHA, kind: "trajectories" }),
@@ -160,7 +160,7 @@ export function sampleFindings(overrides: Record<string, unknown> = {}): Record<
     outputs: { count: 5, valid: 5, complete: 3 },
     verdicts: { passed: 3, failed: 2, unmonitored: 0 },
     failed_rules: [{ rule: "rule_15", count: 2, first_failure_time_s: { min: 12.5, median: 20.1 } }],
-    classes: [{ class_id: "class-a", cases: 5, passed: 3, failed: 2 }],
+    fecs: [{ fec_id: "class-a", cases: 5, passed: 3, failed: 2 }],
     durations_s: { median: 4.2, p90: 9.8 },
     ...overrides,
   };

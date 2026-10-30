@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Zod schemas of the master's operator API views. They mirror
  * `backend/src/scenegems_tool/cluster/master/api/views.py` (node, job, master status) and
- * `campaign_views.py` (campaigns, classes, cases, verdicts, run records, events). Times are
+ * `campaign_views.py` (campaigns, FECs, cases, verdicts, run records, events). Times are
  * ISO strings as the server sends them. Enum fields that grow with the backend (job type,
  * event kind, monitor) are plain strings; the `*_VALUES` lists name the known ones.
  */
@@ -246,15 +246,16 @@ export const campaignRowSchema = campaignSummarySchema.extend({
 export const verdictCountsSchema = z.record(z.string(), z.record(z.string(), z.number().int()));
 
 export const classViewSchema = z.object({
-  class_id: z.string(),
+  fec_id: z.string(),
   state: classStateSchema,
   state_reason: z.string().nullable(),
   content_hash: z.string(),
   vessel_count: z.number().int(),
   obstacle_count: z.number().int(),
   quota: z.number().int(),
-  failure_budget: z.number().int(),
-  failure_budget_left: z.number().int(),
+  /** Both null when the failure budget is unlimited: the class is never abandoned. */
+  failure_budget: z.number().int().nullable(),
+  failure_budget_left: z.number().int().nullable(),
   complete: z.number().int(),
   dropped: z.number().int(),
   in_flight: z.number().int(),
@@ -265,10 +266,10 @@ export const classViewSchema = z.object({
 });
 
 export const campaignTotalsSchema = z.object({
-  classes: z.number().int(),
-  classes_open: z.number().int(),
-  classes_complete: z.number().int(),
-  classes_abandoned: z.number().int(),
+  fecs: z.number().int(),
+  fecs_open: z.number().int(),
+  fecs_complete: z.number().int(),
+  fecs_abandoned: z.number().int(),
   quota: z.number().int(),
   complete: z.number().int(),
   dropped: z.number().int(),
@@ -279,13 +280,13 @@ export const campaignTotalsSchema = z.object({
 
 export const campaignDetailSchema = campaignSummarySchema.extend({
   totals: campaignTotalsSchema,
-  classes: z.array(classViewSchema),
+  fecs: z.array(classViewSchema),
 });
 
 export const caseViewSchema = z.object({
   case_id: z.number().int(),
   campaign_id: z.string(),
-  class_id: z.string(),
+  fec_id: z.string(),
   case_index: z.number().int(),
   seed: z.number().int(),
   config_version: z.number().int(),
@@ -335,7 +336,7 @@ export const runRecordSchema = z.object({
   /** The case's index in its class (P5.1); missing from masters before it. */
   case_index: z.number().int().optional(),
   campaign_id: z.string(),
-  class_id: z.string(),
+  fec_id: z.string(),
   run_index: z.number().int(),
   repeat_index: z.number().int(),
   /** Null for trajectories taken from an item or a live session (Phase 6). */
@@ -365,7 +366,7 @@ export const verdictSchema = z.object({
   /** The case's index in its class (P5.1); missing from masters before it. */
   case_index: z.number().int().optional(),
   campaign_id: z.string(),
-  class_id: z.string(),
+  fec_id: z.string(),
   /** Phase 6; missing from masters before it, whose verdicts are all of the simulation. */
   step: verdictStepSchema.optional(),
   run_index: z.number().int(),
@@ -392,7 +393,7 @@ export const campaignEventSchema = z.object({
   event_id: z.number().int(),
   at: isoTime,
   kind: z.string(),
-  class_id: z.string().nullable(),
+  fec_id: z.string().nullable(),
   detail: jsonObject,
 });
 

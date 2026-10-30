@@ -1,7 +1,9 @@
-"""simulation.ardupilot: replay over the lockstep MAVLink adapter, on a SITL or Gazebo stack per job.
+"""simulation.ardupilot_sim and simulation.gazebo: replay over the lockstep MAVLink adapter, on a SITL or Gazebo stack per job.
 
-The node resolves the instance (every vessel replay to ardupilot on ardupilot_sim or gazebo,
-through replay_mavlink_lockstep), generates the vessel stack into the job's folder and adds
+The job type decides the simulation layer: simulation.ardupilot_sim runs SITL's own physics,
+simulation.gazebo SITL's JSON backend against a Gazebo world, and each type's payload model
+accepts only its own layer. The node resolves the instance (every vessel replay to ardupilot
+on that layer, through replay_mavlink_lockstep), generates the vessel stack into the job's folder and adds
 a runner from the scenario execution image on the stack network. The runner drives every
 vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 
@@ -22,7 +24,7 @@ or the workbench backend's.
 
 import threading
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Tuple, Type
 
 from pydantic import Field, model_validator
 
@@ -34,7 +36,7 @@ from scenegems_tool.cluster.node.launchers.per_job.job_stack import RUNNER_SERVI
 from scenegems_tool.cluster.node.node_context import NodeContext
 from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
-from scenegems_tool.cluster.protocol.jobs import JobSpec
+from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 
 if TYPE_CHECKING:
@@ -78,7 +80,23 @@ class ArduPilotSimulationPayload(ProtocolModel):
         return self
 
 
-PAYLOAD_MODEL = ArduPilotSimulationPayload
+class ArduPilotSimPayload(ArduPilotSimulationPayload):
+    """The payload of simulation.ardupilot_sim; the layer may be left out."""
+
+    simulation_layer: Literal[ArduPilotSimulationLayer.ARDUPILOT_SIM] = ArduPilotSimulationLayer.ARDUPILOT_SIM
+
+
+class GazeboSimulationPayload(ArduPilotSimulationPayload):
+    """The payload of simulation.gazebo; the layer may be left out."""
+
+    simulation_layer: Literal[ArduPilotSimulationLayer.GAZEBO] = ArduPilotSimulationLayer.GAZEBO
+
+
+# One model per job type of this module, so a payload naming another layer is refused at submission
+PAYLOAD_MODELS: Dict[JobType, Type[ArduPilotSimulationPayload]] = {
+    JobType.SIMULATION_ARDUPILOT_SIM: ArduPilotSimPayload,
+    JobType.SIMULATION_GAZEBO: GazeboSimulationPayload,
+}
 
 
 def _instance(payload: ArduPilotSimulationPayload):
@@ -117,7 +135,7 @@ def build_job_stack(job: JobSpec, node: NodeContext, payload: ArduPilotSimulatio
 
 
 def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    payload = parse_payload(ArduPilotSimulationPayload, job)
+    payload = parse_payload(PAYLOAD_MODELS[job.job_type], job)
     report.status(f"generating the {payload.simulation_layer.value} stack")
     stack = build_job_stack(job, node, payload)
     # SITL runs free at the payload's speedup, so an observed run is not slowed down and keeps its timeout
@@ -185,7 +203,7 @@ def execute(job: JobSpec, status: StatusCallback, observation: Optional["Contain
     """The in-container part: drive every vessel's SITL in lockstep and describe the run; observation forwards its states live."""
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import run_mavlink_stack
 
-    payload = parse_payload(ArduPilotSimulationPayload, job)
+    payload = parse_payload(PAYLOAD_MODELS[job.job_type], job)
     trajectories, instance = _instance(payload)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))

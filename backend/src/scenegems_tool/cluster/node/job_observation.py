@@ -26,7 +26,7 @@ from scenegems_tool.cluster.node.launchers.per_job.job_container_io import Obser
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.protocol.messages import MAX_OBSERVATION_BATCH_BYTES, MAX_OBSERVATION_FRAMES
 
-OBSERVABLE_JOB_TYPES = (JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT)
+OBSERVABLE_JOB_TYPES = (JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO)
 BATCH_INTERVAL_S = 0.1
 MAX_BUFFERED_FRAMES = 1000
 

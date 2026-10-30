@@ -6,7 +6,8 @@ const JOB_TYPE_LABELS: Record<string, string> = {
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   "simulation.kinematic": "Simulation, kinematic",
-  "simulation.ardupilot": "Simulation, ArduPilot",
+  "simulation.ardupilot_sim": "Simulation, ArduPilot SITL",
+  "simulation.gazebo": "Simulation, Gazebo",
   "monitoring.post_hoc": "Monitoring, post hoc",
   "calibration.deviation": "Calibration deviation",
 };

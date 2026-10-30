@@ -15,7 +15,7 @@ interface VerdictFilterBarProps {
 }
 
 export function VerdictFilterBar({ detail, filters, onChange, onReset, csvUrl, total, showRun }: VerdictFilterBarProps) {
-  const classes = (detail?.classes ?? []).map((view) => view.class_id).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const classes = (detail?.fecs ?? []).map((view) => view.fec_id).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   const runs = runIndexesOf(detail);
   const active = hasActiveFilters(filters);
   const activeCount =
@@ -44,9 +44,9 @@ export function VerdictFilterBar({ detail, filters, onChange, onReset, csvUrl, t
       >
     <section className="results-filters" aria-label="Filters">
       <label className="results-field results-field--wide">
-        <span>Class</span>
+        <span>FEC</span>
         <select value={filters.classId} onChange={(event) => onChange({ classId: event.target.value })}>
-          <option value="">All classes ({classes.length})</option>
+          <option value="">All FECs ({classes.length})</option>
           {filters.classId !== "" && !classes.includes(filters.classId) && <option value={filters.classId}>{filters.classId}</option>}
           {classes.map((classId) => (
             <option key={classId} value={classId}>

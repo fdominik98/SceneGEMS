@@ -1,0 +1,360 @@
+/* The panel under the canvas of a workbench page (StepPanel): header, notices, Input, Setup and Result rows. */
+
+.step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+}
+
+.step-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.step-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.step-panel-step {
+  color: var(--accent);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.step-panel-title h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.step-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.step-panel-where {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.step-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px var(--space-2);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.step-chip--idle {
+  color: var(--text-muted);
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.step-chip--busy {
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.14);
+  border-color: rgba(250, 204, 21, 0.35);
+}
+
+.step-chip--live {
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.14);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.step-chip--ok {
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.14);
+  border-color: rgba(56, 189, 248, 0.38);
+}
+
+.step-chip--warn {
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.38);
+}
+
+.step-chip--error {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.38);
+}
+
+.step-notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  list-style: none;
+  color: #fcd34d;
+  font-size: var(--font-size-sm);
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius);
+}
+
+.step-notices li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.step-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A row: its label in a narrow column, the content, buttons at the end. */
+.step-row {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+
+.step-row-label {
+  padding-top: 10px;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.step-row-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  min-width: 0;
+  min-height: var(--control-height);
+}
+
+/* A part of a row that takes the whole width (a table, a picker, a report). */
+.step-row-body > .step-row-full {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.step-row-aside {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* What a row is about, on one line: a name and its value (an input, a scene, a run). */
+.step-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.step-value-name {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.step-value-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.step-value-text.is-empty {
+  font-weight: 400;
+  color: var(--text-faint, var(--text-muted));
+}
+
+.step-value-note {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.step-line {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.step-line.warning {
+  color: #fbbf24;
+}
+
+.step-line.error {
+  color: #f87171;
+}
+
+/* A setting on one line: its name, then its control. */
+.step-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-sm);
+}
+
+.step-setting-label {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.step-setting select {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.step-number .wiz-number {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.step-number .wiz-number input {
+  width: calc(var(--field-ch, 6) * 1ch + 28px);
+  min-width: 0;
+}
+
+.step-number .wiz-unit {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.step-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-height);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+/* Buttons that pick where the input comes from, after the input itself. */
+.step-sources {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.step-sources-label {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.step-sources button {
+  padding-inline: var(--space-3);
+}
+
+/* A compact table in a row (the simulation's vessels and connections). */
+.step-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+}
+
+.step-table th {
+  padding: 0 var(--space-2) var(--space-1) 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.step-table td {
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+  vertical-align: middle;
+}
+
+.step-table td select,
+.step-table td input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+}
+
+.step-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Settings shown on demand inside a row (advanced parameters, wind and waves): closed ones share a line,
+   an open one takes the row's width. */
+.step-more {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.step-more.is-open {
+  flex-basis: 100%;
+}
+
+.step-more.disclosure--link > .disclosure-toggle {
+  padding-inline: 0;
+}
+
+.step-more.disclosure--link > .disclosure-panel {
+  padding: 0;
+  color: inherit;
+}
+
+.step-more-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.step-more-body > .step-row-full {
+  flex-basis: 100%;
+}
+
+@media (max-width: 640px) {
+  .step-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .step-row-label {
+    padding-top: 0;
+  }
+
+  .step-row-aside {
+    justify-content: flex-start;
+  }
+
+  .step-panel-actions {
+    margin-left: 0;
+  }
+}

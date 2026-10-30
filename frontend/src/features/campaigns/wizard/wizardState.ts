@@ -27,6 +27,12 @@ export const WIZARD_STEP_LABELS: Record<WizardStepId, string> = {
 /** Values by parameter key; a key that is absent is left out of the config. */
 export type ParamValues = Record<string, unknown>;
 
+/** The failure budget of a class that is never abandoned: it replaces dropped and failed cases until its quota is complete. */
+export const UNLIMITED_FAILURE_BUDGET = "unlimited";
+
+/** Dropped and failed cases a class may use up before it is abandoned, or unlimited; null while the box is empty. */
+export type FailureBudgetDraft = number | typeof UNLIMITED_FAILURE_BUDGET | null;
+
 export interface ScopeEntryDraft {
   id: string;
   /** Class ids of the catalog. */
@@ -34,7 +40,7 @@ export interface ScopeEntryDraft {
   /** Folder patterns (no slash) or class id patterns (with a slash), shell wildcards. */
   patterns: string[];
   quota: number | null;
-  failureBudget: number | null;
+  failureBudget: FailureBudgetDraft;
 }
 
 /** How long an uploaded file stays on the master unless a campaign uses it (`artifact_reference.expires_at` of an upload). */
@@ -49,7 +55,7 @@ export interface ScenarioFileDraft {
   name: string;
   ref: ConfigArtifactRef;
   quota: number | null;
-  failureBudget: number | null;
+  failureBudget: FailureBudgetDraft;
   /** When the file was uploaded (ms since the epoch); it expires 24 hours later unless a campaign uses it. */
   uploadedAt: number;
 }

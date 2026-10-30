@@ -3,12 +3,12 @@
 import random
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pytest
 
 from scenegems_tool.assurance.campaign.campaign_config import QueueDepthCaps
-from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, decide_class, plan_new_cases, spare_cases, startable
+from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, decide_class, plan_new_cases, startable
 from scenegems_tool.persistence.schema import CampaignClassState, CaseState, PipelineStage
 from scenegems_tool.persistence.stores import CaseRecord, ClassRecord
 
@@ -20,7 +20,9 @@ def make_case(index: int, state: CaseState = CaseState.ACTIVE, ready: bool = Fal
     return CaseRecord(index + 100, "campaign", "class", index, index, 1, stage, state, 1, None, None, None, {}, None, NOW, NOW, None if state == CaseState.ACTIVE else NOW)
 
 
-def make_class(quota: int = 3, budget: int = 2, complete: int = 0, dropped: int = 0, in_flight: int = 0, state: CampaignClassState = CampaignClassState.OPEN, class_id: str = "class") -> ClassRecord:
+def make_class(
+    quota: int = 3, budget: Optional[int] = 2, complete: int = 0, dropped: int = 0, in_flight: int = 0, state: CampaignClassState = CampaignClassState.OPEN, class_id: str = "class"
+) -> ClassRecord:
     return ClassRecord("campaign", class_id, "0" * 64, 2, 0, quota, budget, complete, dropped, in_flight, state, None, NOW, NOW, None)
 
 
@@ -57,17 +59,33 @@ def test_a_class_at_its_budget_stays_open():
     assert decide_class(cases, quota=1, failure_budget=1, dropped=1).close is None
 
 
+def test_a_class_with_an_unlimited_budget_is_never_abandoned():
+    cases = [make_case(index, CaseState.DROPPED if index % 2 else CaseState.FAILED) for index in range(50)] + [make_case(50)]
+    decision = decide_class(cases, quota=1, failure_budget=None, dropped=50)
+    assert decision.close is None and decision.cancel == ()
+    cases[-1] = make_case(50, ready=True)
+    decision = decide_class(cases, quota=1, failure_budget=None, dropped=50)
+    assert decision.complete == (150,) and decision.close == CampaignClassState.COMPLETE
+
+
 # Starting cases
 
 
-def test_a_class_runs_one_spare_case_and_one_more_per_drop_within_its_budget():
-    assert startable(make_class(quota=3, budget=2)) == 4
-    assert spare_cases(make_class(quota=3, budget=2, dropped=1)) == 1  # the budget left is 1
-    assert startable(make_class(quota=3, budget=4, dropped=1, in_flight=3)) == 2
+def test_a_class_runs_its_quota_and_replaces_a_drop_only_once_it_is_final():
+    assert startable(make_class(quota=3, budget=2)) == 3  # no case beyond the quota
+    assert startable(make_class(quota=3, budget=2, in_flight=3)) == 0
+    assert startable(make_class(quota=3, budget=2, dropped=1, in_flight=2)) == 1  # the drop is replaced
+    assert startable(make_class(quota=3, budget=2, complete=2, in_flight=1)) == 0
     assert startable(make_class(quota=3, budget=0)) == 3
-    assert startable(make_class(quota=3, budget=2, complete=2, in_flight=2)) == 0
-    assert startable(make_class(quota=3, budget=1, dropped=2)) == 0
+    assert startable(make_class(quota=3, budget=1, dropped=2)) == 0  # out of budget
     assert startable(make_class(state=CampaignClassState.COMPLETE)) == 0
+
+
+def test_an_unlimited_budget_replaces_every_drop():
+    assert make_class(budget=None, dropped=7).failure_budget_left is None
+    assert startable(make_class(quota=3, budget=None, dropped=40, complete=1, in_flight=1)) == 1
+    assert startable(make_class(quota=3, budget=None, dropped=40, complete=1, in_flight=2)) == 0
+    assert startable(make_class(quota=3, budget=None, dropped=40, state=CampaignClassState.COMPLETE)) == 0
 
 
 def test_new_cases_go_round_robin_in_index_order():
@@ -86,7 +104,7 @@ def test_backpressure_stops_new_cases_while_any_stage_is_at_its_cap():
 # The selected set does not depend on the order cases finish in
 
 
-def _run_class(outcomes: Dict[int, str], quota: int, budget: int, rng: random.Random, room: int) -> tuple:
+def _run_class(outcomes: Dict[int, str], quota: int, budget: Optional[int], rng: random.Random, room: int) -> tuple:
     """Plays a class with the given outcome per index (complete or dropped), finishing in-flight cases in a random order."""
     cases: Dict[int, CaseRecord] = {}
     state = CampaignClassState.OPEN
@@ -113,10 +131,12 @@ def _run_class(outcomes: Dict[int, str], quota: int, budget: int, rng: random.Ra
             state = decision.close
         assert running or decision.close is not None, "the class stopped moving"
     selected = tuple(sorted(case.case_index for case in cases.values() if case.state == CaseState.COMPLETE))
+    if state == CampaignClassState.COMPLETE:
+        assert not any(case.state == CaseState.CANCELLED for case in cases.values()), "a case above the quota was started"
     return state, selected
 
 
-def _expected(outcomes: Dict[int, str], quota: int, budget: int) -> tuple:
+def _expected(outcomes: Dict[int, str], quota: int, budget: Optional[int]) -> tuple:
     selected: List[int] = []
     drops = 0
     index = 0
@@ -125,7 +145,7 @@ def _expected(outcomes: Dict[int, str], quota: int, budget: int) -> tuple:
             selected.append(index)
         else:
             drops += 1
-            if drops > budget:
+            if budget is not None and drops > budget:
                 return CampaignClassState.ABANDONED
         index += 1
     return CampaignClassState.COMPLETE, tuple(selected)
@@ -139,6 +159,8 @@ def _expected(outcomes: Dict[int, str], quota: int, budget: int) -> tuple:
         ({0: "dropped", 1: "dropped", 2: "dropped", 6: "dropped"}, 4, 4),
         ({2: "dropped", 3: "dropped", 5: "dropped"}, 3, 2),
         ({0: "dropped"}, 1, 0),
+        ({index: "dropped" for index in range(12)}, 2, None),  # an unlimited budget outlasts any run of drops
+        ({1: "dropped", 3: "dropped", 4: "dropped", 5: "dropped", 9: "dropped"}, 4, None),
     ],
 )
 def test_the_selected_cases_do_not_depend_on_the_completion_order(outcomes, quota, budget):
@@ -152,12 +174,10 @@ def test_the_selected_cases_do_not_depend_on_the_completion_order(outcomes, quot
                 assert (state, selected) == expected, (seed, room)
 
 
-def test_an_item_class_runs_no_spare():
-    assert spare_cases(make_class(quota=1, budget=0, class_id="item/0")) == 0
-    assert spare_cases(make_class(quota=1, budget=3, class_id="item/1")) == 0  # never a second run of the same item
-    assert spare_cases(make_class(quota=1, budget=3, class_id="scenario/mine")) == 1
+def test_an_item_class_runs_its_one_case_once():
     assert startable(make_class(quota=1, budget=0, class_id="item/0")) == 1
     assert startable(make_class(quota=1, budget=0, class_id="item/0", in_flight=1)) == 0
+    assert startable(make_class(quota=1, budget=0, class_id="item/0", dropped=1)) == 0  # never a second run of the same item
 
 
 def test_backpressure_counts_new_cases_at_the_first_stage():

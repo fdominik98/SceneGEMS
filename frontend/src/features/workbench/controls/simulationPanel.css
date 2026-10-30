@@ -1,54 +1,5 @@
-/* The simulation's run panel and setup (SimulationRunPanel, SimulationInitControls) and the
-   monitoring panel's stream switch (TrajectoryMonitorSidebar). */
-
-.sim-run-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.sim-run-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.sim-run-header h3 {
-  margin: 0;
-  font-size: var(--font-size-lg);
-}
-
-.sim-run-header .simulation-status-label--inline {
-  flex: 0 1 auto;
-}
-
-.sim-run-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-left: auto;
-}
-
-.sim-run-where,
-.sim-run-message {
-  margin: 0;
-}
-
-.sim-run-speed {
-  max-width: 220px;
-}
-
-.sim-run-panel .readiness-list {
-  margin: 0;
-}
-
-.sim-run-panel .readiness-list li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-2);
-}
+/* The link button, the monitoring panel's stream switch (TrajectoryMonitorSidebar) and the simulation page's Setup row
+   (SimulationInitControls). */
 
 .link-btn {
   min-height: auto;
@@ -64,32 +15,6 @@
 .link-btn:hover:not(:disabled) {
   background: transparent;
   color: var(--accent-strong);
-}
-
-.sim-setup {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.sim-setup-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  align-items: flex-end;
-}
-
-.sim-setup-simulator {
-  min-width: 200px;
-}
-
-.sim-setup-vessels select {
-  min-width: 140px;
-}
-
-.resource-blocker {
-  margin: 0;
-  color: var(--text-muted);
 }
 
 .monitor-stream-bar {
@@ -122,4 +47,48 @@
 .monitor-stream-option.active {
   background: var(--bg-control);
   color: var(--text);
+}
+
+/* The simulation page's Setup row: the vessels' stacks, their live-session connections and Gazebo models. */
+.sim-vessel-name {
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+/* Below these widths the tables scroll sideways in their row rather than cut their selects short. */
+.sim-vessel-table {
+  min-width: 600px;
+}
+
+.sim-vessel-table td select {
+  min-width: 15ch;
+}
+
+.sim-connection-table {
+  min-width: 560px;
+}
+
+.sim-connection-table th:nth-child(3) {
+  width: 55%;
+}
+
+.sim-port-cell input {
+  width: 10ch;
+}
+
+.sim-model-file {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.sim-model-status {
+  min-width: 13ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.sim-model-status.is-loaded {
+  color: #86efac;
 }

@@ -96,7 +96,7 @@ describe("operator API schemas", () => {
   it("parses campaign summary, detail, events and config", () => {
     expect(campaignSummarySchema.parse(sampleCampaignSummary).actual_state).toBe("running");
     const detail = campaignDetailSchema.parse(sampleCampaignDetail());
-    expect(detail.classes[0].verdicts["0"]).toEqual({ passed: 2, failed: 1 });
+    expect(detail.fecs[0].verdicts["0"]).toEqual({ passed: 2, failed: 1 });
     expect(detail.totals.verdicts.failed).toBe(1);
     expect(campaignEventSchema.parse(sampleEvent).kind).toBe("started");
     expect(
@@ -172,7 +172,7 @@ describe("Phase 6 views", () => {
 
   it("keeps the detail's own totals next to the row fields", () => {
     const detail = campaignDetailSchema.parse({ ...sampleCampaignDetail(), kind: "workbench", origin: "simulation", steps: ["simulation"], made_from: ["c0"] });
-    expect(detail.totals.classes).toBe(1);
+    expect(detail.totals.fecs).toBe(1);
     expect(detail.kind).toBe("workbench");
     expect(detail.made_from).toEqual(["c0"]);
   });

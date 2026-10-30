@@ -171,11 +171,11 @@ class CaseStore:
         with session_scope(self._sessions, session) as scope:
             row = self._require_class(scope, campaign_id, class_id, lock=True)
             if expected is not None and row.state != expected:
-                raise ClassStateConflict(f"class {class_id} of campaign {campaign_id} is {row.state.value}, not {expected.value}")
+                raise ClassStateConflict(f"FEC {class_id} of campaign {campaign_id} is {row.state.value}, not {expected.value}")
             if row.state == state:
                 return ClassRecord.from_row(row)
             if row.state != CampaignClassState.OPEN:
-                raise ClassStateConflict(f"class {class_id} of campaign {campaign_id} is {row.state.value} and stays so")
+                raise ClassStateConflict(f"FEC {class_id} of campaign {campaign_id} is {row.state.value} and stays so")
             row.state = state
             row.state_reason = reason
             row.updated_at = now
@@ -229,7 +229,7 @@ class CaseStore:
             for class_id in sorted({case.class_id for case in cases}):
                 row = self._require_class(scope, campaign_id, class_id, lock=True)
                 if row.state != CampaignClassState.OPEN:
-                    raise ClassStateConflict(f"class {class_id} of campaign {campaign_id} is {row.state.value}; it takes no new cases")
+                    raise ClassStateConflict(f"FEC {class_id} of campaign {campaign_id} is {row.state.value}; it takes no new cases")
             rows = [
                 ScenarioCaseRow(
                     campaign_id=campaign_id,
@@ -468,5 +468,5 @@ class CaseStore:
     def _require_class(self, session: Session, campaign_id: str, class_id: str, lock: bool = False) -> CampaignClassRow:
         row = self._load_class(session, campaign_id, class_id, lock)
         if row is None:
-            raise UnknownClass(f"campaign {campaign_id} has no class {class_id}")
+            raise UnknownClass(f"campaign {campaign_id} has no FEC {class_id}")
         return row

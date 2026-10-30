@@ -102,7 +102,27 @@ class SituationContextStateMachine:
         next_timestamp: int,
         colregs_constants: COLREGSConstraints,
     ) -> SituationContext:
-        """Calculate the next situation context without mutating the current one."""
+        """Calculate the next situation context without mutating the current one.
+
+        A pair that violates the safety domain of the encounter in force is in OTHER,
+        whatever the bearing geometry says. That holds for an encounter that is already
+        running as well, so it ends the moment one vessel is inside the other's domain,
+        and a new one can only begin once the pair is clear of it again.
+        """
+        next_context = SituationContextStateMachine._next_context(current_situation_context, step_samples, next_scene, next_timestamp, colregs_constants)
+        if next_context.situation_type is not COLREGSType.OTHER and next_context.get_actors_violate_safety_domain(next_scene):
+            return OtherSituationContext(next_context.actor1, next_context.actor2, next_scene, next_timestamp, colregs_constants)
+        return next_context
+
+    @staticmethod
+    def _next_context(
+        current_situation_context: SituationContext,
+        step_samples: StepSamples,
+        next_scene: ConcreteScene,
+        next_timestamp: int,
+        colregs_constants: COLREGSConstraints,
+    ) -> SituationContext:
+        """The next context from the encounter's own logic, before the safety domain guard."""
         if current_situation_context.get_actors_passed_each_other(next_scene):
             return OtherSituationContext(current_situation_context.actor1, current_situation_context.actor2, next_scene, next_timestamp, colregs_constants)
         candidate = SituationContextStateMachine.get_situation_context(
@@ -184,7 +204,13 @@ class SituationContextStateMachine:
         if isinstance(vessel1, ConcreteVessel) and isinstance(vessel2, ConcreteVessel):
             if not scene.in_sight_on_collision_course(vessel1, vessel2, include_visibility_band=include_visibility_band):
                 return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
-            return SituationContextStateMachine._from_bearing_geometry(scene, vessel1, vessel2, start_timestamp, colregs_constants)
+            situation_context = SituationContextStateMachine._from_bearing_geometry(scene, vessel1, vessel2, start_timestamp, colregs_constants)
+            # An encounter cannot start with one vessel already inside the other's domain
+            # for that encounter. The context is built on this scene, so its start-scene
+            # flag is exactly that test.
+            if situation_context.situation_type is not COLREGSType.OTHER and situation_context.actors_violate_safety_domain:
+                return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
+            return situation_context
         return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
 
     @staticmethod

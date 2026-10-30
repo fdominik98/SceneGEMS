@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Disclosure } from "../../components/Disclosure";
 import type { ArchitectureDocument, Fact } from "../../domain/cluster/architectureApi";
 import type { Selection } from "./ArchitectureGraph";
-import { factsByGroup, factTone, formatFactValue, shortId, stacksThrough, words, type GraphView } from "./capabilitiesModel";
+import { CLUSTER_JOB_FACT, factsByGroup, factTone, formatFactValue, shortId, stacksRunAsJobs, stacksThrough, words, type GraphView } from "./capabilitiesModel";
 
 interface DetailPanelProps {
   document: ArchitectureDocument;
@@ -13,6 +13,8 @@ interface DetailPanelProps {
 }
 
 const GROUP_TITLES = { capability: "Capabilities", parameter: "Parameters", property: "Properties" } as const;
+/** The facts a stack of the list shows as chips, with their labels. */
+const STACK_CHIP_LABELS: Record<string, string> = { [CLUSTER_JOB_FACT]: "Job", repeatability_tier: "Repeat", max_speedup: "Speedup" };
 
 function FactRows({ facts }: { facts: readonly Fact[] }) {
   const groups = factsByGroup(facts);
@@ -291,15 +293,15 @@ function Stacks({ stacks }: { stacks: ArchitectureDocument["combinations"] }) {
       ) : (
         <ul className="cap-stacks">
           {stacks.map((stack) => {
-            const chips = stack.facts.filter((fact) => fact.key === "repeatability_tier" || fact.key === "max_speedup");
+            const chips = stack.facts.filter((fact) => fact.key in STACK_CHIP_LABELS);
             return (
               <li key={stack.path.join(">")} className="cap-stack">
                 <span className="cap-stack-path">{stack.path.map(shortId).map(words).join(" · ")}</span>
                 <span className="cap-stack-facts">
                   {chips.map((fact) => (
-                    <span key={fact.key} className={`cap-chip cap-chip--${factTone(fact)}`}>
-                      <span className="cap-chip-label">{fact.key === "max_speedup" ? "Speedup" : "Repeat"}</span>
-                      <span className="cap-chip-value">{fact.value === null ? "?" : formatFactValue(fact)}</span>
+                    <span key={fact.key} className={`cap-chip cap-chip--${factTone(fact)}`} title={fact.note ?? undefined}>
+                      <span className="cap-chip-label">{STACK_CHIP_LABELS[fact.key]}</span>
+                      <span className="cap-chip-value">{fact.value === null ? (fact.key === CLUSTER_JOB_FACT ? "none" : "?") : formatFactValue(fact)}</span>
                     </span>
                   ))}
                 </span>
@@ -315,6 +317,7 @@ function Stacks({ stacks }: { stacks: ArchitectureDocument["combinations"] }) {
 function Overview({ document, view }: { document: ArchitectureDocument; view: GraphView }) {
   const measured = [...document.nodes, ...document.edges].reduce((sum, item) => sum + item.facts.filter((fact) => fact.measured).length, 0);
   const available = document.combinations.filter((combination) => combination.status === "available").length;
+  const runAsJobs = stacksRunAsJobs(document);
   return (
     <>
       <Header eyebrow={view === "concrete" ? "Implemented now" : "Metamodel"} title={document.title}>
@@ -334,6 +337,14 @@ function Overview({ document, view }: { document: ArchitectureDocument; view: Gr
             <dt>Stacks that exist</dt>
             <dd>
               {available} of {document.combinations.length}
+            </dd>
+          </div>
+        )}
+        {runAsJobs !== null && (
+          <div className="cap-fact">
+            <dt>Run as cluster jobs</dt>
+            <dd>
+              {runAsJobs} of {available}
             </dd>
           </div>
         )}

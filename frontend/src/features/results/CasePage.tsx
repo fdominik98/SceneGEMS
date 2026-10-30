@@ -61,7 +61,7 @@ function CaseSummary({ detail }: { detail: CaseDetail }) {
   return (
     <section className="results-panel" aria-label="The case">
       <header className="results-panel-head">
-        <h3 title={detail.class_id}>{shortClassId(detail.class_id, 64)}</h3>
+        <h3 title={detail.fec_id}>{shortClassId(detail.fec_id, 64)}</h3>
         <span className="meta">case {detail.case_index}</span>
         <StateChip state={detail.state} />
         <span className="run-tag">stage {detail.stage.replace("_", " ")}</span>
@@ -69,8 +69,8 @@ function CaseSummary({ detail }: { detail: CaseDetail }) {
       <Disclosure id="results:case-details" variant="link" headingLevel={null} title="Case details" openTitle="Hide case details" hint={`seed ${detail.seed}`}>
       <dl className="results-facts">
         <div>
-          <dt>Class</dt>
-          <dd className="mono">{detail.class_id}</dd>
+          <dt>FEC</dt>
+          <dd className="mono">{detail.fec_id}</dd>
         </div>
         <div>
           <dt>Case index</dt>
@@ -196,7 +196,7 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
           campaignId={campaignId}
           runRecord={shown}
           verdict={verdictOfShown}
-          title={`${shortClassId(detail.class_id, 40)}, case ${detail.case_index}, run ${shown.run_index}`}
+          title={`${shortClassId(detail.fec_id, 40)}, case ${detail.case_index}, run ${shown.run_index}`}
           autoStart
         />
       )}

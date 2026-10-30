@@ -84,7 +84,7 @@ def with_required_fingerprints(submission: JobSubmission, expected: Dict[str, st
     """The submission with the expected fingerprints of its job's images, unless it names its own."""
     if submission.requirements.fingerprints:
         return submission
-    required = {image: expected[image] for image in job_images(submission.job_type, submission.payload) if image in expected}
+    required = {image: expected[image] for image in job_images(submission.job_type) if image in expected}
     return submission.model_copy(update={"requirements": submission.requirements.model_copy(update={"fingerprints": required})})
 
 

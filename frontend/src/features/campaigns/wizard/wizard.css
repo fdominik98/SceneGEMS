@@ -292,6 +292,27 @@
   cursor: pointer;
 }
 
+/* A failure budget: the number box with its Unlimited checkbox beside it */
+.wiz-budget {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wiz-budget-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.wiz-budget-row .wiz-number {
+  flex: 1 1 auto;
+}
+
+.wiz-budget-note {
+  display: block;
+}
+
 .wiz-issues {
   list-style: none;
   margin: 0;
