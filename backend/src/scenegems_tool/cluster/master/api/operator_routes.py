@@ -16,7 +16,8 @@ workbench gateway.
     POST NODES_PATH/<node id>/drain      no new jobs; running ones finish
     POST NODES_PATH/<node id>/resume     ends the drain
     POST NODES_PATH/<node id>/remove     forgets an offline node; 409 while it is not offline or holds a lease
-    GET  STATUS_PATH                     master id, expected fingerprints, connected nodes
+    GET  STATUS_PATH                     master id, expected fingerprints (by image repository), connected
+                                         nodes, and live_sessions: whether the workbench gateway starts live sessions
 
 The node view carries the machine the node runs on (null until a node that reports it says hello).
 
@@ -43,13 +44,13 @@ STATUS_PATH = "/cluster/status"
 MAX_LISTED_JOBS = 1000
 
 
-def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = None) -> APIRouter:
+def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = None, live_sessions: bool = False) -> APIRouter:
     router = APIRouter()
     router.include_router(catalog_router())
     router.include_router(setting_router(assurance))
     router.include_router(unavailable_router() if assurance is None else campaign_router(assurance, plane))
     router.include_router(_job_routes(plane))
-    router.include_router(_node_routes(plane))
+    router.include_router(_node_routes(plane, live_sessions))
     return router
 
 
@@ -95,7 +96,7 @@ def _job_routes(plane: ControlPlane) -> APIRouter:
     return router
 
 
-def _node_routes(plane: ControlPlane) -> APIRouter:
+def _node_routes(plane: ControlPlane, live_sessions: bool) -> APIRouter:
     router = APIRouter()
 
     @router.get(NODES_PATH)
@@ -116,6 +117,7 @@ def _node_routes(plane: ControlPlane) -> APIRouter:
             "master_id": plane.master_id,
             "expected_fingerprints": {"state": plane.expected.state.value, "error": plane.expected.error, "images": expected or {}},
             "connected_nodes": [session.node_id for session in plane.registry.connected()],
+            "live_sessions": live_sessions,
         }
 
     router.include_router(_node_control_routes(plane))

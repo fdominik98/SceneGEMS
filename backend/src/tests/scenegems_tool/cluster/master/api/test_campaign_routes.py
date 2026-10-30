@@ -8,6 +8,7 @@ import pytest
 import yaml
 from starlette.testclient import TestClient
 
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
 from scenegems_tool.cluster.master.api.master_apps import create_operator_app
 from scenegems_tool.cluster.master.control_plane import ControlPlane
 from scenegems_tool.cluster.master.scheduling.fingerprint_policy import ExpectedFingerprints
@@ -83,7 +84,7 @@ def test_creating_a_campaign_from_yaml_pins_the_expected_fingerprints_and_waits_
     assert response.status_code == 201
     view = response.json()
     assert view["desired_state"] == "paused" and view["actual_state"] == "created" and view["config_version"] == 1
-    assert view["pinned_fingerprints"] == EXPECTED
+    assert view["pinned_fingerprints"] == by_repository(EXPECTED)
     assert view["name"] == "phase 4 exit campaign"
     assert [entry["fec_id"] for entry in view["fecs"]] == [CLASS_A, CLASS_B]
     assert view["totals"]["quota"] == 4 and view["totals"]["fecs_open"] == 2

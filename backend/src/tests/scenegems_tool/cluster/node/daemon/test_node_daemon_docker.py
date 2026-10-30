@@ -110,7 +110,7 @@ def _node_container(cluster, tmp_path_factory):
         "SCENEGEMS_NODE_SLOTS": "simulation:2,scene_generation:1",
         "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_NODE_LABELS": "test=docker",
-        "SCENEGEMS_NODE_IMAGE_TAG": NODE_IMAGE_TAG,
+        "SCENEGEMS_IMAGE_TAG": NODE_IMAGE_TAG,  # the node image; the subsystem images come by their variables
         "SCENEGEMS_SOFTWARE_REVISION": "docker-test",
         **{variable: _image(subsystem) for subsystem, variable in IMAGE_ENVIRONMENT_VARIABLES.items()},
     }

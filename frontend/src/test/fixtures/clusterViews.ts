@@ -40,6 +40,7 @@ export const sampleMasterStatus = {
     images: { "scenegems-node": "sha256:aaaa", "scenegems-scene-generation": "sha256:bbbb" },
   },
   connected_nodes: ["node-a1"],
+  live_sessions: true,
 };
 
 export function sampleJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {

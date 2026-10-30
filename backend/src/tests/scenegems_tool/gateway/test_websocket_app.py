@@ -102,8 +102,6 @@ def test_health_endpoint():
     assert websocket_app.health() == {"status": "ok"}
 
 
-
-
 class TestRunRecorder:
     async def test_the_gateway_on_its_own_records_nothing(self, monkeypatch):
         monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
@@ -117,8 +115,8 @@ class TestRunRecorder:
         sessions = []
         create_session = websocket_app.websocket_session_manager.create_session
 
-        def created(websocket):
-            session, processor = create_session(websocket=websocket)
+        def created(websocket, live_sessions=True):
+            session, processor = create_session(websocket=websocket, live_sessions=live_sessions)
             sessions.append(session)
             return session, processor
 

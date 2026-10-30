@@ -219,6 +219,15 @@ def test_claim_matches_fingerprints(job_store, node_store):
     assert job_store.claim_next("current", LEASE_S).job.job_id == job.job_id
 
 
+def test_a_job_queued_before_release_tags_still_finds_a_node_by_repository(job_store, node_store):
+    # Jobs stored before release tags name their images :latest; nodes now report repositories
+    node_store.register(make_hello("outdated", slots={SCENE: 5}, fingerprints={"scenegems-scene-generation": "old"}))
+    node_store.register(make_hello("current", slots={SCENE: 5}, fingerprints={"scenegems-scene-generation": "new"}))
+    job = job_store.submit(make_submission(requirements=JobRequirements(fingerprints={"scenegems-scene-generation:latest": "new"}))).job
+    assert job_store.claim_next("outdated", LEASE_S) is None
+    assert job_store.claim_next("current", LEASE_S).job.job_id == job.job_id
+
+
 def test_claim_matches_resources(job_store, node_store):
     node_store.register(make_hello("small", slots={SCENE: 5}, resources=make_resources(cpus=2.0, free_memory_mb=1000)))
     node_store.register(make_hello("few-cpus", slots={SCENE: 5}, resources=make_resources(cpus=2.0, free_memory_mb=8000)))

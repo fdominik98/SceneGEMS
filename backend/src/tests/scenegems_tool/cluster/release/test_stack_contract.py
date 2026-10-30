@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from scenegems_tool.cluster.release.bundle import STACK_COMPOSE_FILES
-from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE, scenegems_roles
+from scenegems_tool.cluster.release.roles import DEFAULT_MASTER_COMPOSE_FILES, LIVE_SESSIONS_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
 ENV_TEMPLATES = {"master": "deploy/master/.env.example", "node": "deploy/node/.env.example"}
@@ -17,11 +17,30 @@ _INTERPOLATION = re.compile(r"(?<!\$)\$\{([A-Z_][A-Z0-9_]*)(:?[-?][^}]*)?\}")
 
 
 def _compose_text(role: str) -> str:
-    return (REPO_ROOT / STACK_COMPOSE_FILES[role]).read_text(encoding="utf-8")
+    """Every compose file of the role's stack, one after the other."""
+    return "\n".join((REPO_ROOT / compose_file).read_text(encoding="utf-8") for compose_file in STACK_COMPOSE_FILES[role])
+
+
+def _compose_file(path: str) -> dict:
+    return yaml.safe_load((REPO_ROOT / path).read_text(encoding="utf-8"))
 
 
 def _compose(role: str) -> dict:
-    return yaml.safe_load(_compose_text(role))
+    """The role's compose files merged as compose merges them: maps updated, volume and host lists appended."""
+    merged: dict = {"services": {}, "volumes": {}}
+    for compose_file in STACK_COMPOSE_FILES[role]:
+        compose = _compose_file(compose_file)
+        merged["volumes"].update(compose.get("volumes") or {})
+        for name, service in compose["services"].items():
+            target = merged["services"].setdefault(name, {})
+            for key, value in service.items():
+                if isinstance(value, dict):
+                    target[key] = {**target.get(key, {}), **value}
+                elif isinstance(value, list) and key != "command":
+                    target[key] = target.get(key, []) + value
+                else:
+                    target[key] = value
+    return merged
 
 
 def _role_keys(role: dict) -> set:
@@ -74,6 +93,7 @@ def _settings_of(compose: dict) -> str:
 
 def test_the_master_stack_has_no_security_tool_certificates_or_tokens():
     compose = _compose("master")
+    assert set(_compose_file(STACK_COMPOSE_FILES["master"][1])["services"]) == {"master-api"}, "the live sessions file only adds to master-api"
     assert set(compose["services"]) == {"postgres", "cluster-broker", "master-api"}
     settings = _settings_of(compose)
     for word in ("security", "pairing", "certificate", "auth_hook", "broker_master", "8883"):
@@ -119,7 +139,8 @@ def _example_env(role_name: str) -> str:
 def test_docker_compose_accepts_the_stack_with_the_role_env(role_name, tmp_path):
     if shutil.which("docker") is None:
         pytest.skip("needs the docker CLI")
-    shutil.copyfile(REPO_ROOT / STACK_COMPOSE_FILES[role_name], tmp_path / "docker-compose.yml")
+    for compose_file in STACK_COMPOSE_FILES[role_name]:
+        shutil.copyfile(REPO_ROOT / compose_file, tmp_path / Path(compose_file).name)
     (tmp_path / ".env").write_text(_example_env(role_name), encoding="utf-8")
     (tmp_path / "release.json").write_text("{}", encoding="utf-8")
     completed = subprocess.run(["docker", "compose", "--profile", "tools", "config", "-q"], cwd=tmp_path, capture_output=True, text=True)
@@ -176,3 +197,32 @@ def test_the_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials_the_ma
     for word in ("pairing", "ca_sha256", "trust", "token"):
         assert word not in settings, word
     assert set(compose["volumes"]) == {"runtime", "state"}
+
+
+def test_only_the_live_sessions_file_gives_master_api_the_docker_socket():
+    base, live = (_compose_file(path)["services"]["master-api"] for path in STACK_COMPOSE_FILES["master"])
+    assert Path(STACK_COMPOSE_FILES["master"][1]).name == LIVE_SESSIONS_COMPOSE_FILE
+    assert not any("docker.sock" in str(volume) for volume in base["volumes"])
+    assert "/var/run/docker.sock:/var/run/docker.sock" in live["volumes"]
+    assert base["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "false" and live["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "true"
+    for key in ("SCENEGEMS_RUNTIME_VOLUME", "SCENEGEMS_DOCKER_NETWORK"):
+        assert key not in base["environment"] and key in live["environment"]
+
+
+def test_compose_reads_both_master_files_by_default_through_compose_file():
+    role = scenegems_roles()["master"]
+    default = role["parameters"]["COMPOSE_FILE"]["default"]
+    assert default == DEFAULT_MASTER_COMPOSE_FILES
+    assert default.split(role["env"]["COMPOSE_PATH_SEPARATOR"]) == [Path(path).name for path in STACK_COMPOSE_FILES["master"]]
+    template = (REPO_ROOT / ENV_TEMPLATES["master"]).read_text(encoding="utf-8").splitlines()
+    assert f"COMPOSE_FILE={default}" in template and "COMPOSE_PATH_SEPARATOR=:" in template
+
+
+def test_every_image_scenegems_builds_carries_the_release_tag():
+    tag = "${SCENEGEMS_IMAGE_TAG:-latest}"
+    master, node = _compose("master")["services"], _compose("node")["services"]
+    assert master["master-api"]["image"] == f"scenegems-backend:{tag}" and master["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
+    assert node["node"]["image"] == f"scenegems-node:{tag}"
+    assert node["node"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the node names its jobs' images with it"
+    roles = scenegems_roles("abc123")
+    assert roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123"

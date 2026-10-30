@@ -8,6 +8,7 @@ import pytest
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.case_machine import CaseMachine
 from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
 from scenegems_tool.persistence.schema import (
@@ -126,11 +127,11 @@ def test_jobs_carry_the_pinned_fingerprints_labels_seeds_and_stage_priorities(ma
     config = config_dict(quota=1, failure_budget=0, resources={"required_labels": {"site": "lab"}, "priority": 10})
     campaign = create_campaign(harness.stores, config)
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
-    assert harness.campaign(campaign.campaign_id).pinned_fingerprints == EXPECTED
+    assert harness.campaign(campaign.campaign_id).pinned_fingerprints == by_repository(EXPECTED)
     (case,) = _cases(harness, campaign)
     jobs = {pipeline_job.stage: job for pipeline_job, job in _jobs_of(harness, case)}
-    assert jobs[SCENE].requirements.fingerprints == {SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]}
-    assert jobs[SIMULATE].requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]}
+    assert jobs[SCENE].requirements.fingerprints == by_repository({SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]})
+    assert jobs[SIMULATE].requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
     assert all(job.requirements.labels == {"site": "lab"} for job in jobs.values())
     assert [jobs[stage].priority for stage in (SCENE, TRAJECTORIES, SIMULATE, MONITOR)] == [10, 11, 12, 13]
     assert jobs[SCENE].payload["seed"] == case.seed == campaign_config_from_dict(config).case_seed(CLASS_A, 0)
@@ -154,7 +155,7 @@ def test_repeats_get_a_run_record_each_and_one_calibration(harness):
     assert len(calibrate_job.payload["trajectories"]) == 3 and calibrate_job.payload["reference"] == f"{CLASS_A}#0"
     (calibration,) = harness.stores.calibrations.list_results()
     assert (calibration.reference_scenario, calibration.repeats, calibration.exact, calibration.campaign_id) == (f"{CLASS_A}#0", 3, True, campaign.campaign_id)
-    assert calibration.fingerprints == {SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]}
+    assert calibration.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
     assert case.progress["runs"]["0"]["calibrated"] is True
 
 
@@ -186,7 +187,7 @@ def test_verdicts_and_run_records_carry_what_the_runs_reported(make_harness):
     sim_job = next(job for pipeline_job, job in _jobs_of(harness, case) if pipeline_job.stage == SIMULATE)
     assert (record.job_id, record.node_id, record.steps, record.dt) == (sim_job.job_id, "fake-node", 10, 1.0)
     assert record.state_digest == sim_job.result["state_digest"] and record.repeatability_tier == "exact"
-    assert record.fingerprints == {SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]}
+    assert record.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
     assert set(record.durations_s) == {"queued_s", "running_s", "total_s"}
     assert record.stack["config"]["mode"] == "replay" and record.stack["run_record"]["run_seed"] == record.seed
     assert record.environment == {"wind_vector": [0.0, 0.0, 0.0]}
@@ -470,7 +471,7 @@ def test_a_campaign_waits_until_it_is_started_and_pins_the_expected_fingerprints
     monkeypatch.setattr(harness.engine, "_expected", harness.plane.expected.current)
     harness.settle()
     started = harness.campaign(campaign.campaign_id)
-    assert (started.actual_state, started.pinned_fingerprints) == (CampaignActualState.RUNNING, EXPECTED) and started.started_at is not None
+    assert (started.actual_state, started.pinned_fingerprints) == (CampaignActualState.RUNNING, by_repository(EXPECTED)) and started.started_at is not None
 
 
 def test_a_campaign_keeps_the_fingerprints_it_was_created_with(harness):
@@ -481,7 +482,7 @@ def test_a_campaign_keeps_the_fingerprints_it_was_created_with(harness):
     assert harness.campaign(campaign.campaign_id).pinned_fingerprints == validated_pins
     (case,) = _cases(harness, campaign)
     ((_, scene_job),) = _jobs_of(harness, case)
-    assert scene_job.requirements.fingerprints == {SCENE_GENERATION_IMAGE: "fp-old"}
+    assert scene_job.requirements.fingerprints == by_repository({SCENE_GENERATION_IMAGE: "fp-old"}), "a pin by full name holds by repository"
     assert harness.executor.run() == 0  # the node runs the current release
 
 

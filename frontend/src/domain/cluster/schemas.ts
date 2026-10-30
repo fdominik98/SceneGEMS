@@ -128,6 +128,8 @@ export const masterStatusSchema = z.object({
     images: stringMap,
   }),
   connected_nodes: z.array(z.string()),
+  /** Whether the master's workbench gateway starts live sessions (it needs the Docker socket); absent from older masters. */
+  live_sessions: z.boolean().optional(),
 });
 export type NodeView = z.infer<typeof nodeViewSchema>;
 export type NodeComponentView = z.infer<typeof nodeComponentSchema>;

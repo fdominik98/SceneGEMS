@@ -132,3 +132,21 @@ def test_the_artifact_settings_are_parameters_with_the_code_s_defaults():
     assert float(master["SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S"]["default"]) == ArtifactSettings.sweep_interval_s
     assert float(master["SCENEGEMS_ARTIFACT_SWEEP_GRACE_S"]["default"]) == ArtifactSettings.sweep_grace_s
     assert int(node["SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES"]["default"]) == DEFAULT_ARTIFACT_CACHE_MAX_BYTES
+
+
+def test_a_release_s_images_carry_its_tag_and_the_pulled_one_keeps_its_own():
+    from scenegems_tool.cluster.release.roles import release_image_tag
+
+    assert release_image_tag("abc", False) == "abc" and release_image_tag("abc", True) == "abc-dirty"
+    roles = scenegems_roles("abc")
+    images = role_images(roles)
+    assert POSTGRES_IMAGE in images and all(image.endswith(":abc") for image in images if image != POSTGRES_IMAGE)
+    assert roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc"
+    assert all(image.endswith(":abc") for images in roles["node"]["parameters"]["SCENEGEMS_NODE_COMPONENTS"]["items"]["images"].values() for image in images)
+    assert scenegems_roles()["node"]["images"] == [NODE_IMAGE] and NODE_IMAGE.endswith(":latest")
+
+
+def test_the_master_reads_its_compose_files_from_a_parameter():
+    master = scenegems_roles()["master"]
+    assert master["parameters"]["COMPOSE_FILE"]["default"] == "docker-compose.yml:docker-compose.live-sessions.yml"
+    assert master["env"]["COMPOSE_PATH_SEPARATOR"] == ":"

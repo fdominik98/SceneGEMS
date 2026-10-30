@@ -1,4 +1,20 @@
 /**
+ * What the Connections page says when the selected master runs without live sessions (its
+ * `/cluster/status` reports `live_sessions: false`): it refuses to connect to a broker. Null when
+ * they are on, or unknown (an older master, or the status not loaded yet).
+ */
+export function liveSessionsOffNote(liveSessions: boolean | undefined): string | null {
+  if (liveSessions !== false) {
+    return null;
+  }
+  return (
+    "Live sessions are off on this master: it runs without the Docker socket (its COMPOSE_FILE leaves out " +
+    "docker-compose.live-sessions.yml), so it cannot connect to a broker or start live simulations and monitors. " +
+    "Campaigns and cluster jobs still run; select a master with live sessions on for live work."
+  );
+}
+
+/**
  * Turn the attempted endpoint into the checks that actually resolve a failed connect.
  * The server already says what went wrong; these say what to do about it.
  */

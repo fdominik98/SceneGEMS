@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
@@ -10,8 +11,9 @@ from scenegems_tool.cluster.master.scheduling.fingerprint_policy import Expected
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream
 from scenegems_tool.cluster.protocol.routes import JOBS_PATH
-from tests.scenegems_tool.cluster.master.conftest import EXPECTED, KINEMATIC, SCENE
+from tests.scenegems_tool.cluster.master.conftest import EXPECTED, EXPECTED_BY_REPOSITORY, KINEMATIC, SCENE
 from tests.scenegems_tool.cluster.payloads import valid_payload
+from utils.image_names import image_repository
 
 
 def _submit(client, **body):
@@ -25,7 +27,7 @@ def test_a_submission_is_queued_with_the_expected_fingerprints(client):
     assert response.status_code == 201
     job = response.json()
     assert job["state"] == "queued" and job["priority"] == 3 and job["attempt"] == 0
-    assert job["requirements"]["fingerprints"] == {SCENE_GENERATION_IMAGE: "fp-scene"}
+    assert job["requirements"]["fingerprints"] == {image_repository(SCENE_GENERATION_IMAGE): "fp-scene"}
     assert job["allowed_nodes"] == []
 
 
@@ -122,7 +124,7 @@ def test_nodes_show_connection_and_fingerprint_state(client, make_node, schedule
     nodes = {node["node_id"]: node for node in client.get(NODES_PATH).json()}
     assert nodes[current.node_id]["connected"] and not nodes[current.node_id]["out_of_date"]
     assert nodes[stale.node_id]["out_of_date"]
-    assert nodes[stale.node_id]["fingerprint_mismatches"] == [{"image": SCENARIO_EXECUTION_IMAGE, "required": "fp-execution", "actual": "old"}]
+    assert nodes[stale.node_id]["fingerprint_mismatches"] == [{"image": image_repository(SCENARIO_EXECUTION_IMAGE), "required": "fp-execution", "actual": "old"}]
     assert nodes[current.node_id]["slots"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
     assert nodes[current.node_id]["components"] == [{"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"}]
     assert nodes[stale.node_id]["components"] == [
@@ -180,4 +182,19 @@ def test_status(client, make_node):
     node.connect()
     status = client.get(STATUS_PATH).json()
     assert status["master_id"] == "lab-master" and status["connected_nodes"] == [node.node_id]
-    assert status["expected_fingerprints"]["state"] == "ready" and status["expected_fingerprints"]["images"] == EXPECTED
+    assert status["expected_fingerprints"]["state"] == "ready" and status["expected_fingerprints"]["images"] == EXPECTED_BY_REPOSITORY
+    assert status["live_sessions"] is False  # no gateway
+
+
+def test_status_reports_whether_the_gateway_starts_live_sessions(plane):
+    gateway = FastAPI()
+    with TestClient(create_operator_app(plane, gateway)) as client:
+        assert client.get(STATUS_PATH).json()["live_sessions"] is True
+    with TestClient(create_operator_app(plane, gateway, live_sessions=False)) as client:
+        assert client.get(STATUS_PATH).json()["live_sessions"] is False
+
+
+def test_the_operator_app_answers_health_without_a_gateway(plane):
+    with TestClient(create_operator_app(plane)) as client:
+        response = client.get("/health")
+    assert response.status_code == 200 and response.json() == {"status": "ok"}

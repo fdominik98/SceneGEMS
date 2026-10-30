@@ -77,9 +77,13 @@ def build_master(settings: MasterSettings, with_gateway: bool = True) -> MasterA
     gateway = None
     if with_gateway:
         from scenegems_tool.gateway.websocket_app import app as gateway
-        from scenegems_tool.gateway.websocket_app import set_run_recorder
+        from scenegems_tool.gateway.websocket_app import set_live_sessions, set_run_recorder
 
         set_run_recorder(build_run_recorder(plane, assurance, artifacts, live), gateway)
+        set_live_sessions(settings.live_sessions, gateway)
+    live_sessions = gateway is not None and settings.live_sessions
+    if not live_sessions:
+        logger.info("Live sessions are off on this master (SCENEGEMS_LIVE_SESSIONS or --no-workbench): the workbench refuses them")
 
     return create_master_apps(
         plane,
@@ -88,6 +92,7 @@ def build_master(settings: MasterSettings, with_gateway: bool = True) -> MasterA
         assurance=assurance,
         allowed_origins=settings.operator_allowed_origins,
         live=live,
+        live_sessions=live_sessions,
     )
 
 

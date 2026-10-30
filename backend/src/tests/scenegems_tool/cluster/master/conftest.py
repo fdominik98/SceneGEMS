@@ -13,6 +13,7 @@ from typing import Callable, Collection, Dict, Iterator, Optional
 import pytest
 from starlette.testclient import TestClient
 
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
 from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.master.api.master_apps import create_node_api_app
 from scenegems_tool.cluster.master.api.operator_routes import operator_router
@@ -25,7 +26,7 @@ from tests.scenegems_tool.cluster.master.fake_stores import InMemoryJobStore, In
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_hello
 
-# The master's expected fingerprints in these tests; a node built from the same checkout reports them
+# The master's expected fingerprints in these tests as release.json names the images; a node built from the same checkout reports them
 EXPECTED = {
     SCENE_GENERATION_IMAGE: "fp-scene",
     TRAJECTORY_GENERATION_IMAGE: "fp-trajectory",
@@ -35,6 +36,8 @@ EXPECTED = {
     GAZEBO_IMAGE: "fp-gazebo",
     "scenegems-backend:latest": "fp-backend",
 }
+# The same as the master holds and requires them: by image repository (cluster/fingerprints/comparison.py)
+EXPECTED_BY_REPOSITORY = by_repository(EXPECTED)
 SCENE = JobType.SCENE_GENERATION
 KINEMATIC = JobType.SIMULATION  # with valid_payload, the kinematic runner
 

@@ -24,14 +24,16 @@ from typing import TYPE_CHECKING, Collection, Dict, Iterable, Optional, Set, Tup
 
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerImplementationId, LayerRef, Role, SimulationLayerId
+from utils.image_names import tagged
 
 if TYPE_CHECKING:
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
 
-SCENE_GENERATION_IMAGE = "scenegems-scene-generation-subsystem:latest"
-TRAJECTORY_GENERATION_IMAGE = "scenegems-trajectory-generation-subsystem:latest"
-SCENARIO_EXECUTION_IMAGE = "scenegems-scenario-execution-subsystem:latest"
-MONITORING_IMAGE = "scenegems-monitoring-subsystem:latest"
+# The subsystem images, tagged with SCENEGEMS_IMAGE_TAG (utils/image_names.py)
+SCENE_GENERATION_IMAGE = tagged("scenegems-scene-generation-subsystem")
+TRAJECTORY_GENERATION_IMAGE = tagged("scenegems-trajectory-generation-subsystem")
+SCENARIO_EXECUTION_IMAGE = tagged("scenegems-scenario-execution-subsystem")
+MONITORING_IMAGE = tagged("scenegems-monitoring-subsystem")
 
 ComponentId = str
 StackTriple = Tuple[AsvSoftwareId, ControlLayerId, SimulationLayerId]

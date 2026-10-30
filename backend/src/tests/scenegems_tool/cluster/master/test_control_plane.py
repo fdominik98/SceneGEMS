@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.master.control_plane import InvalidPayload
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobRequirements, JobState, JobSubmission, JobType
@@ -22,6 +23,7 @@ from tests.scenegems_tool.cluster.master.conftest import EXPECTED, KINEMATIC, SC
 from tests.scenegems_tool.cluster.payloads import ardupilot_payload, valid_payload
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_resources
+from utils.image_names import image_repository
 
 SIMULATION = JobType.SIMULATION
 KINEMATIC_NODE = ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation")
@@ -175,8 +177,8 @@ def test_a_submission_needs_the_components_of_its_payload_and_their_images(plane
     usv_job = _submit(on_loop, plane, job_type=SIMULATION, payload=valid_payload(SIMULATION, mode="usv_navigation"))
     scene_job = _submit(on_loop, plane, requirements=JobRequirements(components=["gpu"]))
     assert stores.jobs.get(gazebo_job.job_id).requirements.components == list(GAZEBO_NODE)
-    assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}
-    assert stores.jobs.get(sitl_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}
+    assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"})
+    assert stores.jobs.get(sitl_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"})
     assert stores.jobs.get(usv_job.job_id).requirements.components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]
     assert stores.jobs.get(scene_job.job_id).requirements.components == ["scene_generation"], "the master sets the components from the payload"
 
@@ -208,7 +210,7 @@ def test_a_stale_component_is_unusable_while_the_others_work(make_node, plane, s
     assert schedule() == 1
     assert node.expect(LeaseOffer).job.job_id == sitl_job.job_id
     session = plane.registry.session(node.node_id)
-    assert session.stale_components == {"simulation_layer/gazebo"} and [mismatch.image for mismatch in session.out_of_date] == [GAZEBO_IMAGE]
+    assert session.stale_components == {"simulation_layer/gazebo"} and [mismatch.image for mismatch in session.out_of_date] == [image_repository(GAZEBO_IMAGE)]
     assert stores.jobs.get(gazebo_job.job_id).state == JobState.QUEUED
 
 
@@ -222,7 +224,7 @@ def test_an_out_of_date_component_gets_no_jobs_and_is_reported(make_node, plane,
     assert schedule() == 1
     assert outdated.expect(LeaseOffer).job.job_id == scene.job_id, "the scene generation component is up to date"
     session = plane.registry.session(outdated.node_id)
-    assert [(mismatch.image, mismatch.required, mismatch.actual) for mismatch in session.out_of_date] == [(SCENARIO_EXECUTION_IMAGE, "fp-execution", "fp-older")]
+    assert [(mismatch.image, mismatch.required, mismatch.actual) for mismatch in session.out_of_date] == [(image_repository(SCENARIO_EXECUTION_IMAGE), "fp-execution", "fp-older")]
     assert session.stale_components == {"simulation_layer/kinematic"}
     current = make_node("current", slots={KINEMATIC: 1}, components=KINEMATIC_NODE)
     current.connect()

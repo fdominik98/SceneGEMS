@@ -20,6 +20,7 @@ from scenegems_tool.persistence.schema import PipelineStage
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict, format2_dict
 from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED
 from tests.scenegems_tool.cluster.payloads import trajectories_data
+from utils.image_names import image_repository
 
 REFERENCE = {"sha256": "ab" * 32, "size_bytes": 2048, "kind": "trajectory_data", "media_type": "application/json", "pointer": None}
 
@@ -94,13 +95,18 @@ def test_a_submission_requires_the_pinned_fingerprints_of_its_images_and_the_lab
     builder = _builder(resources={"required_labels": {"site": "lab"}, "priority": 5})
     payload = builder.scene_generation(CLASS_A, ClassCatalog.default().get(CLASS_A).content_hash, 3)
     submission = builder.submission(SCENE_STEP, payload, "key", EXPECTED)
-    assert submission.requirements.fingerprints == {SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]}
+    assert submission.requirements.fingerprints == {image_repository(SCENE_GENERATION_IMAGE): EXPECTED[SCENE_GENERATION_IMAGE]}
     assert submission.requirements.labels == {"site": "lab"} and submission.priority == 5 and submission.idempotency_key == "key"
     assert submission.allowed_nodes == []  # any node
     assert submission.requirements.components == ["scene_generation"]
-    assert required_fingerprints(["calibration"], EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution"}
+    assert required_fingerprints(["calibration"], EXPECTED) == {image_repository(SCENARIO_EXECUTION_IMAGE): "fp-execution"}
     with pytest.raises(PayloadError, match="invalid simulation payload"):
         builder.submission(Step(PipelineStage.SIMULATE, 0, 0), {"trajectories": {"scene_list": []}}, "key", EXPECTED)
+
+
+def test_a_pin_from_before_release_tags_holds_for_a_release_s_images():
+    pinned = {f"{image_repository(SCENE_GENERATION_IMAGE)}:latest": "pinned-under-latest"}
+    assert required_fingerprints(["scene_generation"], pinned) == {image_repository(SCENE_GENERATION_IMAGE): "pinned-under-latest"}
 
 
 def test_a_submission_names_the_campaigns_selected_nodes():

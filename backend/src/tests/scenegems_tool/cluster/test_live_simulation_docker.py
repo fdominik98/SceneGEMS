@@ -144,7 +144,7 @@ def node(master, tmp_path_factory):
         "SCENEGEMS_NODE_NAME": node_name,
         "SCENEGEMS_NODE_SLOTS": "simulation:1",
         "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic",
-        "SCENEGEMS_NODE_IMAGE_TAG": NODE_IMAGE_TAG,
+        "SCENEGEMS_IMAGE_TAG": NODE_IMAGE_TAG,  # the node image; the subsystem images come by their variables
         "SCENEGEMS_SOFTWARE_REVISION": "live-simulation-test",
         **{variable: _image(subsystem) for subsystem, variable in IMAGE_ENVIRONMENT_VARIABLES.items()},
     }

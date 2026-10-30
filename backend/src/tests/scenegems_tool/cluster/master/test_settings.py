@@ -77,3 +77,11 @@ def test_the_cluster_broker_needs_only_a_host():
     assert MasterSettings.from_environment(environ).broker.port == 11883
     with pytest.raises(ValueError, match="SCENEGEMS_BROKER_PORT"):
         MasterSettings.from_environment(dict(environ, SCENEGEMS_BROKER_PORT="plain"))
+
+
+def test_live_sessions_are_on_unless_turned_off():
+    assert MasterSettings.from_environment(REQUIRED).live_sessions is True
+    for text, expected in (("false", False), ("0", False), ("off", False), ("TRUE", True), ("yes", True), (" ", True)):
+        assert MasterSettings.from_environment(dict(REQUIRED, SCENEGEMS_LIVE_SESSIONS=text)).live_sessions is expected, text
+    with pytest.raises(ValueError, match="SCENEGEMS_LIVE_SESSIONS"):
+        MasterSettings.from_environment(dict(REQUIRED, SCENEGEMS_LIVE_SESSIONS="maybe"))

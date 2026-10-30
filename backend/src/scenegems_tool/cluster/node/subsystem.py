@@ -3,6 +3,8 @@
 import os
 from enum import Enum
 
+from utils.image_names import tagged
+
 
 class Subsystem(str, Enum):
     SCENE_GENERATION = "scene_generation"
@@ -12,10 +14,10 @@ class Subsystem(str, Enum):
 
 
 _DEFAULT_IMAGES = {
-    Subsystem.SCENE_GENERATION: "scenegems-scene-generation-subsystem:latest",
-    Subsystem.TRAJECTORY_GENERATION: "scenegems-trajectory-generation-subsystem:latest",
-    Subsystem.MONITORING: "scenegems-monitoring-subsystem:latest",
-    Subsystem.SCENARIO_EXECUTION: "scenegems-scenario-execution-subsystem:latest",
+    Subsystem.SCENE_GENERATION: tagged("scenegems-scene-generation-subsystem"),
+    Subsystem.TRAJECTORY_GENERATION: tagged("scenegems-trajectory-generation-subsystem"),
+    Subsystem.MONITORING: tagged("scenegems-monitoring-subsystem"),
+    Subsystem.SCENARIO_EXECUTION: tagged("scenegems-scenario-execution-subsystem"),
 }
 # Environment variables that replace a default image, for the workbench and the node alike.
 IMAGE_ENVIRONMENT_VARIABLES = {
@@ -27,5 +29,5 @@ IMAGE_ENVIRONMENT_VARIABLES = {
 
 
 def subsystem_image(subsystem: Subsystem) -> str:
-    """The image a subsystem runs in: the environment override when set and not empty, else the locally built default."""
+    """The image a subsystem runs in: the environment override when set and not empty, else the default with SCENEGEMS_IMAGE_TAG."""
     return os.environ.get(IMAGE_ENVIRONMENT_VARIABLES[subsystem], "").strip() or _DEFAULT_IMAGES[subsystem]
