@@ -117,6 +117,16 @@ functional scenario too (the case's `input_artifact`, or the catalog class). The
 `PresetBar` starts a draft from a campaign preset (`presetDraft.ts`: `draftFromConfig`, the inverse
 of `configBuilder.ts`) and saves the draft as one without its input (`presetConfigOf`).
 
+The wizard has a page per step the campaign runs (Scene generation, Trajectory generation, Simulation), each
+with that step's monitor. Above the pages, the campaign map (`wizard/CampaignMap.tsx`, React Flow) draws the
+draft: the chain from the input to the review with a box per simulation run in a frame, the steps not run as
+dashed boxes, and a row of the settings of the whole campaign. `campaignMapModel.ts` (pure) builds the boxes,
+their facts, the problem counts the stepper used and the layout; each box opens its page (a run's box scrolls to
+the run). "List" replaces the map with the numbered pages (`scenegems:campaign-wizard-map`). Without "Show
+explanations" (`scenegems:campaign-wizard-explanations`), the root carries `wiz--terse`: paragraphs marked
+`wiz-explain` are hidden, a field's hint (`wiz-field-hint`) shows only while the field has the focus and an
+option's hint only when it is chosen.
+
 ## Campaign History and the Cluster page's instances
 
 `features/history/` is Campaign History: every entry of the selected cluster (campaigns and
@@ -193,8 +203,8 @@ panel shows one stream at a time.
 state changes, goes in a file named `*.dom.test.tsx` next to the component. Only those files run in
 jsdom (chosen over happy-dom for the closest browser behaviour and the widest Testing Library
 support; the cost is paid only by the few DOM files), with `src/test/domSetup.ts` as setup: it adds the
-`jest-dom` matchers (`toBeVisible`, `toHaveAttribute`, ...) and unmounts after every test and clears
-`localStorage`. Write them with React Testing Library: `render` the real component, find elements by role
+`jest-dom` matchers (`toBeVisible`, `toHaveAttribute`, ...), a `ResizeObserver` that never reports (React
+Flow needs one to mount), and unmounts after every test and clears `localStorage`. Write them with React Testing Library: `render` the real component, find elements by role
 and name (`screen.getByRole("button", { name: "..." })`), act through `userEvent.setup()` and `await` each
 interaction, assert on what the user sees. Reset any Zustand store a test touches in `beforeEach`.
 `components/Disclosure.dom.test.tsx` is the pattern to copy.

@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from "react";
-import type { CatalogParameter } from "../../../domain/cluster/campaignApi";
+import type { CatalogParameter, StepMonitor } from "../../../domain/cluster/campaignApi";
 import type { Reason } from "./reasons";
 import { UNLIMITED_FAILURE_BUDGET, type FailureBudgetDraft } from "./wizardState";
 
@@ -22,6 +22,29 @@ export function FieldIssues({ reasons, showField = false }: { reasons: readonly 
   );
 }
 
+const MONITOR_CHOICES: { value: StepMonitor; label: string; hint: (output: string) => string }[] = [
+  { value: "empty", label: "No monitor", hint: (output) => `The ${output} are kept without a verdict.` },
+  { value: "post_hoc", label: "Post hoc monitor", hint: (output) => `The COLREGS monitor judges the ${output} after the step.` },
+];
+
+/** The monitor after a generation step: none, or the post hoc monitor that judges what the step produced. */
+export function MonitorChoice({ name, legend, output, value, onChange }: { name: string; legend: string; output: string; value: StepMonitor; onChange: (value: StepMonitor) => void }) {
+  return (
+    <fieldset className="wiz-choice">
+      <legend>{legend}</legend>
+      {MONITOR_CHOICES.map((choice) => (
+        <label key={choice.value} className={`wiz-option${value === choice.value ? " wiz-option--on" : ""}`}>
+          <input type="radio" name={name} checked={value === choice.value} onChange={() => onChange(choice.value)} />
+          <span>
+            <strong>{choice.label}</strong>
+            <span className="wiz-hint">{choice.hint(output)}</span>
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 export interface FieldProps {
   label: ReactNode;
   hint?: ReactNode;
@@ -41,7 +64,7 @@ export function Field({ label, hint, issues, htmlFor, children, inline }: FieldP
       </label>
       <div className="wiz-control">
         {children}
-        {hint && <p className="wiz-hint">{hint}</p>}
+        {hint && <p className="wiz-hint wiz-field-hint">{hint}</p>}
         <FieldIssues reasons={issues} />
       </div>
     </div>

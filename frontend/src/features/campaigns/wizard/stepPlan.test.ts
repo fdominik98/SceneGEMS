@@ -23,11 +23,12 @@ describe("stepRange and normalizeSteps", () => {
 });
 
 describe("visibleWizardSteps", () => {
-  it("hides the trajectories page without trajectory generation and the runs page without simulation", () => {
-    expect(visibleWizardSteps(["scene_generation"])).toEqual(["steps", "input", "domain", "resources", "policy", "review"]);
-    expect(visibleWizardSteps(["scene_generation", "trajectory_generation"])).toEqual(["steps", "input", "domain", "trajectories", "resources", "policy", "review"]);
+  it("shows the page of each step the campaign runs and hides the others", () => {
+    expect(visibleWizardSteps(["scene_generation"])).toEqual(["steps", "input", "domain", "scenes", "resources", "policy", "review"]);
+    expect(visibleWizardSteps(["scene_generation", "trajectory_generation"])).toEqual(["steps", "input", "domain", "scenes", "trajectories", "resources", "policy", "review"]);
+    expect(visibleWizardSteps(["trajectory_generation"])).toEqual(["steps", "input", "domain", "trajectories", "resources", "policy", "review"]);
     expect(visibleWizardSteps(["simulation"])).toEqual(["steps", "input", "domain", "runs", "resources", "policy", "review"]);
-    expect(visibleWizardSteps(["scene_generation", "trajectory_generation", "simulation"])).toEqual(["steps", "input", "domain", "trajectories", "runs", "resources", "policy", "review"]);
+    expect(visibleWizardSteps(["scene_generation", "trajectory_generation", "simulation"])).toEqual(["steps", "input", "domain", "scenes", "trajectories", "runs", "resources", "policy", "review"]);
   });
 });
 

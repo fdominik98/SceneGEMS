@@ -40,7 +40,9 @@ describe("parseReason", () => {
       field: "colregs_constants",
       message: "not valid YAML (mapping values are not allowed here)",
     });
-    expect(parseReason("domain.scene_generation_timeout_s: Input should be greater than 0")).toMatchObject({ step: "domain", field: "scene_generation_timeout_s" });
+    // The scene generation settings of the domain section are set on the Scene generation page
+    expect(parseReason("domain.scene_generation_timeout_s: Input should be greater than 0")).toMatchObject({ step: "scenes", field: "scene_generation_timeout_s" });
+    expect(parseReason("domain.enforce_low_tcpa: Input should be a valid boolean")).toMatchObject({ step: "scenes", field: "enforce_low_tcpa" });
     expect(parseReason("trajectories: Value error, the straight generator needs timespan_s")).toMatchObject({ step: "trajectories", field: null });
     expect(parseReason("trajectories.params.maxLeafs: Input should be a valid integer")).toMatchObject({ step: "trajectories", field: "params.maxLeafs" });
     expect(parseReason("resources.queue_depth.simulate: Input should be greater than or equal to 1")).toMatchObject({ step: "resources", field: "queue_depth.simulate" });
@@ -54,17 +56,16 @@ describe("parseReason", () => {
     expect(parseReason("scope: Tuple should have at least 1 item after validation, not 0")).toMatchObject({ step: "input", entry: null, field: "scope" });
   });
 
-  it("maps the steps and the monitors of the generation steps to the steps page", () => {
+  it("maps the steps to the steps page and the monitor of a generation step to that step's page", () => {
     expect(parseReason("steps: Value error, steps must be consecutive and in chain order")).toMatchObject({ step: "steps", entry: null, field: "steps" });
     expect(parseReason("steps.1: Input should be 'scene_generation'")).toMatchObject({ step: "steps", entry: null, field: "steps" });
     expect(parseReason("scene_generation.monitor: Value error, a generation step cannot be monitored live")).toMatchObject({
-      step: "steps",
+      step: "scenes",
       entry: null,
-      field: "scene_generation.monitor",
+      field: "monitor",
       message: "a generation step cannot be monitored live",
     });
-    expect(parseReason("trajectories.monitor: Value error, a generation step cannot be monitored live")).toMatchObject({ step: "steps", field: "trajectories.monitor" });
-    // The other fields of the trajectories section stay with the trajectories page
+    expect(parseReason("trajectories.monitor: Value error, a generation step cannot be monitored live")).toMatchObject({ step: "trajectories", field: "monitor" });
     expect(parseReason("trajectories.timeout_s: Input should be greater than 0")).toMatchObject({ step: "trajectories", field: "timeout_s" });
   });
 

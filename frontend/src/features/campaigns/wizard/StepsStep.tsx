@@ -1,8 +1,7 @@
-import type { StepMonitor } from "../../../domain/cluster/campaignApi";
 import type { CampaignStep } from "../../../domain/cluster/schemas";
 import { Field, FieldIssues } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
-import { CAMPAIGN_STEP_LABELS, CAMPAIGN_STEP_OUTPUTS, CHAIN, firstStep, itemKindsFor, lastStep, runsStep, stepRange } from "./stepPlan";
+import { CAMPAIGN_STEP_LABELS, CAMPAIGN_STEP_OUTPUTS, CHAIN, firstStep, itemKindsFor, lastStep, stepRange } from "./stepPlan";
 import type { StepProps } from "./stepTypes";
 
 const STEP_HINTS: Record<CampaignStep, string> = {
@@ -11,33 +10,11 @@ const STEP_HINTS: Record<CampaignStep, string> = {
   simulation: "Simulates trajectories, generated here or taken from Campaign History or files, once per run you define.",
 };
 
-const MONITOR_CHOICES: { value: StepMonitor; label: string; hint: (output: string) => string }[] = [
-  { value: "empty", label: "No monitor", hint: (output) => `The ${output} are kept without a verdict.` },
-  { value: "post_hoc", label: "Post hoc monitor", hint: (output) => `The COLREGS monitor judges the ${output} after the step.` },
-];
-
-function MonitorChoice({ name, legend, output, value, onChange }: { name: string; legend: string; output: string; value: StepMonitor; onChange: (value: StepMonitor) => void }) {
-  return (
-    <fieldset className="wiz-choice">
-      <legend>{legend}</legend>
-      {MONITOR_CHOICES.map((choice) => (
-        <label key={choice.value} className={`wiz-option${value === choice.value ? " wiz-option--on" : ""}`}>
-          <input type="radio" name={name} checked={value === choice.value} onChange={() => onChange(choice.value)} />
-          <span>
-            <strong>{choice.label}</strong>
-            <span className="wiz-hint">{choice.hint(output)}</span>
-          </span>
-        </label>
-      ))}
-    </fieldset>
-  );
-}
-
-/** Steps: the campaign's name, the consecutive part of the chain it runs and the monitor after each generation step. */
+/** Steps: the campaign's name and the consecutive part of the chain it runs. Each step's own settings are on the step's page. */
 export function StepsStep({ draft, update, reasons }: StepProps) {
   const first = firstStep(draft.steps);
   const last = lastStep(draft.steps);
-  const own = splitByField(reasonsOfEntry(reasons, null), ["name", "description", "steps", "scene_generation.monitor", "trajectories.monitor"]);
+  const own = splitByField(reasonsOfEntry(reasons, null), ["name", "description", "steps"]);
 
   const choose = (nextFirst: CampaignStep, nextLast: CampaignStep) =>
     update((next) => {
@@ -59,7 +36,7 @@ export function StepsStep({ draft, update, reasons }: StepProps) {
           </Field>
         </div>
         <div className="wiz-column">
-          <p className="wiz-notice" role="note">
+          <p className="wiz-notice wiz-explain" role="note">
             A campaign runs one, two or all three steps of the chain scene generation, trajectory generation, simulation, always next to each other. It starts with the first step you choose and stops after the last.
           </p>
         </div>
@@ -100,22 +77,6 @@ export function StepsStep({ draft, update, reasons }: StepProps) {
         This campaign runs <strong>{draft.steps.map((step) => CAMPAIGN_STEP_LABELS[step].toLowerCase()).join(", then ")}</strong>.
         {first !== "scene_generation" && " Its input comes from earlier results or files (next page)."}
       </p>
-
-      {runsStep(draft.steps, "scene_generation") && (
-        <>
-          <MonitorChoice name="wiz-scene-monitor" legend="Monitor after scene generation" output={CAMPAIGN_STEP_OUTPUTS.scene_generation} value={draft.sceneMonitor} onChange={(value) => update((next) => void (next.sceneMonitor = value))} />
-          <FieldIssues reasons={own.byField.get("scene_generation.monitor")} />
-        </>
-      )}
-      {runsStep(draft.steps, "trajectory_generation") && (
-        <>
-          <MonitorChoice name="wiz-trajectory-monitor" legend="Monitor after trajectory generation" output="trajectories as planned" value={draft.trajectoryMonitor} onChange={(value) => update((next) => void (next.trajectoryMonitor = value))} />
-          <FieldIssues reasons={own.byField.get("trajectories.monitor")} />
-        </>
-      )}
-      {runsStep(draft.steps, "simulation") && (
-        <p className="meta">Simulated runs are monitored per run: the Runs page sets the monitor of each run (post hoc, live or none).</p>
-      )}
       <FieldIssues reasons={own.rest} showField />
     </div>
   );

@@ -116,7 +116,7 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
     }
   }
   if (runsStep(steps, "scene_generation") && (!isSet(draft.domain.sceneGenerationTimeoutS) || (draft.domain.sceneGenerationTimeoutS ?? 0) <= 0)) {
-    reasons.push(local("domain", null, "scene_generation_timeout_s", "The timeout is above 0 seconds."));
+    reasons.push(local("scenes", null, "scene_generation_timeout_s", "The timeout is above 0 seconds."));
   }
   if (catalog && runsStep(steps, "trajectory_generation")) {
     const generator = findGenerator(catalog, draft.trajectories.generator);

@@ -33,7 +33,7 @@ const SECTION_STEPS: Record<string, WizardStepId> = {
   name: "steps",
   description: "steps",
   steps: "steps",
-  scene_generation: "steps",
+  scene_generation: "scenes",
   scope: "input",
   input: "input",
   domain: "domain",
@@ -42,6 +42,9 @@ const SECTION_STEPS: Record<string, WizardStepId> = {
   resources: "resources",
   policy: "policy",
 };
+
+/** Fields of the config's domain section that the Scene generation page sets: they only matter while scenes are generated. */
+const SCENE_GENERATION_FIELDS: readonly string[] = ["scene_generation_timeout_s", "enforce_low_tcpa"];
 
 function cleanMessage(message: string): string {
   return message.replace(/^Value error, /, "").trim();
@@ -55,8 +58,7 @@ export function parseReason(raw: string, source: Reason["source"] = "server"): R
   }
   const [, path, message] = match;
   const parts = path.split(".");
-  // The monitors of the generation steps are chosen on the Steps page, beside the steps themselves
-  const step = parts[0] === "trajectories" && parts[1] === "monitor" ? "steps" : (SECTION_STEPS[parts[0]] ?? "review");
+  const step = parts[0] === "domain" && SCENE_GENERATION_FIELDS.includes(parts[1]) ? "scenes" : (SECTION_STEPS[parts[0]] ?? "review");
   const clean = cleanMessage(message);
   const lists: Record<string, EntryList> = { functional_scenarios: "scenario", items: "item" };
   const list = parts[0] === "input" ? lists[parts[1]] : undefined;
@@ -69,7 +71,7 @@ export function parseReason(raw: string, source: Reason["source"] = "server"): R
   if (parts[0] === "execution" && parts[1] === "runs" && parts[2] !== undefined && /^\d+$/.test(parts[2])) {
     return { raw, step, entry: Number(parts[2]), field: parts.slice(3).join(".") || null, path, message: clean, source };
   }
-  // Both monitors are fields of the Steps page: the field keeps the section that tells them apart
+  // The Steps page's fields are sections of their own (name, description, steps)
   const field = parts[0] === "steps" ? "steps" : step === "steps" ? parts.join(".") : parts.slice(1).join(".");
   const whole = step === "input" || step === "steps" || step === "review";
   return { raw, step, entry: null, field: field || (whole ? parts[0] : null), path, message: clean, source };

@@ -56,7 +56,7 @@ export function PolicyStep({ draft, update, reasons }: StepProps) {
         forceOpen={own.byField.has("stop")}
         headingLevel={4}
       >
-        <p className="meta">Optional. The first one reached ends the campaign: no new cases after the case limit, a drain after the failed verdict limit or the duration.</p>
+        <p className="meta wiz-explain">Optional. The first one reached ends the campaign: no new cases after the case limit, a drain after the failed verdict limit or the duration.</p>
         <div className="wiz-row">
           <Field label="Most cases" htmlFor="wiz-max-cases" hint="No new cases after this many, over all FECs." issues={stopIssues("max_cases")}>
             <NumberField id="wiz-max-cases" integer min={1} value={policy.maxCases} placeholder="no limit" onChange={(value) => update((next) => void (next.policy.maxCases = value))} />
