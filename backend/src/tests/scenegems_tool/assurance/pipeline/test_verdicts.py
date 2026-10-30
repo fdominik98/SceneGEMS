@@ -34,6 +34,21 @@ def test_a_post_hoc_failure_names_its_rules_and_first_failure():
     check_verdict(verdict)
 
 
+def test_the_encounter_types_travel_from_the_monitor_result_to_the_verdict():
+    encounters = {"OS_0 - TS_1": ["HEAD_ON", "OTHER"], "OS_0 - TS_2": ["CROSSING_FROM_PORT"]}
+    verdict = new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounters": encounters, "passed": True}), None, sensitive=False)
+    assert verdict.encounters == encounters
+    live = new_verdict(7, 1, pending_from_live({"monitor": {"rules": {}, "failed_rules": [], "encounters": encounters, "passed": True, "stopped_early_at": None}}), None, sensitive=False)
+    assert live.encounters == encounters
+
+
+def test_a_result_without_encounters_gives_a_verdict_without_them():
+    """A result of an older node, an empty summary and an unmonitored step all have none (stored as null)."""
+    assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=False).encounters is None
+    assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounters": {}, "passed": True}), None, sensitive=False).encounters is None
+    assert new_verdict(7, 0, pending_unmonitored(), None, sensitive=False).encounters is None
+
+
 def test_a_passed_run_has_no_failure_time():
     verdict = new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=True)
     assert verdict.state == VerdictState.PASSED and verdict.first_failure_time_s is None and verdict.sensitive

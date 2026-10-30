@@ -209,6 +209,23 @@ def test_verdicts_print_a_page():
     assert out.splitlines()[1].split() == [CLASS_A, "17", "0", "failed", "rule_15;rule_16", "4.5", "True"]
 
 
+def test_verdicts_pass_the_sort_and_order_on_and_leave_them_out_by_default(tmp_path):
+    server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): json_response([])})
+    run(server, "verdicts", CAMPAIGN)
+    assert "sort" not in server.requests[0].url.params and "order" not in server.requests[0].url.params
+    run(server, "verdicts", CAMPAIGN, "--sort", "first_failure_time_s", "--order", "desc")
+    assert (server.requests[1].url.params["sort"], server.requests[1].url.params["order"]) == ("first_failure_time_s", "desc")
+    csv_server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): httpx.Response(200, content=b"verdict_id\n", headers={"content-type": "text/csv"})})
+    run(csv_server, "verdicts", CAMPAIGN, "--csv", str(tmp_path / "out.csv"), "--sort", "state")
+    assert (csv_server.requests[0].url.params["format"], csv_server.requests[0].url.params["sort"]) == ("csv", "state")
+
+
+def test_verdicts_refuse_a_sort_the_master_would_not_know():
+    for argv in (["verdicts", CAMPAIGN, "--sort", "margin"], ["verdicts", CAMPAIGN, "--order", "sideways"]):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(argv)
+
+
 def test_verdicts_stream_into_a_csv_file(tmp_path):
     body = "verdict_id,fec_id,state\n1,a,passed\n"
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): httpx.Response(200, content=body.encode(), headers={"content-type": "text/csv"})})
@@ -237,6 +254,30 @@ def test_events_print_one_line_each():
     assert code == 0 and lines[0].split()[:3] == ["1", "2026-10-25T12:00:00+00:00", "created"]
     assert lines[1].endswith(f"fec_complete {CLASS_A} {{'complete': 5}}")
     assert server.requests[0].url.params["after"] == "0"
+
+
+def test_events_newest_asks_for_the_newest_page_once():
+    events = [{"event_id": number, "at": f"t{number}", "kind": "started", "fec_id": None, "detail": {}} for number in (8, 9)]
+    server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/events"): json_response(events)})
+    code, out, _ = run(server, "events", CAMPAIGN, "--newest", "2")
+    assert code == 0 and [line.split()[0] for line in out.splitlines()] == ["8", "9"]
+    params = server.requests[0].url.params
+    assert (params["newest"], params["after"]) == ("2", "0") and "limit" not in params
+
+
+def test_events_follow_continues_after_the_newest_page():
+    batches = iter([[{"event_id": 9, "at": "t9", "kind": "started", "fec_id": None, "detail": {}}], [{"event_id": 10, "at": "t10", "kind": "stopped", "fec_id": None, "detail": {}}], []])
+    server = Server(
+        {
+            ("GET", f"/cluster/campaigns/{CAMPAIGN}/events"): lambda request: json_response(next(batches)),
+            ("GET", f"/cluster/campaigns/{CAMPAIGN}"): lambda request: json_response(detail_json(actual_state="stopped")),
+        }
+    )
+    code, out, _ = run(server, "events", CAMPAIGN, "--newest", "1", "--follow", sleep=lambda seconds: None)
+    assert code == 0 and [line.split()[0] for line in out.splitlines()] == ["9", "10"]
+    event_requests = [request.url.params for request in server.requests if request.url.path.endswith("/events")]
+    assert "newest" in event_requests[0] and all("newest" not in params for params in event_requests[1:])
+    assert [params["after"] for params in event_requests] == ["0", "9", "10"]
 
 
 def test_events_follow_polls_after_the_last_event_until_the_campaign_is_final():
@@ -443,6 +484,15 @@ def test_findings_print_the_summary_of_a_monitored_step():
     assert "trajectory_generation: monitored" in out and "cases: complete 5, dropped 1" in out and "outputs: 5, valid 5, complete 3" in out
     assert "verdicts: passed 3, failed 2, unmonitored 0" in out and "job duration s: median 4.2, p90 9.8" in out
     assert "rule_15" in out and "12.5" in out and "20.1" in out and CLASS_A in out
+
+
+def test_findings_print_the_encounter_types_when_the_master_sends_them():
+    server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/findings"): json_response(findings_json(encounter_types={"HEAD_ON": 4, "OTHER": 1}))})
+    out = run(server, "findings", CAMPAIGN, "--step", "scene_generation")[1]
+    assert "encounters (vessel pairs by first type): HEAD_ON 4, OTHER 1" in out
+    assert (
+        "encounters" not in run(Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/findings"): json_response(findings_json())}), "findings", CAMPAIGN, "--step", "scene_generation")[1]
+    )  # an older master
 
 
 def test_findings_of_an_unmonitored_step_are_statistics_only():

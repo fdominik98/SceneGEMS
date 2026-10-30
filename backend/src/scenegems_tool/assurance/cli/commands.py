@@ -98,7 +98,7 @@ def cases(session: Session, arguments: Namespace) -> int:
 
 def verdicts(session: Session, arguments: Namespace) -> int:
     path = campaign_path(arguments.campaign, "/verdicts")
-    filters = dict(fec_id=arguments.fec_id, state=arguments.state, run_index=arguments.run, sensitive=True if arguments.sensitive else None)
+    filters = dict(fec_id=arguments.fec_id, state=arguments.state, run_index=arguments.run, sensitive=True if arguments.sensitive else None, sort=arguments.sort, order=arguments.order)
     if arguments.csv:
         size = session.api.download(path, Path(arguments.csv), format="csv", **filters)
         session.say(f"wrote {size} bytes to {arguments.csv}")
@@ -122,8 +122,13 @@ def _print_events(session: Session, events: list) -> None:
 def events(session: Session, arguments: Namespace) -> int:
     path = campaign_path(arguments.campaign, "/events")
     after = arguments.after
+    newest = arguments.newest  # the first batch only: the following polls page forward from its last event
     while True:
-        batch = session.api.get(path, after=after, limit=FOLLOW_PAGE if arguments.follow else arguments.limit)
+        if newest is not None:
+            batch = session.api.get(path, after=after, newest=newest)
+            newest = None
+        else:
+            batch = session.api.get(path, after=after, limit=FOLLOW_PAGE if arguments.follow else arguments.limit)
         _print_events(session, batch)
         if batch:
             after = batch[-1]["event_id"]

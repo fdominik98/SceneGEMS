@@ -101,6 +101,8 @@ def findings_summary(findings: Dict[str, Any]) -> str:
     durations = findings["durations_s"]
     if durations["median"] is not None:
         lines.append(f"job duration s: median {durations['median']:.1f}, p90 {durations['p90']:.1f}")
+    if findings.get("encounter_types"):  # absent from an older master
+        lines.append("encounters (vessel pairs by first type): " + ", ".join(f"{name} {count}" for name, count in findings["encounter_types"].items()))
     if findings["failed_rules"]:
         lines.append("")
         lines.append(

@@ -71,7 +71,15 @@ def seed_cases(stores, campaign_id):
         record = stores.results.add_run_record(NewRunRecord(case.case_id, 0, TrajectoryGeneratorImplementation.MONITOR_DRIVEN_RRT, True, {"mode": "usv_navigation"}, {}, case.seed, steps=10))
         stores.results.add_verdict(
             NewVerdict(
-                case.case_id, 0, verdict, MonitorImplementation.POST_HOC, failed_rules=rules, first_failure_time_s=4.5 if rules else None, sensitive=sensitive, run_record_id=record.run_record_id
+                case.case_id,
+                0,
+                verdict,
+                MonitorImplementation.POST_HOC,
+                failed_rules=rules,
+                first_failure_time_s=4.5 if rules else None,
+                sensitive=sensitive,
+                run_record_id=record.run_record_id,
+                encounters={"OS_0 - TS_1": ["HEAD_ON", "OTHER"]} if rules else None,
             )
         )
         stores.cases.move_case(case.case_id, case.version, stage=PipelineStage.VERDICT, state=CaseState.COMPLETE)
@@ -251,6 +259,46 @@ def test_verdicts_are_filtered_and_paged(client, stores):
     assert client.get(path, params={"run_index": 1}).json() == []
     assert len(client.get(path, params={"limit": 1, "offset": 1}).json()) == 1
     assert client.get(path, params={"format": "xml"}).status_code == 422
+
+
+def test_verdicts_carry_their_encounter_types(client, stores):
+    campaign_id = create(client).json()["campaign_id"]
+    seed_cases(stores, campaign_id)
+    verdicts = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts").json()
+    assert [verdict["encounters"] for verdict in verdicts] == [None, {"OS_0 - TS_1": ["HEAD_ON", "OTHER"]}]  # null for a verdict stored without them
+
+
+def test_verdicts_are_sorted_in_either_direction_with_nulls_last(client, stores):
+    campaign_id = create(client).json()["campaign_id"]
+    seed_cases(stores, campaign_id)
+    path = f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts"
+    states = lambda **params: [verdict["state"] for verdict in client.get(path, params=params).json()]  # noqa: E731
+    assert states(sort="fec_id") == states() == ["passed", "failed"]
+    assert states(sort="fec_id", order="desc") == ["failed", "passed"]
+    assert states(sort="state") == ["failed", "passed"] and states(sort="state", order="desc") == ["passed", "failed"]
+    assert states(sort="first_failure_time_s") == states(sort="first_failure_time_s", order="desc") == ["failed", "passed"]  # the passed verdict has none: last either way
+    assert states(sort="case_index", order="desc", limit=1, offset=1) == ["passed"]
+    assert states(sort="created_at", order="asc") == ["passed", "failed"]
+    for sort in ("fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at"):
+        assert client.get(path, params={"sort": sort}).status_code == 200
+    assert client.get(path, params={"sort": "margin"}).status_code == 422
+    assert client.get(path, params={"order": "sideways"}).status_code == 422
+    assert total(client.get(path, params={"sort": "state", "limit": 1})) == 2
+
+
+def test_the_csv_follows_the_sort_and_carries_the_encounters(client, stores, monkeypatch):
+    from scenegems_tool.cluster.master.api import campaign_routes
+
+    monkeypatch.setattr(campaign_routes, "CSV_PAGE", 1)  # one verdict per page: the order must hold across pages
+    campaign_id = create(client).json()["campaign_id"]
+    seed_cases(stores, campaign_id)
+    path = f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts"
+    rows = lambda **params: list(csv.DictReader(io.StringIO(client.get(path, params={"format": "csv", **params}).text)))  # noqa: E731
+    assert [row["state"] for row in rows(sort="state")] == ["failed", "passed"]
+    assert [row["state"] for row in rows(sort="fec_id", order="desc")] == ["failed", "passed"]
+    by_state = rows(sort="state")
+    assert by_state[0]["encounters"] == '{"OS_0 - TS_1":["HEAD_ON","OTHER"]}' and by_state[1]["encounters"] == ""
+    assert client.get(path, params={"format": "csv", "sort": "margin"}).status_code == 422
 
 
 def test_verdicts_stream_as_csv(client, stores):
@@ -484,6 +532,24 @@ def test_events_have_their_total_after_the_event_id(client):
     assert total(client.get(path, params={"limit": 1})) == 3
     assert total(client.get(path, params={"after": events[0]["event_id"]})) == 2
     assert total(client.get(path, params={"after": events[2]["event_id"]})) == 0
+
+
+def test_the_newest_events_answer_oldest_first_with_the_total(client):
+    campaign_id = create(client).json()["campaign_id"]
+    for control in ("start", "pause", "resume", "pause"):
+        client.post(f"{CAMPAIGNS_PATH}/{campaign_id}/{control}")
+    path = f"{CAMPAIGNS_PATH}/{campaign_id}/events"
+    everything = client.get(path).json()
+    assert len(everything) == 5
+    newest = client.get(path, params={"newest": 2})
+    assert newest.json() == everything[-2:] and total(newest) == 5  # the total counts every event, not the page
+    assert client.get(path, params={"newest": 2, "limit": 1}).json() == everything[-2:]  # limit does not apply
+    assert client.get(path, params={"newest": 1000}).json() == everything
+    after = client.get(path, params={"newest": 2, "after": everything[3]["event_id"]})
+    assert after.json() == everything[4:] and total(after) == 1
+    assert client.get(path, params={"after": everything[-1]["event_id"], "newest": 3}).json() == []  # paging forward from the newest page
+    for newest_value in (0, -1, 1001):
+        assert client.get(path, params={"newest": newest_value}).status_code == 422
 
 
 # Case index
