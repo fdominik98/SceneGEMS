@@ -135,7 +135,7 @@ def listeners(settings: MasterSettings, apps: MasterApps) -> List[uvicorn.Server
                 **logging_options,
             )
         ),
-        # The workbench frontend expects no WebSocket pings, as the gateway's own main runs it
+        # The workbench frontend expects no WebSocket pings
         _Listener(uvicorn.Config(apps.operator, host=settings.operator.host, port=settings.operator.port, ws_ping_interval=None, **logging_options)),
     ]
 
@@ -173,7 +173,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (SettingMissing, FileNotFoundError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    multiprocessing.set_start_method("spawn", force=True)  # as the gateway's own main: workbench workers are spawned
+    multiprocessing.set_start_method("spawn", force=True)  # workbench workers are spawned
     start_architecture_files_writer()  # the Capabilities page's description files, regenerated from the code on every start
     asyncio.run(serve(listeners(settings, apps)))
     return 0

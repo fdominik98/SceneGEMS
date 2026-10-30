@@ -91,5 +91,5 @@ def test_build_script_lists_a_fingerprint_for_every_image():
     root = SCRIPTS.parents[1]
     completed = subprocess.run([BASH, (SCRIPTS / "build.sh").as_posix(), "--fingerprints"], cwd=root, capture_output=True, text=True, check=True)
     listing = _parse_listing(completed.stdout)
-    assert "scenegems-backend:latest" in listing and "scenegems-ardupilot-sitl:latest" in listing
+    assert "scenegems-master-api:latest" in listing and "scenegems-ardupilot-sitl:latest" in listing
     assert all(len(value) == 64 for value in listing.values())

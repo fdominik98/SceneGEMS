@@ -16,9 +16,6 @@ from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 _LOOPBACK_ALIASES = frozenset({"localhost", "127.0.0.1", "::1"})
 _DOCKER_HOST_GATEWAY = "host.docker.internal"
-_COMPOSE_BROKER_HOSTNAME = "broker"
-_COMPOSE_BROKER_INTERNAL_PORT = 1883
-_COMPOSE_BROKER_HOST_PORT = 1882
 
 _CONNACK_REASONS = {
     1: "broker refused the connection: incorrect protocol version",
@@ -27,15 +24,6 @@ _CONNACK_REASONS = {
     4: "broker refused the connection: bad username or password",
     5: "broker refused the connection: not authorised",
 }
-
-
-def _host_resolves(host: str) -> bool:
-    """Whether the given name can be resolved from this process."""
-    try:
-        socket.getaddrinfo(host, None)
-        return True
-    except socket.gaierror:
-        return False
 
 
 def _running_in_container() -> bool:
@@ -64,45 +52,22 @@ def resolve_mqtt_broker_endpoints(
     *,
     tls_connection: bool,
 ) -> tuple[str, str, int]:
-    """Resolve a broker address the user typed into one this container can dial.
+    """Resolve a broker address the user typed into one master-api's container can dial.
 
-    A loopback address means "the machine running the browser", which from inside a
-    container is the Docker host gateway, not the container itself. Rewriting it to
-    `host.docker.internal` keeps host-published brokers reachable, including ones
-    started by another compose project such as the OTG stack. The in-compose broker
-    service is substituted only when the typed port is the one it listens on internally
-    and its name actually resolves, so an absent compose broker never hides a working
-    address. The compose hostname `broker` is rewritten to the host gateway (and
-    internal port 1883 to host port 1882) when that service is not running, so the
-    default local connection still reaches a broker already published on the host.
+    A loopback address means "the master's machine", which from inside the container is the
+    Docker host gateway, not the container itself. Rewriting it to `host.docker.internal`
+    keeps brokers published on that machine's ports reachable, such as the OTG stack's. A
+    TLS broker keeps its name, which its certificate is checked against. The port is
+    returned as typed.
     """
-    compose_host = os.environ.get("MQTT_BROKER_HOST", "").strip()
-    compose_port = os.environ.get("MQTT_BROKER_PORT", "").strip()
-    prefer_compose = bool(compose_host) and compose_port.isdigit() and int(compose_port) == port and _host_resolves(compose_host)
-    compose_broker_up = _host_resolves(_COMPOSE_BROKER_HOSTNAME)
 
     def normalize_host(host: str) -> str:
         trimmed = host.strip()
-        if tls_connection or not _running_in_container():
-            return trimmed
-        lowered = trimmed.lower()
-        if lowered in _LOOPBACK_ALIASES:
-            return compose_host if prefer_compose else _DOCKER_HOST_GATEWAY
-        if lowered == _COMPOSE_BROKER_HOSTNAME and not compose_broker_up:
+        if not tls_connection and _running_in_container() and trimmed.lower() in _LOOPBACK_ALIASES:
             return _DOCKER_HOST_GATEWAY
         return trimmed
 
-    resolved_port = port
-    if (
-        not tls_connection
-        and _running_in_container()
-        and not compose_broker_up
-        and port == _COMPOSE_BROKER_INTERNAL_PORT
-        and (agent_broker.strip().lower() == _COMPOSE_BROKER_HOSTNAME or client_broker.strip().lower() == _COMPOSE_BROKER_HOSTNAME)
-    ):
-        resolved_port = _COMPOSE_BROKER_HOST_PORT
-
-    return normalize_host(agent_broker), normalize_host(client_broker), resolved_port
+    return normalize_host(agent_broker), normalize_host(client_broker), port
 
 
 class MQttConnectionInfo:

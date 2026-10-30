@@ -39,6 +39,7 @@ RUN pip install --no-cache-dir --no-deps -e .
 
 ENV PYTHONPATH=/app/src
 
-EXPOSE 5174
+# Node API and the operator API with the workbench gateway (deploy/master/docker-compose.yml)
+EXPOSE 8443 5174
 
-CMD ["uvicorn", "scenegems_tool.gateway.websocket_app:app", "--host", "0.0.0.0", "--port", "5174"]
+CMD ["sh", "-c", "python -m scenegems_tool.persistence.migrate upgrade head && exec python -m scenegems_tool.cluster.master"]

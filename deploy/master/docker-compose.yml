@@ -44,17 +44,16 @@ services:
       - broker_data:/data/broker/
 
   # The master (scenegems_tool.cluster.master): node API over plain HTTP, and the operator API
-  # with the workbench gateway on this machine only. It migrates the database before it
-  # starts and reads the image fingerprints its nodes must have from release.json. It connects
+  # with the workbench gateway on this machine only. The image's command migrates the database
+  # before it starts; it reads the image fingerprints its nodes must have from release.json. It connects
   # to cluster-broker to observe pools for the UI. It mounts the artifact volume: the
   # content-addressed job inputs and results nodes up- and download. The Docker socket for the
   # workbench's live sessions comes with docker-compose.live-sessions.yml; without that file the
   # master runs with live sessions off.
   master-api:
-    image: scenegems-backend:${SCENEGEMS_IMAGE_TAG:-latest}
+    image: scenegems-master-api:${SCENEGEMS_IMAGE_TAG:-latest}
     container_name: scenegems-${SCENEGEMS_MASTER_ID}-master-api
     restart: unless-stopped
-    command: ["sh", "-c", "python -m scenegems_tool.persistence.migrate upgrade head && exec python -m scenegems_tool.cluster.master"]
     depends_on:
       postgres:
         condition: service_healthy

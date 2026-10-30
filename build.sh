@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-# Thin wrapper: the build and start scripts live in deploy/scripts.
+# Thin wrapper: the build script lives in deploy/scripts.
 exec "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy/scripts/build.sh" "$@"

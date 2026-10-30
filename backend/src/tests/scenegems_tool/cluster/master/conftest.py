@@ -34,7 +34,7 @@ EXPECTED = {
     MONITORING_IMAGE: "fp-monitoring",
     SITL_IMAGE: "fp-sitl",
     GAZEBO_IMAGE: "fp-gazebo",
-    "scenegems-backend:latest": "fp-backend",
+    "scenegems-master-api:latest": "fp-master-api",
 }
 # The same as the master holds and requires them: by image repository (cluster/fingerprints/comparison.py)
 EXPECTED_BY_REPOSITORY = by_repository(EXPECTED)

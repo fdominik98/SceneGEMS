@@ -221,7 +221,7 @@ def test_compose_reads_both_master_files_by_default_through_compose_file():
 def test_every_image_scenegems_builds_carries_the_release_tag():
     tag = "${SCENEGEMS_IMAGE_TAG:-latest}"
     master, node = _compose("master")["services"], _compose("node")["services"]
-    assert master["master-api"]["image"] == f"scenegems-backend:{tag}" and master["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
+    assert master["master-api"]["image"] == f"scenegems-master-api:{tag}" and master["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
     assert node["node"]["image"] == f"scenegems-node:{tag}"
     assert node["node"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the node names its jobs' images with it"
     roles = scenegems_roles("abc123")

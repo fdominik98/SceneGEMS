@@ -50,7 +50,7 @@ interface WorkbenchSectionProps {
 
 /**
  * The workbench section: scene and trajectory generation, simulation and connections over the
- * workbench gateway socket (`VITE_WS_URL`). Its view is the `workbenchView` of `uiStore`. The
+ * workbench gateway socket of the active cluster's master-api. Its view is the `workbenchView` of `uiStore`. The
  * domain configuration is the active cluster's (the Domain Configuration section edits it), and
  * the functional scenarios to start from are the master's catalog.
  */

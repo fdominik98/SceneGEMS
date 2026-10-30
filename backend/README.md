@@ -223,7 +223,7 @@ source env/bin/activate  # On Windows, use `env\Scripts\activate`
 
 ### Docker-first development
 
-From the **repository root**, run `./start.sh` to start the containerized frontend, MQTT broker, and WebSocket backend. Host Python tooling below is optional for lint/tests without Docker.
+The backend runs in the Docker images that `./build.sh` builds from the **repository root** and Machine Hub deploys (see the repository [`README.md`](../README.md)). The host Python tooling below is for lint and tests.
 
 ### 3. Install Dependencies
 

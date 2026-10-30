@@ -7,7 +7,8 @@ describe("workbench gateway URL", () => {
     expect(gatewayWsUrl("https://master.example/")).toBe("wss://master.example/ws/scenegems_backend_service");
   });
 
-  it("falls back to the configured gateway without a cluster", () => {
-    expect(gatewayWsUrl(null)).toMatch(/^wss?:\/\/.+\/ws\/scenegems_backend_service$/);
+  it("is absent without a cluster", () => {
+    expect(gatewayWsUrl(null)).toBeNull();
+    expect(gatewayWsUrl("")).toBeNull();
   });
 });

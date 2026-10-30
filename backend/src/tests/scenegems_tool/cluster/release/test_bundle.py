@@ -54,7 +54,7 @@ def test_the_release_tags_the_latest_builds_with_its_revision(tmp_path):
 
 def test_a_dirty_release_tags_its_images_dirty(tmp_path):
     release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=True, inspect=_all_built, now=NOW, tag=_Tags())
-    assert "scenegems-backend:abc123-dirty" in release.images and release.roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123-dirty"
+    assert "scenegems-master-api:abc123-dirty" in release.images and release.roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123-dirty"
 
 
 def test_an_older_bundle_is_replaced(tmp_path):

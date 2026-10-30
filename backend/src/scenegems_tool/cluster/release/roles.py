@@ -45,10 +45,10 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN
 from utils.image_names import DEFAULT_IMAGE_TAG, IMAGE_TAG_VARIABLE, tagged, with_tag
 
-BACKEND_REPOSITORY = "scenegems-backend"
+MASTER_API_REPOSITORY = "scenegems-master-api"
 BROKER_REPOSITORY = "scenegems-mqtt-broker"
 NODE_REPOSITORY = "scenegems-node"
-BACKEND_IMAGE = tagged(BACKEND_REPOSITORY, DEFAULT_IMAGE_TAG)
+MASTER_API_IMAGE = tagged(MASTER_API_REPOSITORY, DEFAULT_IMAGE_TAG)
 BROKER_IMAGE = tagged(BROKER_REPOSITORY, DEFAULT_IMAGE_TAG)
 NODE_IMAGE = tagged(NODE_REPOSITORY, DEFAULT_IMAGE_TAG)
 POSTGRES_IMAGE = "postgres:16.10-alpine"
@@ -99,7 +99,7 @@ def master_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "count": "one",
         "stack": "master",
         "project": "scenegems-{cluster}",
-        "images": [tagged(BACKEND_REPOSITORY, image_tag), tagged(BROKER_REPOSITORY, image_tag), POSTGRES_IMAGE],
+        "images": [tagged(MASTER_API_REPOSITORY, image_tag), tagged(BROKER_REPOSITORY, image_tag), POSTGRES_IMAGE],
         "env": {
             "COMPOSE_PROJECT_NAME": "scenegems-{cluster}",
             "COMPOSE_PATH_SEPARATOR": ":",

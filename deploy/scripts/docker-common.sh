@@ -1,21 +1,11 @@
 #!/usr/bin/env bash
-# Shared Docker image fingerprinting and build helpers for build.sh / start.sh.
+# Docker image fingerprinting and build helpers of build.sh.
 
 docker_common_init() {
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
     cd "$SCRIPT_DIR"
     export REPO_ROOT="$SCRIPT_DIR"
-    COMPOSE_FILE="$SCRIPT_DIR/deploy/workbench/docker-compose.yml"
-    COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-scenegems}"
     UPSTREAM_PINS_FILE="$SCRIPT_DIR/deploy/images/upstream_pins.env"
-}
-
-compose_cmd() {
-    if docker compose version >/dev/null 2>&1; then
-        docker compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" "$@"
-    else
-        docker-compose -f "$COMPOSE_FILE" -p "$COMPOSE_PROJECT_NAME" "$@"
-    fi
 }
 
 fingerprint_find_excluded_files() {
@@ -194,30 +184,4 @@ build_subsystem_if_stale() {
     local dockerfile="$2"
     shift 2
     build_with_fingerprint "$tag" "$dockerfile" "$SCRIPT_DIR" "$(fingerprint_image_inputs "$dockerfile" "$@")"
-}
-
-require_image() {
-    local tag="$1"
-    if ! image_exists "$tag"; then
-        echo "Missing image $tag. Run ./build.sh first." >&2
-        exit 1
-    fi
-}
-
-ensure_compose_volumes() {
-    docker volume inspect scenegems_runtime_assets >/dev/null 2>&1 \
-        || docker volume create scenegems_runtime_assets >/dev/null
-    docker volume inspect scenegems_broker_data >/dev/null 2>&1 \
-        || docker volume create scenegems_broker_data >/dev/null
-}
-
-shutdown_stack() {
-    echo "Shutting down SceneGEMS stack..."
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "scenegems_backend"; then
-        docker exec scenegems_backend python - <<'PY' 2>/dev/null || true
-from scenegems_tool.cluster.node.docker_subsystem_shutdown import shutdown_all_docker_subsystems
-shutdown_all_docker_subsystems()
-PY
-    fi
-    compose_cmd down --remove-orphans 2>/dev/null || true
 }

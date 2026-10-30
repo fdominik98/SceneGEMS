@@ -5,7 +5,7 @@
 # (scenegems_tool.cluster.release.roles). Without it master-api has no Docker socket and
 # refuses live sessions with a clear error; campaigns and cluster jobs do not need it.
 # The live sessions run the images of this machine under SCENEGEMS_IMAGE_TAG of master-api,
-# which is not set, so latest: the images ./build.sh builds on the workbench machine.
+# which is not set, so latest: the images ./build.sh builds on the master's machine.
 
 services:
   master-api:

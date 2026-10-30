@@ -1,15 +1,11 @@
 """
-FastAPI WebSocket entrypoint. Copy `python_backend/` into your project and run:
-
-    uvicorn python_backend.websocket_app:app --reload --port 5174
-
-Or mount `websocket_router` on your existing app.
+The workbench gateway: the web console's WebSocket. The master mounts `app` on its operator
+listener (cluster/master/server.py); it does not run on its own.
 """
 
 import atexit
 import json
 import logging
-import multiprocessing
 import signal
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -114,17 +110,3 @@ async def backend_service_socket(websocket: WebSocket) -> None:  # noqa: C901
     except WebSocketDisconnect:
         websocket_session_manager.remove_session(websocket=websocket)
         return
-
-
-if __name__ == "__main__":
-    multiprocessing.set_start_method("spawn")
-    # Run the gateway on its own (no cluster): PYTHONPATH=src python -m scenegems_tool.gateway.websocket_app
-    import uvicorn
-
-    uvicorn.run(
-        "scenegems_tool.gateway.websocket_app:app",
-        host="127.0.0.1",
-        port=5174,
-        reload=False,
-        ws_ping_interval=None,
-    )

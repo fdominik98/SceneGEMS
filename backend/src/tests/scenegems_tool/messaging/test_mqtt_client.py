@@ -3,7 +3,8 @@ import ssl
 import paho.mqtt.client as mqtt
 import pytest
 
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.messaging import mqtt_client
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
 
 
 class _RecordingClient:
@@ -100,3 +101,26 @@ def test_from_environment_defaults_to_plain_without_ca():
 
 def test_repr_hides_the_password():
     assert "secret-pw" not in repr(_info(password="secret-pw"))
+
+
+@pytest.fixture
+def in_container(monkeypatch):
+    monkeypatch.setattr(mqtt_client, "_running_in_container", lambda: True)
+
+
+@pytest.mark.parametrize("loopback", ["localhost", "127.0.0.1", "::1", " LocalHost "])
+def test_a_loopback_broker_is_the_master_machine_from_its_container(in_container, loopback):
+    assert resolve_mqtt_broker_endpoints(loopback, loopback, 1882, tls_connection=False) == ("host.docker.internal", "host.docker.internal", 1882)
+
+
+def test_other_brokers_and_the_port_stay_as_typed(in_container):
+    assert resolve_mqtt_broker_endpoints(" 10.0.0.5 ", "broker", 1883, tls_connection=False) == ("10.0.0.5", "broker", 1883)
+
+
+def test_a_tls_broker_keeps_its_name(in_container):
+    assert resolve_mqtt_broker_endpoints("localhost", "localhost", 8883, tls_connection=True) == ("localhost", "localhost", 8883)
+
+
+def test_outside_a_container_loopback_stays(monkeypatch):
+    monkeypatch.setattr(mqtt_client, "_running_in_container", lambda: False)
+    assert resolve_mqtt_broker_endpoints("localhost", "127.0.0.1", 1883, tls_connection=False) == ("localhost", "127.0.0.1", 1883)

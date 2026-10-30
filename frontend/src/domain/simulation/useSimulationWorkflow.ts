@@ -421,6 +421,14 @@ export function useSimulationWorkflow() {
 
   const gatewayUrl = gatewayWsUrl(workbenchCluster.operatorUrl);
   useEffect(() => {
+    if (gatewayUrl === null) {
+      // No cluster is selected, so there is no master-api whose gateway the workbench could use.
+      setStreamStatus("disconnected");
+      setMqttBrokerStatus("disconnected");
+      setMonitorStatus("disconnected");
+      usePlaybackStore.getState().setActiveScenarioId(null);
+      return;
+    }
     const client = new BackendWsClient(gatewayUrl, {
       onServerMessage: (message) => dispatchMessageRef.current(message),
       onStatus: (status) => {

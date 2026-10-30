@@ -6,31 +6,21 @@ Browser-based console for exploring autonomous surface vehicle (ASV) maritime as
 
 ## Prerequisites
 
-- Docker with Compose v2 (or `docker-compose`)
-- For host-side Python work: Python 3.12+ (see [`backend/README.md`](../backend/README.md))
+- Node.js 20.19 or newer
+- A deployed SceneGEMS cluster whose master's operator API this machine reaches (see the repository [`README.md`](../README.md))
 
-## Quick start (recommended)
-
-From the **repository root**:
-
-```bash
-./start.sh
-```
-
-Open http://localhost:5173 (frontend starts before the backend). The WebSocket URL defaults to `ws://127.0.0.1:5174/ws/scenegems_backend_service` in `frontend/.env`.
-
-## Quick start (frontend only, host Node)
+## Quick start
 
 ```bash
 npm install
-cp .env.example .env
-# Start the full stack from repo root with ./start.sh, or point VITE_WS_URL at a running backend
 npm run dev
 ```
 
+Open http://localhost:5173. The console has no backend of its own: the workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on the master's operator URL), and the cluster's nodes run its jobs.
+
 ### Typical demo flow
 
-1. Run `./start.sh` from the repo root (or ensure the backend is up and `VITE_WS_URL` in `.env` is correct).
+1. Run `npm run dev` and select a deployed cluster in the left pane.
 2. Optional: open **Domain Configuration** in the Cluster group to review the cluster's COLREGS constants, vessel types and obstacle types (the master's default presets apply until one is saved).
 3. Open **Scene Generation**: pick one of the master's functional scenarios (use **Find a preset** to search and filter), then click **Generate scene**.
 4. Click **Next: Trajectory Generation**, generate trajectories, then **Load for Simulation** to open **Simulation** for dual-stream playback, metrics, and exports.
@@ -56,12 +46,6 @@ During `npm run dev`, Docusaurus starts **only when you open** **Documentation**
 | `npm run build` | Build docs, typecheck, production build |
 | `npm test` | Unit tests (Vitest) |
 | `npm run lint` | ESLint |
-
-## Configuration
-
-| Variable | Purpose |
-|----------|---------|
-| `VITE_WS_URL` | WebSocket URL for the simulation backend (default in `.env.example`) |
 
 ## Presets
 

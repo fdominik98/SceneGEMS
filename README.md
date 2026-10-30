@@ -2,10 +2,10 @@
 
 SceneGEMS generates COLREGS encounter scenarios, simulates them with pluggable vessel stacks faster than real time and judges every run with a COLREGS monitor. The scene pipeline (functional, logical and concrete level) comes from the paper *Automated Generation of Functionally Complete Assurance Suites for COLREGS-Compliance of Autonomous Surface Vehicles*.
 
-SceneGEMS runs in two ways:
+SceneGEMS runs on a cluster: one master and any number of nodes, deployed by Machine Hub (the master's machine can be your own PC). The web console works on the cluster selected in its left pane:
 
-- **Workbench**: everything on one machine. You design a scenario, generate its scene and trajectories and simulate it interactively in the web console.
-- **Cluster**: one master and any number of nodes on other machines run assurance campaigns. Every scenario class in a campaign's scope is generated, simulated and monitored automatically; the web console configures, follows and inspects the campaigns.
+- **Workbench**: you design a scenario, generate its scene and trajectories and simulate it interactively. The master's master-api serves the workbench gateway and runs the live sessions; the jobs run on the cluster's nodes.
+- **Campaigns**: every scenario class in a campaign's scope is generated, simulated and monitored automatically; the web console configures, follows and inspects the campaigns.
 
 ## Repository layout
 
@@ -13,12 +13,11 @@ SceneGEMS runs in two ways:
 |------|---------|
 | [`backend/`](backend/) | Python package roots under `backend/src/`: `scenegems_tool` (workbench gateway, subsystems, vessel stacks, the cluster's master and node, the assurance pipeline, persistence), `functional_level`, `logical_level`, `concrete_level`, `evaluation`, `visualization`, `scripts`, `utils`, `tests`. Domain configuration, the 828 functional scenario classes and runtime assets are in `backend/assets/` |
 | [`frontend/`](frontend/) | React and Vite web console with the sections Workbench, Cluster, Capabilities, Campaigns, Campaign History and Results; in-app documentation in `frontend/website/` |
-| [`deploy/images/`](deploy/images/) | One folder per Docker image: `node`, `mqtt_broker`, the subsystems `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, and the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images |
+| [`deploy/images/`](deploy/images/) | One folder per Docker image: `master_api`, `node`, `mqtt_broker`, the subsystems `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, and the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images |
 | [`deploy/master/`](deploy/master/), [`deploy/node/`](deploy/node/) | The compose file and `.env.example` of each cluster role |
-| [`deploy/workbench/`](deploy/workbench/) | The compose file of the single-machine workbench |
-| [`deploy/scripts/`](deploy/scripts/) | `build.sh`, `start.sh` and their shared helpers `docker-common.sh`; `./build.sh` and `./start.sh` in the repository root call them |
+| [`deploy/scripts/`](deploy/scripts/) | `build.sh` and its fingerprint and build helpers `docker-common.sh`; `./build.sh` in the repository root calls it |
 
-The images that copy files from `backend/` (subsystems, node, Gazebo, SITL) build with the repository root as their Docker context, so their `COPY` lines start with `deploy/images/...` or `backend/...`.
+The images that copy files from `backend/` (master-api, subsystems, node, Gazebo, SITL) build with the repository root as their Docker context, so their `COPY` lines start with `deploy/images/...` or `backend/...`.
 
 ## Requirements
 
@@ -26,27 +25,22 @@ The images that copy files from `backend/` (subsystems, node, Gazebo, SITL) buil
 |-------------|---------|
 | Docker | Docker Engine with Compose v2 (`docker compose`) |
 | Shell | Bash; on Windows Git Bash or WSL |
-| Disk | Several GB for every image (Gazebo and SITL are the largest); less with `./build.sh --stack` |
+| Disk | Several GB for every image (Gazebo and SITL are the largest); less with `./build.sh --backend` |
 | Memory | 8 GB for the web console and scene generation; 16 GB or more with Gazebo or ArduPilot simulations |
 | Cluster machines | Ubuntu with Docker and Compose v2; no source checkout. They are prepared by [Machine Hub](#deploying-a-cluster), a separate tool |
 | Development | Python 3.10 or newer (3.12 recommended) in `backend/env/`; Node.js 20.19 or newer for the frontend |
 
-## Workbench on one machine
+## Web console and workbench
 
-From the repository root:
+The web console runs on the host with Node:
 
 ```bash
-./build.sh
-./start.sh
+cd frontend
+npm install
+npm run dev
 ```
 
-| Service | Address |
-|---------|---------|
-| Web console | http://localhost:5173 |
-| Backend health | http://localhost:5174/health |
-| MQTT | `localhost:1882` (the broker's 1883 on the compose network) |
-
-`start.sh` starts the frontend, a local MQTT broker and the backend, which starts the subsystem containers (scene generation, trajectory generation, monitoring, scenario execution) on this machine. Press Ctrl+C in its terminal to stop the stack and every container it started. `start.sh` builds nothing; after code changes run `./build.sh` again.
+Open http://localhost:5173. The workbench has no backend of its own: it uses the cluster selected in the console's left pane. That cluster's master-api serves the workbench gateway on its operator port (5174) and starts the live sessions on the master's machine, and its nodes run the scene generation, trajectory generation, simulation and monitoring jobs. Deploy a cluster first (see [Deploying a cluster](#deploying-a-cluster)); without a selected cluster the workbench stays disconnected.
 
 In the web console, under Workbench:
 
@@ -59,15 +53,13 @@ Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and 
 
 ## Building images
 
-`./build.sh` (a wrapper for [`deploy/scripts/build.sh`](deploy/scripts/build.sh)) computes a fingerprint of each image's inputs, stores it in the image as the label `org.scenegems.fingerprint` and rebuilds only images whose label differs. The same commit gives the same fingerprints on Windows and Linux.
+`./build.sh` (a wrapper for [`deploy/scripts/build.sh`](deploy/scripts/build.sh)) builds the images and the release bundle Machine Hub deploys. It computes a fingerprint of each image's inputs, stores it in the image as the label `org.scenegems.fingerprint` and rebuilds only images whose label differs. The same commit gives the same fingerprints on Windows and Linux. The web console is not an image.
 
 | Option | Builds |
 |--------|--------|
 | *(none)* or `--all` | every image |
-| `-1`, `--backend` | `scenegems-backend` and the four subsystem images |
-| `-2`, `--frontend` | `scenegems-frontend:dev` |
-| `-3`, `--stack` | backend, subsystems and frontend, no simulation images |
-| `-4`, `--arduagent` | `scenegems-arduagent` (workbench ArduPilot runs) |
+| `-1`, `--backend` | `scenegems-master-api` and the four subsystem images |
+| `-4`, `--arduagent` | `scenegems-arduagent` (live sessions with ArduPilot, on the master's machine) |
 | `-5`, `--node` | `scenegems-node`, the node daemon |
 | `--simulation` | `scenegems-gazebo-harmonic`, `scenegems-ardupilot-sitl`, `scenegems-mavproxy` |
 | `--release <folder>` | everything a cluster runs, then the release bundle (see below) |
@@ -146,7 +138,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
    curl http://127.0.0.1:5174/cluster/nodes
    ```
 
-8. **Open the web console.** The workbench (`./start.sh`) also publishes port 5174 on the PC, so run the frontend on its own while the tunnel is open:
+8. **Open the web console** on the PC:
 
    ```bash
    cd frontend && npm install && npm run dev
@@ -172,7 +164,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
 
 The same steps by hand, which is also what the single-host rehearsal test (`backend/src/tests/scenegems_tool/assurance/local_cluster.py`) does:
 
-1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-backend`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the images of each component it offers (the role's `SCENEGEMS_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
+1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-master-api`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the images of each component it offers (the role's `SCENEGEMS_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
 2. On the master, in a folder of its own with both files of `stacks/master/` and `release.json`: write `.env` from [`deploy/master/.env.example`](deploy/master/.env.example) (master id, project name, the release's `SCENEGEMS_IMAGE_TAG`, `COMPOSE_FILE`, a generated Postgres password), `chmod 600 .env`, then:
 
    ```bash
@@ -192,8 +184,7 @@ Real `.env` files are gitignored and stay on the machines. The master's Postgres
 | Port | Where | Service |
 |------|-------|---------|
 | 5173 | operator PC | web console (Vite) |
-| 5174 | workbench PC; master loopback | workbench backend; operator API and workbench gateway of a master |
-| 1882, 8082 | workbench PC, loopback | workbench MQTT broker (1883) and its WebSocket (8083) |
+| 5174 | master loopback | operator API and workbench gateway |
 | 8443 | master | node API over HTTP: control WebSocket, artifacts |
 | 1883 | master | cluster broker, plain anonymous MQTT |
 | 5432 | master loopback | Postgres |
@@ -219,12 +210,6 @@ PYTHONPATH=src env/Scripts/python.exe -m pytest src/tests
 
 Formatting and linting, line length 200: `black src/`, `python -m isort src/` and `flake8 -j 1 src/` (or `make format`, `make lint`, `make check`).
 
-The workbench backend on its own (needs an MQTT broker and the subsystem images):
-
-```bash
-PYTHONPATH=src uvicorn scenegems_tool.gateway.websocket_app:app --host 0.0.0.0 --port 5174
-```
-
 The research evaluation scripts (`evaluation_main.py`, `hyperparam_test.py`, `evaluate_hyperparameters.py`, `compress_eval_data.py`, `eval_vis.py`) are in `backend/src/scripts/`; see [`backend/README.md`](backend/README.md).
 
 ### Frontend
@@ -232,7 +217,6 @@ The research evaluation scripts (`evaluation_main.py`, `hyperparam_test.py`, `ev
 ```bash
 cd frontend
 npm install
-cp .env.example .env
 npm run dev
 ```
 
@@ -243,19 +227,18 @@ npm run dev
 | `npm run lint` | ESLint |
 | `npm run build` | production build, including the documentation |
 
-`VITE_WS_URL` in `.env` is the workbench gateway (`ws://127.0.0.1:5174/ws/scenegems_backend_service`). See [`frontend/README.md`](frontend/README.md) and [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md).
+The workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on its operator URL). See [`frontend/README.md`](frontend/README.md) and [`frontend/ARCHITECTURE.md`](frontend/ARCHITECTURE.md).
 
 ## Troubleshooting
 
 | Symptom | What to try |
 |---------|-------------|
-| `Missing image ... Run ./build.sh first` | `./build.sh`, or `./build.sh --stack` without simulation images |
-| The web console loads but its WebSocket fails | check http://localhost:5174/health and `VITE_WS_URL` |
-| Scene generation hangs | build the subsystem images (`./build.sh --backend`); see `docker logs scenegems_backend` |
-| Gazebo or ArduPilot runs fail | `./build.sh --simulation` (and `--arduagent` for workbench ArduPilot runs); the backend needs the Docker socket |
+| The web console loads but its WebSocket fails | select a cluster in the left pane and check that its master answers at `<operator URL>/health` (the tunnel is open) |
+| Scene generation hangs | check under **Cluster** that a node offering `scene_generation` is online and not out of date |
+| Gazebo or ArduPilot live sessions fail | the master's machine needs `./build.sh --simulation` and `--arduagent` images, and master-api the Docker socket (`docker-compose.live-sessions.yml` in `COMPOSE_FILE`) |
 | Gazebo GUI on Windows | an invalid `DISPLAY` falls back to headless (`deploy/images/gazebo/gazebo_entrypoint_prod.sh`); `GZ_HEADLESS=1` forces it |
-| Old behavior after code changes | `./build.sh --backend --no-check` |
-| The tunnel cannot bind 5174 | the workbench runs on this PC; stop it or tunnel to another local port |
+| Old behavior after code changes | build a new release (`./build.sh --release <folder>`) and deploy it with Machine Hub |
+| The tunnel cannot bind 5174 | a master on this PC already publishes it; tunnel to another local port |
 | A cluster section shows an unreachable master or a CORS error | the tunnel is closed, or the page's origin is not in `SCENEGEMS_OPERATOR_ALLOWED_ORIGINS` |
 | A node gets no jobs | it is out of date: its images differ from the release; deploy the release to it |
 

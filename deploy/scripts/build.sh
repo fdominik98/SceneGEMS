@@ -5,7 +5,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/docker-common.sh"
 docker_common_init
 
 BUILD_BACKEND=0
-BUILD_FRONTEND=0
 BUILD_SIMULATION=0
 BUILD_ARDUAGENT=0
 BUILD_NODE=0
@@ -20,39 +19,37 @@ print_build_help() {
     cat <<'EOF'
 Usage: ./build.sh [OPTIONS]
 
-Build SceneGEMS Docker images (stale-aware; only rebuilds when inputs change).
+Build the SceneGEMS Docker images (stale-aware; only rebuilds when inputs change) and the
+release bundle Machine Hub deploys. The web console is not an image: run it with
+`npm run dev` in frontend/.
 
 With no options, builds every image in the project.
 
 Options:
   -h, --help              Show this help and exit
 
-  -1, --backend           scenegems-backend and Python subsystems (monitor,
+  -1, --backend           scenegems-master-api and the Python subsystems (monitoring,
                           scene-generation, trajectory-generation,
                           scenario-execution)
 
-  -2, --frontend          Frontend only (scenegems-frontend:dev)
+  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
+                          sessions with ArduPilot run it on the master's machine
 
-  -3, --stack             Main application stack: same as -1 and -2 together
-                          (backend + subsystems + frontend; no simulation images)
-
-  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest)
-
-  -5, --node              Node daemon image only (scenegems-node:latest); a worker
-                          also needs the subsystem images its capabilities run
+  -5, --node              Node daemon image only (scenegems-node:latest); a node
+                          also needs the images of the components it offers
 
   --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy
                           (scenegems-gazebo-harmonic, scenegems-ardupilot-sitl, scenegems-mavproxy)
 
   --all                   Build every image (same as no arguments)
 
-  --release <folder>      Build the images a cluster runs (broker, backend and
+  --release <folder>      Build the images a cluster runs (broker, master-api and
                           subsystems, simulation, node daemon) as :latest, pull
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
-                          with those tags, and the master and node stacks. The
-                          deployment tool installs the bundle on the machines.
+                          with those tags, and the master and node stacks.
+                          Machine Hub installs the bundle on the machines.
 
   --fingerprints          Print "image fingerprint" for every image of this checkout
                           and exit; builds nothing and needs no Docker engine
@@ -60,19 +57,16 @@ Options:
   --no-check              Skip stale/fingerprint checks; always run docker build
                           for the selected images (stamps updated after build).
                           With no other options, builds every image (same as
-                          ./build.sh --all --no-check). Full builds run the
-                          application stack (broker, backend, frontend) before
-                          simulation images.
+                          ./build.sh --all --no-check). Full builds run the broker,
+                          master-api and subsystems before the simulation images.
 
 Examples:
-  ./build.sh                      # full build
-  ./build.sh --backend              # after Python/backend changes
-  ./build.sh --frontend             # after UI changes
-  ./build.sh --stack                # backend + frontend, skip simulation
+  ./build.sh                        # full build
+  ./build.sh --backend              # master-api and subsystems, after Python changes
   ./build.sh --arduagent            # agent image only
-  ./build.sh --release ../release   # images and bundle for the deployment tool
-  ./build.sh --backend --simulation # backend stack + simulation images
-  ./build.sh --backend --no-check   # force rebuild backend images
+  ./build.sh --release ../release   # images and bundle for Machine Hub
+  ./build.sh --backend --simulation # master-api, subsystems and simulation images
+  ./build.sh --backend --no-check   # force rebuild master-api and subsystems
 EOF
 }
 
@@ -90,13 +84,6 @@ parse_build_args() {
                 ;;
             -1 | --backend | --subsystems)
                 BUILD_BACKEND=1
-                ;;
-            -2 | --frontend)
-                BUILD_FRONTEND=1
-                ;;
-            -3 | --stack | --app)
-                BUILD_BACKEND=1
-                BUILD_FRONTEND=1
                 ;;
             -4 | --arduagent)
                 BUILD_ARDUAGENT=1
@@ -158,7 +145,7 @@ build_broker_image() {
 }
 
 build_backend_stack_images() {
-    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Backend stack =="
+    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Master-api and subsystems =="
     build_subsystem_if_stale "scenegems-monitoring-subsystem:latest" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/monitoring/requirements.txt" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
@@ -175,24 +162,23 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/deploy/images/trajectory_generation/requirements.txt" "$SCRIPT_DIR/deploy/images/trajectory_generation/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
-    build_subsystem_if_stale "scenegems-backend:latest" "$SCRIPT_DIR/backend/Dockerfile" \
-        "$SCRIPT_DIR/backend/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
+    build_subsystem_if_stale "scenegems-master-api:latest" "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"
 }
 
 build_node_image() {
     [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Node daemon =="
-    build_subsystem_if_stale "scenegems-node:latest" "$SCRIPT_DIR/deploy/images/node/Dockerfile"         "$SCRIPT_DIR/deploy/images/node/requirements.txt" "$SCRIPT_DIR/deploy/images/node/Dockerfile"         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src"         "$SCRIPT_DIR/backend/assets/domain_config" "$SCRIPT_DIR/backend/assets/runtime_assets"
-}
-
-build_frontend_image() {
-    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Frontend =="
-    build_if_stale "scenegems-frontend:dev" "$SCRIPT_DIR/frontend/Dockerfile" "$SCRIPT_DIR/frontend"
+    build_subsystem_if_stale "scenegems-node:latest" "$SCRIPT_DIR/deploy/images/node/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/node/requirements.txt" "$SCRIPT_DIR/deploy/images/node/Dockerfile" \
+        "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
+        "$SCRIPT_DIR/backend/assets/domain_config" "$SCRIPT_DIR/backend/assets/runtime_assets"
 }
 
 parse_build_args "$@"
 
-# A release builds what a cluster runs; the frontend and ArduAgent belong to the workbench.
+# A release builds what a cluster runs. ArduAgent and MAVProxy are only used by live sessions,
+# which run the :latest images of the master's machine (deploy/master/docker-compose.live-sessions.yml).
 if [ -n "$RELEASE_DIR" ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1
@@ -202,8 +188,8 @@ fi
 
 # Modifier-only invocations (e.g. ./build.sh --no-check) should build everything,
 # same as running ./build.sh with no arguments.
-if [ "$BUILD_ALL" -eq 0 ] && [ "$BUILD_BACKEND" -eq 0 ] && [ "$BUILD_FRONTEND" -eq 0 ] \
-    && [ "$BUILD_SIMULATION" -eq 0 ] && [ "$BUILD_ARDUAGENT" -eq 0 ] && [ "$BUILD_NODE" -eq 0 ]; then
+if [ "$BUILD_ALL" -eq 0 ] && [ "$BUILD_BACKEND" -eq 0 ] && [ "$BUILD_SIMULATION" -eq 0 ] \
+    && [ "$BUILD_ARDUAGENT" -eq 0 ] && [ "$BUILD_NODE" -eq 0 ]; then
     BUILD_ALL=1
 fi
 
@@ -214,7 +200,6 @@ fi
 if [ "$BUILD_ALL" -eq 1 ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1
-    BUILD_FRONTEND=1
     BUILD_SIMULATION=1
     BUILD_ARDUAGENT=1
     BUILD_NODE=1
@@ -226,10 +211,7 @@ print_selected_build_targets() {
         targets+=("mqtt-broker")
     fi
     if [ "$BUILD_BACKEND" -eq 1 ]; then
-        targets+=("backend-stack")
-    fi
-    if [ "$BUILD_FRONTEND" -eq 1 ]; then
-        targets+=("frontend")
+        targets+=("master-api+subsystems")
     fi
     if [ "$BUILD_SIMULATION" -eq 1 ]; then
         targets+=("simulation")
@@ -256,15 +238,12 @@ if [ "${DOCKER_FINGERPRINT_ONLY:-0}" != "1" ]; then
     print_selected_build_targets
 fi
 
-# Application stack first (broker, backend, frontend), then optional simulation images.
+# The broker, master-api and subsystems first, then the optional simulation images.
 if [ "$BUILD_BROKER" -eq 1 ]; then
     build_broker_image
 fi
 if [ "$BUILD_BACKEND" -eq 1 ]; then
     build_backend_stack_images
-fi
-if [ "$BUILD_FRONTEND" -eq 1 ]; then
-    build_frontend_image
 fi
 if [ "$BUILD_SIMULATION" -eq 1 ]; then
     build_simulation_images
@@ -302,15 +281,9 @@ if [ -n "$RELEASE_DIR" ]; then
     exit 0
 fi
 
-if [ "$BUILD_BACKEND" -eq 1 ] || [ "$BUILD_FRONTEND" -eq 1 ] || [ "$BUILD_ALL" -eq 1 ]; then
-    ensure_compose_volumes
-fi
-
 echo ""
 if [ "$BUILD_ALL" -eq 1 ]; then
-    echo "All SceneGEMS images are ready. Run ./start.sh to start the stack."
-elif [ "$BUILD_BACKEND" -eq 1 ] && [ "$BUILD_FRONTEND" -eq 1 ] && [ "$BUILD_SIMULATION" -eq 0 ] && [ "$BUILD_ARDUAGENT" -eq 0 ]; then
-    echo "Application stack images are ready. Run ./start.sh to start the stack."
+    echo "All SceneGEMS images are ready. Build a release bundle for Machine Hub with ./build.sh --release <folder>."
 else
     echo "Selected images are ready."
 fi
