@@ -13,7 +13,14 @@ class StandOnCoursePersistenceCondition(RuleCondition):
         super().__init__(relation, actor, colregs_constants)
 
     def condition(self, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
-        if not self.is_standing_on(current_monitored_scene) or self.actor_has_to_give_way(current_monitored_scene):
+        """Rule 17(a)(i) over one step: failed when the bound vessel leaves its course or speed.
+
+        Passed when the obligation ends in this step with course and speed kept: the
+        encounter is over (passed, or no longer an encounter) or the vessel is released
+        (``actor_has_to_give_way``). Unknown while it is still bound, and outside an
+        obligation.
+        """
+        if not self.is_bound(current_monitored_scene):
             return COLREGSRuleResult.UNKNOWN
 
         next_maneuver_state = next_monitored_scene.maneuver_state_set[self.relation]
@@ -23,12 +30,31 @@ class StandOnCoursePersistenceCondition(RuleCondition):
                 return COLREGSRuleResult.FAILED
             if next_maneuver_state.speed_change.speed_change_detected_since_start:
                 return COLREGSRuleResult.FAILED
+        if not self.is_bound(next_monitored_scene):
+            return COLREGSRuleResult.PASSED
         return COLREGSRuleResult.UNKNOWN
 
+    def next_result(self, previous_result: COLREGSRuleResult, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        """A pass holds until the vessel is bound again.
+
+        The rule is kept per vessel and stays active for the whole run, so the rule state
+        machine never retires it; without this the pass of one step would fall back to
+        unknown on the next. A new stand-on obligation starts unknown again, like a rule
+        that turns active again.
+        """
+        result = super().next_result(previous_result, current_monitored_scene, next_monitored_scene)
+        if result is COLREGSRuleResult.UNKNOWN and previous_result is COLREGSRuleResult.PASSED and not self.is_bound(current_monitored_scene):
+            return COLREGSRuleResult.PASSED
+        return result
+
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
-        if not self.is_standing_on(current_monitored_scene) or self.actor_has_to_give_way(current_monitored_scene):
+        if not self.is_bound(current_monitored_scene):
             return ManeuverSuggestions()
         return ManeuverSuggestions({self.actor: {ManeuverType.PERSISTING_COURSE}}, {self.actor: f"{self.__class__.__name__} : ({ManeuverType.PERSISTING_COURSE})"})
+
+    def is_bound(self, monitored_scene: MonitoredScene) -> bool:
+        """Rule 17(a)(i) binds the vessel at this scene: it stands on and is not released."""
+        return self.is_standing_on(monitored_scene) and not self.actor_has_to_give_way(monitored_scene)
 
     def is_standing_on(self, current_monitored_scene: MonitoredScene) -> bool:
         """Rule 17 binds the stand-on vessel of an encounter, and only until the vessels have passed.
@@ -78,6 +104,10 @@ class StandOnCoursePersistenceCondition(RuleCondition):
                 return True
 
             # 17(b): so close that the give-way vessel's action alone can no longer help.
+            # Only the release is modelled: 17(a)(i) ends here and the rule passes if course
+            # and speed were kept until now. Whether the vessel then takes the action that
+            # best aids to avoid collision, which 17(b) requires, is not checked; neither are
+            # 17(c) and 17(d).
             clearance = colregs_state.actors_clearance.get(self.actor)
             if clearance is not None and clearance <= 0.0:
                 return True

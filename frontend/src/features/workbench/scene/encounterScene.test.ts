@@ -9,6 +9,8 @@ import {
   thinPoints,
   vectorTickMinutes,
 } from "./encounterScene";
+import { parseFrame } from "../../../domain/simulation/protocol";
+import { CPA_POSITIONS, monitoredFrame } from "../../../test/fixtures/monitoredFrames";
 
 const frames = threeVesselFrames();
 
@@ -91,5 +93,24 @@ describe("label placement", () => {
     const [box] = placeLabels([{ anchor: { x: 760, y: 20 }, width: 80, height: 30 }], { x: 0, y: 0, width: 800, height: 600 });
     expect(box!.x + box!.width).toBeLessThanOrEqual(800);
     expect(box!.y).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("CPA marks from the monitor", () => {
+  it("draws the monitor's CPA positions with its tcpa and dcpa", () => {
+    const [mark] = cpaMarks(parseFrame(monitoredFrame({ timestamp: 30, monitorHistory: true })));
+    expect(mark).toMatchObject({ relationId: "0->1", pointA: CPA_POSITIONS["0"], pointB: CPA_POSITIONS["1"], tcpa: 30, dcpa: 12.5 });
+  });
+
+  it("draws nothing when the monitor reports no CPA ahead", () => {
+    expect(cpaMarks(parseFrame(monitoredFrame({ timestamp: 70, monitorHistory: true })), { allPairs: true })).toEqual([]);
+  });
+
+  it("computes the CPA from the states on an older frame", () => {
+    const frame = parseFrame(monitoredFrame({ timestamp: 30 }));
+    const [mark] = cpaMarks(frame);
+    expect(mark).toBeDefined();
+    expect(mark!.pointA).not.toEqual(CPA_POSITIONS["0"]);
+    expect(mark!.tcpa).toBeGreaterThan(0);
   });
 });

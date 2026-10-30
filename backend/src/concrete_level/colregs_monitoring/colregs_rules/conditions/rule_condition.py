@@ -33,6 +33,21 @@ class RuleCondition(ABC):
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
         pass
 
+    def initial_condition(self, initial_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        """The result on the initial scene, before any step.
+
+        Unknown unless the condition needs only the state of one scene: every other rule
+        judges how the vessels move, which one scene cannot show. Such a condition overrides
+        this with the same judgement it makes on a step's end state.
+        """
+        return COLREGSRuleResult.UNKNOWN
+
+    def next_result(self, previous_result: COLREGSRuleResult, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        """The result after the step, given the result before it: a failure sticks while the rule is active."""
+        if previous_result is COLREGSRuleResult.FAILED:
+            return COLREGSRuleResult.FAILED
+        return self.condition(current_monitored_scene, next_monitored_scene)
+
     def effective_avoidance_direction(self, monitored_scene: MonitoredScene) -> Direction:
         """Which side this actor should pass on, for the encounter this instance judges.
 
@@ -93,12 +108,10 @@ class RuleCondition(ABC):
 
 class COLREGSRuleConditionMap(Dict[COLREGSRule, RuleCondition]):
     def check(self, current_monitored_scene: MonitoredScene, current_monitor_result_map: COLREGSRuleResultMap, next_monitored_scene: MonitoredScene) -> COLREGSRuleResultMap:
-        return COLREGSRuleResultMap(
-            {
-                rule: COLREGSRuleResult.FAILED if current_monitor_result_map.get_result(rule) is COLREGSRuleResult.FAILED else condition.condition(current_monitored_scene, next_monitored_scene)
-                for rule, condition in self.items()
-            }
-        )
+        return COLREGSRuleResultMap({rule: condition.next_result(current_monitor_result_map.get_result(rule), current_monitored_scene, next_monitored_scene) for rule, condition in self.items()})
+
+    def check_initial(self, initial_monitored_scene: MonitoredScene) -> COLREGSRuleResultMap:
+        return COLREGSRuleResultMap({rule: condition.initial_condition(initial_monitored_scene) for rule, condition in self.items()})
 
     def suggest_maneuvers(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
         maneuver_suggestions = ManeuverSuggestions()
@@ -132,6 +145,10 @@ class COLREGSRuleConditionMapSet(Dict[Relation, COLREGSRuleConditionMap]):
             next_monitor_result_map_set[relation] = next_result_map
 
         return next_monitor_result_map_set
+
+    def check_initial(self, initial_monitored_scene: MonitoredScene) -> COLREGSRuleResultMapSet:
+        """Every active rule's result on the initial scene, so the first frame lists them all."""
+        return COLREGSRuleResultMapSet({relation: self[relation].check_initial(initial_monitored_scene) for relation in sorted(self.keys(), key=relation_order)})
 
     def suggest_maneuvers(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
         maneuver_suggestions = ManeuverSuggestions()

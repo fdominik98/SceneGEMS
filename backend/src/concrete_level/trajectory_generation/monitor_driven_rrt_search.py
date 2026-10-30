@@ -66,7 +66,9 @@ class MonitorDrivenRRTSearch:
         self.start_scene = start_scene
         self.other_trajectories = other_trajectories
         self.time_step = other_trajectories.time_step
-        self.monitor = COLREGSMonitor(self.start_scene, colregs_constants)
+        # The start scene is given, not planned: a rule it already fails (a pair inside its
+        # safe distance) would stick to every node and prune the whole tree.
+        self.monitor = COLREGSMonitor(self.start_scene, colregs_constants, judge_initial_scene=False)
         self.trajectory_tree_builder = TrajectoryTreeBuilder(self.start_scene, self.time_step, self.monitor)
 
         # Optional per-instance overrides for the class-level tuning constants. When a

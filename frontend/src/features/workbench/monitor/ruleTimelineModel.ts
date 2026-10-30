@@ -18,7 +18,7 @@ export interface EncounterTypeValue {
 }
 
 export interface RuleTrack {
-  /** Stable identity across frames: rule name plus subject vessel. */
+  /** Stable identity across frames: the monitor's rule id, else rule name plus subject vessel. */
   key: string;
   ruleName: string;
   title: string;
@@ -27,7 +27,11 @@ export interface RuleTrack {
   subjectActorId: string | null;
   subjectActorName: string;
   segments: TimelineSegment<RuleResult>[];
-  /** First time the rule was FAILED over the whole run, or null. */
+  /**
+   * First time the rule was FAILED over the whole run, or null: the monitor's `firstFailedAt`
+   * when the frames carry it (right even when frames were missed or thinned), else the first
+   * frame showing it FAILED.
+   */
   firstFailure: number | null;
 }
 
@@ -45,8 +49,16 @@ export interface RuleTimelineModel {
   pairs: PairTrack[];
 }
 
-export function ruleKey(evaluation: Pick<RuleEvaluation, "ruleName" | "subjectActorId">): string {
-  return `${evaluation.ruleName}#${evaluation.subjectActorId ?? ""}`;
+/** A rule's identity within its relation: the monitor's `ruleId`, or on older frames its name and subject vessel. */
+export function ruleKey(evaluation: Pick<RuleEvaluation, "ruleName" | "subjectActorId" | "ruleId">): string {
+  return evaluation.ruleId ?? `${evaluation.ruleName}#${evaluation.subjectActorId ?? ""}`;
+}
+
+/** The earlier of two failure times, either of which may be missing. */
+function earlier(a: number | null, b: number | null): number | null {
+  if (a === null) return b;
+  if (b === null) return a;
+  return Math.min(a, b);
 }
 
 /** Short tag of a rule: "R16", or "Tip" for an advisory suggestion. */
@@ -169,8 +181,10 @@ export function buildRuleTimeline(
           pair.rules.push(track);
         }
         pushValue(track.segments, start, end, evaluation.result, (a, b) => a === b);
-        if (evaluation.result === "FAILED" && track.firstFailure === null) {
-          track.firstFailure = start;
+        if (typeof evaluation.firstFailedAt === "number") {
+          track.firstFailure = earlier(track.firstFailure, evaluation.firstFailedAt);
+        } else if (evaluation.result === "FAILED") {
+          track.firstFailure = earlier(track.firstFailure, start);
         }
       }
     }
