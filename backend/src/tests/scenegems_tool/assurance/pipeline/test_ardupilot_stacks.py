@@ -186,7 +186,7 @@ def test_the_new_stacks_need_their_layers_images_and_are_bounded():
     assert graph.run_components(1) == ON_CUSTOM
     assert graph.run_components(2) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
     assert [graph.run_tier(run) for run in range(3)] == ["bounded"] * 3
-    assert required_fingerprints(graph.run_components(1), EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}, "no SITL"
+    assert required_fingerprints(graph.run_components(1), EXPECTED) == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}), "no SITL"
     assert graph.stage_needs(SIMULATE) == [(SIMULATION, graph.run_components(run)) for run in range(3)]
 
 

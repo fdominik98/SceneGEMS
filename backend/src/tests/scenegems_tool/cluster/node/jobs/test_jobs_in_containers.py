@@ -123,7 +123,10 @@ def test_kinematic_simulation_runs_in_a_container(broker, master_id, make_job, h
 
 def test_two_kinematic_jobs_run_side_by_side(broker, master_id, make_job, head_on_trajectories):
     node = make_node(broker, master_id, "n1", {JobType.SIMULATION: 2})
-    jobs = [make_job(JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}, job_id=f"side-{index}") for index in range(2)]
+    jobs = [
+        make_job(JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}, job_id=f"side-{index}")
+        for index in range(2)
+    ]
     reports = [RecordingReport(), RecordingReport()]
     results = [None, None]
 
