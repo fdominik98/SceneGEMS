@@ -9,6 +9,11 @@ runner runs, every change of the master's request is copied into the runner's jo
 (OBSERVE_DOCUMENT), and the frame lines the runner writes are taken out of its log and handed
 to the observation (job_container_io.py). The job's timeout leaves out the time it was
 observed, since an observed run is paced to a chosen speed.
+
+Every container of the stack logs to a bounded Docker log (BOUNDED_LOGGING): the frame lines
+of an observed run and a simulator's chatter would otherwise fill the node's disk until the
+stack is removed. The log follower reads the lines as they come, so the rotation never loses
+one it needs.
 """
 
 import json
@@ -43,6 +48,13 @@ RUNNER_SERVICE = "runner"
 _WAIT_POLL_S = 0.2
 _LOG_DRAIN_TIMEOUT_S = 5.0
 _CONTROL_WAIT_S = 0.5  # how often the request copier looks at its stop event, and its pause after a failed copy
+# The Docker log of each container of a job stack: at most 3 files of 10 MB
+BOUNDED_LOGGING = {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
+
+
+def bounded_logging() -> dict:
+    """A copy of BOUNDED_LOGGING per service: PyYAML writes an object shared by two services as an anchor."""
+    return {"driver": BOUNDED_LOGGING["driver"], "options": dict(BOUNDED_LOGGING["options"])}
 
 
 def runner_service(image: str, *, networks: Optional[List[str]] = None, depends_on: Optional[List[str]] = None, cpus: Optional[float] = None) -> dict:
@@ -51,6 +63,7 @@ def runner_service(image: str, *, networks: Optional[List[str]] = None, depends_
         "image": image,
         "command": ["python", "-m", JOB_CONTAINER_MAIN],
         "environment": {"PYTHONUNBUFFERED": "1"},
+        "logging": bounded_logging(),
     }
     if cpus is not None:
         service["cpus"] = cpus
@@ -64,13 +77,14 @@ def runner_service(image: str, *, networks: Optional[List[str]] = None, depends_
 
 
 def scope_services(scope: InstanceScope, services: Dict[str, dict]) -> Dict[str, dict]:
-    """Container names from the scope; published ports dropped, since instances share the host."""
+    """Container names from the scope; published ports dropped, since instances share the host; a bounded log unless the service sets its own."""
     scoped = {}
     for key, service in services.items():
         service = dict(service)
         service["container_name"] = scope.container_name(key)
         service.pop("ports", None)
         service.pop("restart", None)  # a job's containers stop with the job
+        service.setdefault("logging", bounded_logging())
         scoped[key] = service
     return scoped
 

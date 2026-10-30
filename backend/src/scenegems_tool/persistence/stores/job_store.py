@@ -30,7 +30,7 @@ from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.database import transaction
 from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, JobRow, NodeRow, NodeStatus
 from scenegems_tool.persistence.stores.job_claim import free_job_types, next_queued_job_query
-from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events
+from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events, rejections_since
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES, lease_is_current, result_status, retry_backoff_s, state_after_failed_attempt
 from scenegems_tool.persistence.stores.job_records import CancelOutcome, ExpiredLease, JobEventRecord, JobRecord, Lease, ResultReport, ResultStatus, SubmitOutcome
 from scenegems_tool.persistence.stores.store_session import session_scope
@@ -135,6 +135,11 @@ class JobStore:
     def events(self, job_id: str) -> List[JobEventRecord]:
         with transaction(self._sessions) as session:
             return job_events(session, job_id)
+
+    def recent_rejections(self, since: datetime) -> List[JobEventRecord]:
+        """The rejects since `since` of jobs that have not ended, oldest first: what the master rebuilds its reject holds from at start."""
+        with transaction(self._sessions) as session:
+            return rejections_since(session, since, UNFINISHED_STATES)
 
     def active_leases(self, node_id: Optional[str] = None) -> List[Lease]:
         """Leases in state leased or running, of one node or of all; for reconciling after a reconnect."""

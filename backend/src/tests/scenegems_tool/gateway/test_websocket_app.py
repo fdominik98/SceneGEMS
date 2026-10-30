@@ -12,7 +12,7 @@ import json
 from typing import List
 
 import pytest
-from fastapi import WebSocketDisconnect
+from fastapi import FastAPI, WebSocketDisconnect
 
 from scenegems_tool.gateway import websocket_app
 from tests.scenegems_tool.gateway.conftest import FakeWebSocket, settle
@@ -102,8 +102,6 @@ def test_health_endpoint():
     assert websocket_app.health() == {"status": "ok"}
 
 
-
-
 class TestRunRecorder:
     async def test_the_gateway_on_its_own_records_nothing(self, monkeypatch):
         monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
@@ -126,3 +124,42 @@ class TestRunRecorder:
         await converse()
         (session,) = sessions
         assert session.run_recorder is recorder
+
+
+class TestStartup:
+    """The lifespan with its process side effects (signal handlers, Docker teardown, folders) replaced."""
+
+    @pytest.fixture(autouse=True)
+    def quiet(self, monkeypatch):
+        monkeypatch.setattr(websocket_app, "_register_process_shutdown_handlers", lambda: None)
+        monkeypatch.setattr(websocket_app, "shutdown_all_docker_subsystems", lambda: None)
+        monkeypatch.setattr(websocket_app, "ensure_directories", lambda: None)
+
+    async def test_the_live_entries_the_last_process_left_are_stopped_before_any_connection(self):
+        calls = []
+
+        class Recorder:
+            async def stop_stranded_entries(self):
+                calls.append("stopped")
+                return ["entry-1"]
+
+        gateway = FastAPI()
+        websocket_app.set_run_recorder(Recorder(), gateway)
+        async with websocket_app.lifespan(gateway):
+            assert calls == ["stopped"]
+
+    async def test_a_failing_cleanup_does_not_stop_the_gateway(self):
+        class Recorder:
+            async def stop_stranded_entries(self):
+                raise ConnectionError("the database is gone")
+
+        gateway = FastAPI()
+        websocket_app.set_run_recorder(Recorder(), gateway)
+        async with websocket_app.lifespan(gateway):
+            pass
+
+    async def test_without_a_recorder_nothing_is_stopped(self):
+        gateway = FastAPI()
+        websocket_app.set_run_recorder(None, gateway)
+        async with websocket_app.lifespan(gateway):
+            pass

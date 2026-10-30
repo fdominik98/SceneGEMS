@@ -32,6 +32,14 @@ def test_runner_without_networks_has_no_network():
     assert "networks" not in service
 
 
+def test_every_container_of_a_job_stack_has_a_bounded_log():
+    services = scope_services(SCOPE, {RUNNER_SERVICE: runner_service("image"), "sitl_0": {"image": "sitl"}, "gazebo": {"image": "gazebo", "logging": {"driver": "local"}}})
+    assert services[RUNNER_SERVICE]["logging"] == {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}
+    assert services["sitl_0"]["logging"] == services[RUNNER_SERVICE]["logging"]
+    assert services["gazebo"]["logging"] == {"driver": "local"}  # a service's own logging stays
+    assert services[RUNNER_SERVICE]["logging"] is not services["sitl_0"]["logging"]  # no shared object, so no YAML anchor
+
+
 def test_runner_on_a_stack_network_waits_for_the_stack():
     service = runner_service("image", networks=["maritime_net"], depends_on=["vessel_0", "vessel_1"])
     assert service["networks"] == ["maritime_net"]
@@ -41,7 +49,7 @@ def test_runner_on_a_stack_network_waits_for_the_stack():
 
 def test_scoped_services_get_scope_names_and_no_published_ports():
     services = scope_services(SCOPE, {"gazebo": {"image": "gz", "container_name": "gazebo", "ports": ["11345:11345"], "restart": "unless-stopped"}})
-    assert services["gazebo"] == {"image": "gz", "container_name": "scenegems-m1-n1-job-j7-1-gazebo"}
+    assert services["gazebo"] == {"image": "gz", "container_name": "scenegems-m1-n1-job-j7-1-gazebo", "logging": job_stack.bounded_logging()}
 
 
 def test_job_stack_names_the_runner_container_by_scope():

@@ -120,7 +120,8 @@ class ControlPlane:
     # Lifetime
 
     async def start(self, timers: bool = True) -> None:
-        """Loads the expected fingerprints and starts the scheduler and the sweeps; without timers a test drives them."""
+        """Rebuilds the reject holds, loads the expected fingerprints and starts the scheduler and the sweeps; without timers a test drives them."""
+        await self._restore_reject_holds()
         self._tasks.append(asyncio.create_task(self._load_expected()))
         if timers:
             self._tasks.append(asyncio.create_task(self.scheduler.run()))
@@ -138,6 +139,17 @@ class ControlPlane:
     async def _load_expected(self) -> None:
         await self.expected.load()
         self.scheduler.wake()
+
+    async def _restore_reject_holds(self) -> None:
+        """Replays the recent rejects of unfinished jobs, so a restart does not hand a job straight back to a node that keeps refusing it."""
+        try:
+            rejections = await anyio.to_thread.run_sync(self.jobs.recent_rejections, self.backoff.restore_since())
+        except Exception:
+            logger.exception("Cannot read the recent rejects; the reject holds start empty")
+            return
+        kept = self.backoff.restore((event.node_id, event.job_id, event.at) for event in rejections)
+        if kept:
+            logger.info("Restored %d reject holds from %d rejects", kept, len(rejections))
 
     @staticmethod
     async def _every(interval_s: float, action) -> None:

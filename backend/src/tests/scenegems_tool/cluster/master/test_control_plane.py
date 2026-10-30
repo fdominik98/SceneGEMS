@@ -329,6 +329,21 @@ def test_a_rejected_job_is_held_back_from_that_node_only(make_node, plane, store
     assert other.expect(LeaseOffer).job.job_id == job.job_id
 
 
+def test_a_restarted_master_keeps_its_reject_holds(make_node, plane, stores, on_loop, schedule):
+    picky = make_node("picky", slots={SCENE: 1})
+    picky.connect()
+    job = _submit(on_loop, plane)
+    schedule()
+    picky.reject(picky.expect(LeaseOffer), "not now")
+    picky.sync()
+    assert plane.backoff.held_jobs(picky.node_id) == [job.job_id]
+    plane.backoff._holds.clear()  # what a new master process starts with
+    on_loop(plane._restore_reject_holds)  # what ControlPlane.start does first
+    assert plane.backoff.held_jobs(picky.node_id) == [job.job_id]
+    picky.heartbeat()
+    assert schedule() == 0  # still held back from picky
+
+
 def test_a_released_job_returns_without_using_an_attempt(make_node, plane, stores, on_loop, schedule):
     node = make_node("lab 1", slots={SCENE: 1})
     node.connect()

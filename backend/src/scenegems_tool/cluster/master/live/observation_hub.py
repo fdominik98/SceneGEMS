@@ -316,9 +316,23 @@ class ObservationHub:
             self._channel.publish(topic, data)
 
     def publish_simulation_frames(self, node_id: str, job_id: str, attempt: int, frames: List[Dict[str, Any]]) -> None:
-        """P5.10's entry point: frames of an observed run (gateway.serialization.serialize_monitored_frame), from the job's node."""
-        if frames:
-            self.publish_instance_update(node_id, job_instance(job_id, attempt), SimulationFrames(job_id=job_id, frames=frames))
+        """P5.10's entry point: frames of an observed run (gateway.serialization.serialize_monitored_frame), from the job's node.
+
+        They go to every observed instance topic of the job's attempt, whatever node the topic
+        names, as its status does (_publish_status): a browser may name another node than the
+        lease holder, for example one that held an earlier lease. The holder's own topic gets
+        them too, as before.
+        """
+        if not frames:
+            return
+        update = SimulationFrames(job_id=job_id, frames=frames)
+        targets = {(node_id, job_instance(job_id, attempt))}
+        for topic in self._jobs.get(job_id, ()):
+            observed = self._observed.get(topic)
+            if observed is not None and observed.name.attempt == attempt:
+                targets.add((observed.node_id, observed.instance))
+        for target_node, instance in sorted(targets):
+            self.publish_instance_update(target_node, instance, update)
 
     def observes_job(self, job_id: str) -> bool:
         return job_id in self._jobs

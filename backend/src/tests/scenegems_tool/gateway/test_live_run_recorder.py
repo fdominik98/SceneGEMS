@@ -16,8 +16,8 @@ import numpy as np
 import pytest
 
 from concrete_level.models.trajectories import Trajectories
-from scenegems_tool.assurance.pipeline.case_machine import RecordedRun
 from scenegems_tool.assurance.campaign.domain_presets import default_domain
+from scenegems_tool.assurance.pipeline.case_machine import RecordedRun
 from scenegems_tool.gateway.live_run_recorder import (
     INPUT_ROLE,
     NO_STATE_MESSAGE,
@@ -263,6 +263,51 @@ class TestRecordedRuns:
         assert [status for status in statuses(sent) if status[0] == "saved"] == [("saved", "entry-1", 7), ("saved", "entry-2", 7)]
 
 
+class StrandedCampaigns(FakeCampaigns):
+    """Campaigns a previous master process left: list_campaigns answers them, a conflict id refuses the stop."""
+
+    def __init__(self, listed, conflict=None):
+        super().__init__()
+        self.listed = listed
+        self.conflict = conflict
+        self.asked = None
+
+    def list_campaigns(self, actual_states=None, limit=100, offset=0, *, kinds=None, origins=None, q=None, session=None):
+        self.asked = (set(actual_states), limit, list(origins))
+        return self.listed
+
+    def set_desired_state(self, campaign_id, state, expected=None, *, session=None):
+        from scenegems_tool.persistence.stores import CampaignStateConflict
+
+        if campaign_id == self.conflict:
+            raise CampaignStateConflict(f"{campaign_id} completed meanwhile")
+        super().set_desired_state(campaign_id, state)
+
+
+@pytest.mark.anyio
+class TestStrandedEntries:
+    async def test_running_live_entries_without_a_case_are_stopped(self, world):
+        listed = [
+            SimpleNamespace(campaign_id="stranded", desired_state=CampaignDesiredState.RUNNING),
+            SimpleNamespace(campaign_id="recorded", desired_state=CampaignDesiredState.RUNNING),
+            SimpleNamespace(campaign_id="asked-to-stop", desired_state=CampaignDesiredState.STOPPED),
+            SimpleNamespace(campaign_id="finished-meanwhile", desired_state=CampaignDesiredState.RUNNING),
+        ]
+        campaigns = StrandedCampaigns(listed, conflict="finished-meanwhile")
+        cases = SimpleNamespace(count_cases=lambda campaign_id, **_: 1 if campaign_id == "recorded" else 0)
+        announced: List[str] = []
+        recorder = LiveRunRecorder(SimpleNamespace(campaigns=campaigns, cases=cases, domain=world.domain), world.artifacts, world.engine, announce=announced.extend)
+        assert await recorder.stop_stranded_entries() == ["stranded"]
+        assert campaigns.desired == {"stranded": CampaignDesiredState.STOPPED}
+        states, limit, origins = campaigns.asked
+        assert states == {state for state in CampaignActualState if not state.is_final} and limit is None and origins == [CampaignOrigin.LIVE_SESSION]
+        assert announced == ["stranded"] and world.engine.wakes == 1
+
+    async def test_nothing_stranded_changes_nothing(self, world):
+        recorder = LiveRunRecorder(SimpleNamespace(campaigns=StrandedCampaigns([]), cases=None, domain=world.domain), world.artifacts, world.engine)
+        assert await recorder.stop_stranded_entries() == [] and world.engine.wakes == 0
+
+
 @pytest.mark.anyio
 class TestStandaloneGateway:
     async def test_without_a_recorder_every_run_is_reported_unavailable_once(self, world):
@@ -347,6 +392,18 @@ class TestOnTheMaster:
         assert sorted(reference.role for reference in artifacts.records.references_of(ArtifactHolderKind.RUN, str(record_.run_record_id))) == ["frames", "state_log"]
         references = {(reference.holder_kind, reference.role) for reference in artifacts.records.references(record_.artifacts["trajectories"])}
         assert (ArtifactHolderKind.CAMPAIGN, INPUT_ROLE) in references
+
+    def test_a_restart_stops_the_live_entries_left_without_a_run(self, make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
+        harness, _, recorder = master_world(make_harness, session_factory, tmp_path)
+        setup = live_setup()
+        stranded = recorder._open(setup).campaign_id  # opened, then the master process stopped before its run ended
+        _, sent = record(harness, recorder, setup, setup.trajectories.scene_list[:5], lambda session: session.run_ended())
+        recorded = sent[-1]["campaignId"]
+        assert harness.run(recorder.stop_stranded_entries()) == [stranded]
+        harness.settle()
+        assert harness.campaign(stranded).actual_state == CampaignActualState.STOPPED
+        assert harness.campaign(recorded).desired_state == CampaignDesiredState.RUNNING  # its recorded run finishes it
+        assert harness.run(recorder.stop_stranded_entries()) == []
 
     def test_a_live_run_without_a_state_leaves_a_stopped_entry(self, make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
         harness, _, recorder = master_world(make_harness, session_factory, tmp_path)

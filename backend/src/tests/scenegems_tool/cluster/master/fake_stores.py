@@ -240,6 +240,17 @@ class InMemoryJobStore:
             job = self._jobs.get(job_id)
             return [] if job is None else list(job.events)
 
+    def recent_rejections(self, since: datetime) -> List[JobEventRecord]:
+        with self._lock:
+            found = [
+                event
+                for job in self._jobs.values()
+                if job.state in (JobState.QUEUED,) + ACTIVE_STATES
+                for event in job.events
+                if event.kind == JobEventKind.REJECTED and event.at >= since and event.node_id is not None
+            ]
+            return sorted(found, key=lambda event: (event.at, event.event_id))
+
     def active_leases(self, node_id: Optional[str] = None) -> List[Lease]:
         with self._lock:
             jobs = sorted(self._jobs.values(), key=lambda job: job.seq)

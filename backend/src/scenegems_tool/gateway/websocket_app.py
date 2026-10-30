@@ -8,6 +8,7 @@ Or mount `websocket_router` on your existing app.
 
 import atexit
 import json
+import logging
 import multiprocessing
 import signal
 from contextlib import asynccontextmanager
@@ -20,6 +21,7 @@ from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder
 from scenegems_tool.gateway.web_socket_session_manager import WebSocketSessionManager
 from utils.file_system_utils import ensure_directories
 
+logger = logging.getLogger(__name__)
 websocket_session_manager = WebSocketSessionManager()
 _shutdown_handlers_registered = False
 
@@ -43,6 +45,13 @@ def _register_process_shutdown_handlers() -> None:
 async def lifespan(_app: FastAPI):
     ensure_directories()
     _register_process_shutdown_handlers()
+    recorder = run_recorder(_app)
+    if recorder is not None:
+        # No connection exists yet, so a live session entry still running without a run lost its session with the last process
+        try:
+            await recorder.stop_stranded_entries()
+        except Exception:
+            logger.exception("Cannot stop the live session entries the last master process left running")
     yield
     websocket_session_manager.shutdown_all()
     shutdown_all_docker_subsystems()
@@ -95,8 +104,6 @@ async def backend_service_socket(websocket: WebSocket) -> None:  # noqa: C901
     except WebSocketDisconnect:
         websocket_session_manager.remove_session(websocket=websocket)
         return
-
-
 
 
 if __name__ == "__main__":
