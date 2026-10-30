@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from scenegems_tool.persistence.schema import (
     CampaignClassState,
@@ -108,6 +108,7 @@ class NewVerdict:
     early_stop_time_s: Optional[float] = None
     run_record_id: Optional[int] = None
     step: StepKind = StepKind.SIMULATION  # the scene and trajectory steps have run index 0
+    encounters: Optional[Dict[str, List[str]]] = None  # per relation, the COLREGSType names in order of first appearance; None when the monitor did not say
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,7 @@ class VerdictRecord:
     created_at: datetime
     case_index: Optional[int] = None  # the case's index in its class, joined in by the store
     step: StepKind = StepKind.SIMULATION
+    encounters: Optional[Dict[str, List[str]]] = None
 
     @classmethod
     def from_row(cls, row: VerdictRow, case_index: Optional[int] = None) -> "VerdictRecord":
@@ -150,6 +152,7 @@ class VerdictRecord:
             created_at=row.created_at,
             case_index=case_index,
             step=row.step,
+            encounters=None if row.encounters is None else {relation: list(types) for relation, types in row.encounters.items()},
         )
 
 
@@ -192,7 +195,7 @@ class ClassFindings:
 class StepFindings:
     """The summary of one step of a campaign that Results shows (operator API `findings`).
 
-    An unmonitored step has statistics only: verdicts and failed_rules stay empty. outputs
+    An unmonitored step has statistics only: verdicts, failed_rules and encounter_types stay empty. outputs
     counts the step's outputs (count), the usable ones (valid) and the complete ones;
     durations_s are the running times of the step's finished jobs.
     """
@@ -205,6 +208,7 @@ class StepFindings:
     outputs_complete: int
     verdicts: Dict[VerdictState, int]
     failed_rules: Tuple[RuleFindings, ...]
+    encounter_types: Dict[str, int]  # vessel pairs by the first encounter type of each (COLREGSType name); empty without monitored encounters
     classes: Tuple[ClassFindings, ...]
     duration_median_s: Optional[float]
     duration_p90_s: Optional[float]

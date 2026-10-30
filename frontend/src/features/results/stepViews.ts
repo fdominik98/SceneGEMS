@@ -10,6 +10,7 @@ import {
   type Verdict,
   type VerdictStep,
 } from "../../domain/cluster/schemas";
+import { encounterTypeLabel } from "../../domain/simulation/encounterTypes";
 import { formatSeconds, formatTime } from "./resultsFormat";
 
 /**
@@ -156,6 +157,15 @@ export function rankFailedRules(rules: Findings["failed_rules"]): RankedRule[] {
     }));
 }
 
+/** The vessel pairs of a step by the first encounter type of each, most pairs first then by label, OTHER last among equals; empty counts and an older master's missing field give none. */
+export function encounterTypeCounts(counts: Readonly<Record<string, number>> | undefined): CountEntry[] {
+  return Object.entries(counts ?? {})
+    .filter(([, count]) => count > 0)
+    .map(([type, count]) => ({ label: encounterTypeLabel(type), count, other: type.toUpperCase() === "OTHER" }))
+    .sort((a, b) => b.count - a.count || Number(a.other) - Number(b.other) || a.label.localeCompare(b.label))
+    .map(({ label, count }) => ({ label, count }));
+}
+
 export interface ClassRow {
   classId: string;
   cases: number;
@@ -184,6 +194,8 @@ export interface FindingsView {
   showComplete: boolean;
   verdicts: { passed: number; failed: number; unmonitored: number; judged: number } | null;
   failedRules: RankedRule[];
+  /** The vessel pairs by their first encounter type; empty when the step is unmonitored or the master predates them. */
+  encounters: CountEntry[];
   classes: ClassRow[];
   duration: { median: string; p90: string } | null;
 }
@@ -207,6 +219,7 @@ export function describeFindings(findings: Findings): FindingsView {
     showComplete: findings.step !== "scene_generation",
     verdicts: monitored ? { ...findings.verdicts, judged } : null,
     failedRules: monitored ? rankFailedRules(findings.failed_rules) : [],
+    encounters: monitored ? encounterTypeCounts(findings.encounter_types) : [],
     classes: rankClasses(findings.fecs),
     duration: hasDuration ? { median: formatSeconds(findings.durations_s.median), p90: formatSeconds(findings.durations_s.p90) } : null,
   };

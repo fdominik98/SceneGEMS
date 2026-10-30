@@ -6,6 +6,7 @@ import {
   DEFAULT_VERDICT_FILTERS,
   type SortDirection,
   type VerdictFilterState,
+  type VerdictSort,
 } from "./resultsApi";
 
 /**
@@ -25,6 +26,8 @@ export interface ResultsState {
   page: number;
   pageSize: number;
   direction: SortDirection;
+  /** The column the verdict table is sorted by (a master of Phase 7 sorts; an older one keeps the FEC order). */
+  sort: VerdictSort;
   /** Shows an entry's results with no filters, on `step` when given (the entry's last step otherwise). */
   openCampaign: (campaignId: string, step?: CampaignStep) => void;
   /** Shows one case of an entry (its page). */
@@ -39,6 +42,8 @@ export interface ResultsState {
   setPage: (page: number, total?: number | null) => void;
   setPageSize: (pageSize: number) => void;
   setDirection: (direction: SortDirection) => void;
+  /** Sorts by a column: the same column again flips the direction, another one starts ascending; back to the first page. */
+  sortBy: (sort: VerdictSort) => void;
   /** Forgets the campaign (the selected cluster changed). */
   reset: () => void;
 }
@@ -51,6 +56,7 @@ const INITIAL = {
   page: 0,
   pageSize: DEFAULT_PAGE_SIZE,
   direction: "asc" as SortDirection,
+  sort: "fec_id" as VerdictSort,
 };
 
 export const useResultsStore = create<ResultsState>()((set, get) => ({
@@ -78,5 +84,7 @@ export const useResultsStore = create<ResultsState>()((set, get) => ({
     set((state) => ({ page: total === undefined || total === null ? Math.max(0, page) : clampPage(page, total, state.pageSize) })),
   setPageSize: (pageSize) => set({ pageSize, page: 0 }),
   setDirection: (direction) => set({ direction, page: 0 }),
+  sortBy: (sort) =>
+    set((state) => (state.sort === sort ? { direction: state.direction === "asc" ? "desc" : "asc", page: 0 } : { sort, direction: "asc", page: 0 })),
   reset: () => set({ ...INITIAL }),
 }));

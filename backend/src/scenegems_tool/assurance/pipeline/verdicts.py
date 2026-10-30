@@ -80,6 +80,7 @@ def _pending(monitor: MonitorImplementation, outcomes: Mapping[str, Any], early_
         "failed_rules": [f"{rule.get('relation')}: {rule.get('rule')}" for rule in failed],
         "first_failure_time_s": None if passed or not times else min(times),
         "early_stop_time_s": early_stop_time_s,
+        "encounters": {relation: list(types) for relation, types in outcomes["encounters"].items()} if outcomes.get("encounters") else None,  # a result of an older node has none
     }
 
 
@@ -96,7 +97,15 @@ def pending_from_live(simulation_result: Mapping[str, Any]) -> Dict[str, Any]:
 
 
 def pending_unmonitored() -> Dict[str, Any]:
-    return {"state": VerdictState.UNMONITORED.value, "monitor": MonitorImplementation.EMPTY.value, "rule_outcomes": {}, "failed_rules": [], "first_failure_time_s": None, "early_stop_time_s": None}
+    return {
+        "state": VerdictState.UNMONITORED.value,
+        "monitor": MonitorImplementation.EMPTY.value,
+        "rule_outcomes": {},
+        "failed_rules": [],
+        "first_failure_time_s": None,
+        "early_stop_time_s": None,
+        "encounters": None,
+    }
 
 
 def new_verdict(case_id: int, run_index: int, pending: Mapping[str, Any], run_record_id: Optional[int], sensitive: bool, step: StepKind = StepKind.SIMULATION) -> NewVerdict:
@@ -112,6 +121,7 @@ def new_verdict(case_id: int, run_index: int, pending: Mapping[str, Any], run_re
         sensitive=sensitive,
         early_stop_time_s=pending.get("early_stop_time_s"),
         run_record_id=run_record_id,
+        encounters=pending.get("encounters"),
     )
 
 

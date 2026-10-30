@@ -145,6 +145,20 @@ def test_events_in_order_with_paging(stores, campaign):
     assert stores.campaigns.list_events(campaign.campaign_id, after_event_id=events[0].event_id, limit=1) == [events[1]]
 
 
+def test_the_newest_events_come_last_in_order(stores, campaign):
+    for number in range(5):
+        stores.campaigns.append_event(campaign.campaign_id, CampaignEventKind.STARTED, {"number": number})
+    everything = stores.campaigns.list_events(campaign.campaign_id, limit=None)
+    assert len(everything) == 6
+    assert stores.campaigns.list_events(campaign.campaign_id, 0, 2, newest=True) == everything[-2:]
+    assert stores.campaigns.list_events(campaign.campaign_id, 0, 100, newest=True) == everything
+    assert stores.campaigns.list_events(campaign.campaign_id, everything[1].event_id, 2, newest=True) == everything[-2:]  # after still bounds it from below
+    assert stores.campaigns.list_events(campaign.campaign_id, everything[4].event_id, 3, newest=True) == everything[5:]
+    assert stores.campaigns.list_events(campaign.campaign_id, everything[5].event_id, 3, newest=True) == []
+    assert stores.campaigns.list_events(campaign.campaign_id, 0, 2, [CampaignEventKind.CREATED], newest=True) == everything[:1]
+    assert stores.campaigns.list_events(campaign.campaign_id, 0, 2) == everything[:2]  # the default is still the oldest first
+
+
 def test_count_events_takes_the_filters_of_list_events(stores, campaign):
     stores.campaigns.append_event(campaign.campaign_id, CampaignEventKind.STARTED)
     stores.campaigns.append_event(campaign.campaign_id, CampaignEventKind.CLASS_COMPLETE, class_id=CLASS_A)

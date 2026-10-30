@@ -10,10 +10,10 @@ Every method takes an optional session (see store_session).
 """
 
 import statistics
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Type
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Type, get_args
 
-from sqlalchemy import and_, case, distinct, extract, func, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import and_, case, column, distinct, extract, func, select, true
+from sqlalchemy.dialects.postgresql import JSONB, insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from scenegems_tool.persistence.clock import Clock, utc_now
@@ -43,6 +43,8 @@ from scenegems_tool.persistence.stores.result_records import (
 from scenegems_tool.persistence.stores.store_session import session_scope
 
 FAILED_RULE_SEPARATOR = ": "  # a verdict's failed rule reads "<relation>: <rule>"
+VerdictSort = Literal["fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at"]
+VERDICT_SORTS: Tuple[str, ...] = get_args(VerdictSort)  # the whitelist of list_verdicts' sort
 
 
 def check_verdict(verdict: NewVerdict) -> None:
@@ -167,15 +169,42 @@ class ResultStore:
         offset: int = 0,
         *,
         step: Optional[StepKind] = None,
+        sort: VerdictSort = "fec_id",
+        descending: bool = False,
         session: Optional[Session] = None,
     ) -> List[VerdictRecord]:
-        """Verdicts of the campaign ordered by class, case, step and run, each with its case index; filter on class, case, state, run, sensitivity, step."""
+        """Verdicts of the campaign, each with its case index; filter on class, case, state, run, sensitivity, step.
+
+        The order is sort (fec_id: class, case, step and run, the default; or one of
+        VERDICT_SORTS), ascending or descending. A sort other than fec_id breaks ties by the
+        default order and the verdict id, and nulls (first_failure_time_s) come last in
+        either direction, so offset paging stays stable.
+        """
+        if sort not in VERDICT_SORTS:
+            raise ValueError(f"cannot sort verdicts by {sort}; use {', '.join(VERDICT_SORTS)}")
         with session_scope(self._sessions, session) as scope:
             query = select(VerdictRow, ScenarioCaseRow.case_index).join(ScenarioCaseRow, ScenarioCaseRow.id == VerdictRow.case_id)
             query = self._verdict_filtered(query, campaign_id, class_id, case_id, state, run_index, sensitive, step)
-            step_order = case({StepKind.SCENE.value: 0, StepKind.TRAJECTORIES.value: 1}, value=VerdictRow.step, else_=2)
-            query = query.order_by(VerdictRow.class_id, ScenarioCaseRow.case_index, step_order, VerdictRow.run_index).offset(offset).limit(limit)
+            query = query.order_by(*self._verdict_order(sort, descending)).offset(offset).limit(limit)
             return [VerdictRecord.from_row(row, case_index) for row, case_index in scope.execute(query)]
+
+    @staticmethod
+    def _verdict_order(sort: str, descending: bool) -> list:
+        step_order = case({StepKind.SCENE.value: 0, StepKind.TRAJECTORIES.value: 1}, value=VerdictRow.step, else_=2)
+        default_order = [VerdictRow.class_id, ScenarioCaseRow.case_index, step_order, VerdictRow.run_index]
+        keys = {
+            "state": VerdictRow.state,
+            "first_failure_time_s": VerdictRow.first_failure_time_s,
+            "step": step_order,
+            "run_index": VerdictRow.run_index,
+            "case_index": ScenarioCaseRow.case_index,
+            "created_at": VerdictRow.created_at,
+        }
+        if sort == "fec_id":
+            ordered = [key.desc() if descending else key.asc() for key in default_order]
+            return [*ordered, VerdictRow.id.desc() if descending else VerdictRow.id.asc()]
+        key = keys[sort]
+        return [key.desc().nulls_last() if descending else key.asc().nulls_last(), *default_order, VerdictRow.id]
 
     def count_verdicts(
         self,
@@ -249,11 +278,13 @@ class ResultStore:
             count, valid, complete = scope.execute(step_outputs_query(self._output_counts(step), campaign_id, step)).one()
             verdicts: Dict[VerdictState, int] = {}
             failed_rules: Tuple[RuleFindings, ...] = ()
+            encounter_types: Dict[str, int] = {}
             if monitored:
                 query = select(VerdictRow.state, func.count()).where(VerdictRow.campaign_id == campaign_id, VerdictRow.step == step).group_by(VerdictRow.state)
                 verdicts = {state: number for state, number in scope.execute(query)}
                 query = select(VerdictRow.failed_rules, VerdictRow.rule_outcomes).where(VerdictRow.campaign_id == campaign_id, VerdictRow.step == step, VerdictRow.state == VerdictState.FAILED)
                 failed_rules = rule_findings([(rules, outcomes) for rules, outcomes in scope.execute(query)])
+                encounter_types = self._encounter_types(scope, campaign_id, step)
             median, p90 = self._durations(scope, campaign_id, step)
             return StepFindings(
                 step=step,
@@ -264,10 +295,26 @@ class ResultStore:
                 outputs_complete=complete or 0,
                 verdicts=verdicts,
                 failed_rules=failed_rules,
+                encounter_types=encounter_types,
                 classes=self._class_findings(scope, campaign_id, step, monitored),
                 duration_median_s=median,
                 duration_p90_s=p90,
             )
+
+    @staticmethod
+    def _encounter_types(session: Session, campaign_id: str, step: StepKind) -> Dict[str, int]:
+        """The step's vessel pairs by the first encounter type of each (OTHER included), most first; verdicts stored without encounters add none."""
+        pair = func.jsonb_each(VerdictRow.encounters).table_valued(column("key"), column("value", JSONB))
+        first_type = pair.c.value[0].astext
+        query = (
+            select(first_type, func.count())
+            .select_from(VerdictRow)
+            .join(pair, true())
+            .where(VerdictRow.campaign_id == campaign_id, VerdictRow.step == step, VerdictRow.encounters.is_not(None))
+            .group_by(first_type)
+        )
+        counts = {name: count for name, count in session.execute(query) if name is not None}
+        return dict(sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
     @staticmethod
     def _output_counts(step: StepKind) -> list:

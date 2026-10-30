@@ -39,13 +39,19 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
     GET  <id>/outputs?step=&state=&fec_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
                                            simulation) by FEC and case: the artifact, whether it is valid and complete, the step's verdict
                                            and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run
-    GET  <id>/findings?step=               the summary of a step for Results: cases by state, outputs, verdicts, failed rules, FECs (fecs), durations;
-                                           statistics only for a step the config does not monitor
-    GET  <id>/verdicts?fec_id=&state=&run_index=&sensitive=&step=&limit=&offset=&format=       verdicts by FEC, case, step and run;
-                                           step is scene, trajectories or simulation; format=csv answers every matching verdict as a CSV stream
-                                           (limit and offset still apply when given)
+    GET  <id>/findings?step=               the summary of a step for Results: cases by state, outputs, verdicts, failed rules, encounter_types (vessel
+                                           pairs by the first encounter type of each), FECs (fecs), durations; statistics only for a step the config
+                                           does not monitor
+    GET  <id>/verdicts?fec_id=&state=&run_index=&sensitive=&step=&sort=&order=&limit=&offset=&format=       verdicts, by default by FEC, case, step and run;
+                                           step is scene, trajectories or simulation; sort is fec_id (that default order), state,
+                                           first_failure_time_s, step, run_index, case_index or created_at, order asc (default) or desc;
+                                           nulls come last in both directions and the verdict id breaks ties, so offset paging is stable.
+                                           A verdict carries encounters (per relation as in rule_outcomes, the situation types by first
+                                           appearance; null for older verdicts). format=csv answers every matching verdict as a CSV stream
+                                           (limit, offset, sort and order still apply when given; encounters is a JSON cell)
     GET  <id>/run-records?fec_id=&run_index=&limit=&offset=      rows carry source (job or live_session); trajectory_generator is null for a live session
-    GET  <id>/events?after=&limit=         the audit trail after an event id, oldest first
+    GET  <id>/events?after=&limit=&newest=         the audit trail after an event id, oldest first; newest=N (1 to 1000) answers the N newest events
+                                           after that id instead (limit does not apply), still oldest first
     GET  <id>/config                       the current config and every config version
     POST <id>/start | resume               desired state running
     POST <id>/pause                        desired state paused: queued jobs held, no new cases
@@ -66,7 +72,7 @@ import inspect
 import io
 import json
 from functools import partial
-from typing import Any, Callable, Dict, Iterator, List, NamedTuple, Optional
+from typing import Any, Callable, Dict, Iterator, List, Literal, NamedTuple, Optional
 
 import anyio
 from fastapi import APIRouter, HTTPException, Query, Request, Response
@@ -105,8 +111,10 @@ from scenegems_tool.persistence.schema import (
     VerdictState,
 )
 from scenegems_tool.persistence.stores import AssuranceStores, CampaignRecord, CampaignStateConflict, UnknownCampaign
+from scenegems_tool.persistence.stores.result_store import VerdictSort
 
 MAX_LISTED = 1000
+NEWEST_EVENTS_MAX = 1000
 TOTAL_COUNT_HEADER = "X-Total-Count"
 CSV_PAGE = 1000
 YAML_TYPES = ("application/yaml", "text/yaml", "application/x-yaml", "text/x-yaml")
@@ -374,9 +382,10 @@ def _campaign_routes(stores: AssuranceStores) -> APIRouter:
         return await _run(_classes_of, stores, campaign_id)
 
     @router.get(CAMPAIGNS_PATH + "/{campaign_id}/events")
-    async def list_events(response: Response, campaign_id: str, after: int = 0, limit: int = 100) -> list:
+    async def list_events(response: Response, campaign_id: str, after: int = 0, limit: int = 100, newest: Optional[int] = Query(None, ge=1, le=NEWEST_EVENTS_MAX)) -> list:
         await _campaign_or_404(stores, campaign_id)
-        events = await _run(stores.campaigns.list_events, campaign_id, max(0, after), _page(limit))
+        # newest: the newest events after `after`, oldest first; limit does not apply then
+        events = await _run(partial(stores.campaigns.list_events, campaign_id, max(0, after), newest or _page(limit), newest=newest is not None))
         _with_total(response, await _run(stores.campaigns.count_events, campaign_id, max(0, after)))
         return [event_view(event) for event in events]
 
@@ -477,7 +486,7 @@ def _output_routes(stores: AssuranceStores) -> APIRouter:
 def _result_routes(stores: AssuranceStores) -> APIRouter:
     router = APIRouter()
 
-    def csv_rows(campaign_id: str, filters: tuple, step: Optional[StepKind], limit: Optional[int], offset: int) -> Iterator[str]:
+    def csv_rows(campaign_id: str, filters: tuple, step: Optional[StepKind], limit: Optional[int], offset: int, sort: VerdictSort = "fec_id", descending: bool = False) -> Iterator[str]:
         """The verdict CSV in pages, so a campaign of any size streams in constant memory."""
         buffer = io.StringIO()
         writer = csv.writer(buffer, lineterminator="\n")
@@ -485,7 +494,7 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         position, remaining = offset, limit
         while remaining is None or remaining > 0:
             size = CSV_PAGE if remaining is None else min(CSV_PAGE, remaining)
-            page = stores.results.list_verdicts(campaign_id, *filters, size, position, step=step)
+            page = stores.results.list_verdicts(campaign_id, *filters, size, position, step=step, sort=sort, descending=descending)
             for verdict in page:
                 writer.writerow(verdict_row(verdict))
             yield buffer.getvalue()
@@ -506,6 +515,8 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         run_index: Optional[int] = None,
         sensitive: Optional[bool] = None,
         step: Optional[StepKind] = None,
+        sort: VerdictSort = "fec_id",
+        order: Literal["asc", "desc"] = "asc",
         limit: Optional[int] = None,
         offset: int = 0,
         format: str = "json",
@@ -514,13 +525,14 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         if format not in ("json", "csv"):
             raise HTTPException(status_code=422, detail="format is json or csv")
         filters = (fec_id, None, state, run_index, sensitive)  # FEC, case, state, run, sensitivity: the case filter is not offered here
+        descending = order == "desc"
         total = await _run(partial(stores.results.count_verdicts, campaign_id, state, class_id=fec_id, run_index=run_index, sensitive=sensitive, step=step))
         _with_total(response, total)
         if format == "json":
-            verdicts = await _run(partial(stores.results.list_verdicts, campaign_id, *filters, _page(100 if limit is None else limit), max(0, offset), step=step))
+            verdicts = await _run(partial(stores.results.list_verdicts, campaign_id, *filters, _page(100 if limit is None else limit), max(0, offset), step=step, sort=sort, descending=descending))
             return [verdict_view(verdict) for verdict in verdicts]
         headers = {"Content-Disposition": f'attachment; filename="verdicts-{campaign_id}.csv"', TOTAL_COUNT_HEADER: str(total)}
-        return StreamingResponse(csv_rows(campaign_id, filters, step, limit, max(0, offset)), media_type="text/csv", headers=headers)
+        return StreamingResponse(csv_rows(campaign_id, filters, step, limit, max(0, offset), sort, descending), media_type="text/csv", headers=headers)
 
     @router.get(CAMPAIGNS_PATH + "/{campaign_id}/run-records")
     async def list_run_records(response: Response, campaign_id: str, fec_id: Optional[str] = None, run_index: Optional[int] = None, limit: int = 100, offset: int = 0) -> list:

@@ -56,10 +56,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0009"]
+    assert scripts.get_heads() == ["0010"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -131,7 +131,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0009"
+            assert MigrationContext.configure(connection).get_current_revision() == "0010"
     finally:
         engine.dispose()
 
@@ -549,5 +549,28 @@ def test_revision_0009_merges_the_simulation_jobs_by_their_runner_and_stores_nod
             }
             assert connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all() == ["scene_generation"]
             assert "node_component" not in inspect(connection).get_table_names()
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0010_adds_nullable_encounters_that_existing_verdicts_lack(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0004")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 10, 30, 9, 30, tzinfo=timezone.utc)
+    try:
+        with engine.begin() as connection:
+            _insert_a_campaign_of_revision_0004(connection, at)
+        command.upgrade(config, "0009")
+        assert "encounters" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
+        command.upgrade(config, "0010")
+        columns = {column["name"]: column for column in inspect(engine).get_columns("verdict")}
+        assert columns["encounters"]["nullable"] and type(columns["encounters"]["type"]).__name__ == "JSONB"
+        with engine.begin() as connection:
+            assert connection.execute(text("SELECT encounters IS NULL FROM verdict")).scalar_one(), "an existing verdict has no encounters (SQL NULL, not a JSON null)"
+            connection.execute(text("""UPDATE verdict SET encounters = '{"OS_0 - TS_1": ["HEAD_ON"]}'"""))
+        command.downgrade(config, "0009")
+        assert "encounters" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
     finally:
         engine.dispose()

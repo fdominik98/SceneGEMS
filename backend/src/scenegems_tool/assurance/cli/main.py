@@ -24,6 +24,7 @@ CAMPAIGN_STEPS = ("scene_generation", "trajectory_generation", "simulation")
 CASE_STATES = ("active", "complete", "dropped", "failed", "cancelled")
 CASE_STAGES = ("generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate", "verdict")
 VERDICT_STATES = ("passed", "failed", "unmonitored")
+VERDICT_SORTS = ("fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at")  # the master's whitelist
 
 DESCRIPTION = """Create and watch assurance campaigns on a SceneGEMS master through its operator API.
 
@@ -90,6 +91,8 @@ def build_parser() -> argparse.ArgumentParser:
     verdicts.add_argument("--state", choices=VERDICT_STATES)
     verdicts.add_argument("--run", type=int, help="only this run index")
     verdicts.add_argument("--sensitive", action="store_true", help="only sensitive verdicts")
+    verdicts.add_argument("--sort", choices=VERDICT_SORTS, help="order by this column (default: FEC, case, step and run); nulls come last")
+    verdicts.add_argument("--order", choices=("asc", "desc"), help="ascending (default) or descending")
     verdicts.add_argument("--csv", metavar="FILE", help="write every matching verdict to this CSV file instead of printing a page")
     _paging(verdicts)
 
@@ -97,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     events.add_argument("campaign")
     events.add_argument("--after", type=int, default=0, help="only events after this event id")
     events.add_argument("--limit", type=int, default=100)
+    events.add_argument("--newest", type=int, metavar="N", help="the N newest events (1 to 1000) instead of the first --limit, still oldest first; --follow continues after them")
     events.add_argument("--follow", action="store_true", help="keep polling until interrupted or the campaign is stopped or completed")
     events.add_argument("--interval", type=float, default=2.0, help="seconds between polls with --follow")
 

@@ -183,6 +183,24 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
         </Disclosure>
       )}
 
+      {view.monitored && view.encounters.length > 0 && (
+        <Disclosure
+          id="results:findings-encounters"
+          title="Encounter types"
+          hint={`${view.encounters.reduce((sum, entry) => sum + entry.count, 0)} vessel pairs, by the first type of each`}
+          variant="plain"
+          headingLevel={4}
+        >
+          <ul className="results-count-chips" aria-label="Vessel pairs by encounter type">
+            {view.encounters.map((entry) => (
+              <li key={entry.label} className="results-count-chip">
+                {entry.label} <span className="mono">{entry.count}</span>
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+      )}
+
       <Disclosure
         id="results:findings-classes"
         title="Per FEC"

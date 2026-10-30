@@ -20,7 +20,7 @@ from scenegems_tool.persistence.schema import (
     VerdictState,
 )
 from scenegems_tool.persistence.stores import ClassFindings, NewCase, NewRunRecord, NewVerdict, RuleFindings, UnknownCase
-from scenegems_tool.persistence.stores.result_store import rule_findings
+from scenegems_tool.persistence.stores.result_store import VERDICT_SORTS, rule_findings
 from tests.scenegems_tool.persistence.stores.builders import START, sha256_of
 from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B
 
@@ -113,6 +113,70 @@ def test_verdicts_by_state_class_and_case(stores, campaign):
     assert listed(limit=1, offset=1) == [a1.case_id]
     assert stores.results.count_verdicts(campaign.campaign_id) == 4
     assert stores.results.count_verdicts(campaign.campaign_id, VerdictState.FAILED) == 1
+
+
+def _sort_fixture(stores, campaign):
+    """Verdicts of two FECs in a mixed order of insertion: states, first failure times (three nulls), steps and runs."""
+    a0, a1 = _cases(stores, campaign, CLASS_A, 2)
+    (b0,) = _cases(stores, campaign, CLASS_B, 1)
+    added = {
+        "b0": stores.results.add_verdict(_verdict(b0, VerdictState.FAILED, first_failure_time_s=5.0)),
+        "a1_run1": stores.results.add_verdict(_verdict(a1, VerdictState.FAILED, run_index=1, first_failure_time_s=20.0)),
+        "a0_scene": stores.results.add_verdict(_verdict(a0, VerdictState.PASSED, step=StepKind.SCENE)),
+        "a0_run0": stores.results.add_verdict(_verdict(a0, VerdictState.FAILED, first_failure_time_s=9.0)),
+        "a1_run0": stores.results.add_verdict(_verdict(a1, VerdictState.PASSED)),
+        "a0_run1": stores.results.add_verdict(_verdict(a0, VerdictState.UNMONITORED, run_index=1)),
+    }
+    return {name: verdict.verdict_id for name, verdict in added.items()}
+
+
+def _listed(stores, campaign, **options):
+    return [verdict.verdict_id for verdict in stores.results.list_verdicts(campaign.campaign_id, **options)]
+
+
+def test_verdicts_sort_by_fec_case_step_and_run_in_either_direction(stores, campaign):
+    ids = _sort_fixture(stores, campaign)
+    ascending = ["a0_scene", "a0_run0", "a0_run1", "a1_run0", "a1_run1", "b0"]
+    assert _listed(stores, campaign) == [ids[name] for name in ascending]
+    assert _listed(stores, campaign, sort="fec_id") == _listed(stores, campaign)
+    assert _listed(stores, campaign, sort="fec_id", descending=True) == [ids[name] for name in reversed(ascending)]
+    assert _listed(stores, campaign, sort="fec_id", descending=True, limit=2, offset=1) == [ids["a1_run1"], ids["a1_run0"]]
+
+
+def test_verdicts_sort_by_a_column_with_nulls_last_and_stable_paging(stores, campaign):
+    ids = _sort_fixture(stores, campaign)
+    by = lambda *names: [ids[name] for name in names]  # noqa: E731
+    # first_failure_time_s: 5, 9, 20, then the three verdicts without one in the default order; descending keeps the nulls last
+    assert _listed(stores, campaign, sort="first_failure_time_s") == by("b0", "a0_run0", "a1_run1", "a0_scene", "a0_run1", "a1_run0")
+    assert _listed(stores, campaign, sort="first_failure_time_s", descending=True) == by("a1_run1", "a0_run0", "b0", "a0_scene", "a0_run1", "a1_run0")
+    assert _listed(stores, campaign, sort="state") == by("a0_run0", "a1_run1", "b0", "a0_scene", "a1_run0", "a0_run1")  # failed, passed, unmonitored
+    assert _listed(stores, campaign, sort="state", descending=True)[:1] == by("a0_run1")
+    assert _listed(stores, campaign, sort="step") == by("a0_scene", "a0_run0", "a0_run1", "a1_run0", "a1_run1", "b0")  # scene before simulation
+    assert _listed(stores, campaign, sort="step", descending=True)[-1] == ids["a0_scene"]
+    assert _listed(stores, campaign, sort="run_index") == by("a0_scene", "a0_run0", "a1_run0", "b0", "a0_run1", "a1_run1")
+    assert _listed(stores, campaign, sort="case_index", descending=True) == by("a1_run0", "a1_run1", "a0_scene", "a0_run0", "a0_run1", "b0")
+    # offset paging covers every verdict exactly once in each sort and direction
+    for sort in VERDICT_SORTS:
+        for descending in (False, True):
+            whole = _listed(stores, campaign, sort=sort, descending=descending)
+            paged = [identifier for offset in range(0, 6, 2) for identifier in _listed(stores, campaign, sort=sort, descending=descending, limit=2, offset=offset)]
+            assert paged == whole and sorted(paged) == sorted(ids.values())
+
+
+def test_a_sort_outside_the_whitelist_is_refused(stores, campaign):
+    with pytest.raises(ValueError, match="cannot sort verdicts by margin"):
+        stores.results.list_verdicts(campaign.campaign_id, sort="margin")
+    with pytest.raises(ValueError, match="cannot sort verdicts by"):
+        stores.results.list_verdicts(campaign.campaign_id, sort="id; DROP TABLE verdict")
+
+
+def test_encounters_are_stored_with_the_verdict_and_null_when_absent(stores, campaign):
+    a0, a1 = _cases(stores, campaign, CLASS_A, 2)
+    encounters = {"OS_0 - TS_1": ["HEAD_ON", "OTHER"], "OS_0 - TS_2": ["CROSSING_FROM_PORT"]}
+    with_types = stores.results.add_verdict(_verdict(a0, encounters=encounters))
+    without = stores.results.add_verdict(_verdict(a1))
+    assert with_types.encounters == encounters and without.encounters is None
+    assert [verdict.encounters for verdict in stores.results.list_verdicts(campaign.campaign_id)] == [encounters, None]
 
 
 def test_count_verdicts_takes_the_filters_of_list_verdicts(stores, campaign):
@@ -341,6 +405,19 @@ def test_findings_of_a_monitored_scene_step(stores, step_outputs, session_factor
     assert (findings.verdicts, findings.failed_rules) == ({VerdictState.PASSED: 1}, ())
     assert findings.classes == (ClassFindings(CLASS_A, cases=3, passed=1, failed=0), ClassFindings(CLASS_B, cases=1, passed=0, failed=0))
     assert (findings.duration_median_s, findings.duration_p90_s) == (pytest.approx(20.0), pytest.approx(28.0))
+
+
+def test_findings_count_the_vessel_pairs_by_their_first_encounter_type(stores, campaign):
+    a0, a1, a2 = _cases(stores, campaign, CLASS_A, 3)
+    stores.results.add_verdict(_verdict(a0, step=StepKind.SCENE, encounters={"OS_0 - TS_1": ["HEAD_ON", "OTHER"], "OS_0 - TS_2": ["OTHER"]}))
+    stores.results.add_verdict(_verdict(a1, VerdictState.FAILED, step=StepKind.SCENE, encounters={"OS_0 - TS_1": ["HEAD_ON"]}))
+    stores.results.add_verdict(_verdict(a2, step=StepKind.SCENE))  # stored before encounters existed: adds none
+    stores.results.add_verdict(_verdict(a0, encounters={"OS_0 - TS_1": ["OVERTAKING_TO_PORT"]}))  # another step's
+    findings = stores.results.findings(campaign.campaign_id, StepKind.SCENE)
+    assert findings.encounter_types == {"HEAD_ON": 2, "OTHER": 1}  # by the first type of each pair, OTHER included, most first
+    assert stores.results.findings(campaign.campaign_id, StepKind.SIMULATION).encounter_types == {"OVERTAKING_TO_PORT": 1}
+    assert stores.results.findings(campaign.campaign_id, StepKind.TRAJECTORIES).encounter_types == {}
+    assert stores.results.findings(campaign.campaign_id, StepKind.SCENE, monitored=False).encounter_types == {}  # an unmonitored step has statistics only
 
 
 def test_findings_of_the_trajectory_step_name_the_failed_rules(stores, step_outputs):

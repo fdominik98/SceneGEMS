@@ -9,7 +9,7 @@ import type { CampaignConfig, CampaignDetail, CampaignSummary } from "../../doma
 import { useLiveTopic } from "../../domain/cluster/useLiveTopic";
 import { planOfConfig, startBlocker } from "../campaigns/resourcePlan";
 import { retryUnlessUnreachable, useOperatorClient } from "../campaigns/useCampaignData";
-import { EMPTY_EVENT_FEED, eventFeedReducer, mergeEvents, newerSummary } from "./campaignModel";
+import { EMPTY_EVENT_FEED, EVENTS_KEPT, eventFeedReducer, mergeEvents, newerSummary } from "./campaignModel";
 
 /** The live feed, events, config and controls of one entry of Campaign History. */
 
@@ -106,7 +106,9 @@ export function useCampaignEvents(campaignId: string, lastEventId: number | null
       try {
         let after = lastIdRef.current;
         for (let page = 0; page < EVENTS_PAGES_MAX; page += 1) {
-          const { items } = await client.listEvents(campaignId, { after, limit: EVENTS_PAGE }, signal);
+          // The first read takes the newest page (what the feed keeps); a master without `newest` ignores it and pages from event 0 as before.
+          const first = after === 0 && page === 0;
+          const { items } = await client.listEvents(campaignId, first ? { newest: EVENTS_KEPT, limit: EVENTS_PAGE } : { after, limit: EVENTS_PAGE }, signal);
           if (items.length === 0) {
             break;
           }

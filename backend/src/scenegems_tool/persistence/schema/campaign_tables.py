@@ -379,6 +379,9 @@ class VerdictRow(Base):
     margin: Mapped[Optional[float]] = mapped_column(Float)  # empty until the monitor reports margins
     sensitive: Mapped[bool] = mapped_column(Boolean)  # the run's stack is bounded and not calibrated, or the margin is small
     early_stop_time_s: Mapped[Optional[float]] = mapped_column(Float)  # when the live monitor stopped the run
+    encounters: Mapped[Optional[Dict[str, List[str]]]] = mapped_column(
+        JSONB(none_as_null=True)
+    )  # per relation, as in rule_outcomes, the COLREGSType names in order of first appearance; NULL before 0010
     created_at: Mapped[datetime] = mapped_column(utc_timestamp())
 
 
