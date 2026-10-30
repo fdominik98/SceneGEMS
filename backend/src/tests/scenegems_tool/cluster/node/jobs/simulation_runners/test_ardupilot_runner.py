@@ -243,6 +243,16 @@ def test_the_trajectories_hold_the_observed_states(fake_sitl, make_job, head_on_
         assert [(state.x, state.y) for state in observed] == [(state.x, state.y) for state in fake_sitl[vessel.id]]
 
 
+def test_a_run_on_trajectories_sampled_every_15_s_steps_at_one_second(fake_sitl, make_job, head_on_trajectories):
+    from concrete_level.models.trajectories import Trajectories
+    from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
+
+    coarse = TrajectoryBuilder.default_trajectory_from_scene(head_on_trajectories.initial_scene, 15, 120)
+    result = execute(ardupilot_job(make_job, coarse, include_trajectories=True, monitor="live"), _quiet)
+    assert Trajectories.from_dict(result["trajectories"]).time_step == 1
+    assert result["monitor"]["time_step"] == 1 and result["monitor"]["scenes"] == 121
+
+
 def test_static_obstacles_stay_in_every_step_scene(head_on_trajectories):
     from concrete_level.models.actor_state import ActorState
     from concrete_level.models.concrete_actors import ConcreteStaticObstacle

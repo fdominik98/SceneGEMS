@@ -38,9 +38,9 @@ from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_
 from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
 from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP, usv_navigation_participant_runtime
 from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepParticipant, StepAck, derive_seed
+from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
-from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import GUIDED_TARGET_TIMEOUT_S, MavlinkLink, MavlinkLinkError, StampedState, sitl_mavlink_endpoint
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -50,6 +50,7 @@ START_QUANTUM_S = 5.0  # scenario time 0 is put on a multiple of this SITL time,
 START_MARGIN_S = 1.0  # at least this much SITL time between arming and scenario time 0
 GUIDED_CHECK_MS = 2500  # scenario time by which every vessel must report GUIDED
 MAVLINK_LOCKSTEP_ADAPTERS = {AsvSoftwareId.REPLAY: REPLAY_MAVLINK_LOCKSTEP.id, AsvSoftwareId.USV_NAVIGATION: USV_NAVIGATION_MAVLINK_LOCKSTEP.id}
+DEFAULT_LOCKSTEP_DT_S = 1.0  # the step of a run that names none when Rover cannot take the trajectories' time step (generated ones are 15 s)
 
 StepObserver = Callable[[int, Mapping[int, StampedState]], None]  # (step index, the observed sample of each vessel id)
 
@@ -84,6 +85,17 @@ class MavlinkRunResult:
         return digest.hexdigest()
 
 
+def is_lockstep_dt(dt: float) -> bool:
+    """Whether Rover can take dt as a lockstep step: a whole number of milliseconds below its GUIDED target timeout."""
+    dt_ms = int(round(dt * 1000))
+    return dt_ms > 0 and abs(dt_ms - dt * 1000) <= 1e-6 and dt < GUIDED_TARGET_TIMEOUT_S
+
+
+def lockstep_dt(time_step: float) -> float:
+    """The step of a run that names none: the trajectories' time step when Rover can take it, else DEFAULT_LOCKSTEP_DT_S."""
+    return float(time_step) if is_lockstep_dt(float(time_step)) else DEFAULT_LOCKSTEP_DT_S
+
+
 def run_mavlink_lockstep(
     links: Mapping[int, MavlinkLink],
     participants: Mapping[int, LockstepParticipant],
@@ -116,9 +128,9 @@ def run_mavlink_lockstep(
         participant = participants[vessel_id]
         seeds[participant.participant_id] = derive_seed(run_seed, participant.participant_id)
         participant.start(seeds[participant.participant_id])
-    dt_ms = int(round(dt * 1000))
-    if dt_ms <= 0 or abs(dt_ms - dt * 1000) > 1e-6 or dt >= GUIDED_TARGET_TIMEOUT_S:
+    if not is_lockstep_dt(dt):
         raise ValueError(f"dt must be a whole number of milliseconds below Rover's {GUIDED_TARGET_TIMEOUT_S:g} s GUIDED target timeout, got {dt}")
+    dt_ms = int(round(dt * 1000))
     _engage(links, vessel_ids, active_ids, ready_timeout_s)
     epochs = _epochs(links, vessel_ids, start_boot_s)
     recorded: List[Tuple[StampedState, ...]] = []
@@ -214,8 +226,8 @@ def run_mavlink_stack(
     lockstep MAVLink adapter: replay_mavlink_lockstep (the ReplayFollower on its trajectory) or
     usv_navigation_mavlink_lockstep (USV Navigation, parameters from its trajectory unless
     given). endpoints maps agent ids to MAVLink endpoints; by default each is SERIAL0 of the
-    vessel's SITL service inside the stack network. dt defaults to the trajectory time step and
-    steps to its timespan. The run seed is environment.seed. on_step sees every step's observed states.
+    vessel's SITL service inside the stack network. dt defaults to the trajectory time step when
+    Rover can take it, else to DEFAULT_LOCKSTEP_DT_S (lockstep_dt), and steps to its timespan. The run seed is environment.seed. on_step sees every step's observed states.
     An attended run (an operator is watching, as in the workbench) may also hold Mission Planner
     vessels on their ground control station port (mission_planner_gcs_port), which it observes
     and leaves to the operator.
@@ -232,7 +244,7 @@ def run_mavlink_stack(
     if wrong:
         accepted = " or ".join(sorted(lockstep_ids | passive_ids))
         raise StackUnavailableError([f"run_mavlink_stack needs {accepted} for every simulated vessel: {', '.join(wrong)}"])
-    dt = float(trajectories.time_step) if dt is None else dt
+    dt = lockstep_dt(trajectories.time_step) if dt is None else dt
     scene = trajectories.initial_scene
 
     links: Dict[int, MavlinkLink] = {}

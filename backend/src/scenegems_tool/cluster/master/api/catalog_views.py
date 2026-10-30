@@ -121,13 +121,13 @@ def _ardupilot_parameters() -> List[Dict[str, Any]]:
         parameter(
             "speedup", "integer", "SITL's requested pace as a multiple of real time; the resolver refuses a pace the stack cannot hold", ArdupilotStackConfig.model_fields["speedup"].default, minimum=1
         ),
-        *_lockstep_parameters(),
+        *_lockstep_parameters("the trajectories' time step when absent, 1 s when that is 3 s or longer (Rover's GUIDED target timeout)"),
     ]
 
 
-def _lockstep_parameters() -> List[Dict[str, Any]]:
+def _lockstep_parameters(absent: str = "the trajectories' time step when absent") -> List[Dict[str, Any]]:
     return [
-        parameter("dt", "number", "time step of the run in whole seconds; the trajectories' time step when absent", unit="s", exclusive_minimum=0.0),
+        parameter("dt", "number", f"time step of the run in whole seconds; {absent}", unit="s", exclusive_minimum=0.0),
         parameter("steps", "integer", "number of steps; the trajectories' timespan when absent", minimum=1),
     ]
 

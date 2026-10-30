@@ -3,13 +3,16 @@
 import numpy as np
 import pytest
 
+from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
 from scenegems_tool.vessel_stack.contracts.clock import derive_seed
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, SimulationLayerId
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import MavlinkLinkError
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import (
+    DEFAULT_LOCKSTEP_DT_S,
     GUIDED_CHECK_MS,
     START_QUANTUM_S,
+    lockstep_dt,
     mavlink_instance,
     mavlink_replay_instance,
     run_mavlink_lockstep,
@@ -213,6 +216,10 @@ class TestValidation:
         with pytest.raises(ValueError):
             run_mavlink_lockstep(links, followers, vessels, dt, 3, run_seed=0)
 
+    @pytest.mark.parametrize("time_step, dt", [(1, 1.0), (2, 2.0), (0.5, 0.5), (3, DEFAULT_LOCKSTEP_DT_S), (15, DEFAULT_LOCKSTEP_DT_S)])
+    def test_a_run_without_dt_takes_the_trajectories_time_step_only_when_rover_can(self, time_step, dt):
+        assert lockstep_dt(time_step) == dt
+
     def test_half_second_steps_run(self):
         trajectories = encounter_trajectories("head_on", 10)
         links, followers, vessels = build_run(trajectories)
@@ -287,6 +294,13 @@ class TestRunMavlinkReplay:
         FakeLink.start_positions = {0: (0.0, 0.0)}
         result = run_mavlink_stack(straight, mavlink_replay_instance(straight, SimulationLayerId.ARDUPILOT_SIM), GEOFENCE, resolver=resolver)
         assert result.steps == 60
+
+    def test_generated_trajectories_sampled_every_15_s_replay_at_one_second_steps(self, resolver, straight):
+        FakeLink.start_positions = {0: (0.0, 0.0)}
+        coarse = TrajectoryBuilder.default_trajectory_from_scene(straight.initial_scene, 15, 60)
+        result = run_mavlink_stack(coarse, mavlink_replay_instance(coarse, SimulationLayerId.ARDUPILOT_SIM), GEOFENCE, resolver=resolver)
+        assert result.dt == DEFAULT_LOCKSTEP_DT_S and result.steps == 60 and result.run_record["dt"] == DEFAULT_LOCKSTEP_DT_S
+        assert result.states[-1][0].state.x == pytest.approx(straight.state_list(straight.initial_scene.vessels[0])[-1].x, abs=5.0)
 
     def test_links_are_closed_afterwards(self, resolver, straight):
         FakeLink.start_positions = {0: (0.0, 0.0)}

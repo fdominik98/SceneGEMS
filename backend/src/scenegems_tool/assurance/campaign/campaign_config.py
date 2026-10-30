@@ -385,7 +385,7 @@ class ArdupilotStackConfig(ConfigModel):
     mode: KinematicMode = KinematicMode.REPLAY
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
     speedup: int = Field(default=1, ge=1)  # SITL's requested pace, as the resolver checks it
-    dt: Optional[float] = Field(default=None, gt=0)  # the trajectories' time step when absent; whole seconds
+    dt: Optional[float] = Field(default=None, gt=0)  # whole seconds; the trajectories' time step when absent, 1 s when Rover cannot take that (generated trajectories are 15 s)
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
     geofence: GeofenceSettings = Field(default_factory=GeofenceSettings)
 

@@ -79,7 +79,7 @@ class ArduPilotSimulationPayload(ProtocolModel):
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; from the own ship's trajectory when None
     geofence: GeofencePayload  # maps the local frame to SITL's home positions
     speedup: int = Field(default=1, ge=1)  # requested SITL pace
-    dt: Optional[float] = Field(default=None, gt=0.0)  # the trajectories' time step when None
+    dt: Optional[float] = Field(default=None, gt=0.0)  # the trajectories' time step when None, 1 s when Rover cannot take that (lockstep_dt)
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when None
     seed: int = 0
     start_boot_s: Optional[float] = Field(default=None, ge=0.0)  # SITL time of scenario time 0; the next quantum when None
@@ -231,10 +231,10 @@ def observed_trajectories(trajectories, result, dt: float, state_of: Callable[[A
 
 def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
     """The in-container part: drive every vessel's SITL in lockstep and describe the run; observation forwards its states live."""
-    from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import run_mavlink_stack
+    from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt, run_mavlink_stack
 
     trajectories, instance, parameters = _instance(payload)
-    dt = float(trajectories.time_step) if payload.dt is None else payload.dt
+    dt = lockstep_dt(trajectories.time_step) if payload.dt is None else payload.dt
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
     monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False) if payload.monitor == SimulationMonitor.LIVE else None
     observer = None
