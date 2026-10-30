@@ -3,32 +3,34 @@ import pytest
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobType
 from scenegems_tool.cluster.protocol.messages import Heartbeat, JobResult
 from scenegems_tool.persistence.schema import NodeStatus
-from scenegems_tool.persistence.stores import CapabilityUsage
+from scenegems_tool.persistence.stores import SlotState
 from tests.scenegems_tool.persistence.stores.builders import START, make_hello, make_resources, make_submission
 
 pytestmark = pytest.mark.postgres
 
 SCENE = JobType.SCENE_GENERATION
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 
 
 def test_register_creates_an_online_node(node_store):
-    hello = make_hello("node-a", slots={SCENE: 2, KINEMATIC: 4}, labels={"site": "lab"}, fingerprints={"scenegems-scene-generation": "f1"})
+    hello = make_hello("node-a", slots={SCENE: 2, KINEMATIC: 4}, labels={"site": "lab"}, fingerprints={"scenegems-scene-generation": "f1"}, components=["scene_generation", "control_layer/none"])
     node = node_store.register(hello)
     assert node.status == NodeStatus.ONLINE
     assert node.name == "node-a-host"
     assert node.labels == {"site": "lab"}
-    assert node.capabilities == {SCENE: CapabilityUsage(slots=2, slots_in_use=0), KINEMATIC: CapabilityUsage(slots=4, slots_in_use=0)}
+    assert node.slots == {SCENE: SlotState(slots=2, slots_in_use=0), KINEMATIC: SlotState(slots=4, slots_in_use=0)}
+    assert node.components == ("control_layer/none", "scene_generation")
     assert node.fingerprints == {"scenegems-scene-generation": "f1"}
     assert node.registered_at == node.last_seen_at == START
     assert node_store.get("node-a") == node
 
 
-def test_register_again_replaces_capabilities_and_fingerprints(node_store, clock):
+def test_register_again_replaces_slots_components_and_fingerprints(node_store, clock):
     node_store.register(make_hello("node-a", slots={SCENE: 2, KINEMATIC: 4}, fingerprints={"old-image": "f0", "kept-image": "f1"}))
     clock.advance(60)
-    node = node_store.register(make_hello("node-a", slots={KINEMATIC: 1}, fingerprints={"kept-image": "f2"}, name="renamed"))
-    assert node.capabilities == {KINEMATIC: CapabilityUsage(slots=1, slots_in_use=0)}
+    node = node_store.register(make_hello("node-a", slots={KINEMATIC: 1}, fingerprints={"kept-image": "f2"}, name="renamed", components=["simulation_layer/kinematic"]))
+    assert node.slots == {KINEMATIC: SlotState(slots=1, slots_in_use=0)}
+    assert node.components == ("simulation_layer/kinematic",)
     assert node.fingerprints == {"kept-image": "f2"}
     assert node.name == "renamed"
     assert node.registered_at == START
@@ -63,7 +65,7 @@ def test_heartbeat_records_resources_and_slot_usage(node_store, clock):
     node = node_store.heartbeat("node-a", Heartbeat(resources=make_resources(free_memory_mb=3000), slots_in_use={KINEMATIC: 3}))
     assert node.last_seen_at == clock.now
     assert node.resources.free_memory_mb == 3000
-    assert node.capabilities == {SCENE: CapabilityUsage(slots=2, slots_in_use=0), KINEMATIC: CapabilityUsage(slots=4, slots_in_use=3)}
+    assert node.slots == {SCENE: SlotState(slots=2, slots_in_use=0), KINEMATIC: SlotState(slots=4, slots_in_use=3)}
 
 
 def test_heartbeat_of_an_unknown_node(node_store):
@@ -137,7 +139,7 @@ def test_a_removed_node_registers_anew(node_store):
     node_store.set_status("node-a", NodeStatus.OFFLINE)
     node_store.remove_offline("node-a")
     node = node_store.register(make_hello("node-a", slots={KINEMATIC: 1}))
-    assert node.status == NodeStatus.ONLINE and node.capabilities == {KINEMATIC: CapabilityUsage(slots=1, slots_in_use=0)}
+    assert node.status == NodeStatus.ONLINE and node.slots == {KINEMATIC: SlotState(slots=1, slots_in_use=0)}
 
 
 def test_list_nodes(node_store):

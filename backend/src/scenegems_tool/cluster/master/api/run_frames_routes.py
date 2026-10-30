@@ -31,7 +31,8 @@ import anyio
 from fastapi import APIRouter, HTTPException, Response
 
 from scenegems_tool.assurance.pipeline.pipeline_queries import latest_job_by_key_family
-from scenegems_tool.cluster.fingerprints.job_images import job_images
+from scenegems_tool.cluster.fingerprints.comparison import fingerprints_of
+from scenegems_tool.cluster.fingerprints.components import MONITORING, images_of
 from scenegems_tool.cluster.master.api.views import job_view
 from scenegems_tool.cluster.master.control_plane import ControlPlane, FingerprintsUnavailable, InvalidPayload
 from scenegems_tool.cluster.protocol.artifacts import ArtifactKind, ArtifactRef, is_reference
@@ -104,13 +105,13 @@ def _submission(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, 
         "include_frames": True,
     }
     pinned = campaign.pinned_fingerprints if campaign is not None else {}
-    fingerprints = {image: pinned[image] for image in job_images(JobType.MONITORING_POST_HOC) if image in pinned}
+    fingerprints = fingerprints_of(images_of([MONITORING]), pinned)
     resources = config.get("resources", {})
     labels = dict(resources.get("required_labels", {}))
     return JobSubmission(
         job_type=JobType.MONITORING_POST_HOC,
         payload=payload,
-        requirements=JobRequirements(labels=labels, fingerprints=fingerprints),
+        requirements=JobRequirements(labels=labels, components=[MONITORING], fingerprints=fingerprints),
         priority=FRAMES_PRIORITY,
         idempotency_key=frames_key(run_record_id, attempt),
         allowed_nodes=list(resources.get("nodes", [])),

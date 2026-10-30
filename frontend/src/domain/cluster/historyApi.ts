@@ -124,6 +124,8 @@ export const findingsSchema = z.object({
       first_failure_time_s: z.object({ min: z.number().nullable(), median: z.number().nullable() }),
     })
   ),
+  /** Phase 7: vessel pairs by the first encounter type of each (COLREGSType name); missing from an older master, empty for an unmonitored step. */
+  encounter_types: z.record(z.string(), z.number().int()).optional(),
   fecs: z.array(z.object({ fec_id: z.string(), cases: z.number().int(), passed: z.number().int(), failed: z.number().int() })),
   durations_s: durationSummarySchema,
 });

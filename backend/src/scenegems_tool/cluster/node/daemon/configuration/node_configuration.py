@@ -7,7 +7,9 @@ Variables (deploy/node/.env.example is the template):
     SCENEGEMS_MASTER_ID           the master's id; names the node's compose project and is checked against the master's Welcome
     SCENEGEMS_BROKER_PORT         optional, the port of the master's cluster broker on the master's host (1883)
     SCENEGEMS_NODE_NAME           this node's name and node id on the master and in Docker names
-    SCENEGEMS_NODE_CAPABILITIES   job types with slots, for example simulation.kinematic:4,scene_generation:1
+    SCENEGEMS_NODE_SLOTS          job types with slots, for example simulation:4,scene_generation:1
+    SCENEGEMS_NODE_COMPONENTS     what the node runs, comma separated (cluster/fingerprints/components.py), for example
+                                  asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation
     SCENEGEMS_NODE_LABELS         optional key=value pairs, for example gpu=true,site=lab
     SCENEGEMS_NODE_MACHINE        optional, the name of the machine the node runs on (the deployment tool writes it); shown in the UI
     SCENEGEMS_NODE_STATE_DIR      folder on the node's volume for the artifact cache
@@ -16,6 +18,10 @@ Variables (deploy/node/.env.example is the template):
     SCENEGEMS_SOFTWARE_REVISION   optional, the revision the node reports (its release's revision)
     SCENEGEMS_NODE_ARTIFACT_CACHE_DIR        optional, the cache of downloaded artifacts (<state>/artifacts)
     SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES  optional, the cache's bound in bytes (2 GiB)
+
+A job type with slots needs a component that serves it (a simulation layer for simulation,
+monitoring for monitoring.post_hoc, ...). SCENEGEMS_NODE_CAPABILITIES of releases before protocol 6
+is refused with a message naming the two variables that replace it.
 
 Process variables win over the file; an empty process variable counts as unset, since
 Compose passes unset optional variables as empty strings. Every problem is reported at
@@ -26,9 +32,10 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Dict, FrozenSet, List, Mapping, Optional, Tuple
 from urllib.parse import urlsplit
 
+from scenegems_tool.cluster.fingerprints.components import COMPONENTS, JOB_TYPE_COMPONENTS, SIMULATION_LAYER_PREFIX, STACK_COMPONENTS, is_component
 from scenegems_tool.cluster.node.daemon.configuration.env_file import EnvFileError, read_env_file
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.scope_names import is_scope_name
@@ -45,7 +52,8 @@ MAX_MACHINE_LENGTH = 256  # the registry column
 _LABEL_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _JOB_TYPES = {job_type.value: job_type for job_type in JobType}
 # Job types of earlier releases and what replaced them, named in the error
-_REPLACED_JOB_TYPES = {"simulation.ardupilot": (JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO)}
+_REPLACED_JOB_TYPES = {name: JobType.SIMULATION for name in ("simulation.kinematic", "simulation.ardupilot", "simulation.ardupilot_sim", "simulation.gazebo")}
+REPLACED_CAPABILITIES_VARIABLE = "SCENEGEMS_NODE_CAPABILITIES"  # before protocol 6
 
 
 class ConfigurationError(ValueError):
@@ -59,7 +67,8 @@ class NodeConfiguration:
     master_url: str  # http://host[:port], without a trailing slash
     master_id: str
     node_name: str
-    capabilities: Dict[JobType, int]  # job type to slots
+    slots: Dict[JobType, int]  # job type to slots
+    components: FrozenSet[str]  # what the node runs its jobs with
     state_dir: Path
     broker_port: int = DEFAULT_BROKER_PORT  # on the master's host
     labels: Dict[str, str] = field(default_factory=dict)
@@ -134,8 +143,7 @@ class NodeConfiguration:
         node_name = required("SCENEGEMS_NODE_NAME")
         if node_name and not is_scope_name(node_name):
             problems.append(f"SCENEGEMS_NODE_NAME: {node_name!r} must be 1 to 63 lowercase letters, digits and hyphens, since it names Docker objects")
-        capabilities_text = required("SCENEGEMS_NODE_CAPABILITIES")
-        capabilities = parsed("SCENEGEMS_NODE_CAPABILITIES", parse_capabilities, capabilities_text, {}) if capabilities_text else {}
+        slots, components = _slots_and_components(get, required, parsed, problems)
         labels = parsed("SCENEGEMS_NODE_LABELS", parse_labels, get("SCENEGEMS_NODE_LABELS"), {})
         state_text = required("SCENEGEMS_NODE_STATE_DIR")
         broker_port_text = get("SCENEGEMS_BROKER_PORT")
@@ -152,7 +160,8 @@ class NodeConfiguration:
             master_url=master_url,
             master_id=master_id,
             node_name=node_name,
-            capabilities=capabilities,
+            slots=slots,
+            components=components,
             state_dir=Path(state_text),
             broker_port=broker_port,
             labels=labels,
@@ -163,6 +172,22 @@ class NodeConfiguration:
             artifact_cache_dir=Path(get("SCENEGEMS_NODE_ARTIFACT_CACHE_DIR")) if get("SCENEGEMS_NODE_ARTIFACT_CACHE_DIR") else None,
             artifact_cache_max_bytes=cache_max_bytes,
         )
+
+
+def _slots_and_components(get, required, parsed, problems: List[str]) -> Tuple[Optional[Dict[JobType, int]], Optional[FrozenSet[str]]]:
+    """SCENEGEMS_NODE_SLOTS and SCENEGEMS_NODE_COMPONENTS, each slotted job type checked against the components; the variable they replace is refused."""
+    if get(REPLACED_CAPABILITIES_VARIABLE):
+        problems.append(
+            f"{REPLACED_CAPABILITIES_VARIABLE} is replaced by SCENEGEMS_NODE_SLOTS (job types with slots, for example simulation:2,scene_generation:1) "
+            "and SCENEGEMS_NODE_COMPONENTS (what the node runs them with, for example asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation)"
+        )
+    slots_text = required("SCENEGEMS_NODE_SLOTS")
+    slots = parsed("SCENEGEMS_NODE_SLOTS", parse_slots, slots_text, None) if slots_text else None
+    components_text = required("SCENEGEMS_NODE_COMPONENTS")
+    components = parsed("SCENEGEMS_NODE_COMPONENTS", parse_components, components_text, None) if components_text else None
+    if slots is not None and components is not None:
+        problems.extend(f"SCENEGEMS_NODE_SLOTS: {problem}" for problem in slots_without_components(slots, components))
+    return slots, components
 
 
 def parse_master_url(text: str) -> str:
@@ -199,16 +224,15 @@ def parse_port(text: str) -> int:
 
 def _job_type_named(name: str) -> JobType:
     if name in _REPLACED_JOB_TYPES:
-        replacements = " and ".join(replacement.value for replacement in _REPLACED_JOB_TYPES[name])
-        raise ValueError(f"{name} is split into {replacements}; list the ones this node runs")
+        raise ValueError(f"{name} is replaced by {_REPLACED_JOB_TYPES[name].value}; give it slots here and list its layers in SCENEGEMS_NODE_COMPONENTS")
     job_type = _JOB_TYPES.get(name)
     if job_type is None:
         raise ValueError(f"unknown job type {name!r}; known: {', '.join(sorted(_JOB_TYPES))}")
     return job_type
 
 
-def parse_capabilities(text: str) -> Dict[JobType, int]:
-    capabilities: Dict[JobType, int] = {}
+def parse_slots(text: str) -> Dict[JobType, int]:
+    slots: Dict[JobType, int] = {}
     for item in (part.strip() for part in text.split(",")):
         if not item:
             continue
@@ -217,18 +241,45 @@ def parse_capabilities(text: str) -> Dict[JobType, int]:
         if not separator or not name:
             raise ValueError(f"{item!r} must read <job type>:<slots>")
         job_type = _job_type_named(name)
-        if job_type in capabilities:
+        if job_type in slots:
             raise ValueError(f"{name} is listed twice")
         try:
-            slots = int(slots_text.strip())
+            count = int(slots_text.strip())
         except ValueError:
             raise ValueError(f"{item!r}: slots must be a whole number") from None
-        if slots < 1:
+        if count < 1:
             raise ValueError(f"{item!r}: slots must be at least 1")
-        capabilities[job_type] = slots
-    if not capabilities:
+        slots[job_type] = count
+    if not slots:
         raise ValueError("lists no job type")
-    return capabilities
+    return slots
+
+
+def parse_components(text: str) -> FrozenSet[str]:
+    components = set()
+    for name in (part.strip() for part in text.split(",")):
+        if not name:
+            continue
+        if not is_component(name):
+            raise ValueError(f"unknown component {name!r}; known: {', '.join(COMPONENTS)}")
+        if name in components:
+            raise ValueError(f"{name} is listed twice")
+        components.add(name)
+    if not components:
+        raise ValueError("lists no component")
+    return frozenset(components)
+
+
+def slots_without_components(slots: Mapping[JobType, int], components: FrozenSet[str]) -> List[str]:
+    """The job types with slots that no listed component serves, each as a problem."""
+    problems = []
+    for job_type in slots:
+        if job_type == JobType.SIMULATION:
+            if not any(component.startswith(SIMULATION_LAYER_PREFIX) for component in components):
+                problems.append(f"{job_type.value} needs a simulation layer among SCENEGEMS_NODE_COMPONENTS ({', '.join(c for c in STACK_COMPONENTS if c.startswith(SIMULATION_LAYER_PREFIX))})")
+        elif JOB_TYPE_COMPONENTS[job_type] not in components:
+            problems.append(f"{job_type.value} needs the component {JOB_TYPE_COMPONENTS[job_type]} among SCENEGEMS_NODE_COMPONENTS")
+    return problems
 
 
 def parse_labels(text: str) -> Dict[str, str]:

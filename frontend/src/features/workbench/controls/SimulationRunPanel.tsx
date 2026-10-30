@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import "./simulationPanel.css";
 import { useUiStore } from "../../../app/uiStore";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
@@ -6,7 +6,7 @@ import { isClusterRunActive, useClusterRunStore, type ClusterRunStatus } from ".
 import { describeClusterPlan, isPacedByWatchSpeed, KINEMATIC_SIMULATION_JOB, planSimulationRun, type SimulationSetup } from "../cluster/simulationJobs";
 import { describeResources } from "../cluster/workbenchResources";
 import { formatClock } from "../scene/encounterGeometry";
-import { activateLiveMode, getLatestSimulationTimestamp } from "./livePlayback";
+import { activateLiveMode, getLatestSimulationTimestamp, watchClusterRun } from "./livePlayback";
 import { groundControlEndpointLabels } from "./simulationInitConfig";
 import { SimulationInitControls, type SimulationInitControlsHandle } from "./SimulationInitControls";
 import type { SimulationStreamControls } from "./types";
@@ -62,6 +62,9 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const groundControlPorts = usePlaybackStore((s) => s.groundControlPortsByAgentId);
   const previewMonitor = usePlaybackStore((s) => s.previewMonitor);
   const run = useClusterRunStore();
+  const playbackSpeed = usePlaybackStore((s) => s.speed);
+  const setPlaying = usePlaybackStore((s) => s.setPlaying);
+  const setHoldAtLiveEdge = usePlaybackStore((s) => s.setHoldAtLiveEdge);
   const input = useSimulationPageStore((s) => s.input);
   const trajectoryPageHasResult = useTrajectoryGenerationStore((s) => s.resultValid && s.resultScenarioJson !== null);
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
@@ -72,7 +75,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
 
   const plan = setup ? planSimulationRun(setup) : null;
   const onCluster = plan?.where === "cluster";
-  const resources = streamControls.clusterResources(plan?.where === "cluster" ? plan.jobType : KINEMATIC_SIMULATION_JOB);
+  const resources = plan?.where === "cluster" ? streamControls.clusterResources(plan.jobType, plan.components) : streamControls.clusterResources(KINEMATIC_SIMULATION_JOB);
   const clusterActive = isClusterRunActive(run.status);
   const sessionStatus = SESSION_STATUS[simulationStatus] ?? { label: simulationStatus, tone: "idle" as const };
   const status = onCluster ? CLUSTER_STATUS[run.status] : sessionStatus;
@@ -97,6 +100,14 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const sessionStarted = simulationStatus === "running" || simulationStatus === "starting";
   const sessionBusy = sessionStarted || simulationStatus === "initializing" || simulationStatus === "agents are preparing";
   const locked = clusterActive || sessionBusy;
+  // SITL runs free, so the watch speed of an ArduPilot run is the speed it plays at in the browser
+  const pacedOnNode = plan?.where === "cluster" ? isPacedByWatchSpeed(plan) : true;
+
+  useEffect(() => {
+    if (!clusterActive) {
+      setHoldAtLiveEdge(false); // no more frames are coming
+    }
+  }, [clusterActive, setHoldAtLiveEdge]);
 
   // The input's trajectories go to the gateway session and the cluster run; a new input replaces the shown run.
   const takeInput = async (picked: PageInput, content: string | null) => {
@@ -112,7 +123,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
       return;
     }
     streamControls.runSimulationOnCluster(plan, colregsConstraintsContent);
-    activateLiveMode({ followSimulationLive });
+    watchClusterRun(isPacedByWatchSpeed(plan), { followSimulationLive, setPlaying, setHoldAtLiveEdge });
   };
 
   const where =
@@ -125,11 +136,14 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const actions = onCluster ? (
     clusterActive ? (
       <>
-        {plan?.where === "cluster" && isPacedByWatchSpeed(plan) ? (
-          <label className="step-setting">
+        {plan?.where === "cluster" ? (
+          <label className="step-setting" title={pacedOnNode ? "The pace the node runs the simulation at while you watch" : "SITL runs free at the job's speedup, so this is the speed the arriving run plays at here, as the playback bar's"}>
             <span className="step-setting-label">Watch at</span>
-            <select value={run.speed} onChange={(e) => streamControls.setClusterRunSpeed(Number(e.target.value))}>
-              {RUN_SPEEDS.map((speed) => (
+            <select
+              value={pacedOnNode ? run.speed : playbackSpeed}
+              onChange={(e) => (pacedOnNode ? streamControls.setClusterRunSpeed(Number(e.target.value)) : streamControls.setSpeed(Number(e.target.value)))}
+            >
+              {(pacedOnNode || (RUN_SPEEDS as readonly number[]).includes(playbackSpeed) ? RUN_SPEEDS : [...RUN_SPEEDS, playbackSpeed].sort((a, b) => a - b)).map((speed) => (
                 <option key={speed} value={speed}>
                   {speed}x real time
                 </option>

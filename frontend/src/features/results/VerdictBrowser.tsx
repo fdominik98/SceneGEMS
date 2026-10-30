@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { describeOperatorError } from "../../domain/cluster/operatorApi";
-import { hasActiveFilters, toApiFilters, type VerdictPaging } from "../../domain/cluster/resultsApi";
+import { hasActiveFilters, toApiFilters, type VerdictPaging, type VerdictSort } from "../../domain/cluster/resultsApi";
 import { useResultsStore } from "../../domain/cluster/resultsStore";
 import type { CampaignStep, Verdict } from "../../domain/cluster/schemas";
 import { VerdictFilterBar } from "./VerdictFilterBar";
@@ -27,15 +27,19 @@ export function VerdictBrowser({ operatorUrl, campaignId, step, stepFilter }: Ve
   const page = useResultsStore((state) => state.page);
   const pageSize = useResultsStore((state) => state.pageSize);
   const direction = useResultsStore((state) => state.direction);
-  const { setFilters, resetFilters, setPage, setPageSize, setDirection, openCase } = useResultsStore.getState();
+  const sort = useResultsStore((state) => state.sort);
+  const { setFilters, resetFilters, setPage, setPageSize, setDirection, sortBy, openCase } = useResultsStore.getState();
 
-  const paging = useMemo<VerdictPaging>(() => ({ page, pageSize, direction }), [page, pageSize, direction]);
+  const paging = useMemo<VerdictPaging>(() => ({ page, pageSize, direction, sort }), [page, pageSize, direction, sort]);
   const client = useResultsClient(operatorUrl);
   const detail = useCampaignDetail(operatorUrl, campaignId);
   const verdicts = useVerdictPage(operatorUrl, campaignId, filters, paging, verdictStep);
   const summary = useVerdictSummary(operatorUrl, campaignId, filters, verdictStep, byRun);
   const total = verdicts.data?.total ?? null;
-  const csvUrl = client ? client.verdictsCsvUrl(campaignId, toApiFilters(filters, verdictStep)) : null;
+  // An older master answers false once it was seen ignoring the sort: it has the FEC order only.
+  const sortable = verdicts.data?.serverSort !== false;
+  const csvUrl = client ? client.verdictsCsvUrl(campaignId, { ...toApiFilters(filters, verdictStep), ...(sortable && (sort !== "fec_id" || direction === "desc") ? { sort, order: direction } : {}) }) : null;
+  const onSort = (next: VerdictSort) => (sortable ? sortBy(next) : setDirection(direction === "asc" ? "desc" : "asc"));
 
   const open = (verdict: Verdict) => openCase(campaignId, verdict.case_id);
 
@@ -58,7 +62,8 @@ export function VerdictBrowser({ operatorUrl, campaignId, step, stepFilter }: Ve
           onOpenCase={open}
           onPage={(next) => setPage(next, total)}
           onPageSize={setPageSize}
-          onDirection={setDirection}
+          sortable={sortable}
+          onSort={onSort}
         />
       )}
     </div>

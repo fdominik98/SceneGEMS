@@ -113,6 +113,8 @@ const ruleEvaluationSchema = z
     subjectActorId: z.string().nullable(),
     subjectActorName: z.string(),
     result: z.enum(["PASSED", "FAILED", "UNKNOWN"]),
+    ruleId: z.string().optional(),
+    firstFailedAt: z.number().nullable().optional(),
   })
   .passthrough();
 
@@ -156,6 +158,9 @@ const metricsSchema = z
     dcpaByRelationId: z.record(z.string(), z.number()).optional(),
     tcpaByRelationId: z.record(z.string(), z.number()).optional(),
     dsIndexByRelationId: z.record(z.string(), z.number()).optional(),
+    cpaPositionsByRelationId: z
+      .record(z.string(), z.record(z.string(), z.object({ x: z.number(), y: z.number() })))
+      .optional(),
   })
   .passthrough();
 
@@ -173,6 +178,25 @@ const frameSchema = z
     metrics: metricsSchema.optional(),
   })
   .passthrough();
+
+/** Positions by actor id when every entry is a finite point; null otherwise (none, or malformed). */
+function cpaPositionsOf(raw: unknown): Record<string, { x: number; y: number }> | null {
+  if (typeof raw !== "object" || raw === null) {
+    return null;
+  }
+  const out: Record<string, { x: number; y: number }> = {};
+  for (const [actorId, point] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof point !== "object" || point === null) {
+      return null;
+    }
+    const { x, y } = point as Record<string, unknown>;
+    if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+    out[actorId] = { x, y };
+  }
+  return Object.keys(out).length ? out : null;
+}
 
 export function parseFrame(raw: unknown): SimulationFrame {
   return frameSchema.parse(normalizeFramePayload(raw));
@@ -285,8 +309,16 @@ function normalizeFramePayload(raw: unknown): unknown {
             (e.title as string | undefined) ??
             ruleName.replace(/^(Rule\s+[^:]+|Suggestion):\s*/i, "");
           const subjectActorIdRaw = e.subjectActorId ?? e.subject_actor_id ?? null;
+          const { ruleId: rawRuleId, firstFailedAt: rawFirstFailedAt, ...rest } = e;
           return {
-            ...e,
+            ...rest,
+            ...(typeof rawRuleId === "string" && rawRuleId !== "" ? { ruleId: rawRuleId } : {}),
+            // A number or null (never failed) from the monitor; left out on older frames.
+            ...(typeof rawFirstFailedAt === "number" && Number.isFinite(rawFirstFailedAt)
+              ? { firstFailedAt: rawFirstFailedAt }
+              : rawFirstFailedAt === null
+                ? { firstFailedAt: null }
+                : {}),
             ruleName,
             title,
             ruleNumber,
@@ -371,6 +403,7 @@ function normalizeFramePayload(raw: unknown): unknown {
     const dcpaByRelationId: Record<string, number> = {};
     const tcpaByRelationId: Record<string, number> = {};
     const dsIndexByRelationId: Record<string, number> = {};
+    const cpaPositionsByRelationId: Record<string, Record<string, { x: number; y: number }>> = {};
 
     for (const [relationId, rawRelationMetrics] of Object.entries(relations)) {
       if (typeof rawRelationMetrics !== "object" || rawRelationMetrics === null) {
@@ -391,6 +424,10 @@ function normalizeFramePayload(raw: unknown): unknown {
       } else if (typeof relationMetrics.proximityIndex === "number") {
         dsIndexByRelationId[relationId] = relationMetrics.proximityIndex;
       }
+      const cpaPositions = cpaPositionsOf(relationMetrics.cpaPositionsByActorId);
+      if (cpaPositions) {
+        cpaPositionsByRelationId[relationId] = cpaPositions;
+      }
     }
 
     return {
@@ -403,6 +440,9 @@ function normalizeFramePayload(raw: unknown): unknown {
         metrics.tcpaByRelationId ?? (Object.keys(tcpaByRelationId).length ? tcpaByRelationId : undefined),
       dsIndexByRelationId:
         metrics.dsIndexByRelationId ?? (Object.keys(dsIndexByRelationId).length ? dsIndexByRelationId : undefined),
+      cpaPositionsByRelationId:
+        metrics.cpaPositionsByRelationId ??
+        (Object.keys(cpaPositionsByRelationId).length ? cpaPositionsByRelationId : undefined),
     };
   })();
 

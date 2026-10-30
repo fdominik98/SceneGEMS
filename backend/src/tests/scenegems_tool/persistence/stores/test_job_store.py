@@ -12,7 +12,7 @@ pytestmark = pytest.mark.postgres
 
 SCENE = JobType.SCENE_GENERATION
 TRAJECTORY = JobType.TRAJECTORY_GENERATION
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 LEASE_S = 30.0
 
 
@@ -183,6 +183,20 @@ def test_claim_matches_labels(job_store, node_store):
     assert job_store.claim_next("gpu", LEASE_S).job.job_id == job.job_id
 
 
+def test_claim_matches_components(job_store, node_store):
+    gazebo = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+    node_store.register(make_hello("sitl", slots={SCENE: 5}, components=["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]))
+    node_store.register(make_hello("world", slots={SCENE: 5}, components=gazebo + ["scene_generation"]))
+    job = job_store.submit(make_submission(requirements=JobRequirements(components=gazebo))).job
+    assert job_store.get(job.job_id).requirements.components == gazebo
+    assert job_store.claim_next("sitl", LEASE_S) is None
+    assert job_store.claim_next("world", LEASE_S, components=["scene_generation"]) is None, "the scheduler passes the usable components only"
+    lease = job_store.claim_next("world", LEASE_S)
+    assert lease.job.job_id == job.job_id and lease.job.requirements.components == gazebo
+    unrestricted = job_store.submit(make_submission()).job
+    assert job_store.claim_next("sitl", LEASE_S).job.job_id == unrestricted.job_id, "a job of an earlier release needs no component"
+
+
 def test_claim_matches_allowed_nodes(job_store, node_store):
     for node_id in ("left-out", "chosen", "also-chosen"):
         node_store.register(make_hello(node_id, slots={SCENE: 5}))
@@ -202,6 +216,15 @@ def test_claim_matches_fingerprints(job_store, node_store):
     job = job_store.submit(make_submission(requirements=JobRequirements(fingerprints={"scenegems-scene-generation": "new"}))).job
     assert job_store.claim_next("outdated", LEASE_S) is None
     assert job_store.claim_next("missing", LEASE_S) is None
+    assert job_store.claim_next("current", LEASE_S).job.job_id == job.job_id
+
+
+def test_a_job_queued_before_release_tags_still_finds_a_node_by_repository(job_store, node_store):
+    # Jobs stored before release tags name their images :latest; nodes now report repositories
+    node_store.register(make_hello("outdated", slots={SCENE: 5}, fingerprints={"scenegems-scene-generation": "old"}))
+    node_store.register(make_hello("current", slots={SCENE: 5}, fingerprints={"scenegems-scene-generation": "new"}))
+    job = job_store.submit(make_submission(requirements=JobRequirements(fingerprints={"scenegems-scene-generation:latest": "new"}))).job
+    assert job_store.claim_next("outdated", LEASE_S) is None
     assert job_store.claim_next("current", LEASE_S).job.job_id == job.job_id
 
 
@@ -269,6 +292,22 @@ def test_reject_requeues_without_a_failed_attempt(job_store, node_a):
     assert job_store.reject(lease.lease_id, "again") is None  # superseded
     rejected_event = job_store.events(job.job_id)[2]
     assert (rejected_event.kind, rejected_event.detail) == (JobEventKind.REJECTED, {"reason": "no free slot"})
+
+
+def test_recent_rejections_are_those_of_unfinished_jobs(job_store, node_a, clock):
+    waiting = job_store.submit(make_submission()).job
+    job_store.reject(job_store.claim_next("node-a", LEASE_S).lease_id, "busy")
+    first_reject = clock.now
+    clock.advance(60)
+    job_store.reject(job_store.claim_next("node-a", LEASE_S).lease_id, "still busy")
+    ended = job_store.submit(make_submission(idempotency_key="ended")).job
+    job_store.reject(job_store.claim_next("node-a", LEASE_S, exclude_job_ids=[waiting.job_id]).lease_id, "busy")
+    job_store.cancel(ended.job_id, "not needed")
+    assert [(event.job_id, event.node_id, event.at) for event in job_store.recent_rejections(first_reject)] == [
+        (waiting.job_id, "node-a", first_reject),
+        (waiting.job_id, "node-a", clock.now),
+    ]
+    assert [event.at for event in job_store.recent_rejections(first_reject + timedelta(seconds=1))] == [clock.now]
 
 
 def test_reject_needs_an_unaccepted_offer(job_store, node_a):

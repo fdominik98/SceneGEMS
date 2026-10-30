@@ -1,10 +1,10 @@
-"""simulation.kinematic in process: the live monitor gives the post-hoc result, and a run without it is unchanged."""
+"""The kinematic runner of the simulation job in process: the live monitor gives the post-hoc result, and a run without it is unchanged."""
 
 import io
 
 import pytest
 
-from scenegems_tool.cluster.node.jobs import monitoring_post_hoc_job, simulation_kinematic_job
+from scenegems_tool.cluster.node.jobs import monitoring_post_hoc_job, simulation_job
 from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation, RunObserver
 from scenegems_tool.cluster.node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
 from scenegems_tool.cluster.protocol.jobs import JobType
@@ -21,7 +21,7 @@ def _quiet(message, progress=None):
 @pytest.fixture
 def simulate(make_job, head_on_trajectories):
     def simulate(**fields):
-        return simulation_kinematic_job.execute(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), **fields}), _quiet)
+        return simulation_job.execute(make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields}), _quiet)
 
     return simulate
 
@@ -85,8 +85,8 @@ def observe(make_job, head_on_trajectories, tmp_path):
         (tmp_path / OBSERVE_DOCUMENT).write_text(ObservationControl(active=True, speed=speed, revision=1).to_document(), encoding="utf-8")
         out, fake_time = io.StringIO(), FakeTime()
         observation = ContainerObservation(str(tmp_path), out=out, clock=fake_time, sleep=fake_time.sleep)
-        job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), **fields})
-        result = simulation_kinematic_job.execute(job, _quiet, observation=observation)
+        job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields})
+        result = simulation_job.execute(job, _quiet, observation=observation)
         return result, [parse_frame_line(line) for line in out.getvalue().splitlines()], fake_time.now
 
     return observe
@@ -132,8 +132,8 @@ def test_an_observation_that_starts_mid_run_picks_up_at_the_current_step(simulat
         def observer(self, build_frame, dt, **options):
             return RunObserver(requests, written.append, build_frame, dt, sleep=lambda seconds: None, **options)
 
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "monitor": "live"})
-    result = simulation_kinematic_job.execute(job, _quiet, observation=Observation())
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "monitor": "live"})
+    result = simulation_job.execute(job, _quiet, observation=Observation())
     assert result == simulate(monitor="live")
     assert written[0]["timestamp"] == 50 and written[-1]["timestamp"] < 80
     assert written[0]["ruleResults"]

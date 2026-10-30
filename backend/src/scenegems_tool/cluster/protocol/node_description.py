@@ -1,4 +1,4 @@
-"""What a node tells the master about itself: capabilities with slots, labels, resources."""
+"""What a node tells the master about itself: slots per job type, components, labels, resources."""
 
 from typing import Dict
 
@@ -8,7 +8,7 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 
 
-class CapabilityOffer(ProtocolModel):
+class SlotOffer(ProtocolModel):
     """One job type the node runs, with the number of jobs of that type it runs at once."""
 
     job_type: JobType

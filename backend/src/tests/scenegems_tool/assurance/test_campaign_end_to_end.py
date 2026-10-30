@@ -33,7 +33,10 @@ CLUSTER = "p4-rehearsal"
 NODE = "local"
 OPERATOR_PORT = 15174
 MASTER_PARAMETERS = {"SCENEGEMS_API_PORT": "18443", "SCENEGEMS_BROKER_PORT": "18883", "SCENEGEMS_OPERATOR_PORT": str(OPERATOR_PORT), "POSTGRES_HOST_PORT": "15432"}
-NODE_PARAMETERS = {"SCENEGEMS_NODE_CAPABILITIES": "scene_generation:2,trajectory_generation:2,simulation.kinematic:2,monitoring.post_hoc:2"}
+NODE_PARAMETERS = {
+    "SCENEGEMS_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
+    "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
+}
 STRAIGHT_CLASSES = [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in range(5)]
 RRT_CLASSES = [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in (5, 6)]
 QUOTA = 4

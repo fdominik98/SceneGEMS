@@ -12,16 +12,18 @@
                             seed, the timeout
     monitoring.post_hoc     (monitor_trajectories) the planned trajectories, as the simulation
                             gets them
-    simulation.kinematic    the trajectory result's trajectories (a reference into its
+    simulation              runner kinematic: the trajectory result's trajectories (a reference into its
                             trajectory_data with pointer /trajectories, or the inline list), or an
                             input item's trajectories reference; the stack's mode and parameters,
                             the run's seed (the case seed unless the run fixes one), the live
                             monitor options
-    simulation.ardupilot_sim, simulation.gazebo
-                            the same trajectories for a run on an ArduPilot stack: its simulation layer,
+                            runner ardupilot: the same trajectories for a run on an ArduPilot stack: its simulation layer,
                             speedup, geofence, dt, steps and the run seed; the observed run comes back
                             as trajectories (include_trajectories), with the live monitor options when
-                            the run is judged live and no state rows (the trajectories are the state log)
+                            the run is judged live and no state rows (the trajectories are the state log);
+                            the stack's mode and USV Navigation parameters
+                            runner gazebo_custom: the same for the custom controller on Gazebo, with the
+                            run's environment (wind and waves) and no speedup or geofence
     monitoring.post_hoc     (monitor) the simulation result's trajectories, the COLREGS constants
     calibration.deviation   the trajectories of the run's repeats
 
@@ -34,15 +36,25 @@ intent, so a payload the master would refuse never reaches the queue.
 """
 
 import hashlib
-from typing import Any, Dict, Mapping, Optional, Sequence
+from typing import Any, Collection, Dict, Mapping, Optional, Sequence, Tuple
 
 from pydantic import ValidationError
 
-from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, FunctionalScenarioInput, InputArtifactKind, InputItem, InputRef, RunConfig
+from scenegems_tool.assurance.campaign.campaign_config import (
+    ArdupilotStackConfig,
+    CampaignConfig,
+    CustomStackConfig,
+    FunctionalScenarioInput,
+    InputArtifactKind,
+    InputItem,
+    InputRef,
+    RunConfig,
+)
 from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.stage_graph import StageGraph, Step
-from scenegems_tool.cluster.fingerprints.job_images import job_images
+from scenegems_tool.cluster.fingerprints.comparison import fingerprints_of
+from scenegems_tool.cluster.fingerprints.components import ComponentId, SimulationRunner, images_of
 from scenegems_tool.cluster.protocol.artifacts import ArtifactContent, encode_document, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSubmission, JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, TrajectoryGeneratorImplementation
@@ -109,21 +121,20 @@ def item_trajectories(item: InputItem) -> Dict[str, Any]:
     return reference
 
 
-def validate_payload(job_type: JobType, payload: Mapping[str, Any]) -> None:
-    """Checks the payload with its job type's model, as the master does at submission; raises PayloadError."""
-    from scenegems_tool.cluster.node.jobs.job_payload import validate_structure
-    from scenegems_tool.cluster.node.jobs.job_types import payload_model
+def validate_payload(job_type: JobType, payload: Mapping[str, Any]) -> Tuple[ComponentId, ...]:
+    """Checks the payload with its job type's model, as the master does at submission, and returns the components it needs; raises PayloadError."""
+    from scenegems_tool.cluster.node.jobs.job_types import payload_components
 
     try:
-        validate_structure(payload_model(job_type), payload)
+        return payload_components(job_type, payload)
     except ValidationError as error:
         problems = "; ".join(f"{'.'.join(str(part) for part in issue['loc'])}: {issue['msg']}" for issue in error.errors(include_url=False, include_input=False))
         raise PayloadError(f"invalid {job_type.value} payload: {problems}") from error
 
 
-def required_fingerprints(job_type: JobType, pinned: Mapping[str, str]) -> Dict[str, str]:
-    """The pinned fingerprints of the images a job of the type runs in."""
-    return {image: pinned[image] for image in job_images(job_type) if image in pinned}
+def required_fingerprints(components: Collection[ComponentId], pinned: Mapping[str, str]) -> Dict[str, str]:
+    """The pinned fingerprints of the images of these components, keyed by repository; a pin under another tag (an older release's) holds."""
+    return fingerprints_of(images_of(components), pinned)
 
 
 class PayloadBuilder:
@@ -192,8 +203,10 @@ class PayloadBuilder:
         run = self.config.execution.runs[run_index]
         if isinstance(run.stack, ArdupilotStackConfig):
             return self._ardupilot_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
+        if isinstance(run.stack, CustomStackConfig):
+            return self._custom_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         stack = run.stack
-        payload: Dict[str, Any] = {"mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
+        payload: Dict[str, Any] = {"runner": SimulationRunner.KINEMATIC.value, "mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
         if stack.usv_navigation is not None:
             payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
         if stack.dt is not None:
@@ -205,9 +218,11 @@ class PayloadBuilder:
         return payload
 
     def _ardupilot_simulation(self, run: RunConfig, stack: ArdupilotStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:
-        """The simulation.ardupilot_sim or simulation.gazebo payload of a run: the observed run always comes back as trajectories (what the post-hoc monitor, the calibration and the frames take)."""
+        """The ardupilot runner's payload of a run: the observed run always comes back as trajectories (what the post-hoc monitor, the calibration and the frames take)."""
         payload: Dict[str, Any] = {
+            "runner": SimulationRunner.ARDUPILOT.value,
             "simulation_layer": stack.simulation_layer,
+            "mode": stack.mode.value,
             "trajectories": trajectories,
             "geofence": stack.geofence.model_dump(mode="json"),
             "speedup": stack.speedup,
@@ -215,6 +230,24 @@ class PayloadBuilder:
             "include_states": False,  # the sample rows would be a second state log next to the trajectories
             "include_trajectories": True,
         }
+        return self._lockstep_options(run, stack, payload)
+
+    def _custom_simulation(self, run: RunConfig, stack: CustomStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:
+        """The gazebo_custom runner's payload of a run: the run's environment goes to the world and to the controller's hulls, and the observed run comes back as trajectories."""
+        payload: Dict[str, Any] = {
+            "runner": SimulationRunner.GAZEBO_CUSTOM.value,
+            "mode": stack.mode.value,
+            "trajectories": trajectories,
+            "environment": run.environment.model_dump(mode="json"),
+            "seed": seed,
+            "include_trajectories": True,
+        }
+        return self._lockstep_options(run, stack, payload)
+
+    def _lockstep_options(self, run: RunConfig, stack: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """The fields the ardupilot and gazebo_custom payloads share: the USV Navigation parameters, dt, steps and the live monitor's options."""
+        if stack.usv_navigation is not None:
+            payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
         if stack.dt is not None:
             payload["dt"] = stack.dt
         if stack.steps is not None:
@@ -249,11 +282,11 @@ class PayloadBuilder:
     # Submissions
 
     def submission(self, step: Step, payload: Dict[str, Any], key: str, pinned: Mapping[str, str]) -> JobSubmission:
-        """The job of a step, checked: its payload, the campaign's labels and nodes, the pinned fingerprints of its images, its priority."""
+        """The job of a step, checked: its payload, the campaign's labels and nodes, its components and the pinned fingerprints of their images, its priority."""
         job_type = self.graph.job_type_of(step)
-        validate_payload(job_type, payload)
+        components = validate_payload(job_type, payload)
         resources = self.config.resources
-        requirements = JobRequirements(labels=dict(resources.required_labels), fingerprints=required_fingerprints(job_type, pinned))
+        requirements = JobRequirements(labels=dict(resources.required_labels), components=list(components), fingerprints=required_fingerprints(components, pinned))
         return JobSubmission(
             job_type=job_type,
             payload=payload,

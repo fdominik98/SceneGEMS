@@ -50,9 +50,10 @@ class FakeClient:
 class FakeContainer:
     service_topic = "waraps/service/virtual/real/scenario_execution_service"
 
-    def __init__(self, *args, on_ground_control_ports=None):
+    def __init__(self, *args, on_ground_control_ports=None, scope=None):
         self.args = args
         self.on_ground_control_ports = on_ground_control_ports
+        self.scope = scope
         self.cancelled = False
         self.destroyed = False
 

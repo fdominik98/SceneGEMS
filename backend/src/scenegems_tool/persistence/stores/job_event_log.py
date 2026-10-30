@@ -1,7 +1,7 @@
 """The append-only history of each job: one row per state change, never updated or deleted."""
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,3 +31,14 @@ def append_job_event(session: Session, job: JobRow, kind: JobEventKind, from_sta
 def job_events(session: Session, job_id: str) -> List[JobEventRecord]:
     rows = session.execute(select(JobEventRow).where(JobEventRow.job_id == job_id).order_by(JobEventRow.id)).scalars()
     return [JobEventRecord.from_row(row) for row in rows]
+
+
+def rejections_since(session: Session, since: datetime, unfinished_states: Sequence[JobState]) -> List[JobEventRecord]:
+    """The reject events since `since` of jobs in unfinished_states that name their node, oldest first."""
+    query = (
+        select(JobEventRow)
+        .join(JobRow, JobRow.id == JobEventRow.job_id)
+        .where(JobEventRow.kind == JobEventKind.REJECTED, JobEventRow.at >= since, JobEventRow.node_id.is_not(None), JobRow.state.in_(unfinished_states))
+        .order_by(JobEventRow.at, JobEventRow.id)
+    )
+    return [JobEventRecord.from_row(row) for row in session.execute(query).scalars()]

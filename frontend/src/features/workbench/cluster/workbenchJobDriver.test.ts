@@ -113,7 +113,7 @@ function fakeMaster() {
 }
 
 function access(client: OperatorClient): ClusterAccess {
-  return { cluster: { client, channel: null }, resources: (jobType) => ({ jobType, nodes: 1, slots: 1, freeSlots: 1, blocker: null }) };
+  return { cluster: { client, channel: null }, resources: (jobType, components = []) => ({ jobType, components: [...components], nodes: 1, slots: 1, freeSlots: 1, blocker: null }) };
 }
 
 describe("workbench job driver", () => {
@@ -224,16 +224,16 @@ describe("workbench job driver", () => {
     const requested: string[] = [];
     const driver = new WorkbenchJobDriver(() => ({
       cluster: { client, channel: null },
-      resources: (jobType) => {
-        requested.push(jobType);
-        return { jobType, nodes: 1, slots: 1, freeSlots: 1, blocker: null };
+      resources: (jobType, components = []) => {
+        requested.push(`${jobType} with ${components.join(", ")}`);
+        return { jobType, components: [...components], nodes: 1, slots: 1, freeSlots: 1, blocker: null };
       },
     }));
     driver.pollMs = 1;
     driver.jobPollMs = 1;
     const ref = { sha256: TRAJECTORY_SHA, size_bytes: 9, kind: "trajectories", media_type: "application/json", pointer: null };
     await driver.runSimulationEntry(
-      { where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 3, summary: "" },
+      { where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "gazebo", mode: "replay", ownShipId: null, speedup: 3, components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], summary: "" },
       {
         input: { label: "planned", origin: "history", ref, source: { campaign_id: "c1", case_id: 5, step: "trajectory_generation" } },
         scenarioContent: null,
@@ -242,7 +242,7 @@ describe("workbench job driver", () => {
       }
     );
 
-    expect(requested).toContain("simulation.gazebo");
+    expect(requested).toContain("simulation with asv_software/replay, control_layer/ardupilot, simulation_layer/gazebo");
     const [body] = created;
     expect(body).toMatchObject({ kind: "workbench", origin: "simulation", start: true });
     expect(parse(body.config as string)).toMatchObject({

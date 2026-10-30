@@ -163,6 +163,22 @@ class LiveRunRecorder:
         self._changed(campaign_id)
         self.pipeline.wake()
 
+    async def stop_stranded_entries(self) -> List[str]:
+        """Stops the live session entries a stopped master left without a run; returns their ids.
+
+        The gateway calls it as it starts, before any connection: no live session runs then,
+        so an entry of origin live_session that still wants to run and has no case lost its
+        session with the previous process and would stay running for ever. An entry with a
+        case got its run recorded, and the engine finishes it.
+        """
+        stopped = await anyio.to_thread.run_sync(self._stop_stranded)
+        for campaign_id in stopped:
+            self._changed(campaign_id)
+        if stopped:
+            logger.info("Stopped %d live session entries left without a run by the previous master process", len(stopped))
+            self.pipeline.wake()
+        return stopped
+
     # Worker threads
 
     def _open(self, setup: LiveRunSetup) -> OpenedEntry:
@@ -186,6 +202,22 @@ class LiveRunRecorder:
         )
         self.artifacts.records.add_reference(item["sha256"], ArtifactHolderKind.CAMPAIGN, campaign.campaign_id, INPUT_ROLE, campaign.campaign_id)
         return OpenedEntry(campaign.campaign_id, item)
+
+    def _stop_stranded(self) -> List[str]:
+        from scenegems_tool.persistence.schema import CampaignActualState, CampaignDesiredState, CampaignOrigin
+        from scenegems_tool.persistence.stores import CampaignStateConflict
+
+        open_states = [state for state in CampaignActualState if not state.is_final]
+        stopped = []
+        for campaign in self.stores.campaigns.list_campaigns(open_states, limit=None, origins=[CampaignOrigin.LIVE_SESSION]):
+            if campaign.desired_state == CampaignDesiredState.STOPPED or self.stores.cases.count_cases(campaign.campaign_id) > 0:
+                continue
+            try:
+                self.stores.campaigns.set_desired_state(campaign.campaign_id, CampaignDesiredState.STOPPED)
+            except CampaignStateConflict:
+                continue  # finished or stopped meanwhile
+            stopped.append(campaign.campaign_id)
+        return stopped
 
     def _config(self, setup: LiveRunSetup, item: Dict[str, Any]) -> Dict[str, Any]:
         name = f"Live session: {setup.scenario_name} ({self._clock().strftime('%Y-%m-%d %H:%M')})"[:MAX_NAME_LENGTH]

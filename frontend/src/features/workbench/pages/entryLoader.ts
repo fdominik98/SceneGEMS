@@ -52,6 +52,8 @@ export interface LoadedTrajectories {
 /** What the simulation page fills its setup from, so the run can run again. */
 export interface LoadedRunSetup {
   simulationLayer: string;
+  /** The control layer the run's stack section names (custom), or null for the one its layer implies. */
+  controlLayer: string | null;
   mode: string | null;
   /** SITL's requested pace of an ArduPilot run; null on the kinematic layer. */
   speedup: number | null;
@@ -165,6 +167,7 @@ export function runSetupOf(record: Pick<RunRecord, "stack" | "environment">): Lo
   const waves = isRecord(record.environment.waves) ? record.environment.waves : null;
   return {
     simulationLayer: typeof config.simulation_layer === "string" ? config.simulation_layer : "kinematic",
+    controlLayer: typeof config.control_layer === "string" ? config.control_layer : null,
     mode: typeof config.mode === "string" ? config.mode : null,
     speedup: typeof config.speedup === "number" && Number.isFinite(config.speedup) ? config.speedup : null,
     windVector: numberTriple(record.environment.wind_vector),

@@ -16,8 +16,9 @@ Sections:
     trajectories    the generator: monitor_driven_rrt with its search parameters (the wire keys of
                     TrajectoryGenerationParams) or straight with its timespan; the timeout; format 2:
                     the monitor of the planned trajectories (post_hoc or empty)
-    execution       the runs of every case: a stack (kinematic, or ArduPilot SITL or Gazebo replay), an
-                    environment, a seed, repeats, the monitor
+    execution       the runs of every case: a stack (the kinematic layer, ArduPilot on SITL or Gazebo, or
+                    the custom controller on Gazebo, each with replay or USV Navigation on the own
+                    ship), an environment, a seed, repeats, the monitor
     resources       the nodes it may use (all when none are named), required node labels, queue depth
                     caps per stage, priority
     policy          retention, whether to keep frames, the campaign seed, stop conditions
@@ -44,11 +45,23 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Literal, Mapping, Optional, Tuple, Union
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, ValidatorFunctionWrapHandler, WrapValidator, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    TypeAdapter,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    WrapValidator,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode, UsvNavigationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
 from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
@@ -313,10 +326,22 @@ class EnvironmentSettings(ConfigModel):
     waves: Optional[WaveSettings] = None
 
 
+def _check_usv_navigation_mode(mode: KinematicMode, usv_navigation: Optional[UsvNavigationPayload]) -> None:
+    if usv_navigation is not None and mode != KinematicMode.USV_NAVIGATION:
+        raise ValueError("usv_navigation parameters apply only to mode usv_navigation")
+
+
+def _check_whole_seconds(dt: Optional[float]) -> Optional[float]:
+    if dt is not None and not float(dt).is_integer():
+        raise ValueError("the observed trajectories and the live monitor need a whole number of seconds as dt")
+    return dt
+
+
 class KinematicStackConfig(ConfigModel):
     """A run on the kinematic layer: every vessel replays, or the own ship runs USV Navigation.
 
-    The stacks on the ArduPilot layers are ArdupilotStackConfig; StackConfig is the union on simulation_layer.
+    The stacks on the ArduPilot layers are ArdupilotStackConfig, the custom controller on Gazebo
+    CustomStackConfig; StackConfig is the union on simulation_layer and control_layer.
     """
 
     simulation_layer: Literal["kinematic"] = "kinematic"
@@ -327,12 +352,15 @@ class KinematicStackConfig(ConfigModel):
 
     @model_validator(mode="after")
     def _usv_navigation_needs_its_mode(self) -> "KinematicStackConfig":
-        if self.usv_navigation is not None and self.mode != KinematicMode.USV_NAVIGATION:
-            raise ValueError("usv_navigation parameters apply only to mode usv_navigation")
+        _check_usv_navigation_mode(self.mode, self.usv_navigation)
         return self
 
 
 ARDUPILOT_LAYERS = ("ardupilot_sim", "gazebo")  # the simulation layers of ArdupilotStackConfig, as ArduPilotSimulationLayer names them
+CUSTOM_CONTROL_LAYER = "custom"  # the control layer of CustomStackConfig, which its stack section names
+CUSTOM_LAYERS = ("gazebo",)  # the simulation layers of CustomStackConfig
+# The control layer a stack section's simulation layer implies when it names none; naming it changes nothing
+IMPLIED_CONTROL_LAYERS = {"kinematic": "none", **{layer: "ardupilot" for layer in ARDUPILOT_LAYERS}}
 DEFAULT_GEOFENCE_LATITUDE, DEFAULT_GEOFENCE_LONGITUDE, DEFAULT_GEOFENCE_RADIUS_M = DEFAULT_REFERENCE_GEOFENCE  # the workbench's reference area
 
 
@@ -345,38 +373,96 @@ class GeofenceSettings(ConfigModel):
 
 
 class ArdupilotStackConfig(ConfigModel):
-    """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays its trajectory.
+    """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays, or the own ship runs USV Navigation.
 
-    The ASV software is replay over the replay_mavlink_lockstep adapter, in the bounded repeatability
-    tier, as simulation.ardupilot_sim and simulation.gazebo run it. The job applies no environment, so a run on this stack is calm.
+    Replay goes over the replay_mavlink_lockstep adapter and USV Navigation over usv_navigation_mavlink_lockstep,
+    in the bounded repeatability tier, as the simulation job's ardupilot runner runs them. The job applies no
+    environment, so a run on this stack is calm. usv_navigation is left out of the JSON while it is absent,
+    so a config written before the mode existed keeps its JSON, its hash and its calibration stack key.
     """
 
     simulation_layer: Literal["ardupilot_sim", "gazebo"]
-    mode: Literal["replay"] = "replay"
+    mode: KinematicMode = KinematicMode.REPLAY
+    usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
     speedup: int = Field(default=1, ge=1)  # SITL's requested pace, as the resolver checks it
-    dt: Optional[float] = Field(default=None, gt=0)  # the trajectories' time step when absent; whole seconds
+    dt: Optional[float] = Field(default=None, gt=0)  # whole seconds; the trajectories' time step when absent, 1 s when Rover cannot take that (generated trajectories are 15 s)
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
     geofence: GeofenceSettings = Field(default_factory=GeofenceSettings)
 
     @field_validator("dt")
     @classmethod
     def _whole_seconds(cls, dt: Optional[float]) -> Optional[float]:
-        if dt is not None and not float(dt).is_integer():
-            raise ValueError("the observed trajectories and the live monitor need a whole number of seconds as dt")
-        return dt
+        return _check_whole_seconds(dt)
+
+    @model_validator(mode="after")
+    def _usv_navigation_needs_its_mode(self) -> "ArdupilotStackConfig":
+        _check_usv_navigation_mode(self.mode, self.usv_navigation)
+        return self
+
+    @model_serializer(mode="wrap")
+    def _without_absent_usv_navigation(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        data = handler(self)
+        if self.usv_navigation is None:
+            data.pop("usv_navigation", None)
+        return data
+
+
+class CustomStackConfig(ConfigModel):
+    """A run on the custom controller on Gazebo: every vessel replays through the line-of-sight follower, or the own ship runs USV Navigation.
+
+    The simulation job's gazebo_custom runner steps the Gazebo world itself, with no SITL, in the bounded
+    repeatability tier (a thrust can reach gz sim an iteration late). The run applies its environment: the
+    generated world and the hull dynamics of the controller take the same wind and waves, as far as the
+    resolver supports them. The section names its control layer (control_layer: custom), which tells it
+    from ArduPilot on the same layer.
+    """
+
+    simulation_layer: Literal["gazebo"]
+    control_layer: Literal["custom"]
+    mode: KinematicMode = KinematicMode.REPLAY
+    usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
+    dt: Optional[float] = Field(default=None, gt=0)  # the trajectories' time step when absent; whole seconds
+    steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
+
+    @field_validator("dt")
+    @classmethod
+    def _whole_seconds(cls, dt: Optional[float]) -> Optional[float]:
+        return _check_whole_seconds(dt)
+
+    @model_validator(mode="after")
+    def _usv_navigation_needs_its_mode(self) -> "CustomStackConfig":
+        _check_usv_navigation_mode(self.mode, self.usv_navigation)
+        return self
 
 
 def _stack_by_layer(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
-    """Validates a stack as the model of its simulation_layer (kinematic when it names none), so an error names the field under stack and not a union member."""
-    if isinstance(value, (KinematicStackConfig, ArdupilotStackConfig)):
+    """Validates a stack as the model of its simulation_layer and control_layer (kinematic when it names none), so an error names the field under stack and not a union member.
+
+    control_layer custom picks CustomStackConfig. The control layer a simulation layer implies (none on
+    kinematic, ardupilot on the ArduPilot layers) may be named too and is dropped, so it adds nothing to the JSON.
+    """
+    if isinstance(value, (KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig)):
         return value
-    layer = value.get("simulation_layer", "kinematic") if isinstance(value, Mapping) else None
-    if layer != "kinematic" and layer not in ARDUPILOT_LAYERS and isinstance(value, Mapping):
+    if not isinstance(value, Mapping):
+        return KinematicStackConfig.model_validate(value)
+    layer = value.get("simulation_layer", "kinematic")
+    if layer != "kinematic" and layer not in ARDUPILOT_LAYERS:
         raise ValueError(f"unknown simulation_layer {layer!r}; a stack runs on kinematic, {', '.join(ARDUPILOT_LAYERS)}")
+    control = value.get("control_layer")
+    if control == CUSTOM_CONTROL_LAYER:
+        if layer not in CUSTOM_LAYERS:
+            raise ValueError(f"the custom control layer drives {', '.join(CUSTOM_LAYERS)} only, not {layer!r}")
+        return CustomStackConfig.model_validate(value)
+    if "control_layer" in value:
+        implied = IMPLIED_CONTROL_LAYERS[layer]
+        if control != implied:
+            choices = f"{implied} or {CUSTOM_CONTROL_LAYER}" if layer in CUSTOM_LAYERS else implied
+            raise ValueError(f"control_layer {control!r} does not run on {layer}; it takes {choices}")
+        value = {key: field for key, field in value.items() if key != "control_layer"}
     return (ArdupilotStackConfig if layer in ARDUPILOT_LAYERS else KinematicStackConfig).model_validate(value)
 
 
-StackConfig = Annotated[Union[KinematicStackConfig, ArdupilotStackConfig], WrapValidator(_stack_by_layer)]
+StackConfig = Annotated[Union[KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig], WrapValidator(_stack_by_layer)]
 
 
 class RunConfig(ConfigModel):
@@ -394,6 +480,8 @@ class RunConfig(ConfigModel):
             raise ValueError("early_stop needs the live monitor")
         if self.early_stop and isinstance(self.stack, ArdupilotStackConfig):
             raise ValueError("the ArduPilot stacks do not stop early: the lockstep run always finishes")
+        if self.early_stop and isinstance(self.stack, CustomStackConfig):
+            raise ValueError("the custom controller on Gazebo does not stop early: the lockstep run always finishes")
         return self
 
     def seed_for(self, case_seed_value: int) -> int:

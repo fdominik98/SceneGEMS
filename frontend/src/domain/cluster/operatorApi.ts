@@ -101,6 +101,10 @@ export interface CaseFilters {
   offset?: number;
 }
 
+/** The orders the master sorts verdicts in (Phase 7); `fec_id` is FEC, case, step and run. */
+export const VERDICT_SORTS = ["fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at"] as const;
+export type VerdictSort = (typeof VERDICT_SORTS)[number];
+
 export interface VerdictFilters {
   fec_id?: string;
   state?: VerdictState;
@@ -108,6 +112,9 @@ export interface VerdictFilters {
   sensitive?: boolean;
   /** Phase 6: the verdicts of one monitored step; without it, every step. */
   step?: VerdictStep;
+  /** Phase 7: the order (`fec_id` is the default FEC, case, step, run order); an older master ignores it. */
+  sort?: VerdictSort;
+  order?: "asc" | "desc";
   limit?: number;
   offset?: number;
 }
@@ -353,8 +360,8 @@ export class OperatorClient {
     return this.list(`${this.campaignPath(campaignId)}/run-records`, runRecordSchema, { ...filters }, signal);
   }
 
-  /** The audit trail after an event id, oldest first. */
-  listEvents(campaignId: string, filters: { after?: number; limit?: number } = {}, signal?: AbortSignal) {
+  /** The audit trail after an event id, oldest first; `newest` (1 to 1000, Phase 7) answers that many of the newest events instead, still oldest first. */
+  listEvents(campaignId: string, filters: { after?: number; limit?: number; newest?: number } = {}, signal?: AbortSignal) {
     return this.list(`${this.campaignPath(campaignId)}/events`, campaignEventSchema, { ...filters }, signal);
   }
 

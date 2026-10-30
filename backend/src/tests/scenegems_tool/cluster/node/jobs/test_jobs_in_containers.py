@@ -111,8 +111,8 @@ def master_id() -> str:
 
 
 def test_kinematic_simulation_runs_in_a_container(broker, master_id, make_job, head_on_trajectories):
-    node = make_node(broker, master_id, "n1", {JobType.SIMULATION_KINEMATIC: 1})
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "include_trajectories": False})
+    node = make_node(broker, master_id, "n1", {JobType.SIMULATION: 1})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False})
     report = RecordingReport()
     result = run_job(job, node, report)
     assert result["state_digest"] == run_kinematic_replay(head_on_trajectories).state_digest()
@@ -122,9 +122,10 @@ def test_kinematic_simulation_runs_in_a_container(broker, master_id, make_job, h
 
 
 def test_two_kinematic_jobs_run_side_by_side(broker, master_id, make_job, head_on_trajectories):
-    node = make_node(broker, master_id, "n1", {JobType.SIMULATION_KINEMATIC: 2})
+    node = make_node(broker, master_id, "n1", {JobType.SIMULATION: 2})
     jobs = [
-        make_job(JobType.SIMULATION_KINEMATIC, {"mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}, job_id=f"side-{index}") for index in range(2)
+        make_job(JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}, job_id=f"side-{index}")
+        for index in range(2)
     ]
     reports = [RecordingReport(), RecordingReport()]
     results = [None, None]
@@ -154,8 +155,8 @@ def test_post_hoc_monitoring_runs_in_a_container(broker, master_id, make_job, he
 
 def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, master_id, make_job, head_on_trajectories):
     """Needs the scenario execution image built from Phase 4 (P4.2) code."""
-    node = make_node(broker, master_id, "n1", {JobType.SIMULATION_KINEMATIC: 1})
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "include_trajectories": False, "monitor": "live"})
+    node = make_node(broker, master_id, "n1", {JobType.SIMULATION: 1})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False, "monitor": "live"})
     result = run_job(job, node, RecordingReport())
     assert result["state_digest"] == run_kinematic_replay(head_on_trajectories).state_digest()
     assert not result["monitor"]["passed"] and result["monitor"]["stopped_early_at"] is None

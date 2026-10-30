@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { connectionHints } from "./connectionHints";
+import { connectionHints, liveSessionsOffNote } from "./connectionHints";
 
 describe("connection hints", () => {
   it("points at the master's broker service for the master broker", () => {
@@ -15,5 +15,11 @@ describe("connection hints", () => {
 
   it("names the TLS port of the public broker when TLS is on", () => {
     expect(connectionHints(false, "broker.waraps.org", 8883, true).at(-1)).toContain("8883");
+  });
+
+  it("says live sessions are off only when the master reports them off", () => {
+    expect(liveSessionsOffNote(true)).toBeNull();
+    expect(liveSessionsOffNote(undefined)).toBeNull();
+    expect(liveSessionsOffNote(false)).toContain("Live sessions are off on this master");
   });
 });

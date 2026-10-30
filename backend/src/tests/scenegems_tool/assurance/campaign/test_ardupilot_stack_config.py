@@ -13,13 +13,14 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.node.jobs.simulation_ardupilot_job import ArduPilotSimulationLayer
+from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationLayer
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
 CLASS = "2vessel_0obstacle_scenarios/functional_model0"
 WAVES = {"amplitude": 0.5, "period": 4.0, "steepness": 0.1, "direction": [1.0, 0.0]}
+USV_NAVIGATION = {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}
 
 
 def _config(*runs, **sections):
@@ -78,6 +79,36 @@ def test_the_stack_values_and_a_geofence_are_kept_and_round_trip_through_the_sto
     assert campaign_config_from_dict(config.to_json()) == config and campaign_config_from_dict(config.to_json()).config_hash() == config.config_hash()
 
 
+# Configs stored before USV Navigation on ArduPilot existed, and their hashes then
+STORED_ARDUPILOT_HASHES = {
+    "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "a0cfa9556b4fe7df370d136abb190b68e1e7f5a2466f04bc41345ff1588278e9"),
+    "sitl": (
+        {"stack": {"simulation_layer": "ardupilot_sim", "speedup": 4, "dt": 2, "steps": 30, "geofence": {"latitude": 58.0}}, "monitor": "live", "repeats": 2},
+        "f4f8b82409661fb29e3fe760c3d6843a34fb4b4909814d814dae42b7c5218f77",
+    ),
+}
+
+
+@pytest.mark.parametrize("name", STORED_ARDUPILOT_HASHES)
+def test_an_ardupilot_config_from_before_the_mode_keeps_its_json_hash_and_stack_key(name):
+    from scenegems_tool.assurance.pipeline.payload_builder import stack_key
+
+    run, stored_hash = STORED_ARDUPILOT_HASHES[name]
+    config = _config(run)
+    assert config.config_hash() == stored_hash
+    assert "usv_navigation" not in config.to_json()["execution"]["runs"][0]["stack"] and "usv_navigation" not in stack_key(config, 0)
+    named = _config({**run, "stack": {**run["stack"], "control_layer": "ardupilot"}})
+    assert named.config_hash() == stored_hash, "the implied control layer adds nothing"
+
+
+def test_usv_navigation_on_ardupilot_is_kept_and_round_trips():
+    config = _config(_run("gazebo", stack={"mode": "usv_navigation", "usv_navigation": USV_NAVIGATION}))
+    (stored,) = config.to_json()["execution"]["runs"]
+    assert stored["stack"]["mode"] == "usv_navigation" and stored["stack"]["usv_navigation"]["goal"] == [3000.0, 0.0]
+    assert campaign_config_from_dict(config.to_json()).config_hash() == config.config_hash()
+    assert config.config_hash() != _config(_run("gazebo", stack={"mode": "usv_navigation"})).config_hash() != _config(_run("gazebo")).config_hash()
+
+
 def test_the_geofence_is_pinned_in_the_hash():
     base, moved = _config(_run()), _config(_run(stack={"geofence": {"latitude": 58.0}}))
     assert base.config_hash() != moved.config_hash() and base.config_hash() != _config(_run("gazebo")).config_hash()
@@ -92,14 +123,18 @@ def test_a_format_1_config_without_ardupilot_keeps_its_hash():
     "run, reason",
     [
         ({"stack": {"simulation_layer": "mars"}}, "execution.runs.0.stack: Value error, unknown simulation_layer 'mars'; a stack runs on kinematic, ardupilot_sim, gazebo"),
-        (_run(stack={"mode": "usv_navigation"}), "execution.runs.0.stack.mode: Input should be 'replay'"),
+        (_run(stack={"mode": "pilot"}), "execution.runs.0.stack.mode: Input should be 'replay' or 'usv_navigation'"),
+        (_run(stack={"usv_navigation": USV_NAVIGATION}), "execution.runs.0.stack: Value error, usv_navigation parameters apply only to mode usv_navigation"),
+        (_run(stack={"control_layer": "none"}), "execution.runs.0.stack: Value error, control_layer 'none' does not run on ardupilot_sim; it takes ardupilot"),
+        (_run(stack={"control_layer": "custom"}), "execution.runs.0.stack: Value error, the custom control layer drives gazebo only, not 'ardupilot_sim'"),
+        (_run("gazebo", stack={"control_layer": "none"}), "execution.runs.0.stack: Value error, control_layer 'none' does not run on gazebo; it takes ardupilot or custom"),
         (_run(stack={"speedup": 0}), "execution.runs.0.stack.speedup: Input should be greater than or equal to 1"),
         (_run(stack={"dt": 1.5}), "execution.runs.0.stack.dt: Value error, the observed trajectories and the live monitor need a whole number of seconds as dt"),
         (_run(stack={"dt": 0}), "execution.runs.0.stack.dt: Input should be greater than 0"),
         (_run(stack={"steps": 0}), "execution.runs.0.stack.steps: Input should be greater than or equal to 1"),
         (_run(stack={"geofence": {"latitude": 91}}), "execution.runs.0.stack.geofence.latitude: Input should be less than or equal to 90"),
         (_run(stack={"geofence": {"radius_meters": 0}}), "execution.runs.0.stack.geofence.radius_meters: Input should be greater than 0"),
-        (_run(stack={"usv_navigation": {"goal": [1, 2]}}), "execution.runs.0.stack.usv_navigation: Extra inputs are not permitted"),
+        (_run(stack={"mode": "usv_navigation", "usv_navigation": {"goal": [1, 2]}}), "execution.runs.0.stack.usv_navigation.speed: Field required"),
         (_run(monitor="live", early_stop=True), "the ArduPilot stacks do not stop early"),
     ],
 )
@@ -130,6 +165,22 @@ def test_both_layers_resolve_as_replay_on_ardupilot_in_the_bounded_tier(layer):
     (resolved,) = validated.runs
     assert resolved.repeatability_tier == "bounded" and resolved.environment == {"wind_vector": None, "waves": None}
     assert resolved.vessels[OWN_SHIP].simulation_layer.value == layer
+
+
+@pytest.mark.parametrize("layer", ARDUPILOT_LAYERS)
+def test_usv_navigation_steers_the_own_ship_on_ardupilot_in_the_bounded_tier(layer):
+    stack = _config(_run(layer, stack={"mode": "usv_navigation"})).execution.runs[0].stack
+    stacks = vessel_stacks(stack)
+    assert (stacks[OWN_SHIP].asv_software, stacks[OWN_SHIP].control_layer) == (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT)
+    assert (stacks[TARGET_SHIP].asv_software, stacks[TARGET_SHIP].control_layer) == (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT)
+    (resolved,) = validate_campaign_config(_config(_run(layer, stack={"mode": "usv_navigation"}))).runs
+    assert resolved.repeatability_tier == "bounded"
+
+
+def test_usv_navigation_on_ardupilot_holds_its_measured_speedup():
+    assert validate_campaign_config(_config(_run(stack={"mode": "usv_navigation", "speedup": 20}))).runs
+    reasons = _rejection(_config(_run(stack={"mode": "usv_navigation", "speedup": 40})))
+    assert "speedup 40 exceeds the measured max_speedup 20 of usv_navigation_mavlink_lockstep" in reasons
 
 
 def test_a_run_may_mix_ardupilot_and_kinematic_runs():

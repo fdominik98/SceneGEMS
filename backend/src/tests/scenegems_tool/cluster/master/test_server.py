@@ -101,3 +101,24 @@ def test_the_master_hands_the_gateway_a_recorder_of_live_sessions(tmp_path, monk
     recorder = websocket_app.run_recorder()
     assert isinstance(recorder, LiveRunRecorder) and recorder.pipeline is not None and recorder.pipeline.stores is recorder.stores
     assert recorder.max_bytes == 1024 and recorder.artifacts.store.root == tmp_path and recorder._announce is not None
+
+
+def test_the_master_turns_the_gateway_s_live_sessions_off_when_told(monkeypatch):
+    from starlette.testclient import TestClient
+
+    from scenegems_tool.cluster.master.api.operator_routes import STATUS_PATH
+    from scenegems_tool.gateway import websocket_app
+
+    monkeypatch.setattr(websocket_app.app.state, "live_sessions", True)
+    monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
+    apps = build_master(_settings(live_sessions=False))
+    assert websocket_app.live_sessions() is False
+    client = TestClient(apps.operator)  # no lifespan: the gateway's installs signal handlers
+    assert client.get(STATUS_PATH).json()["live_sessions"] is False
+    assert client.get("/health").json() == {"status": "ok"}
+    build_master(_settings())
+    assert websocket_app.live_sessions() is True
+    without_gateway = build_master(_settings(), with_gateway=False)
+    client = TestClient(without_gateway.operator)
+    assert client.get(STATUS_PATH).json()["live_sessions"] is False
+    assert client.get("/health").status_code == 200

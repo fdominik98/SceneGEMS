@@ -12,6 +12,7 @@ and the campaigns its items came from, read from the stored config JSON so that 
 config model (which pulls in numpy and the job type modules the master keeps out of its startup).
 """
 
+import json
 from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
@@ -47,6 +48,7 @@ VERDICT_COLUMNS = (
     "margin",
     "sensitive",
     "early_stop_time_s",
+    "encounters",
     "created_at",
 )
 
@@ -274,14 +276,17 @@ def verdict_view(verdict: VerdictRecord) -> Dict[str, Any]:
         "margin": verdict.margin,
         "sensitive": verdict.sensitive,
         "early_stop_time_s": verdict.early_stop_time_s,
+        "encounters": verdict.encounters,
         "created_at": iso(verdict.created_at),
     }
 
 
 def verdict_row(verdict: VerdictRecord) -> List[Any]:
-    """The verdict as a CSV row in VERDICT_COLUMNS order: failed rules joined with a semicolon, empty cells for nulls."""
+    """The verdict as a CSV row in VERDICT_COLUMNS order: failed rules joined with a semicolon, encounters as compact JSON, empty cells for nulls."""
     values = verdict_view(verdict)
     values["failed_rules"] = ";".join(verdict.failed_rules)
+    if verdict.encounters is not None:
+        values["encounters"] = json.dumps(verdict.encounters, separators=(",", ":"))
     return ["" if values[column] is None else values[column] for column in VERDICT_COLUMNS]
 
 
@@ -338,6 +343,7 @@ def findings_view(step: str, findings: StepFindings) -> Dict[str, Any]:
         "failed_rules": [
             {"rule": rule.rule, "count": rule.count, "first_failure_time_s": {"min": rule.first_failure_time_min_s, "median": rule.first_failure_time_median_s}} for rule in findings.failed_rules
         ],
+        "encounter_types": findings.encounter_types,
         "fecs": [{"fec_id": entry.class_id, "cases": entry.cases, "passed": entry.passed, "failed": entry.failed} for entry in findings.classes],
         "durations_s": {"median": findings.duration_median_s, "p90": findings.duration_p90_s},
     }

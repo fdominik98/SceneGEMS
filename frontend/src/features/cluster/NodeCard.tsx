@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Disclosure } from "../../components/Disclosure";
+import { componentLabel, isWhollyOutOfDate, staleComponents } from "../../domain/cluster/components";
 import { createOperatorClient, describeOperatorError } from "../../domain/cluster/operatorApi";
 import { useNodesStore } from "../../domain/cluster/nodesStore";
 import type { NodeView } from "../../domain/cluster/schemas";
@@ -37,7 +38,7 @@ interface NodeCardProps {
   onToggleInstances: () => void;
 }
 
-/** One node of the cluster as a machine resource: state, slots, resources, leases and release; it opens the node's instances. */
+/** One node of the cluster as a machine resource: state, components, slots, resources, leases and release; it opens the node's instances. */
 export function NodeCard({ node, operatorUrl, nowMs, instancesOpen, onToggleInstances }: NodeCardProps) {
   const applyNode = useNodesStore((s) => s.applyNode);
   const removeNode = useNodesStore((s) => s.removeNode);
@@ -45,7 +46,8 @@ export function NodeCard({ node, operatorUrl, nowMs, instancesOpen, onToggleInst
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const totals = nodeSlotTotals(node);
-  const capabilities = Object.entries(node.capabilities).sort(([a], [b]) => a.localeCompare(b));
+  const slots = Object.entries(node.slots).sort(([a], [b]) => a.localeCompare(b));
+  const stale = staleComponents(node);
   const labels = Object.entries(node.labels).sort(([a], [b]) => a.localeCompare(b));
   const { resources } = node;
   const memoryUsed = resources.memory_mb - resources.free_memory_mb;
@@ -123,7 +125,12 @@ export function NodeCard({ node, operatorUrl, nowMs, instancesOpen, onToggleInst
 
       {node.out_of_date && (
         <div className="node-stale" role="status">
-          <strong>Out of date:</strong> its images differ from the master's release.
+          <strong>Out of date:</strong>{" "}
+          {isWhollyOutOfDate(node)
+            ? "its images differ from the master's release, so it gets no jobs."
+            : stale.length > 0
+              ? `the images of ${stale.map(componentLabel).join(", ")} differ from the master's release; jobs needing ${stale.length === 1 ? "it" : "them"} go elsewhere.`
+              : "its images differ from the master's release."}
           <ul className="node-stale-list">
             {node.fingerprint_mismatches.map((mismatch) => (
               <li key={mismatch.image}>
@@ -140,6 +147,23 @@ export function NodeCard({ node, operatorUrl, nowMs, instancesOpen, onToggleInst
           </ul>
         </div>
       )}
+
+      <ul className="node-components" aria-label="Components">
+        {node.components.length === 0 ? (
+          <li className="meta">No components reported.</li>
+        ) : (
+          node.components.map((entry) => (
+            <li
+              key={entry.component}
+              className={`node-component${entry.state === "out_of_date" ? " node-component--stale" : ""}`}
+              title={`${entry.component}${entry.images.length > 0 ? `: ${entry.images.join(", ")}` : ", no image of its own"}${entry.state === "out_of_date" ? " (out of date)" : ""}`}
+            >
+              {componentLabel(entry.component)}
+              {entry.state === "out_of_date" && <span className="node-component-state"> out of date</span>}
+            </li>
+          ))
+        )}
+      </ul>
 
       <div className="node-card-summary">
         <div className="node-card-block-head">
@@ -172,16 +196,16 @@ export function NodeCard({ node, operatorUrl, nowMs, instancesOpen, onToggleInst
       >
       <div className="node-card-block">
         <div className="node-card-block-head">
-          <span>Capabilities</span>
+          <span>Slots</span>
           <span className="node-card-block-total">
-            {totals.inUse} / {totals.slots} slots in use
+            {totals.inUse} / {totals.slots} in use
           </span>
         </div>
-        {capabilities.length === 0 ? (
-          <p className="meta">No capabilities reported.</p>
+        {slots.length === 0 ? (
+          <p className="meta">No slots reported.</p>
         ) : (
           <ul className="node-capabilities">
-            {capabilities.map(([jobType, usage]) => (
+            {slots.map(([jobType, usage]) => (
               <li key={jobType} className="node-capability">
                 <span className="node-capability-name" title={jobType}>
                   {jobTypeLabel(jobType)}

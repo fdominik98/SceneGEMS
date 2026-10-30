@@ -17,7 +17,7 @@ export function applySetupRequestToDrafts(
   drafts: VesselInitConnectionDraft[],
   mode: "replay" | "usv_navigation",
   ownShipIds: ReadonlySet<string>,
-  controlLayer: "none" | "ardupilot" = "none"
+  controlLayer: "none" | "ardupilot" | "custom" = "none"
 ): VesselInitConnectionDraft[] {
   return drafts.map((draft) => ({
     ...draft,

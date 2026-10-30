@@ -13,7 +13,7 @@ from scenegems_tool.cluster.protocol.messages import (
     Observe,
     Welcome,
 )
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer
+from scenegems_tool.cluster.protocol.node_description import SlotOffer
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 
 
@@ -37,25 +37,30 @@ def test_unknown_fields_are_rejected():
         LeaseAccept(lease_id="l1", lease="l1")
 
 
-def test_capability_needs_a_slot():
+def test_a_slot_offer_needs_a_slot():
     with pytest.raises(ValidationError):
-        CapabilityOffer(job_type=JobType.SCENE_GENERATION, slots=0)
+        SlotOffer(job_type=JobType.SCENE_GENERATION, slots=0)
 
 
-def test_hello_lists_capabilities_with_slots(resources):
+def test_hello_lists_slots_and_components(resources):
     hello = Hello(
         node_id="n1",
         node_name="lab-1",
         software_revision="4ac7ef2",
-        capabilities=[CapabilityOffer(job_type=JobType.SIMULATION_KINEMATIC, slots=4)],
+        slots=[SlotOffer(job_type=JobType.SIMULATION, slots=4)],
+        components=["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"],
         resources=resources,
     )
-    assert hello.capabilities[0].slots == 4
+    assert hello.slots[0].slots == 4 and hello.components[2] == "simulation_layer/kinematic"
     assert hello.running_lease_ids == []
+    with pytest.raises(ValidationError, match="components"):
+        Hello(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[], resources=resources)
+    with pytest.raises(ValidationError, match="capabilities"):
+        Hello(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[], components=[], capabilities=[], resources=resources)
 
 
 def test_hello_names_the_machine_optionally(resources):
-    base = dict(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", capabilities=[CapabilityOffer(job_type=JobType.SCENE_GENERATION, slots=1)], resources=resources)
+    base = dict(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1)], components=["scene_generation"], resources=resources)
     assert Hello(**base).machine is None
     hello = Hello(**base, machine="lab-pc-3")
     assert Hello.model_validate_json(hello.model_dump_json()).machine == "lab-pc-3"

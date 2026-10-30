@@ -108,19 +108,26 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
    ./build.sh --release ../scenegems-release
    ```
 
-   This builds the images a cluster runs, pulls `postgres:16.10-alpine` and writes the bundle. The bundle holds no source code:
+   This builds the images a cluster runs as `:latest`, pulls `postgres:16.10-alpine`, tags every SceneGEMS image of the release with the revision (`<commit>`, or `<commit>-dirty` from uncommitted changes) and writes the bundle. Each release names its own images, so a machine can hold several releases, and the roles pass the tag to the machines as `SCENEGEMS_IMAGE_TAG`. The bundle holds no source code:
 
    | File | Content |
    |------|---------|
-   | `release.json` | revision, every image with its ID and fingerprint, and the roles `master` and `node` with their images, fixed values, parameters, secrets, setup commands and outputs |
+   | `release.json` | revision, every image under its release tag with its ID and fingerprint, and the roles `master` and `node` with their images, fixed values, parameters, secrets, setup commands and outputs |
    | `stacks/master/docker-compose.yml` | copy of `deploy/master/docker-compose.yml` |
+   | `stacks/master/docker-compose.live-sessions.yml` | copy of `deploy/master/docker-compose.live-sessions.yml`: the Docker socket for the workbench's live sessions |
    | `stacks/node/docker-compose.yml` | copy of `deploy/node/docker-compose.yml` |
 
 3. **Create the cluster.** In **Clusters**, create a cluster from the bundle folder. Its name becomes the master id: lowercase letters, digits and hyphens. It names the cluster's topics, containers and volumes.
-4. **Add the master.** Give one machine the role `master`. Its parameters have defaults: node API port 8443, broker port 1883, operator port 5174, Postgres port 5432, the browser origins the operator API allows (`http://localhost:5173,http://127.0.0.1:5173`) and the artifact limits. The master's address is the machine's VPN address.
-5. **Add the nodes.** Give any number of machines (the master's machine too) the role `node`. A node needs nothing from a deployed master: it only needs the master added to the cluster, because its `.env` gets the master's VPN address and ports from it. Set `SCENEGEMS_NODE_CAPABILITIES` to the job types the node runs and their slots, for example `scene_generation:2,trajectory_generation:9,simulation.kinematic:2,monitoring.post_hoc:2,calibration.deviation:1` on a 12-core machine (trajectory generation slots: cores minus 3). Job types: `scene_generation`, `trajectory_generation`, `simulation.kinematic`, `simulation.ardupilot_sim` (ArduPilot SITL's own physics), `simulation.gazebo` (SITL against a Gazebo world), `monitoring.post_hoc`, `calibration.deviation`. The release lists each one with the images it needs, the simulation ones read from the vessel stack matrix, and Machine Hub installs those images on the node. Optional: labels that jobs can require (`key=value`) and the artifact cache bound.
+4. **Add the master.** Give one machine the role `master`. Its parameters have defaults: node API port 8443, broker port 1883, operator port 5174, Postgres port 5432, the browser origins the operator API allows (`http://localhost:5173,http://127.0.0.1:5173`), the artifact limits and `COMPOSE_FILE`. The master's address is the machine's VPN address.
+
+   `COMPOSE_FILE` (default `docker-compose.yml:docker-compose.live-sessions.yml`) chooses the compose files `docker compose up -d` reads. The live sessions file mounts the Docker socket into master-api, which the workbench's live sessions need (MQTT broker, real vessels, Mission Planner, ArduPilot live): they start their containers on the master's machine, with that machine's locally built `:latest` images. Set it to `docker-compose.yml` for a master without Docker access: the workbench then refuses live sessions with a clear error, the Connections page says that live sessions are off on this master, and campaigns and cluster jobs work as before.
+5. **Add the nodes.** Give any number of machines (the master's machine too) the role `node`. A node needs nothing from a deployed master: it only needs the master added to the cluster, because its `.env` gets the master's VPN address and ports from it. Set two parameters per node member:
+   - `SCENEGEMS_NODE_COMPONENTS`: what the node runs, as a comma list. Vessel stack layers: `asv_software/replay`, `asv_software/usv_navigation`, `control_layer/none`, `control_layer/ardupilot` (SITL), `control_layer/custom`, `simulation_layer/kinematic`, `simulation_layer/ardupilot_sim`, `simulation_layer/gazebo` (Gazebo); subsystems: `scene_generation`, `trajectory_generation`, `monitoring`, `calibration`. The release lists the images of each component (a simulation layer adds the scenario execution runner) and Machine Hub installs the images of the components chosen. A simulation runs on a node that has every layer of every vessel's stack: a kinematic replay needs `asv_software/replay,control_layer/none,simulation_layer/kinematic`, USV Navigation adds `asv_software/usv_navigation`, a SITL replay needs `asv_software/replay,control_layer/ardupilot,simulation_layer/ardupilot_sim`, a Gazebo replay the same with `simulation_layer/gazebo`, and the custom controller on Gazebo `asv_software/replay,control_layer/custom,simulation_layer/gazebo` (no SITL).
+   - `SCENEGEMS_NODE_SLOTS`: how many jobs of each type the node runs at once, as `type:slots`, for example `scene_generation:2,trajectory_generation:9,simulation:2,monitoring.post_hoc:2,calibration.deviation:1` on a 12-core machine (trajectory generation slots: cores minus 3). Job types: `scene_generation`, `trajectory_generation`, `simulation`, `monitoring.post_hoc`, `calibration.deviation`; each needs a component that serves it (a simulation layer for `simulation`, `monitoring` for `monitoring.post_hoc`, `calibration` for `calibration.deviation`).
+
+   The defaults make a kinematic node. A node refuses `SCENEGEMS_NODE_CAPABILITIES` and the job types `simulation.kinematic`, `simulation.ardupilot_sim` and `simulation.gazebo` of earlier releases with a message naming their replacements, so Machine Hub members that set them need the two parameters above. Optional: labels that jobs can require (`key=value`) and the artifact cache bound.
 6. **Deploy all.** Machine Hub deploys every member; a node does not wait for the master, since it keeps retrying its connection. For each member it:
-   1. loads the role's images from the PC, skipping images the machine already has;
+   1. loads the role's images from the PC, skipping images the machine already has; an image the machine has under another tag (the same image ID, or the same fingerprint label) is only tagged with the release's name;
    2. copies the role's compose file and `release.json` to `~/machine_hub/stacks/<project>/` on the machine;
    3. writes `.env` with mode 600: the role's fixed values, your parameters and the secrets. The master's Postgres password is generated on the machine once and kept on later deploys;
    4. runs the role's setup commands (none in this release);
@@ -145,7 +152,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
    cd frontend && npm install && npm run dev
    ```
 
-   Open http://localhost:5173. The cluster selector in the left pane starts with "Local master" at `http://127.0.0.1:5174`; add a cluster there for each tunnel (one local port per master, for example `ssh -L 15174:127.0.0.1:5174 ...` and `http://127.0.0.1:15174`). The page's origin must be one of the master's allowed origins (`SCENEGEMS_OPERATOR_ALLOWED_ORIGINS`). The **Cluster** section lists the nodes with their machine, capabilities, slots in use and image state, and drains or resumes a node.
+   Open http://localhost:5173. The cluster selector in the left pane starts with "Local master" at `http://127.0.0.1:5174`; add a cluster there for each tunnel (one local port per master, for example `ssh -L 15174:127.0.0.1:5174 ...` and `http://127.0.0.1:15174`). The page's origin must be one of the master's allowed origins (`SCENEGEMS_OPERATOR_ALLOWED_ORIGINS`). The **Cluster** section lists the nodes with their machine, components (out-of-date ones marked), slots in use and image state, and drains or resumes a node.
 9. **Run a campaign.** In **Campaigns**, the wizard walks through scope (classes and folder patterns with quota and failure budget), domain constraints, trajectory generator, runs (vessel stack and monitor), resources and policy; the master checks the config before you create the campaign paused or running. From the command line, in `backend/`:
 
    ```bash
@@ -158,23 +165,23 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
 
 ### Updating and removing a cluster
 
-- **New release**: commit, build a new bundle (`./build.sh --release <folder>`), choose it for the cluster in Machine Hub and press **Deploy all**. The database stays. A node whose image fingerprints differ from the master's `release.json` gets no jobs until it runs the release's images. When `PROTOCOL_VERSION` (`backend/src/scenegems_tool/cluster/protocol/version.py`) changes, update the master and all its nodes together.
+- **New release**: commit, build a new bundle (`./build.sh --release <folder>`), choose it for the cluster in Machine Hub and press **Deploy all**. The database stays. A node whose image fingerprints differ from the master's `release.json` gets no jobs until it runs the release's images. Fingerprints compare by image repository, not by tag: a node that has the same build under an older release's tag is up to date, and a campaign keeps its pinned fingerprints across releases. When `PROTOCOL_VERSION` (`backend/src/scenegems_tool/cluster/protocol/version.py`) changes, update the master and all its nodes together.
 - **Remove**: Machine Hub's Remove stops a member's stack and deletes its volumes and folder. For a master that deletes its database. Nodes need no re-pairing: they reconnect when a master with the same id is back.
 
 ### Without Machine Hub
 
 The same steps by hand, which is also what the single-host rehearsal test (`backend/src/tests/scenegems_tool/assurance/local_cluster.py`) does:
 
-1. Copy the images of each role in `release.json` to its machine, for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-backend`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the subsystem image of each job type it offers (`scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for simulations and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-ardupilot-sitl` and `scenegems-gazebo-harmonic` for ArduPilot runs).
-2. On the master, in a folder of its own with `stacks/master/docker-compose.yml` and `release.json`: write `.env` from [`deploy/master/.env.example`](deploy/master/.env.example) (master id, project name, a generated Postgres password), `chmod 600 .env`, then:
+1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-backend`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the images of each component it offers (the role's `SCENEGEMS_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
+2. On the master, in a folder of its own with both files of `stacks/master/` and `release.json`: write `.env` from [`deploy/master/.env.example`](deploy/master/.env.example) (master id, project name, the release's `SCENEGEMS_IMAGE_TAG`, `COMPOSE_FILE`, a generated Postgres password), `chmod 600 .env`, then:
 
    ```bash
    docker compose up -d
    ```
 
-3. On each node, in a folder of its own with `stacks/node/docker-compose.yml`: write `.env` from [`deploy/node/.env.example`](deploy/node/.env.example) with the master's URL and id, the node name, its capabilities and the release revision, then `docker compose up -d`. This works before or after the master is up.
+3. On each node, in a folder of its own with `stacks/node/docker-compose.yml`: write `.env` from [`deploy/node/.env.example`](deploy/node/.env.example) with the master's URL and id, the node name, its components and slots, the release revision and the release's `SCENEGEMS_IMAGE_TAG`, then `docker compose up -d`. This works before or after the master is up.
 
-A test keeps the roles in `backend/src/scenegems_tool/cluster/release/roles.py`, both compose files and both `.env.example` files in agreement.
+A test keeps the roles in `backend/src/scenegems_tool/cluster/release/roles.py`, the compose files and both `.env.example` files in agreement.
 
 ### Secrets
 

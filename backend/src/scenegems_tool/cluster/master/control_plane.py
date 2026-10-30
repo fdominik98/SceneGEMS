@@ -81,15 +81,15 @@ class InvalidPayload(ValueError):
         self.errors: List[Any] = error.errors(include_url=False, include_context=False, include_input=False)
 
 
-def validate_submission_payload(submission: JobSubmission) -> None:
-    """Raise InvalidPayload unless the payload validates; references are checked for shape only."""
-    from scenegems_tool.cluster.node.jobs.job_payload import validate_structure
-    from scenegems_tool.cluster.node.jobs.job_types import payload_model
+def validate_submission_payload(submission: JobSubmission) -> JobSubmission:
+    """The submission with the components its payload needs; raises InvalidPayload unless the payload validates (references are checked for shape only)."""
+    from scenegems_tool.cluster.node.jobs.job_types import payload_components
 
     try:
-        validate_structure(payload_model(submission.job_type), submission.payload)
+        components = payload_components(submission.job_type, submission.payload)
     except ValidationError as error:
         raise InvalidPayload(submission.job_type, error) from error
+    return submission.model_copy(update={"requirements": submission.requirements.model_copy(update={"components": list(components)})})
 
 
 class ControlPlane:
@@ -120,7 +120,8 @@ class ControlPlane:
     # Lifetime
 
     async def start(self, timers: bool = True) -> None:
-        """Loads the expected fingerprints and starts the scheduler and the sweeps; without timers a test drives them."""
+        """Rebuilds the reject holds, loads the expected fingerprints and starts the scheduler and the sweeps; without timers a test drives them."""
+        await self._restore_reject_holds()
         self._tasks.append(asyncio.create_task(self._load_expected()))
         if timers:
             self._tasks.append(asyncio.create_task(self.scheduler.run()))
@@ -138,6 +139,17 @@ class ControlPlane:
     async def _load_expected(self) -> None:
         await self.expected.load()
         self.scheduler.wake()
+
+    async def _restore_reject_holds(self) -> None:
+        """Replays the recent rejects of unfinished jobs, so a restart does not hand a job straight back to a node that keeps refusing it."""
+        try:
+            rejections = await anyio.to_thread.run_sync(self.jobs.recent_rejections, self.backoff.restore_since())
+        except Exception:
+            logger.exception("Cannot read the recent rejects; the reject holds start empty")
+            return
+        kept = self.backoff.restore((event.node_id, event.job_id, event.at) for event in rejections)
+        if kept:
+            logger.info("Restored %d reject holds from %d rejects", kept, len(rejections))
 
     @staticmethod
     async def _every(interval_s: float, action) -> None:
@@ -208,7 +220,7 @@ class ControlPlane:
         expected = self.expected.current()
         if expected is None and not submission.requirements.fingerprints:
             raise FingerprintsUnavailable(f"the master's expected image fingerprints are {self.expected.state.value}" + (f": {self.expected.error}" if self.expected.error else ""))
-        await anyio.to_thread.run_sync(validate_submission_payload, submission)
+        submission = await anyio.to_thread.run_sync(validate_submission_payload, submission)
         if expected is not None:
             submission = with_required_fingerprints(submission, expected)
         outcome = await anyio.to_thread.run_sync(self.jobs.submit, submission)
@@ -256,4 +268,4 @@ class ControlPlane:
         """The connected nodes as the pipeline engine's stall check sees them."""
         from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
 
-        return [NodeAvailability(record=session.record, out_of_date=bool(session.out_of_date)) for session in self.registry.connected()]
+        return [NodeAvailability(record=session.record, stale_components=session.stale_components) for session in self.registry.connected()]

@@ -15,7 +15,22 @@ describe("results store", () => {
       page: 0,
       pageSize: DEFAULT_PAGE_SIZE,
       direction: "asc",
+      sort: "fec_id",
     });
+  });
+
+  it("sorts by a column ascending, flips it when selected again and starts over on another column", () => {
+    const store = useResultsStore.getState();
+    store.setPage(3);
+    store.sortBy("first_failure_time_s");
+    expect(useResultsStore.getState()).toMatchObject({ sort: "first_failure_time_s", direction: "asc", page: 0 });
+    store.setPage(2);
+    store.sortBy("first_failure_time_s");
+    expect(useResultsStore.getState()).toMatchObject({ sort: "first_failure_time_s", direction: "desc", page: 0 });
+    store.sortBy("state");
+    expect(useResultsStore.getState()).toMatchObject({ sort: "state", direction: "asc" });
+    store.reset();
+    expect(useResultsStore.getState()).toMatchObject({ sort: "fec_id", direction: "asc" });
   });
 
   it("opens a campaign with clean filters and the table shown", () => {

@@ -91,7 +91,7 @@ def seed_outputs(stores, campaign_id):
     stores.cases.move_case(a1.case_id, a1.version, state=CaseState.DROPPED, scene_artifact=SCENE_1, reason="the scene generation found no valid scene")
     runs = [stores.results.add_run_record(NewRunRecord(a0.case_id, index, None, True, {}, {}, 5, artifacts={"state_log": STATE_LOG_0})) for index in (0, 1)]
     post_hoc = MonitorImplementation.POST_HOC
-    stores.results.add_verdict(NewVerdict(a0.case_id, 0, VerdictState.PASSED, post_hoc, step=StepKind.SCENE))
+    stores.results.add_verdict(NewVerdict(a0.case_id, 0, VerdictState.PASSED, post_hoc, step=StepKind.SCENE, encounters={"OS_0 - TS_1": ["HEAD_ON", "OTHER"], "OS_0 - TS_2": ["OTHER"]}))
     stores.results.add_verdict(
         NewVerdict(
             a0.case_id,
@@ -114,6 +114,7 @@ def seed_outputs(stores, campaign_id):
             rule_outcomes={"OS_0 - TS_1": {"rule_8": {"failed": 4.0}}},
             first_failure_time_s=4.0,
             run_record_id=runs[0].run_record_id,
+            encounters={"OS_0 - TS_1": ["OVERTAKING_TO_PORT"]},
         )
     )
     stores.results.add_verdict(NewVerdict(a0.case_id, 1, VerdictState.PASSED, post_hoc, run_record_id=runs[1].run_record_id))
@@ -425,15 +426,17 @@ def test_findings_summarize_a_step(client, stores):
     assert scene["step"] == "scene_generation" and scene["monitored"] is True  # the config monitors the scenes
     assert scene["cases"] == {"active": 1, "complete": 1, "dropped": 1} and scene["outputs"] == {"count": 2, "valid": 1, "complete": 1}  # the case still generating has no output yet
     assert scene["verdicts"] == {"passed": 1, "failed": 0, "unmonitored": 0} and scene["failed_rules"] == []
+    assert scene["encounter_types"] == {"HEAD_ON": 1, "OTHER": 1}  # the pairs by their first encounter type, OTHER included
     assert {entry["fec_id"]: (entry["cases"], entry["passed"], entry["failed"]) for entry in scene["fecs"]}[CLASS_A] == (2, 1, 0)
 
     trajectories = client.get(path, params={"step": "trajectory_generation"}).json()
     assert trajectories["monitored"] is False  # the config's trajectory monitor is empty: statistics only, whatever the rows hold
-    assert trajectories["verdicts"] == {"passed": 0, "failed": 0, "unmonitored": 0} and trajectories["failed_rules"] == []
+    assert trajectories["verdicts"] == {"passed": 0, "failed": 0, "unmonitored": 0} and trajectories["failed_rules"] == [] and trajectories["encounter_types"] == {}
     assert trajectories["durations_s"] == {"median": None, "p90": None}
 
     simulation = client.get(path, params={"step": "simulation"}).json()
     assert simulation["monitored"] is True and simulation["verdicts"] == {"passed": 1, "failed": 1, "unmonitored": 0}
+    assert simulation["encounter_types"] == {"OVERTAKING_TO_PORT": 1}
     assert simulation["failed_rules"] == [{"rule": "rule_8", "count": 1, "first_failure_time_s": {"min": 4.0, "median": 4.0}}]
 
 

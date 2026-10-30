@@ -1,17 +1,18 @@
 """Hello and Heartbeat: what the node tells its master about itself.
 
-Hello opens every connection: identity, the machine, capabilities with slots, labels, resources, the
+Hello opens every connection: identity, the machine, slots per job type, components, labels, resources, the
 fingerprints of the local images and the leases still running from before a reconnect.
 Heartbeats repeat the changing part at the interval the master's Welcome sets.
 """
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional, Protocol
+from typing import Callable, Dict, FrozenSet, List, Optional, Protocol
 
+from scenegems_tool.cluster.fingerprints.components import ordered
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import Heartbeat, Hello
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer, NodeResources, SlotUsage
+from scenegems_tool.cluster.protocol.node_description import NodeResources, SlotOffer, SlotUsage
 
 _logger = logging.getLogger(__name__)
 
@@ -29,7 +30,8 @@ class StatusFrames:
     node_id: str
     node_name: str
     software_revision: str
-    capabilities: Dict[JobType, int]
+    slots: Dict[JobType, int]
+    components: FrozenSet[str]
     labels: Dict[str, str]
     resources: Callable[[], NodeResources]
     fingerprints: Callable[[], Dict[str, str]]
@@ -42,7 +44,8 @@ class StatusFrames:
             node_name=self.node_name,
             software_revision=self.software_revision,
             machine=self.machine,
-            capabilities=[CapabilityOffer(job_type=job_type, slots=slots) for job_type, slots in sorted(self.capabilities.items(), key=lambda item: item[0].value)],
+            slots=[SlotOffer(job_type=job_type, slots=slots) for job_type, slots in sorted(self.slots.items(), key=lambda item: item[0].value)],
+            components=list(ordered(self.components)),
             labels=dict(self.labels),
             resources=self.resources(),
             fingerprints=self._fingerprints(),

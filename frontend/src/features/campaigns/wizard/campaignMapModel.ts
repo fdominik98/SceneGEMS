@@ -1,7 +1,7 @@
 import type { CatalogClass, CatalogStacks, StepMonitor } from "../../../domain/cluster/campaignApi";
 import type { CampaignStep } from "../../../domain/cluster/schemas";
 import { plural } from "../campaignFormat";
-import { capabilityLabel, type ResourcePlan } from "../resourcePlan";
+import { needLabel, type ResourcePlan } from "../resourcePlan";
 import { isEmptyScopeEntry } from "./configBuilder";
 import { planScope } from "./scopePlan";
 import { CAMPAIGN_STEP_LABELS, CHAIN, inputKindOf, normalizeSteps } from "./stepPlan";
@@ -257,7 +257,9 @@ function settingsOf(draft: WizardDraft, context: MapContext): MapSetting[] {
   if (plan === null) {
     machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.nodes.length, "machine")} chosen`), fact("Machines not read yet", "muted")];
   } else if (plan.missing.length > 0) {
-    const missing = capabilityLabel(plan.missing[0].jobType);
+    // The need as the resources step names it: a simulation with the components its runs need
+    const label = needLabel(plan.missing[0]);
+    const missing = label.charAt(0).toUpperCase() + label.slice(1);
     machines = [fact(plan.missing.length === 1 ? `Missing: ${missing}` : `Missing: ${missing} and ${plan.missing.length - 1} more`, "bad")];
   } else {
     machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.nodes.length, "machine")} chosen`), fact(`${plural(plan.usable.length, "machine")} usable`, plan.usable.length > 0 ? "ok" : "warn")];

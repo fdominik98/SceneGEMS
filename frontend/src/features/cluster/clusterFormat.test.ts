@@ -21,8 +21,7 @@ describe("cluster formatting", () => {
     expect(shortHash("sha256:0123456789abcdef")).toBe("0123456789ab");
     expect(shortHash("abc")).toBe("abc");
     expect(shortHash(null)).toBe("none");
-    expect(jobTypeLabel("simulation.ardupilot_sim")).toBe("Simulation, ArduPilot SITL");
-    expect(jobTypeLabel("simulation.gazebo")).toBe("Simulation, Gazebo");
+    expect(jobTypeLabel("simulation")).toBe("Simulation");
     expect(jobTypeLabel("future.kind")).toBe("future.kind");
     expect(memoryUseFraction(1000, 250)).toBe(0.75);
     expect(memoryUseFraction(0, 0)).toBe(0);
@@ -31,7 +30,7 @@ describe("cluster formatting", () => {
   it("sums slots and summarizes the nodes", () => {
     const a = nodeViewSchema.parse(sampleNode());
     const b = nodeViewSchema.parse(
-      sampleNode({ node_id: "b", status: "draining", connected: false, out_of_date: true, leases: [], capabilities: { trajectory_generation: { slots: 2, slots_in_use: 0 } } })
+      sampleNode({ node_id: "b", status: "draining", connected: false, out_of_date: true, leases: [], slots: { trajectory_generation: { slots: 2, slots_in_use: 0 } } })
     );
     expect(nodeSlotTotals(a)).toEqual({ slots: 12, inUse: 9 });
     expect(summarizeNodes([a, b])).toEqual({

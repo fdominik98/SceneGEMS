@@ -15,7 +15,7 @@ Every method takes an optional session (see store_session).
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Collection, List, Optional
+from typing import Collection, List, Optional, Set
 
 from sqlalchemy import delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -135,6 +135,13 @@ class ArtifactRecordStore:
         with session_scope(self._sessions, session) as scope:
             row = scope.get(ArtifactRow, artifact_hash, populate_existing=True)
             return None if row is None else ArtifactRecord.from_row(row)
+
+    def existing_hashes(self, artifact_hashes: Collection[str], *, session: Optional[Session] = None) -> Set[str]:
+        """The hashes among artifact_hashes that have a record (the orphan sweep's bulk check)."""
+        if not artifact_hashes:
+            return set()
+        with session_scope(self._sessions, session) as scope:
+            return set(scope.execute(select(ArtifactRow.hash).where(ArtifactRow.hash.in_(sorted(set(artifact_hashes))))).scalars())
 
     def mark_used(self, artifact_hash: str, *, session: Optional[Session] = None) -> Optional[ArtifactRecord]:
         """Marks an artifact as used now (it was read), so the sweep spares it; None when there is no record."""

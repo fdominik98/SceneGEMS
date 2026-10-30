@@ -11,7 +11,7 @@ The Scene Generation, Trajectory Generation and Simulation pages are independent
 
 Every scene generation, trajectory generation and simulation on the cluster is saved as a one-step **workbench entry** of [Campaign History](./navigation): a batch scene generation is one entry with a case per scenario. The entry records the input it used, so Campaign History shows what it was made from. Each entry gets a fresh random base seed, so two runs of the same input give different results. To repeat a run, type a seed into **Base seed** next to the page's run controls (or **Keep** the seed the last run used): every entry then takes it, in every step. Empty the field to go back to random seeds. A page says which entry it shows, such as "Shows case 12 of entry 4f2c...".
 
-A replay on ArduPilot SITL or Gazebo is an entry too: its run is the ArduPilot stack with the setup's real-time factor as SITL's pace and the Connections page's reference area. Loading such a run fills the setup again with the simulator, the pace and replay on ArduPilot.
+A run on ArduPilot SITL or Gazebo is an entry too: its run is the ArduPilot stack with the setup's real-time factor as SITL's pace and the Connections page's reference area. A run on the custom controller with Gazebo is one with the setup's wind. Loading such a run fills the setup again with the simulator, the control layer, replay or USV Navigation on the own ship, and the pace or the wind.
 
 ## Setting a page's input
 
@@ -43,4 +43,4 @@ The contents are fetched from the master: after a reload each page loads its ent
 
 ## Live sessions
 
-A live session (real vessels, Mission Planner, ArduPilot with wind or waves, the custom controller) runs on the master over the MQTT broker and is recorded as an entry too. The control panel shows whether it is being recorded, when it is saved (with **Open the recorded run**, which replays it on the Simulation page), when the recording failed, or that the gateway records nothing (a gateway started without a master).
+A live session (real vessels, Mission Planner, USV Navigation on a target ship, mixed control layers, ArduPilot with wind or waves, the custom controller with waves) runs on the master over the MQTT broker and is recorded as an entry too. The control panel shows whether it is being recorded, when it is saved (with **Open the recorded run**, which replays it on the Simulation page), when the recording failed, or that the gateway records nothing (a gateway started without a master).

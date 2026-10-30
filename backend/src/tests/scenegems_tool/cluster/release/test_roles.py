@@ -1,8 +1,8 @@
 import re
 
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE, job_type_images
+from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SCENARIO_EXECUTION_IMAGE, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.release.roles import NAME_PATTERN, NODE_IMAGE, POSTGRES_IMAGE, capability_item_images, role_images, scenegems_roles
+from scenegems_tool.cluster.release.roles import NAME_PATTERN, NODE_IMAGE, POSTGRES_IMAGE, component_item_images, role_images, scenegems_roles, slot_item_images
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
 FIELDS = {"description", "count", "stack", "project", "images", "env", "parameters", "secrets", "setup", "outputs", "ready"}
@@ -55,14 +55,26 @@ def test_there_are_no_secrets_but_the_database_password():
     assert scenegems_roles()["master"]["secrets"] == ["POSTGRES_PASSWORD"] and scenegems_roles()["node"]["secrets"] == []
 
 
-def test_capability_items_are_the_job_types_with_their_images_from_the_vessel_stack_matrix():
-    images = capability_item_images()
-    assert set(images) == {job_type.value for job_type in JobType}
-    for job_type in JobType:
-        assert images[job_type.value] == list(job_type_images()[job_type])
-    assert images["simulation.ardupilot_sim"] == [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE]
-    assert images["simulation.gazebo"] == [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]
-    assert "simulation.ardupilot" not in images
+def test_component_items_are_the_catalog_with_its_images():
+    images = component_item_images()
+    assert list(images) == list(COMPONENTS)
+    assert all(images[component] == list(component_images()[component]) for component in COMPONENTS)
+    assert images["control_layer/ardupilot"] == [SITL_IMAGE]
+    assert images["simulation_layer/gazebo"] == sorted([SCENARIO_EXECUTION_IMAGE, GAZEBO_IMAGE])
+    assert images["asv_software/replay"] == []
+
+
+def test_slot_items_are_the_job_types_without_images_of_their_own():
+    assert slot_item_images() == {job_type.value: [] for job_type in JobType}
+    assert set(slot_item_images()) == {"scene_generation", "trajectory_generation", "simulation", "monitoring.post_hoc", "calibration.deviation"}
+
+
+def test_the_node_parameters_are_components_without_an_amount_and_slots_with_one():
+    parameters = scenegems_roles()["node"]["parameters"]
+    assert "SCENEGEMS_NODE_CAPABILITIES" not in parameters
+    components, slots = parameters["SCENEGEMS_NODE_COMPONENTS"]["items"], parameters["SCENEGEMS_NODE_SLOTS"]["items"]
+    assert components["separator"] == "," and "key_separator" not in components and components["images"] == component_item_images()
+    assert (slots["separator"], slots["key_separator"], slots["images"]) == (",", ":", slot_item_images())
 
 
 def test_role_images_include_every_image_a_role_may_need():
@@ -71,10 +83,17 @@ def test_role_images_include_every_image_a_role_may_need():
     assert images == sorted(set(images))
 
 
-def test_the_default_capabilities_name_known_job_types():
-    capabilities = scenegems_roles()["node"]["parameters"]["SCENEGEMS_NODE_CAPABILITIES"]
-    items = [item.split(":")[0] for item in capabilities["default"].split(",")]
-    assert set(items) <= set(capabilities["items"]["images"])
+def test_the_defaults_are_a_kinematic_node_the_node_configuration_accepts():
+    from scenegems_tool.cluster.node.daemon.configuration.node_configuration import parse_components, parse_slots, slots_without_components
+
+    parameters = scenegems_roles()["node"]["parameters"]
+    components = parameters["SCENEGEMS_NODE_COMPONENTS"]["default"].split(",")
+    slots = [item.split(":")[0] for item in parameters["SCENEGEMS_NODE_SLOTS"]["default"].split(",")]
+    assert set(components) <= set(parameters["SCENEGEMS_NODE_COMPONENTS"]["items"]["images"])
+    assert set(slots) <= set(parameters["SCENEGEMS_NODE_SLOTS"]["items"]["images"])
+    assert "simulation_layer/kinematic" in components and not {"control_layer/ardupilot", "simulation_layer/gazebo"} & set(components)
+    parsed = parse_slots(parameters["SCENEGEMS_NODE_SLOTS"]["default"])
+    assert slots_without_components(parsed, parse_components(parameters["SCENEGEMS_NODE_COMPONENTS"]["default"])) == []
 
 
 def test_cluster_ids_and_names_are_single_scope_names():
@@ -89,7 +108,8 @@ def test_the_node_reports_its_machine_from_the_machine_name():
     node = scenegems_roles()["node"]
     assert node["env"]["SCENEGEMS_NODE_MACHINE"] == "{machine.name}"
     values = {"SCENEGEMS_MASTER_URL": "http://10.88.0.2:8443", "SCENEGEMS_MASTER_ID": "lab"}
-    values.update({"SCENEGEMS_NODE_NAME": "worker-1", "SCENEGEMS_NODE_CAPABILITIES": node["parameters"]["SCENEGEMS_NODE_CAPABILITIES"]["default"], "SCENEGEMS_NODE_STATE_DIR": "/state"})
+    values.update({"SCENEGEMS_NODE_NAME": "worker-1", "SCENEGEMS_NODE_STATE_DIR": "/state"})
+    values.update({key: node["parameters"][key]["default"] for key in ("SCENEGEMS_NODE_SLOTS", "SCENEGEMS_NODE_COMPONENTS")})
     values["SCENEGEMS_NODE_MACHINE"] = node["env"]["SCENEGEMS_NODE_MACHINE"].replace("{machine.name}", "lab-pc-3")
     assert NodeConfiguration.from_values(values).machine == "lab-pc-3"
 
@@ -112,3 +132,21 @@ def test_the_artifact_settings_are_parameters_with_the_code_s_defaults():
     assert float(master["SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S"]["default"]) == ArtifactSettings.sweep_interval_s
     assert float(master["SCENEGEMS_ARTIFACT_SWEEP_GRACE_S"]["default"]) == ArtifactSettings.sweep_grace_s
     assert int(node["SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES"]["default"]) == DEFAULT_ARTIFACT_CACHE_MAX_BYTES
+
+
+def test_a_release_s_images_carry_its_tag_and_the_pulled_one_keeps_its_own():
+    from scenegems_tool.cluster.release.roles import release_image_tag
+
+    assert release_image_tag("abc", False) == "abc" and release_image_tag("abc", True) == "abc-dirty"
+    roles = scenegems_roles("abc")
+    images = role_images(roles)
+    assert POSTGRES_IMAGE in images and all(image.endswith(":abc") for image in images if image != POSTGRES_IMAGE)
+    assert roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc"
+    assert all(image.endswith(":abc") for images in roles["node"]["parameters"]["SCENEGEMS_NODE_COMPONENTS"]["items"]["images"].values() for image in images)
+    assert scenegems_roles()["node"]["images"] == [NODE_IMAGE] and NODE_IMAGE.endswith(":latest")
+
+
+def test_the_master_reads_its_compose_files_from_a_parameter():
+    master = scenegems_roles()["master"]
+    assert master["parameters"]["COMPOSE_FILE"]["default"] == "docker-compose.yml:docker-compose.live-sessions.yml"
+    assert master["env"]["COMPOSE_PATH_SEPARATOR"] == ":"

@@ -3,12 +3,21 @@
     commit(writer, kind, media_type, holder)  file first, then the record (and the holder's reference)
     open(sha256)                              marks the record used, then opens the file
     sweep(grace_s)                            deletes unreferenced, unused records, then their files
+    sweep_orphans(grace_s)                    deletes files that had no record for grace_s seconds
 
 The order makes a crash harmless: a file without a record is at most an orphan, a record
-never names a missing file. Both paths take a lock per hash, so a sweep that deleted a
-record cannot then delete the file a concurrent upload of the same content just recorded
-again. The locks are in this process, which is enough because a cluster has one master
-process; a store shared by several processes would need the lock in the database.
+never names a missing file. Orphans come from a crash between a file's rename and its
+record, or from a sweep that deleted a record but could not delete its file; sweep_orphans
+collects them. All paths take a lock per hash, so a sweep cannot delete the file a
+concurrent upload of the same content just recorded. The locks are in this process, which
+is enough because a cluster has one master process; a store shared by several processes
+would need the lock in the database.
+
+One writer records outside the lock: the pipeline engine repairs a missing record inside
+its own transaction (assurance/pipeline/verdicts.py record_references). Its file is a job
+result the node uploaded just before reporting the result, so the grace period, counted
+from the file's first write, keeps the orphan sweep away from it unless the engine falls
+that far behind the results.
 
 An upload names the job it belongs to, which becomes the artifact's first reference
 (holder `job`, role `result:<field>`), in the same locked step as the record. A result
@@ -19,7 +28,8 @@ by hand keeps its results.
 import logging
 import threading
 from dataclasses import dataclass
-from typing import BinaryIO, List, Optional
+from itertools import islice
+from typing import BinaryIO, Iterator, List, Optional
 
 from scenegems_tool.persistence.artifacts.artifact_store import ArtifactStore, ArtifactWriter, StoredArtifact, sha256_hex
 from scenegems_tool.persistence.schema import ArtifactHolderKind
@@ -114,6 +124,31 @@ class RecordedArtifacts:
             try:
                 self.store.delete(sha256)
             except OSError as error:
-                # The record is gone, so the file is an orphan; a later upload of the same content replaces it
+                # The record is gone, so the file is an orphan; sweep_orphans or a later upload of the same content handles it
                 logger.warning("Cannot delete the file of artifact %s: %s", sha256, error)
         return True
+
+    def sweep_orphans(self, grace_s: float, batch: int = SWEEP_BATCH) -> List[str]:
+        """Deletes the stored files first written more than grace_s seconds ago that have no record; returns their hashes."""
+        deleted: List[str] = []
+        for chunk in _chunks(self.store.stored_hashes(grace_s), batch):
+            recorded = self.records.existing_hashes(chunk)
+            deleted.extend(sha256 for sha256 in chunk if sha256 not in recorded and self._delete_orphan(sha256))
+        if deleted:
+            logger.info("Artifact sweep deleted %d files without a record", len(deleted))
+        return deleted
+
+    def _delete_orphan(self, sha256: str) -> bool:
+        with self._lock(sha256):
+            if self.records.get(sha256) is not None:
+                return False  # recorded since it was listed
+            try:
+                return self.store.delete(sha256)
+            except OSError as error:
+                logger.warning("Cannot delete the artifact file %s without a record: %s", sha256, error)
+                return False
+
+
+def _chunks(hashes: Iterator[str], size: int) -> Iterator[List[str]]:
+    while chunk := list(islice(hashes, size)):
+        yield chunk

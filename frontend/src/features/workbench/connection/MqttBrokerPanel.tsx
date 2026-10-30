@@ -1,5 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { useUiStore } from "../../../app/uiStore";
+import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
 import { Disclosure } from "../../../components/Disclosure";
 import { PageHeader } from "../../../components/PageHeader";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
@@ -11,7 +12,8 @@ import {
   type MqttConnectionPresetKey,
 } from "./connectionLibrary";
 import { buildConnectMessage, connectionFormIsValid, useConnectionStore } from "./connectionStore";
-import { connectionHints } from "./connectionHints";
+import { useMasterStatus } from "../../cluster/useMasterStatus";
+import { connectionHints, liveSessionsOffNote } from "./connectionHints";
 import { ReferenceGeofenceMap } from "./ReferenceGeofenceMap";
 
 interface MqttBrokerPanelProps {
@@ -45,6 +47,8 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
     clearConnectionAttempt,
   } = form;
   const usesMaster = selectedPreset === MASTER_BROKER_PRESET;
+  const masterStatus = useMasterStatus(useSelectedCluster()?.operatorUrl ?? null);
+  const liveSessionsOff = liveSessionsOffNote(masterStatus.data?.live_sessions);
 
   const setReferenceGeofence = useUiStore((s) => s.setReferenceGeofence);
   useEffect(() => {
@@ -63,7 +67,7 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
 
   const connected = brokerStatus === "connected";
   const masterMissing = usesMaster && streamStatus === "connected" && masterBroker === null;
-  const canConnect = streamStatus === "connected" && connectionFormIsValid(form) && !masterMissing;
+  const canConnect = streamStatus === "connected" && connectionFormIsValid(form) && !masterMissing && liveSessionsOff === null;
   const target = usesMaster ? (masterBroker ?? "the master broker") : `${form.clientBroker || "no broker"}:${form.port}${form.tlsConnection ? ", TLS" : ""}`;
 
   const connect = () => {
@@ -109,6 +113,12 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
           )
         }
       />
+
+      {liveSessionsOff && (
+        <p className="meta warning" role="status">
+          {liveSessionsOff}
+        </p>
+      )}
 
       {connectionAttempt === "failed" && connectionError && (
         <div className="mqtt-broker-connection-error" role="alert">

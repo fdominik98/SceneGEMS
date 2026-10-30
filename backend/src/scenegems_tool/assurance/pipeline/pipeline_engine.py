@@ -41,8 +41,9 @@ Desired and actual states:
              reason "drained", so a later resume continues the campaign
     stop     cancel the active cases and every unfinished job, actual stopped once no job of the
              campaign is unfinished; open classes are abandoned
-    stalled  a job type the campaign needs has no connected node that runs it with the pinned
-             fingerprints (and the campaign's labels) for stall_after_s: actual stalled with the
+    stalled  a job type the campaign needs, with the components of its stage, has no connected node
+             that runs it with the pinned fingerprints (and the campaign's labels) for
+             stall_after_s: actual stalled with the
              reason, back to running (or draining) once one appears; a stalled campaign starts
              no new cases
     complete every class complete or abandoned: actual completed
@@ -71,7 +72,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable, Collection, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Awaitable, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
 
 import anyio
 from sqlalchemy.orm import Session
@@ -84,6 +85,8 @@ from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, 
 from scenegems_tool.assurance.pipeline.engine_leadership import EngineLeadership, LeadershipLost
 from scenegems_tool.assurance.pipeline.payload_builder import required_fingerprints
 from scenegems_tool.assurance.pipeline.pipeline_queries import UNFINISHED_JOB_STATES, case_states, delete_intent, job_id_by_key, next_case_indexes, pin_fingerprints, unfinished_jobs_of_final_cases
+from scenegems_tool.assurance.pipeline.stage_graph import JobNeed
+from scenegems_tool.cluster.fingerprints.comparison import find_mismatches
 from scenegems_tool.cluster.protocol.jobs import JobSubmission, JobType
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.schema import (
@@ -112,18 +115,20 @@ class NodeAvailability:
     """A connected node as the stall check sees it."""
 
     record: NodeRecord
-    out_of_date: bool = False
+    stale_components: FrozenSet[str] = frozenset()  # its components whose images differ from the release
 
-    def runs(self, job_type: JobType, fingerprints: Mapping[str, str], labels: Mapping[str, str], nodes: Collection[str] = ()) -> bool:
-        """Whether the node may run the job type now; nodes, when not empty, are the node ids the campaign allows."""
+    def runs(self, job_type: JobType, components: Collection[str], fingerprints: Mapping[str, str], labels: Mapping[str, str], nodes: Collection[str] = ()) -> bool:
+        """Whether the node may run a job of the type with these components now; nodes, when not empty, are the node ids the campaign allows."""
         record = self.record
-        if record.status != NodeStatus.ONLINE or self.out_of_date or job_type not in record.capabilities:
+        if record.status != NodeStatus.ONLINE or job_type not in record.slots:
+            return False
+        if not set(components) <= set(record.components) - self.stale_components:
             return False
         if nodes and record.node_id not in nodes:
             return False
         if any(record.labels.get(key) != value for key, value in labels.items()):
             return False
-        return all(record.fingerprints.get(image) == fingerprint for image, fingerprint in fingerprints.items())
+        return not find_mismatches(record.fingerprints, fingerprints)
 
 
 @dataclass(frozen=True)
@@ -531,41 +536,44 @@ class PipelineEngine:
             return False
 
     def _check_stall(self, session: Session, context: CampaignContext, campaign: CampaignRecord, queued, nodes: Sequence[NodeAvailability], now: datetime) -> CampaignRecord:
-        missing = self._missing_job_types(context, queued, nodes)
+        missing = self._missing_needs(context, queued, nodes)
         campaign_id = campaign.campaign_id
         target = _target_of(campaign.desired_state)
         if not missing:
             self._unrunnable_since.pop(campaign_id, None)
             if campaign.actual_state == CampaignActualState.STALLED:
                 kind = CampaignEventKind.RESUMED if target == CampaignActualState.RUNNING else CampaignEventKind.DRAINING
-                return self._set_actual(session, campaign, target, None, kind, {"reason": "a node runs every needed job type again"})
+                return self._set_actual(session, campaign, target, None, kind, {"reason": "a node runs every needed job type with its components again"})
             return campaign
         since = self._unrunnable_since.setdefault(campaign_id, now)
         reason = (
             "no connected node runs "
-            + ", ".join(job_type.value for job_type in missing)
+            + "; ".join(f"{job_type.value} with {', '.join(components)}" for job_type, components in missing)
             + " with the campaign's pinned fingerprints"
             + (" and labels" if context.config.resources.required_labels else "")
             + (" among its selected nodes" if context.config.resources.nodes else "")
         )
         if campaign.actual_state != CampaignActualState.STALLED and now - since >= timedelta(seconds=self.settings.stall_after_s):
             logger.warning("Campaign %s is stalled: %s", campaign_id, reason)
-            return self._set_actual(session, campaign, CampaignActualState.STALLED, reason, CampaignEventKind.STALLED, {"reason": reason, "job_types": [job_type.value for job_type in missing]})
+            detail = {"reason": reason, "job_types": sorted({job_type.value for job_type, _ in missing}), "components": sorted({component for _, components in missing for component in components})}
+            return self._set_actual(session, campaign, CampaignActualState.STALLED, reason, CampaignEventKind.STALLED, detail)
         return campaign
 
     @staticmethod
-    def _missing_job_types(context: CampaignContext, queued, nodes: Sequence[NodeAvailability]) -> List[JobType]:
+    def _missing_needs(context: CampaignContext, queued, nodes: Sequence[NodeAvailability]) -> List[JobNeed]:
+        """The job types with components that a stage with queued jobs needs and no connected node runs."""
         labels = context.config.resources.required_labels
         allowed = frozenset(context.config.resources.nodes)
-        missing = []
+        missing: List[JobNeed] = []
         for stage, count in sorted(queued.items(), key=lambda item: item[0].value):
             if count <= 0:
                 continue
-            # The simulate stage queues one job type per distinct stack of the runs (kinematic, ArduPilot SITL, Gazebo)
-            for job_type in context.graph.stage_jobs(stage):
-                fingerprints = required_fingerprints(job_type, context.pinned)
-                if job_type not in missing and not any(node.runs(job_type, fingerprints, labels, allowed) for node in nodes):
-                    missing.append(job_type)
+            # The simulate stage needs the components of each distinct stack of the runs (kinematic, ArduPilot SITL, Gazebo)
+            for need in context.graph.stage_needs(stage):
+                job_type, components = need
+                fingerprints = required_fingerprints(components, context.pinned)
+                if need not in missing and not any(node.runs(job_type, components, fingerprints, labels, allowed) for node in nodes):
+                    missing.append(need)
         return missing
 
     def _stop_condition(self, session: Session, context: CampaignContext, now: datetime) -> Optional[str]:

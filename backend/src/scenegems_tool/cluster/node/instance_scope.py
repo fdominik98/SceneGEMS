@@ -6,8 +6,10 @@ Contract with the broker access rules (design doc 13.7, "Cluster topic scope"):
     instance id       <subsystem>-<index> for a pooled service, job-<job_id> for a per-job stack
 
 The ids are lowercase letters, digits, '-' and '_', so every derived name is valid as an
-MQTT topic level, a Docker container name and a compose project name. The workbench has
-no scope: its launchers keep the fixed names and the empty topic prefix of a single machine.
+MQTT topic level, a Docker container name and a compose project name. A live session of the
+workbench is an instance too: node `workbench`, instance `live-<session>` (InstanceScope.live_session).
+Its Docker names always come from the scope; its topic prefix is used only on the master's
+broker (gateway/socket_session.py), since other brokers carry unscoped WARA-PS topics.
 """
 
 import re
@@ -16,6 +18,8 @@ from dataclasses import dataclass
 from utils.file_system_utils import RUNTIME_ASSETS_FOLDER
 
 SCOPE_ROOT = "scenegems"
+LIVE_SESSION_NODE_ID = "workbench"  # the node level of the workbench's live sessions
+LIVE_SESSION_INSTANCE_PREFIX = "live-"
 INSTANCES_FOLDER = f"{RUNTIME_ASSETS_FOLDER}/instances"  # compose files and generated files of scoped instances, one folder each
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _UNSAFE_ID_CHARACTERS = re.compile(r"[^a-z0-9_-]+")
@@ -34,6 +38,11 @@ def safe_id(value: str) -> str:
     if not cleaned:
         raise ValueError(f"Cannot derive a scope id from {value!r}")
     return cleaned
+
+
+def live_session_project_prefix(master_id: str) -> str:
+    """The compose project names of every live session of one master start with this."""
+    return f"{SCOPE_ROOT}-{_require_id('master id', master_id)}-{LIVE_SESSION_NODE_ID}-{LIVE_SESSION_INSTANCE_PREFIX}"
 
 
 def node_topic_scope(master_id: str, node_id: str) -> str:
@@ -64,6 +73,11 @@ class InstanceScope:
     @classmethod
     def per_job(cls, master_id: str, node_id: str, job_id: str) -> "InstanceScope":
         return cls(master_id, node_id, f"job-{safe_id(job_id)}")
+
+    @classmethod
+    def live_session(cls, master_id: str, session_id: str) -> "InstanceScope":
+        """One live session of the workbench: its simulation stack, and its topics on the master's broker."""
+        return cls(master_id, LIVE_SESSION_NODE_ID, f"{LIVE_SESSION_INSTANCE_PREFIX}{safe_id(session_id)}")
 
     @property
     def topic_prefix(self) -> str:

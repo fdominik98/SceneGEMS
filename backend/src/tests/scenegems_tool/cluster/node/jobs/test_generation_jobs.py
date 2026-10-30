@@ -115,6 +115,30 @@ def test_a_job_cancelled_before_its_search_started_sends_no_cancel(pool, node, m
     assert client.commands == [] and client.cancels == []
 
 
+def test_a_cancelled_scene_job_cancels_its_own_generation_only(pool, node, make_job):
+    cancel = threading.Event()
+    client = pool(mqtt_scene_generation_client, "MqttSceneGenerationClient", lambda arguments, command: cancel.set())  # the lease is cancelled mid-generation
+    with pytest.raises(JobFailed, match="cancelled"):
+        scene_generation_job.run(make_job(JobType.SCENE_GENERATION, valid_payload(JobType.SCENE_GENERATION)), node, _Report(), cancel)
+    assert client.cancels == ["job-1-1"]
+
+
+def test_a_finished_scene_job_sends_no_cancel(pool, node, make_job):
+    client = pool(mqtt_scene_generation_client, "MqttSceneGenerationClient", lambda arguments, command: arguments["on_scene_result"](command[0], {"sample": 1}, True, True))
+    scene_generation_job.run(make_job(JobType.SCENE_GENERATION, valid_payload(JobType.SCENE_GENERATION)), node, _Report())
+    assert len(client.commands) == 1 and client.cancels == []
+
+
+def test_a_scene_job_cancelled_before_its_generation_started_sends_no_cancel(pool, node, make_job):
+    cancel = threading.Event()
+    cancel.set()
+    client = pool(mqtt_scene_generation_client, "MqttSceneGenerationClient", lambda arguments, command: None)
+    client.ready = False  # cancelled while the job waits for the pool's heartbeat
+    with pytest.raises(JobFailed, match="cancelled"):
+        scene_generation_job.run(make_job(JobType.SCENE_GENERATION, valid_payload(JobType.SCENE_GENERATION)), node, _Report(), cancel)
+    assert client.commands == [] and client.cancels == []
+
+
 def _scenario_reference(text: str):
     data = text.encode("utf-8")
     reference = {"sha256": hashlib.sha256(data).hexdigest(), "size_bytes": len(data), "kind": "functional_scenario", "media_type": "text/plain; charset=utf-8"}

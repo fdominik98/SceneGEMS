@@ -1,3 +1,4 @@
+import { describeComponents, isWhollyOutOfDate, JOB_TYPE_COMPONENTS, offersJob, runStackComponents, SIMULATION_JOB } from "../../domain/cluster/components";
 import type { NodeView } from "../../domain/cluster/schemas";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
@@ -6,45 +7,52 @@ import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
  * the wizard builds it or as the master stores it (`execution.runs`, `trajectories.generator`,
  * `resources.nodes` and `required_labels`), so the wizard and the campaign page judge the same
  * way. A node counts the way the master's stall check counts it (`NodeAvailability.runs`):
- * online, up to date (the campaign pins the master's fingerprints), carrying every required label,
- * selected when the campaign names nodes, and offering the job type.
+ * online, carrying every required label, selected when the campaign names nodes, with slots for
+ * the job type and every component the job needs up to date (the campaign pins the master's
+ * fingerprints). Every run is a simulation job; its components are the layers of its vessels' stacks.
  */
 
-export const KINEMATIC_JOB = "simulation.kinematic";
-export const ARDUPILOT_SIM_JOB = "simulation.ardupilot_sim";
-export const GAZEBO_JOB = "simulation.gazebo";
+/** Every run is simulated by the one simulation job type; the name stays for the wizard's queue caps. */
+export const KINEMATIC_JOB = SIMULATION_JOB;
 
-/** The job type of each queued stage, as `assurance/pipeline/stage_graph.py` STAGE_JOB_TYPES; a run on an ArduPilot stack simulates with `simulationJobType`. */
+/** The job type of each queued stage, as `assurance/pipeline/stage_graph.py` STAGE_JOB_TYPES. */
 export const STAGE_JOB_TYPES: Record<string, string> = {
   generate_scene: "scene_generation",
   generate_trajectories: "trajectory_generation",
-  simulate: KINEMATIC_JOB,
+  simulate: SIMULATION_JOB,
   monitor: "monitoring.post_hoc",
   calibrate: "calibration.deviation",
 };
 
-/** The job type of each ArduPilot layer (`stage_graph.ARDUPILOT_LAYER_JOB_TYPES`). */
-const ARDUPILOT_LAYER_JOBS: Record<string, string> = { ardupilot_sim: ARDUPILOT_SIM_JOB, gazebo: GAZEBO_JOB };
-
-/** The job type that simulates a run of this stack section (`stage_graph.simulation_job_type`): by the ArduPilot layer, else kinematic. */
+/** The job type that simulates a run of this stack section: the simulation, whatever the stack (`runStackComponents` tells the stacks apart). */
 export function simulationJobType(stack: unknown): string {
-  const layer = typeof stack === "object" && stack !== null ? (stack as { simulation_layer?: unknown }).simulation_layer : undefined;
-  return (typeof layer === "string" ? ARDUPILOT_LAYER_JOBS[layer] : undefined) ?? KINEMATIC_JOB;
+  void stack;
+  return SIMULATION_JOB;
 }
 
-const SIMULATED_WHERE: Record<string, string> = { [ARDUPILOT_SIM_JOB]: "on ArduPilot SITL", [GAZEBO_JOB]: "on Gazebo" };
+const LAYER_WHERE: Record<string, string> = {
+  "simulation_layer/kinematic": "on the kinematic layer",
+  "simulation_layer/ardupilot_sim": "on ArduPilot SITL",
+  "simulation_layer/gazebo": "on Gazebo",
+};
+
+/** Where runs with these components are simulated ("on Gazebo", "on the custom controller with Gazebo", "on the kinematic layer with USV Navigation"). */
+function simulatedWhere(components: readonly string[]): string {
+  const layer = components.find((component) => component.startsWith("simulation_layer/"));
+  const layerWhere = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
+  const where = components.includes("control_layer/custom") ? `on the custom controller with ${layerWhere.replace(/^on /, "")}` : layerWhere;
+  return components.includes("asv_software/usv_navigation") ? `${where} with USV Navigation` : where;
+}
 
 const CAPABILITY_LABELS: Record<string, string> = {
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
-  "simulation.kinematic": "Kinematic simulation",
-  "simulation.ardupilot_sim": "ArduPilot SITL simulation",
-  "simulation.gazebo": "Gazebo simulation",
+  simulation: "Simulation",
   "monitoring.post_hoc": "Post hoc monitoring",
   "calibration.deviation": "Repeat calibration",
 };
 
-/** A job type as a capability name ("Kinematic simulation"). */
+/** A job type as a capability name ("Simulation"). */
 export function capabilityLabel(jobType: string): string {
   return CAPABILITY_LABELS[jobType] ?? jobType;
 }
@@ -54,8 +62,10 @@ const DEFAULT_MONITOR = "post_hoc";
 const DEFAULT_REPEATS = 1;
 
 export interface RequiredCapability {
-  /** The job type a node must offer. */
+  /** The job type a node must have slots for. */
   jobType: string;
+  /** The components a node must have up to date: the subsystem's, or a run's vessel stack layers. */
+  components: string[];
   /** The queue depth stage of its jobs. */
   stage: string;
   /** Why the campaign needs it, in plain words. */
@@ -93,35 +103,41 @@ function monitorOf(config: Record<string, unknown>, section: string): unknown {
   return (config[section] as { monitor?: unknown } | undefined)?.monitor;
 }
 
-/** The job types the campaign's cases run, in pipeline order, each with why it is needed. */
+function subsystemNeed(stage: string, reason: string): RequiredCapability {
+  const jobType = STAGE_JOB_TYPES[stage];
+  return { jobType, components: [JOB_TYPE_COMPONENTS[jobType]], stage, reason };
+}
+
+/** The job types the campaign's cases run, in pipeline order, each with the components it needs and why; the runs give one need per distinct set of components. */
 export function requiredCapabilities(config: Record<string, unknown>): RequiredCapability[] {
   const steps = stepsOf(config);
   const runs = steps.includes("simulation") ? runsOf(config) : [];
   const generator = (config.trajectories as { generator?: unknown } | undefined)?.generator;
   const required: RequiredCapability[] = [];
   if (steps.includes("scene_generation")) {
-    required.push({ jobType: STAGE_JOB_TYPES.generate_scene, stage: "generate_scene", reason: "Every case starts with a generated scene." });
+    required.push(subsystemNeed("generate_scene", "Every case starts with a generated scene."));
   }
   if (steps.includes("trajectory_generation")) {
-    required.push({
-      jobType: STAGE_JOB_TYPES.generate_trajectories,
-      stage: "generate_trajectories",
-      reason: typeof generator === "string" ? `Every case plans its trajectories (${generator.replace(/_/g, " ")}).` : "Every case plans its trajectories.",
-    });
+    required.push(
+      subsystemNeed("generate_trajectories", typeof generator === "string" ? `Every case plans its trajectories (${generator.replace(/_/g, " ")}).` : "Every case plans its trajectories.")
+    );
   }
-  const simulators = [...new Set(runs.map((run) => simulationJobType(run.stack)))];
-  for (const jobType of simulators) {
-    const names = runs.map((run, index) => (simulationJobType(run.stack) === jobType ? runName(run, index) : null)).filter((name): name is string => name !== null);
-    const where = SIMULATED_WHERE[jobType] ?? "on the kinematic layer";
+  const runComponents = runs.map((run) => runStackComponents(run.stack));
+  const sets = [...new Map(runComponents.map((components) => [components.join(","), components])).values()];
+  for (const components of sets) {
+    const key = components.join(",");
+    const names = runs.map((run, index) => (runComponents[index].join(",") === key ? runName(run, index) : null)).filter((name): name is string => name !== null);
+    const where = simulatedWhere(components);
     required.push({
-      jobType,
+      jobType: SIMULATION_JOB,
+      components,
       stage: "simulate",
       reason:
-        simulators.length > 1
+        sets.length > 1
           ? `${listed(names)} ${names.length === 1 ? "is" : "are"} simulated ${where}.`
           : runs.length === 1
-            ? `The run is simulated${jobType !== KINEMATIC_JOB ? ` ${where}` : ""}.`
-            : `Each of the ${runs.length} runs is simulated${jobType !== KINEMATIC_JOB ? ` ${where}` : ""}.`,
+            ? `The run is simulated ${where}.`
+            : `Each of the ${runs.length} runs is simulated ${where}.`,
     });
   }
   const judged: string[] = [];
@@ -133,11 +149,11 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
   }
   judged.push(...runs.map((run, index) => ((run.monitor ?? DEFAULT_MONITOR) === "post_hoc" ? runName(run, index) : null)).filter((name): name is string => name !== null));
   if (judged.length > 0) {
-    required.push({ jobType: STAGE_JOB_TYPES.monitor, stage: "monitor", reason: `The post hoc monitor judges ${listed(judged)}.` });
+    required.push(subsystemNeed("monitor", `The post hoc monitor judges ${listed(judged)}.`));
   }
   const repeated = runs.map((run, index) => (Number(run.repeats ?? DEFAULT_REPEATS) > 1 ? runName(run, index) : null)).filter((name): name is string => name !== null);
   if (repeated.length > 0) {
-    required.push({ jobType: STAGE_JOB_TYPES.calibrate, stage: "calibrate", reason: `The repeats of ${listed(repeated)} are compared.` });
+    required.push(subsystemNeed("calibrate", `The repeats of ${listed(repeated)} are compared.`));
   }
   return required;
 }
@@ -148,8 +164,8 @@ export function nodeProblems(node: NodeView, labels: Readonly<Record<string, str
   if (node.status !== "online") {
     problems.push(node.status === "draining" ? "Draining: it takes no new jobs." : "Offline.");
   }
-  if (node.out_of_date) {
-    problems.push("Out of date: its images differ from the master's release.");
+  if (isWhollyOutOfDate(node)) {
+    problems.push("Out of date: the images of all its components differ from the master's release.");
   }
   const missing = Object.entries(labels).filter(([key, value]) => node.labels[key] !== value);
   if (missing.length > 0) {
@@ -167,7 +183,7 @@ export interface NodeSelection {
 
 export interface CapabilityCoverage {
   capability: RequiredCapability;
-  /** The campaign's usable nodes that offer it. */
+  /** The campaign's usable nodes with slots for its job type and its components up to date. */
   nodes: NodeView[];
   /** Their slots for the job type. */
   slots: number;
@@ -191,8 +207,8 @@ export function isSelected(node: NodeView, selection: NodeSelection): boolean {
 export function planResources(required: readonly RequiredCapability[], nodes: readonly NodeView[], selection: NodeSelection): ResourcePlan {
   const usable = nodes.filter((node) => isSelected(node, selection) && nodeProblems(node, selection.labels).length === 0);
   const coverage = required.map((capability) => {
-    const offering = usable.filter((node) => (node.capabilities[capability.jobType]?.slots ?? 0) > 0);
-    return { capability, nodes: offering, slots: offering.reduce((total, node) => total + node.capabilities[capability.jobType].slots, 0) };
+    const offering = usable.filter((node) => offersJob(node, capability.jobType, capability.components));
+    return { capability, nodes: offering, slots: offering.reduce((total, node) => total + node.slots[capability.jobType].slots, 0) };
   });
   const known = new Set(nodes.map((node) => node.node_id));
   return {
@@ -211,7 +227,7 @@ export function slotsByJobType(nodes: readonly NodeView[], labels: Readonly<Reco
     if (nodeProblems(node, labels).length > 0) {
       continue;
     }
-    for (const [jobType, usage] of Object.entries(node.capabilities)) {
+    for (const [jobType, usage] of Object.entries(node.slots)) {
       slots[jobType] = (slots[jobType] ?? 0) + usage.slots;
     }
   }
@@ -222,18 +238,18 @@ export function slotsByJobType(nodes: readonly NodeView[], labels: Readonly<Reco
  * The queue caps of full usage: each stage may hold as many queued jobs as the cluster has slots
  * for its job type, never fewer than the config's default. A new case starts only while every
  * stage is below its cap, so with caps below the slot count a large cluster waits for work. The
- * simulate stage counts the slots of every simulation job type the runs use (kinematic by default).
+ * simulate stage counts the slots of the simulation job types the runs use (the simulation).
  */
-export function fullUsageQueueDepth(slots: Readonly<Record<string, number>>, simulationJobTypes: readonly string[] = [KINEMATIC_JOB]): Record<string, number> {
+export function fullUsageQueueDepth(slots: Readonly<Record<string, number>>, simulationJobTypes: readonly string[] = [SIMULATION_JOB]): Record<string, number> {
   const slotsOf = (stage: string) =>
-    stage === "simulate" ? simulationJobTypes.reduce((total, jobType) => total + (slots[jobType] ?? 0), 0) : (slots[STAGE_JOB_TYPES[stage]] ?? 0);
+    stage === "simulate" ? [...new Set(simulationJobTypes)].reduce((total, jobType) => total + (slots[jobType] ?? 0), 0) : (slots[STAGE_JOB_TYPES[stage]] ?? 0);
   return Object.fromEntries(Object.entries(QUEUE_DEPTH_DEFAULTS).map(([stage, depth]) => [stage, Math.max(depth, slotsOf(stage))]));
 }
 
 /** The simulation job types among a plan's required capabilities. */
 export function simulationJobTypesOf(required: readonly RequiredCapability[]): string[] {
-  const types = required.filter((capability) => capability.stage === "simulate").map((capability) => capability.jobType);
-  return types.length > 0 ? types : [KINEMATIC_JOB];
+  const types = [...new Set(required.filter((capability) => capability.stage === "simulate").map((capability) => capability.jobType))];
+  return types.length > 0 ? types : [SIMULATION_JOB];
 }
 
 function stringsOf(value: unknown): Record<string, string> {
@@ -258,6 +274,17 @@ export function startBlocker(plan: ResourcePlan | null): string | null {
   if (plan.missing.length === 0) {
     return null;
   }
-  const names = plan.missing.map((capability) => capabilityLabel(capability.jobType).toLowerCase());
+  const names = plan.missing.map(needLabel);
   return `No usable machine of the campaign runs ${listed(names)}.`;
+}
+
+/** A need's key: its stage and components, since a campaign whose runs mix stacks has one simulation need per component set. */
+export function needKey(capability: RequiredCapability): string {
+  return `${capability.stage}:${capability.components.join(",")}`;
+}
+
+/** A need in a sentence: the job type, and for a simulation the components it needs ("simulation with Replay, ArduPilot and Gazebo"). */
+export function needLabel(capability: RequiredCapability): string {
+  const name = capabilityLabel(capability.jobType).toLowerCase();
+  return capability.stage === "simulate" ? `${name} with ${describeComponents(capability.components)}` : name;
 }

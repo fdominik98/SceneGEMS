@@ -17,6 +17,8 @@ Nodes and the master trust each other on the VPN, so there are no certificates, 
     SCENEGEMS_ARTIFACT_SWEEP_GRACE_S  how long an unreferenced artifact is kept after its last use (default 3600)
     SCENEGEMS_BROKER_HOST, _PORT      the cluster broker as the master dials it (compose: cluster-broker, 1883); when
                                       the host is set the live channel observes pools
+    SCENEGEMS_LIVE_SESSIONS           whether the workbench gateway starts live sessions (true by default): they need the
+                                      Docker socket, which docker-compose.live-sessions.yml mounts; false refuses them
 """
 
 import os
@@ -29,6 +31,8 @@ from scenegems_tool.persistence.database import DATABASE_URL_ENV
 
 DEFAULT_ARTIFACT_DIR = Path("/var/lib/scenegems/artifacts")
 DEFAULT_OPERATOR_ALLOWED_ORIGINS = ("http://localhost:5173", "http://127.0.0.1:5173")
+_TRUE = ("1", "true", "yes", "on")
+_FALSE = ("0", "false", "no", "off")
 
 
 class SettingMissing(ValueError):
@@ -51,6 +55,7 @@ class MasterSettings:
     operator_allowed_origins: Tuple[str, ...] = DEFAULT_OPERATOR_ALLOWED_ORIGINS
     artifacts: "ArtifactSettings" = field(default_factory=lambda: ArtifactSettings())
     broker: Optional["BrokerClientSettings"] = None  # the master's own broker login, for observing pools
+    live_sessions: bool = True  # the workbench gateway may start live sessions on this machine's Docker
 
     @classmethod
     def from_environment(cls, environ: Optional[Mapping[str, str]] = None) -> "MasterSettings":
@@ -68,6 +73,7 @@ class MasterSettings:
             operator_allowed_origins=parse_allowed_origins(environ.get("SCENEGEMS_OPERATOR_ALLOWED_ORIGINS", "")),
             artifacts=ArtifactSettings.from_environment(environ),
             broker=BrokerClientSettings.from_environment(environ),
+            live_sessions=_flag(environ, "SCENEGEMS_LIVE_SESSIONS", cls.live_sessions),
         )
 
 
@@ -125,6 +131,15 @@ def _number(environ: Mapping[str, str], name: str, default, parse):
         return parse(text)
     except ValueError:
         raise ValueError(f"{name} must be a number, got {text!r}") from None
+
+
+def _flag(environ: Mapping[str, str], name: str, default: bool) -> bool:
+    text = environ.get(name, "").strip().lower()
+    if not text:
+        return default
+    if text in _TRUE or text in _FALSE:
+        return text in _TRUE
+    raise ValueError(f"{name} must be true or false, got {text!r}")
 
 
 def _required(environ: Mapping[str, str], name: str) -> str:

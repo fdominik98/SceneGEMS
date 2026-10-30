@@ -16,7 +16,7 @@ export interface SimulationStreamControls {
   seek: (value: number) => void;
   sendMessage: (message: ClientToServerMessage) => void;
   /** What the active cluster offers for a job type, and why the workbench cannot run it when it cannot. */
-  clusterResources: (jobType: string) => JobTypeResources;
+  clusterResources: (jobType: string, components?: readonly string[]) => JobTypeResources;
   /** The active cluster's operator client, null without one. */
   operatorClient: OperatorClient | null;
   generateTrajectories: (requestId: string, request: TrajectoryEntryRequest) => void;

@@ -9,6 +9,8 @@ import {
   ruleTag,
   valueAt,
 } from "./ruleTimelineModel";
+import { parseFrame } from "../../../domain/simulation/protocol";
+import { RULE_16_ID, monitoredFrames } from "../../../test/fixtures/monitoredFrames";
 
 const R16 = "Rule 16: Give-Way Vessel Takes Early and Substantial Action";
 
@@ -110,5 +112,39 @@ describe("niceTimeStep", () => {
     expect(niceTimeStep(60)).toBe(10);
     expect(niceTimeStep(3600)).toBe(600);
     expect(niceTimeStep(10 ** 7)).toBe(14400);
+  });
+});
+
+describe("buildRuleTimeline with the monitor's rule ids and first failures", () => {
+  const frames = monitoredFrames(40, 12, true).map(parseFrame);
+
+  it("keys the tracks by rule id, so a renamed rule stays one track", () => {
+    const renamed = frames.map((frame, index) =>
+      index < 20
+        ? frame
+        : {
+            ...frame,
+            ruleResults: frame.ruleResults.map((result) => ({
+              ...result,
+              evaluations: result.evaluations.map((rule) => ({ ...rule, ruleName: `${rule.ruleName} (renamed)` })),
+            })),
+          }
+    );
+    const pair = buildRuleTimeline(renamed).pairs[0]!;
+    expect(pair.rules.map((rule) => rule.key).sort()).toEqual([RULE_16_ID, "rule:8:passing-at-a-safe-distance:0-1:-"].sort());
+  });
+
+  it("takes the first failure from the monitor when frames were thinned", () => {
+    const thinned = frames.filter((frame) => frame.timestamp % 10 === 0);
+    const r16 = buildRuleTimeline(thinned).pairs[0]!.rules.find((rule) => rule.key === RULE_16_ID)!;
+    expect(r16.segments.find((segment) => segment.value === "FAILED")!.start).toBe(20);
+    expect(r16.firstFailure).toBe(12);
+  });
+
+  it("falls back to the first FAILED frame on older frames", () => {
+    const older = monitoredFrames(40, 12).map(parseFrame).filter((frame) => frame.timestamp % 10 === 0);
+    const r16 = buildRuleTimeline(older).pairs[0]!.rules.find((rule) => rule.ruleNumber === "16")!;
+    expect(r16.key).toBe("Rule 16: Give-Way Vessel Takes Early and Substantial Action#0");
+    expect(r16.firstFailure).toBe(20);
   });
 });

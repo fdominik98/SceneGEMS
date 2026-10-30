@@ -32,7 +32,7 @@ from scenegems_tool.cluster.protocol.messages import (
     ProtocolErrorCode,
     Welcome,
 )
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer
+from scenegems_tool.cluster.protocol.node_description import SlotOffer
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 from tests.scenegems_tool.cluster.node.daemon.conftest import FINGERPRINTS, make_job, make_offer, wait_for
 from tests.scenegems_tool.cluster.node.daemon.fake_master import FakeMaster
@@ -63,7 +63,8 @@ def test_the_node_says_hello_under_its_name_without_any_pairing(fake_master, nod
     assert connection.node_id == hello.node_id == "test-node"  # the node id is the node name
     assert hello.node_name == "test-node"
     assert hello.software_revision == "test-revision"
-    assert hello.capabilities == [CapabilityOffer(job_type=JobType.SCENE_GENERATION, slots=1), CapabilityOffer(job_type=JobType.SIMULATION_KINEMATIC, slots=2)]
+    assert hello.slots == [SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1), SlotOffer(job_type=JobType.SIMULATION, slots=2)]
+    assert hello.components == ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"]
     assert hello.labels == {"site": "lab"}
     assert hello.fingerprints == FINGERPRINTS
     assert hello.resources.cpus >= 1 and hello.resources.free_disk_mb > 0
@@ -118,7 +119,7 @@ def test_offer_accept_renew_and_result(fake_master, node_configuration, start_da
     renewal = connection.expect(LeaseRenew, skip=(Heartbeat, JobStatus, LogLines))
     assert renewal.lease_id == "lease-a"
     heartbeat = connection.expect(Heartbeat, skip=(LeaseRenew, JobStatus, LogLines))
-    assert heartbeat.slots_in_use == {JobType.SIMULATION_KINEMATIC: 1} and heartbeat.running_lease_ids == ["lease-a"]
+    assert heartbeat.slots_in_use == {JobType.SIMULATION: 1} and heartbeat.running_lease_ids == ["lease-a"]
     time.sleep(1.0)  # longer than the lease timeout: renewals keep the lease
     jobs.finish("job-a", {"state_digest": "abc"})
 
@@ -157,7 +158,7 @@ def test_offers_beyond_the_slots_are_rejected(fake_master, node_configuration, s
         connection.expect(LeaseAccept)
     connection.send(make_offer("lease-3", make_job("job-lease-3")))
     reject = connection.expect(LeaseReject)
-    assert reject.lease_id == "lease-3" and "2 simulation.kinematic slots are in use" in reject.reason
+    assert reject.lease_id == "lease-3" and "2 simulation slots are in use" in reject.reason
 
     connection.send(make_offer("lease-t", make_job("job-t", job_type=JobType.TRAJECTORY_GENERATION)))
     assert "offers no trajectory_generation slots" in connection.expect(LeaseReject).reason
@@ -173,7 +174,7 @@ def test_offers_beyond_the_slots_are_rejected(fake_master, node_configuration, s
 
 
 def test_cancel_stops_the_job_and_frees_its_slot(fake_master, node_configuration, start_daemon, jobs):
-    _, connection, _ = connect(fake_master, start_daemon, node_configuration(SCENEGEMS_NODE_CAPABILITIES="simulation.kinematic:1"))
+    _, connection, _ = connect(fake_master, start_daemon, node_configuration(SCENEGEMS_NODE_SLOTS="simulation:1"))
     connection.send(make_offer("lease-c", make_job("job-c")))
     connection.expect(LeaseAccept)
     jobs.wait_started()
@@ -235,7 +236,7 @@ def test_a_result_ready_while_disconnected_is_sent_after_the_reconnect(fake_mast
 def test_a_lease_without_confirmed_renewals_is_given_up(fake_master, node_configuration, start_daemon, jobs):
     fake_master.lease_timeout_s = 0.5
     fake_master.renew_leases = False
-    _, connection, _ = connect(fake_master, start_daemon, node_configuration(SCENEGEMS_NODE_CAPABILITIES="simulation.kinematic:1"))
+    _, connection, _ = connect(fake_master, start_daemon, node_configuration(SCENEGEMS_NODE_SLOTS="simulation:1"))
     connection.send(make_offer("lease-l", make_job("job-l")))
     connection.expect(LeaseAccept)
     jobs.wait_started()

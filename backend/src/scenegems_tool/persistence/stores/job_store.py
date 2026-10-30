@@ -24,13 +24,14 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from scenegems_tool.cluster.fingerprints.comparison import with_legacy_names
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.database import transaction
 from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, JobRow, NodeRow, NodeStatus
 from scenegems_tool.persistence.stores.job_claim import free_job_types, next_queued_job_query
-from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events
+from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events, rejections_since
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES, lease_is_current, result_status, retry_backoff_s, state_after_failed_attempt
 from scenegems_tool.persistence.stores.job_records import CancelOutcome, ExpiredLease, JobEventRecord, JobRecord, Lease, ResultReport, ResultStatus, SubmitOutcome
 from scenegems_tool.persistence.stores.store_session import session_scope
@@ -95,6 +96,7 @@ class JobStore:
                     payload=submission.payload,
                     required_labels=requirements.labels,
                     required_fingerprints=requirements.fingerprints,
+                    required_components=list(requirements.components),
                     min_memory_mb=requirements.min_memory_mb,
                     min_cpus=requirements.min_cpus,
                     allowed_nodes=list(submission.allowed_nodes),
@@ -135,6 +137,11 @@ class JobStore:
         with transaction(self._sessions) as session:
             return job_events(session, job_id)
 
+    def recent_rejections(self, since: datetime) -> List[JobEventRecord]:
+        """The rejects since `since` of jobs that have not ended, oldest first: what the master rebuilds its reject holds from at start."""
+        with transaction(self._sessions) as session:
+            return rejections_since(session, since, UNFINISHED_STATES)
+
     def active_leases(self, node_id: Optional[str] = None) -> List[Lease]:
         """Leases in state leased or running, of one node or of all; for reconciling after a reconnect."""
         with transaction(self._sessions) as session:
@@ -145,12 +152,21 @@ class JobStore:
 
     # Leases
 
-    def claim_next(self, node_id: str, lease_duration_s: float, job_types: Optional[Collection[JobType]] = None, exclude_job_ids: Collection[str] = ()) -> Optional[Lease]:
+    def claim_next(
+        self,
+        node_id: str,
+        lease_duration_s: float,
+        job_types: Optional[Collection[JobType]] = None,
+        exclude_job_ids: Collection[str] = (),
+        components: Optional[Collection[str]] = None,
+    ) -> Optional[Lease]:
         """Leases the next matching queued job to the node, or returns None.
 
         Considers only online nodes and job types the node has a free slot for (slots minus
         its leased and running jobs of that type), optionally limited to job_types, and skips
-        the jobs in exclude_job_ids and those not available yet. The match on labels, fingerprints, resources and allowed nodes and the
+        the jobs in exclude_job_ids and those not available yet. A job's components must be among
+        components (the node's usable ones, which the scheduler passes) or, when None, among the
+        node's stored components. The match on labels, components, fingerprints, resources and allowed nodes and the
         order (priority, then submission) are in next_queued_job_query. The lease starts as
         an offer that holds for lease_duration_s; the node accepts it with accept().
         """
@@ -168,8 +184,10 @@ class JobStore:
             job_types = free_job_types({capability.job_type: capability.slots for capability in node.capabilities}, active_counts, job_types)
             if not job_types:
                 return None
-            fingerprints = {fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints}
-            row = session.execute(next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id)).scalar_one_or_none()
+            fingerprints = with_legacy_names({fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints})
+            offered = sorted(components) if components is not None else [component.component for component in node.components]
+            query = next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id, components=offered)
+            row = session.execute(query).scalar_one_or_none()
             if row is None:
                 return None
             row.state = JobState.LEASED

@@ -14,12 +14,13 @@ from scenegems_tool.assurance.pipeline.payload_builder import (
     validate_payload,
 )
 from scenegems_tool.assurance.pipeline.stage_graph import SCENE_MONITOR_STEP, SCENE_STEP, TRAJECTORIES_MONITOR_STEP, Step
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import PipelineStage
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict, format2_dict
 from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED
 from tests.scenegems_tool.cluster.payloads import trajectories_data
+from utils.image_names import image_repository
 
 REFERENCE = {"sha256": "ab" * 32, "size_bytes": 2048, "kind": "trajectory_data", "media_type": "application/json", "pointer": None}
 
@@ -70,7 +71,7 @@ def test_the_simulation_takes_the_trajectories_inline_or_through_a_pointer():
     referenced = builder.simulation(5, 0, {"trajectory_data": REFERENCE})
     assert referenced["trajectories"] == dict(REFERENCE, pointer="/trajectories")
     for payload in (inline, referenced):
-        validate_payload(JobType.SIMULATION_KINEMATIC, payload)
+        validate_payload(JobType.SIMULATION, payload)
     assert trajectories_of_trajectory_result({"trajectory_data": dict(REFERENCE, pointer="/result")})["pointer"] == "/result/trajectories"
 
 
@@ -94,12 +95,18 @@ def test_a_submission_requires_the_pinned_fingerprints_of_its_images_and_the_lab
     builder = _builder(resources={"required_labels": {"site": "lab"}, "priority": 5})
     payload = builder.scene_generation(CLASS_A, ClassCatalog.default().get(CLASS_A).content_hash, 3)
     submission = builder.submission(SCENE_STEP, payload, "key", EXPECTED)
-    assert submission.requirements.fingerprints == {SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]}
+    assert submission.requirements.fingerprints == {image_repository(SCENE_GENERATION_IMAGE): EXPECTED[SCENE_GENERATION_IMAGE]}
     assert submission.requirements.labels == {"site": "lab"} and submission.priority == 5 and submission.idempotency_key == "key"
     assert submission.allowed_nodes == []  # any node
-    assert required_fingerprints(JobType.CALIBRATION_DEVIATION, EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution"}
-    with pytest.raises(PayloadError, match="invalid simulation.kinematic payload"):
+    assert submission.requirements.components == ["scene_generation"]
+    assert required_fingerprints(["calibration"], EXPECTED) == {image_repository(SCENARIO_EXECUTION_IMAGE): "fp-execution"}
+    with pytest.raises(PayloadError, match="invalid simulation payload"):
         builder.submission(Step(PipelineStage.SIMULATE, 0, 0), {"trajectories": {"scene_list": []}}, "key", EXPECTED)
+
+
+def test_a_pin_from_before_release_tags_holds_for_a_release_s_images():
+    pinned = {f"{image_repository(SCENE_GENERATION_IMAGE)}:latest": "pinned-under-latest"}
+    assert required_fingerprints(["scene_generation"], pinned) == {image_repository(SCENE_GENERATION_IMAGE): "pinned-under-latest"}
 
 
 def test_a_submission_names_the_campaigns_selected_nodes():
@@ -165,7 +172,7 @@ def test_a_trajectories_item_feeds_the_simulation(kind, pointer, sent):
     item = builder.config.input.items[0]
     payload = builder.simulation_of_item(5, 0, item)
     assert payload["trajectories"] == dict(ref, pointer=sent) and payload["seed"] == 5
-    validate_payload(JobType.SIMULATION_KINEMATIC, payload)
+    validate_payload(JobType.SIMULATION, payload)
     with pytest.raises(PayloadError, match="not a scene"):
         builder.trajectory_generation_of_item(5, item)
 
@@ -197,4 +204,4 @@ def test_monitor_submissions_take_their_graphs_priorities():
     planned = builder.submission(TRAJECTORIES_MONITOR_STEP, builder.trajectory_monitoring("c", {"trajectory_data": REFERENCE}), "k2", EXPECTED)
     simulate = builder.submission(Step(PipelineStage.SIMULATE, 0, 0), builder.simulation(1, 0, {"trajectory_data": REFERENCE}), "k3", EXPECTED)
     assert (scene.priority, planned.priority, simulate.priority) == (11, 13, 14)
-    assert scene.job_type == JobType.MONITORING_POST_HOC and set(scene.requirements.fingerprints) == set(required_fingerprints(JobType.MONITORING_POST_HOC, EXPECTED))
+    assert scene.job_type == JobType.MONITORING_POST_HOC and set(scene.requirements.fingerprints) == set(required_fingerprints(["monitoring"], EXPECTED))

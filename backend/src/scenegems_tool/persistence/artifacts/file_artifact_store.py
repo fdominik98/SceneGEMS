@@ -10,6 +10,8 @@ write their own temporary file; whichever renames first stores it, and the other
 equal content in place. Temporary files older than an hour are removed when a store opens.
 
 The gzip files carry no name and a zero timestamp, so equal content gives equal files.
+A stored file keeps the modification time of its first write (a later write of equal
+content leaves it in place), which stored_hashes reads as the artifact's age.
 """
 
 import gzip
@@ -20,7 +22,7 @@ import tempfile
 import time
 import zlib
 from pathlib import Path
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Iterator, List, Optional
 
 from scenegems_tool.persistence.artifacts.artifact_store import (
     ArtifactHashMismatch,
@@ -31,6 +33,7 @@ from scenegems_tool.persistence.artifacts.artifact_store import (
     StoredArtifact,
     require_artifact_hash,
 )
+from scenegems_tool.persistence.schema.artifact_tables import SHA256_HEX_PATTERN
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +89,14 @@ class FileArtifactStore(ArtifactStore):
             return self.path(sha256).stat().st_size
         except FileNotFoundError:
             raise ArtifactNotFound(sha256) from None
+
+    def stored_hashes(self, older_than_s: float = 0.0) -> Iterator[str]:
+        """Each folder is listed whole before its hashes are yielded, so a caller may delete files while it iterates."""
+        cutoff = time.time() - older_than_s
+        for first in _hash_folders(self.root):
+            for second in _hash_folders(first):
+                for sha256 in _stored_before(second, cutoff):
+                    yield sha256
 
     def _remove_stale_incoming(self, older_than_s: float) -> None:
         cutoff = time.time() - older_than_s
@@ -163,6 +174,33 @@ class _FileWriter(ArtifactWriter):
             except (OSError, ValueError, zlib.error):
                 pass
         self._temporary.unlink(missing_ok=True)
+
+
+def _hash_folders(folder: Path) -> List[Path]:
+    """The two-character hex subfolders of an address level; .incoming and anything else are skipped."""
+    try:
+        return sorted(Path(entry.path) for entry in os.scandir(folder) if len(entry.name) == 2 and all(c in "0123456789abcdef" for c in entry.name) and entry.is_dir())
+    except FileNotFoundError:
+        return []
+
+
+def _stored_before(folder: Path, cutoff: float) -> List[str]:
+    """The hashes of the artifact files in a leaf folder last modified before cutoff (seconds since the epoch)."""
+    found: List[str] = []
+    try:
+        entries = list(os.scandir(folder))
+    except FileNotFoundError:
+        return found
+    for entry in entries:
+        sha256 = entry.name[: -len(FILE_SUFFIX)]
+        if not entry.name.endswith(FILE_SUFFIX) or not SHA256_HEX_PATTERN.match(sha256):
+            continue
+        try:
+            if entry.is_file() and entry.stat().st_mtime < cutoff:
+                found.append(sha256)
+        except FileNotFoundError:
+            pass  # deleted while listed
+    return found
 
 
 def _sync_folder(folder: Path) -> None:

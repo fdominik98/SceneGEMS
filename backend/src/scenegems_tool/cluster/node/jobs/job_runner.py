@@ -31,6 +31,9 @@ def run_job(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional
     """Run one job in its subsystem container and return its result. Setting cancel stops it."""
     if node.slots and job.job_type not in node.slots:
         raise JobFailed(f"This node offers no {job.job_type.value} slots", retryable=True)
+    lacking = node.lacks(job)
+    if lacking:
+        raise JobFailed(f"This node does not offer the components {', '.join(lacking)}", retryable=True)
     resolved = resolve_job_inputs(job, node, report)
     result = job_type_module(job.job_type).run(resolved, node, report, cancel)
     return store_job_results(job, result, node, report)

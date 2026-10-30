@@ -35,17 +35,23 @@ def _sanitize_docker_name(name: str) -> str:
     return sanitized[:63]
 
 
-def workbench_monitor_names(agent_name: str) -> PoolNames:
-    """Names of one workbench monitor container: unique per start, prefixed by the agent name."""
+def workbench_monitor_names(agent_name: str, topic_prefix: str = "") -> PoolNames:
+    """Names of one workbench monitor container: unique per start, prefixed by the agent name.
+
+    topic_prefix is the live session's on the master's broker (empty elsewhere); the container
+    name then starts with the session's scope name instead, so an unscoped monitor of the same
+    agent never takes it for a leftover of its own.
+    """
     instance_id = uuid.uuid4().hex[:8]
+    owner = _sanitize_docker_name(topic_prefix.replace("/", "-")) if topic_prefix else _sanitize_docker_name(agent_name)[:54]
     return PoolNames(
         compose_project=f"{WORKBENCH_COMPOSE_PROJECT_PREFIX}-{instance_id}",
         service_key=_SERVICE_KEY,
-        container_name=f"{_sanitize_docker_name(agent_name)[:54]}-{instance_id}",
+        container_name=f"{owner[:54]}-{instance_id}",
         network_key="",
         network_name="",
         folder=f"{MONITORING_GEN_FOLDER}/{instance_id}",
-        topic_prefix="",
+        topic_prefix=topic_prefix,
         scoped=False,
     )
 
@@ -73,7 +79,8 @@ class MonitorService(PooledService):
 
     @classmethod
     def for_workbench(cls, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, agent_name: str, topic: str, colregs_constraints_content: str) -> "MonitorService":
-        return cls(workbench_monitor_names(agent_name), mqtt_connection, reference_geofence, agent_name, topic, colregs_constraints_content)
+        """A live session's monitor, under the session's topic prefix when it has one."""
+        return cls(workbench_monitor_names(agent_name, mqtt_connection.topic_prefix), mqtt_connection, reference_geofence, agent_name, topic, colregs_constraints_content)
 
     @classmethod
     def for_scope(
@@ -121,7 +128,7 @@ class MonitorService(PooledService):
         try:
             if self._shutdown.is_set():
                 return
-            if not self.names.scoped:
+            if not self.names.scoped and not self.names.topic_prefix:
                 self._reap_same_agent_containers()
             if self._shutdown.is_set():
                 return
@@ -144,11 +151,12 @@ class MonitorService(PooledService):
 
         Unique compose projects no longer remove peers, so a previous live-broker
         container can keep publishing as `scenario_monitor` and the live broker
-        drops the new session. Scoped instances never share a name, so only the
-        workbench reaps.
+        drops the new session. Scoped instances never share a name, and neither do
+        the monitors of live sessions with a topic prefix, so only an unscoped
+        workbench monitor reaps, and only containers named as it names them.
         """
-        prefix = f"{_sanitize_docker_name(self.agent_name)[:54]}-"
-        force_remove_containers([container_id for container_id, name in container_names_and_ids() if name.startswith(prefix) and name != self.container_name])
+        own_kind = re.compile(rf"^{re.escape(_sanitize_docker_name(self.agent_name)[:54])}-[0-9a-f]{{8}}$")
+        force_remove_containers([container_id for container_id, name in container_names_and_ids() if own_kind.match(name) and name != self.container_name])
 
     def _remove_owned_container(self) -> None:
         force_remove_containers([self.container_name])

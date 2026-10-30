@@ -16,9 +16,9 @@ scenario's text, an item's scene or trajectories, as the node resolves them.
 import hashlib
 import random
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.cluster.fingerprints.job_images import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.node.jobs.job_types import artifact_input_fields, artifact_result_fields
 from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference, json_pointer, resolve_references, store_results
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
@@ -91,6 +91,7 @@ class FakeExecutor:
         fingerprints: Optional[Dict[str, str]] = None,
         slots: Optional[Dict[JobType, int]] = None,
         labels: Optional[Dict[str, str]] = None,
+        components: Optional[Collection[str]] = None,
     ):
         self.stores = stores
         self.jobs = job_store
@@ -101,7 +102,7 @@ class FakeExecutor:
         self.reports: List[Report] = []
         self.attempts: Dict[str, int] = {}
         self.payloads: Dict[str, Dict[str, Any]] = {}
-        self.node = node_store.register(make_hello(node_id, slots=slots or ALL_SLOTS, fingerprints=fingerprints or EXPECTED, labels=labels))
+        self.node = node_store.register(make_hello(node_id, slots=slots or ALL_SLOTS, fingerprints=fingerprints or EXPECTED, labels=labels, components=components))
 
     # Claiming and reporting
 
@@ -197,7 +198,7 @@ def _outcomes(script: CaseScript, stage: PipelineStage = PipelineStage.MONITOR) 
     passed = script.monitor_passed.get(stage, script.passed)
     rules = {"OS_0 - TS_1": {"Rule 14": {"passed": 0} if passed else {"failed": FAILED_RULE["first_failed_at"]}}}
     failed = [] if passed else [dict(FAILED_RULE)]
-    return {"rules": rules, "failed_rules": failed, "passed": passed}
+    return {"rules": rules, "failed_rules": failed, "encounters": {"OS_0 - TS_1": ["HEAD_ON", "OTHER"]}, "passed": passed}
 
 
 def _simulation(executor: FakeExecutor, script: CaseScript, case, payload) -> Dict[str, Any]:
@@ -223,7 +224,7 @@ def _simulation(executor: FakeExecutor, script: CaseScript, case, payload) -> Di
 
 
 def _ardupilot_simulation(script: CaseScript, payload, digest: str) -> Dict[str, Any]:
-    """A simulation.ardupilot_sim or simulation.gazebo result as the job reports it: a bounded run record, the state digest, the observed run as trajectories and no state rows."""
+    """A result of the simulation job's ardupilot runner as the job reports it: a bounded run record, the state digest, the observed run as trajectories and no state rows."""
     assert payload["include_trajectories"] is True and payload["include_states"] is False and payload["geofence"]["radius_meters"] > 0
     run_record = {
         "stack": ["replay on ardupilot"],

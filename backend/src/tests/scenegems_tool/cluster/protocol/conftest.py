@@ -15,9 +15,9 @@ def resources() -> NodeResources:
 def job_spec() -> JobSpec:
     return JobSpec(
         job_id="job-1",
-        job_type=JobType.SIMULATION_KINEMATIC,
+        job_type=JobType.SIMULATION,
         payload={"steps": 300, "dt": 1.0},
-        requirements=JobRequirements(labels={"site": "lab"}, fingerprints={"scenegems-scenario-execution": "abc123"}),
+        requirements=JobRequirements(labels={"site": "lab"}, components=["asv_software/replay", "simulation_layer/kinematic"], fingerprints={"scenegems-scenario-execution": "abc123"}),
         attempt=1,
         idempotency_key="job-1/1",
     )

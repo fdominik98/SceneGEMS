@@ -10,7 +10,7 @@ from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmis
 from scenegems_tool.cluster.protocol.messages import Cancel, Heartbeat, LeaseOffer, LeaseRenewed, ProtocolError, ProtocolErrorCode, Welcome
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 from scenegems_tool.persistence.schema import NodeStatus
-from tests.scenegems_tool.cluster.master.conftest import EXPECTED, SCENE
+from tests.scenegems_tool.cluster.master.conftest import EXPECTED_BY_REPOSITORY, SCENE
 from tests.scenegems_tool.cluster.payloads import valid_payload
 from tests.scenegems_tool.persistence.stores.builders import make_resources
 
@@ -36,7 +36,7 @@ def test_offer_accept_renew_result(make_node, plane, stores, on_loop, schedule, 
     assert schedule() == 1
     offer = node.expect(LeaseOffer)
     assert offer.job.job_id == job.job_id and offer.job.attempt == 1
-    assert offer.job.requirements.fingerprints == {"scenegems-scene-generation-subsystem:latest": "fp-scene"}
+    assert offer.job.requirements.fingerprints == {"scenegems-scene-generation-subsystem": "fp-scene"}
     assert offer.expires_at == clock.now + timedelta(seconds=10)
 
     renewed = node.accept(offer)
@@ -161,4 +161,4 @@ def test_the_expected_fingerprints_are_in_every_offer(make_node, plane, on_loop,
     node.connect()
     _submit(on_loop, plane)
     schedule()
-    assert set(node.expect(LeaseOffer).job.requirements.fingerprints.items()) <= set(EXPECTED.items())
+    assert set(node.expect(LeaseOffer).job.requirements.fingerprints.items()) <= set(EXPECTED_BY_REPOSITORY.items())

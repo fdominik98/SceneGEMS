@@ -9,11 +9,16 @@ result is that final scene. With a seed the scene is reproducible (unless the ge
 ran into its timeout, which depends on the machine); the seed used is recorded in
 evaluation_data.random_seed either way.
 
+A job that stops waiting without its final scene (cancelled, lost, released, timed out)
+cancels its own generation by request id, so the pool's other generations keep running and
+the worker is free for the next job.
+
 functional_scenario_content is the scenario's text, or a reference to a functional_scenario
 artifact that the node resolves to its text before the job runs (a scenario given as content
 to a campaign); the text must parse either way, a reference is checked for shape only.
 """
 
+import logging
 import threading
 from typing import Any, Dict, Optional, Tuple
 
@@ -31,6 +36,8 @@ from scenegems_tool.subsystems.scene_generation.scene_generation_types import SC
 
 REPLY_MARGIN_S = 60.0  # time beyond the generation timeout for the worker to start and the reply to arrive
 MAX_SEED = 2**31 - 1
+CANCEL_FLUSH_TIMEOUT_S = 2.0  # how long the job waits for the broker to take its cancel before it disconnects
+_logger = logging.getLogger(__name__)
 
 # functional_scenario_content is a string (the .problem text); a reference to a functional scenario artifact resolves to its text.
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("functional_scenario_content", ArtifactKind.FUNCTIONAL_SCENARIO, ArtifactContent.TEXT),)
@@ -97,6 +104,7 @@ def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[thr
         client.connect()
     except RuntimeError as error:
         raise JobFailed(str(error), retryable=True) from error
+    generating = False
     try:
         wait_for_pool(lambda: client.is_connected and client.is_heartbeat_valid, report, "scene generation pool", cancel)
         client.publish_generate_scene_command(
@@ -109,7 +117,20 @@ def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[thr
             payload.enforce_low_tcpa,
             seed=payload.seed,
         )
+        generating = True
         wait_for_reply(replied, report, "generated scene", cancel, payload.timeout_s + REPLY_MARGIN_S)
     finally:
+        if generating and not replied.is_set():
+            _cancel_generation(client, request_id)
         client.disconnect()
     return {"request_id": request_id, **reply}
+
+
+def _cancel_generation(client: Any, request_id: str) -> None:
+    """Stop this job's generation in the pool; a cancel that cannot be sent leaves the job's outcome as it is."""
+    try:
+        info = client.publish_cancel_command(request_id)
+        if info is not None:
+            info.wait_for_publish(timeout=CANCEL_FLUSH_TIMEOUT_S)
+    except Exception as error:
+        _logger.warning("Could not cancel the generation of request %s: %s", request_id, error)

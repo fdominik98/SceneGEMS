@@ -1,8 +1,10 @@
 name: scenegems-${SCENEGEMS_MASTER_ID:?set SCENEGEMS_MASTER_ID in .env}
 
 # One master of a SceneGEMS cluster: Postgres, the cluster broker and master-api. The
-# deployment tool installs this file with release.json and .env into one folder per master
-# (scenegems_tool.cluster.release.roles) and runs `docker compose up -d` in that folder.
+# deployment tool installs this file and docker-compose.live-sessions.yml with release.json and
+# .env into one folder per master (scenegems_tool.cluster.release.roles) and runs
+# `docker compose up -d` in that folder; COMPOSE_FILE in .env says which of the two files compose
+# reads (by default both). The images carry the release's tag, SCENEGEMS_IMAGE_TAG.
 # Master and nodes trust the VPN: there are no certificates, tokens or broker accounts, and
 # the node API and the broker are open to every machine that can reach them.
 # The master id scopes the project, container and volume names, and the ports come from .env,
@@ -33,7 +35,7 @@ services:
   # Cluster broker: plain, anonymous MQTT for every node, the image's own configuration.
   # Nodes find it on the master's host at SCENEGEMS_BROKER_PORT.
   cluster-broker:
-    image: scenegems-mqtt-broker:latest
+    image: scenegems-mqtt-broker:${SCENEGEMS_IMAGE_TAG:-latest}
     container_name: scenegems-${SCENEGEMS_MASTER_ID}-cluster-broker
     restart: unless-stopped
     ports:
@@ -44,10 +46,12 @@ services:
   # The master (scenegems_tool.cluster.master): node API over plain HTTP, and the operator API
   # with the workbench gateway on this machine only. It migrates the database before it
   # starts and reads the image fingerprints its nodes must have from release.json. It connects
-  # to cluster-broker to observe pools for the UI. It mounts the Docker socket for the workbench
-  # gateway, and the artifact volume: the content-addressed job inputs and results nodes up- and download.
+  # to cluster-broker to observe pools for the UI. It mounts the artifact volume: the
+  # content-addressed job inputs and results nodes up- and download. The Docker socket for the
+  # workbench's live sessions comes with docker-compose.live-sessions.yml; without that file the
+  # master runs with live sessions off.
   master-api:
-    image: ${SCENEGEMS_MASTER_IMAGE:-scenegems-backend:latest}
+    image: scenegems-backend:${SCENEGEMS_IMAGE_TAG:-latest}
     container_name: scenegems-${SCENEGEMS_MASTER_ID}-master-api
     restart: unless-stopped
     command: ["sh", "-c", "python -m scenegems_tool.persistence.migrate upgrade head && exec python -m scenegems_tool.cluster.master"]
@@ -69,8 +73,8 @@ services:
       SCENEGEMS_OPERATOR_LISTEN_HOST: 0.0.0.0
       SCENEGEMS_OPERATOR_LISTEN_PORT: "5174"
       SCENEGEMS_OPERATOR_ALLOWED_ORIGINS: ${SCENEGEMS_OPERATOR_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
-      SCENEGEMS_RUNTIME_VOLUME: scenegems-${SCENEGEMS_MASTER_ID}-runtime
-      SCENEGEMS_DOCKER_NETWORK: scenegems-${SCENEGEMS_MASTER_ID}_default
+      # On only with docker-compose.live-sessions.yml, which mounts the Docker socket
+      SCENEGEMS_LIVE_SESSIONS: "false"
       SCENEGEMS_ARTIFACT_DIR: /var/lib/scenegems/artifacts
       SCENEGEMS_ARTIFACT_MAX_BYTES: ${SCENEGEMS_ARTIFACT_MAX_BYTES:-268435456}
       SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S: ${SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S:-600}
@@ -80,11 +84,7 @@ services:
       SCENEGEMS_BROKER_PORT: "1883"
     volumes:
       - ./release.json:/etc/scenegems/release.json:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-      - runtime:/app/assets/runtime_assets
       - artifacts:/var/lib/scenegems/artifacts
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5174/health', timeout=3)"]
       interval: 10s
@@ -95,8 +95,6 @@ services:
 volumes:
   postgres_data:
   broker_data:
-  runtime:
-    name: scenegems-${SCENEGEMS_MASTER_ID}-runtime
   # Job inputs and results (scenegems_tool.persistence.artifacts); Postgres records what it holds
   artifacts:
     name: scenegems-${SCENEGEMS_MASTER_ID}-artifacts

@@ -47,10 +47,12 @@ Options:
   --all                   Build every image (same as no arguments)
 
   --release <folder>      Build the images a cluster runs (broker, backend and
-                          subsystems, simulation, node daemon), pull Postgres, and
-                          write the release bundle into <folder>: release.json and
-                          the master and node stacks. The deployment tool installs
-                          the bundle on the machines.
+                          subsystems, simulation, node daemon) as :latest, pull
+                          Postgres, tag the release's images with the revision
+                          (<commit>, or <commit>-dirty with uncommitted changes)
+                          and write the release bundle into <folder>: release.json
+                          with those tags, and the master and node stacks. The
+                          deployment tool installs the bundle on the machines.
 
   --fingerprints          Print "image fingerprint" for every image of this checkout
                           and exit; builds nothing and needs no Docker engine

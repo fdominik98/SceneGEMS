@@ -1,4 +1,4 @@
-"""simulation.kinematic: a lockstep run on the kinematic layer, in a scenario execution container.
+"""The simulation job's kinematic runner: a lockstep run on the kinematic layer, in a scenario execution container.
 
 Two modes: replay of every vessel's generated trajectory (kinematic_runner.run_kinematic_replay),
 or USV Navigation on the own ship against replaying targets (run_kinematic_closed_loop).
@@ -17,12 +17,13 @@ do not depend on whether or when the run was observed.
 
 import threading
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional, Tuple
 
 from pydantic import Field, model_validator
 
+from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
 from scenegems_tool.cluster.node.job_report import JobReport, JobResultData
-from scenegems_tool.cluster.node.jobs.job_payload import TrajectoriesInput, parse_payload, to_trajectories
+from scenegems_tool.cluster.node.jobs.job_payload import TrajectoriesInput, to_trajectories
 from scenegems_tool.cluster.node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, run_in_runner_container
 from scenegems_tool.cluster.node.node_context import NodeContext
@@ -31,6 +32,7 @@ from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKin
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import DEFAULT_PRESCRIBED_TIME_S, UsvNavigationParameters
+from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
@@ -42,6 +44,14 @@ ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories
 class KinematicMode(str, Enum):
     REPLAY = "replay"  # every vessel replays its trajectory
     USV_NAVIGATION = "usv_navigation"  # the own ship runs USV Navigation, the others replay
+
+
+def vessel_stacks(mode: KinematicMode) -> Tuple[StackTriple, ...]:
+    """The vessel stacks a run of the mode runs: replay for the vessels that replay, USV Navigation for the own ship in mode usv_navigation."""
+    replay = (AsvSoftwareId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
+    if mode == KinematicMode.REPLAY:
+        return (replay,)
+    return (replay, (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC))
 
 
 class UsvNavigationPayload(ProtocolModel):
@@ -65,7 +75,22 @@ class UsvNavigationPayload(ProtocolModel):
         )
 
 
+def check_closed_loop_options(mode: KinematicMode, own_ship_id: Optional[int], usv_navigation: Optional[UsvNavigationPayload]) -> None:
+    """own_ship_id and usv_navigation apply only to mode usv_navigation (every runner with the two modes checks it)."""
+    if mode == KinematicMode.REPLAY and (own_ship_id is not None or usv_navigation is not None):
+        raise ValueError("own_ship_id and usv_navigation apply only to mode usv_navigation")
+
+
+def own_ship(scene, own_ship_id: Optional[int]):
+    """The vessel that runs USV Navigation: the scene's own ship, or the vessel own_ship_id names; ValueError when the scene has none by that id."""
+    own = scene.os if own_ship_id is None else next((vessel for vessel in scene.vessels if vessel.id == own_ship_id), None)
+    if own is None:
+        raise ValueError(f"No vessel with id {own_ship_id} in the scene")
+    return own
+
+
 class KinematicSimulationPayload(ProtocolModel):
+    runner: Literal[SimulationRunner.KINEMATIC]
     mode: KinematicMode = KinematicMode.REPLAY
     trajectories: TrajectoriesInput
     own_ship_id: Optional[int] = None  # usv_navigation only; the scene's own ship when None
@@ -81,8 +106,7 @@ class KinematicSimulationPayload(ProtocolModel):
 
     @model_validator(mode="after")
     def _closed_loop_options_need_closed_loop(self) -> "KinematicSimulationPayload":
-        if self.mode == KinematicMode.REPLAY and (self.own_ship_id is not None or self.usv_navigation is not None):
-            raise ValueError("own_ship_id and usv_navigation apply only to mode usv_navigation")
+        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation)
         return self
 
     @model_validator(mode="after")
@@ -93,12 +117,14 @@ class KinematicSimulationPayload(ProtocolModel):
             raise ValueError("the live monitor needs a whole number of seconds as dt")
         return self
 
+    def vessel_stacks(self) -> Tuple[StackTriple, ...]:
+        return vessel_stacks(self.mode)
+
 
 PAYLOAD_MODEL = KinematicSimulationPayload
 
 
-def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    payload = parse_payload(KinematicSimulationPayload, job)
+def run(job: JobSpec, node: NodeContext, report: JobReport, payload: KinematicSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
     return run_in_runner_container(job, node, report, Subsystem.SCENARIO_EXECUTION, timeout_s=payload.timeout_s, cancel=cancel)
 
 
@@ -134,12 +160,11 @@ def step_observer(monitor: Optional[LiveMonitor], observer) -> Optional[Callable
     return on_step
 
 
-def execute(job: JobSpec, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
+def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
     """The in-container part: run the simulation in process and describe the run; observation makes it observable live."""
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
     from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_closed_loop, run_kinematic_replay
 
-    payload = parse_payload(KinematicSimulationPayload, job)
     trajectories = to_trajectories(payload.trajectories)
     environment = EnvironmentConfig.calm(seed=payload.seed)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt

@@ -341,14 +341,21 @@ class CampaignStore:
         limit: Optional[int] = 100,
         kinds: Optional[Collection[CampaignEventKind]] = None,
         *,
+        newest: bool = False,
         session: Optional[Session] = None,
     ) -> List[CampaignEventRecord]:
-        """The campaign's events in order, after after_event_id (for paging), optionally of some kinds."""
+        """The campaign's events in order, after after_event_id (for paging), optionally of some kinds.
+
+        With newest, limit counts from the end: the limit newest events after after_event_id,
+        still returned oldest first.
+        """
         with session_scope(self._sessions, session) as scope:
-            query = select(CampaignEventRow).where(CampaignEventRow.campaign_id == campaign_id, CampaignEventRow.id > after_event_id).order_by(CampaignEventRow.id).limit(limit)
+            query = select(CampaignEventRow).where(CampaignEventRow.campaign_id == campaign_id, CampaignEventRow.id > after_event_id)
+            query = query.order_by(CampaignEventRow.id.desc() if newest else CampaignEventRow.id).limit(limit)
             if kinds is not None:
                 query = query.where(CampaignEventRow.kind.in_(list(kinds)))
-            return [CampaignEventRecord.from_row(row) for row in scope.execute(query).scalars()]
+            records = [CampaignEventRecord.from_row(row) for row in scope.execute(query).scalars()]
+            return records[::-1] if newest else records
 
     def count_events(self, campaign_id: str, after_event_id: int = 0, kinds: Optional[Collection[CampaignEventKind]] = None, *, session: Optional[Session] = None) -> int:
         """How many events list_events would return for the same filters without a limit."""

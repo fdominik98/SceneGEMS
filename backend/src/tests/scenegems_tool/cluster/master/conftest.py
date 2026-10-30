@@ -8,12 +8,13 @@ the sweeps themselves, on the app's event loop, after moving the manual clock.
 """
 
 from dataclasses import dataclass
-from typing import Callable, Dict, Iterator, Optional
+from typing import Callable, Collection, Dict, Iterator, Optional
 
 import pytest
 from starlette.testclient import TestClient
 
-from scenegems_tool.cluster.fingerprints.job_images import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
+from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.master.api.master_apps import create_node_api_app
 from scenegems_tool.cluster.master.api.operator_routes import operator_router
 from scenegems_tool.cluster.master.control_plane import ControlPlane
@@ -25,7 +26,7 @@ from tests.scenegems_tool.cluster.master.fake_stores import InMemoryJobStore, In
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_hello
 
-# The master's expected fingerprints in these tests; a node built from the same checkout reports them
+# The master's expected fingerprints in these tests as release.json names the images; a node built from the same checkout reports them
 EXPECTED = {
     SCENE_GENERATION_IMAGE: "fp-scene",
     TRAJECTORY_GENERATION_IMAGE: "fp-trajectory",
@@ -35,8 +36,10 @@ EXPECTED = {
     GAZEBO_IMAGE: "fp-gazebo",
     "scenegems-backend:latest": "fp-backend",
 }
+# The same as the master holds and requires them: by image repository (cluster/fingerprints/comparison.py)
+EXPECTED_BY_REPOSITORY = by_repository(EXPECTED)
 SCENE = JobType.SCENE_GENERATION
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION  # with valid_payload, the kinematic runner
 
 
 @dataclass
@@ -97,9 +100,27 @@ def make_node(client) -> Iterator[Callable[..., FakeNode]]:
     """A scripted node of the master. Its id is its name's slug and a counter, so two nodes of one name stay apart."""
     nodes = []
 
-    def make(name: str, slots: Optional[Dict[JobType, int]] = None, labels=None, fingerprints: Optional[Dict[str, str]] = None, resources=None, machine: Optional[str] = None) -> FakeNode:
+    def make(
+        name: str,
+        slots: Optional[Dict[JobType, int]] = None,
+        labels=None,
+        fingerprints: Optional[Dict[str, str]] = None,
+        resources=None,
+        machine: Optional[str] = None,
+        components: Optional[Collection[str]] = None,
+    ) -> FakeNode:
+        """components: every component of the catalog when None."""
         node_id = f"{_slug(name)}-{len(nodes) + 1}"
-        hello = make_hello(node_id, slots=slots or {SCENE: 2}, labels=labels, fingerprints=dict(EXPECTED) if fingerprints is None else fingerprints, resources=resources, name=name, machine=machine)
+        hello = make_hello(
+            node_id,
+            slots=slots or {SCENE: 2},
+            labels=labels,
+            fingerprints=dict(EXPECTED) if fingerprints is None else fingerprints,
+            resources=resources,
+            name=name,
+            machine=machine,
+            components=components,
+        )
         nodes.append(FakeNode(client, hello))
         return nodes[-1]
 

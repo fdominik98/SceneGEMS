@@ -9,8 +9,9 @@ Per case, the stages of the steps the campaign runs (config.steps), in chain ord
       generate_trajectories   trajectory_generation job (monitor_driven_rrt or straight)
       monitor_trajectories    monitoring.post_hoc job over the planned trajectories (trajectories.monitor post_hoc)
     simulation, per run, per repeat:
-      simulate                simulation.kinematic job, or simulation.ardupilot_sim or simulation.gazebo for a run on an ArduPilot stack
-                              (StageGraph.job_type_of); with the live monitor the job judges the run itself
+      simulate                simulation job, runner kinematic, or runner ardupilot for a run on an ArduPilot stack; it
+                              needs the components of the run's vessel stacks (StageGraph.run_components); with the
+                              live monitor the job judges the run itself
     simulation, per run:
       monitor                 monitoring.post_hoc job over repeat 0's state log (post_hoc only)
       calibrate               calibration.deviation job over the run's repeats (repeats above one only)
@@ -42,9 +43,10 @@ verdicts) or cancels it (above the quota).
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, RunConfig, StackConfig
+from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, CustomStackConfig, RunConfig, StackConfig
+from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, ComponentId, stack_components
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind
 
@@ -63,7 +65,7 @@ STAGE_JOB_TYPES = {
     PipelineStage.MONITOR_SCENE: JobType.MONITORING_POST_HOC,
     PipelineStage.GENERATE_TRAJECTORIES: JobType.TRAJECTORY_GENERATION,
     PipelineStage.MONITOR_TRAJECTORIES: JobType.MONITORING_POST_HOC,
-    PipelineStage.SIMULATE: JobType.SIMULATION_KINEMATIC,  # the default; a run on an ArduPilot stack uses simulation_job_type
+    PipelineStage.SIMULATE: JobType.SIMULATION,
     PipelineStage.MONITOR: JobType.MONITORING_POST_HOC,
     PipelineStage.CALIBRATE: JobType.CALIBRATION_DEVIATION,
 }
@@ -85,13 +87,15 @@ def stage_priority_offsets(scene_monitored: bool = False, trajectories_monitored
     return {stage: offset for offset, stage in enumerate(chain)}
 
 
-# The job type of each ArduPilot layer; the job type decides the images (job_images), so a Gazebo run needs Gazebo
-ARDUPILOT_LAYER_JOB_TYPES = {"ardupilot_sim": JobType.SIMULATION_ARDUPILOT_SIM, "gazebo": JobType.SIMULATION_GAZEBO}
+# A job type and the components a node needs to run one of its jobs: what the stall check looks for
+JobNeed = Tuple[JobType, Tuple[ComponentId, ...]]
 
 
-def simulation_job_type(stack: StackConfig) -> JobType:
-    """The job type that simulates a run on this stack: simulation.ardupilot_sim or simulation.gazebo by the ArduPilot layer, simulation.kinematic otherwise."""
-    return ARDUPILOT_LAYER_JOB_TYPES[stack.simulation_layer] if isinstance(stack, ArdupilotStackConfig) else JobType.SIMULATION_KINEMATIC
+def run_stack_components(stack: StackConfig) -> Tuple[ComponentId, ...]:
+    """The components a run on this stack needs: every layer of every vessel's stack (the own ship's and the targets'), as the simulation job computes them from its payload."""
+    from scenegems_tool.assurance.campaign.config_validation import vessel_stacks
+
+    return stack_components((vessel.asv_software, vessel.control_layer, vessel.simulation_layer) for vessel in vessel_stacks(stack).values())
 
 
 @dataclass(frozen=True)
@@ -116,7 +120,6 @@ class Step:
 
     @property
     def job_type(self) -> JobType:
-        """The stage's job type; a simulate step's is the kinematic one here, StageGraph.job_type_of gives its run's."""
         return STAGE_JOB_TYPES[self.stage]
 
     def idempotency_key(self, campaign_id: str, case_id: int) -> str:
@@ -216,31 +219,29 @@ class StageGraph:
         return self.runs[run_index]
 
     def job_type_of(self, step: Step) -> JobType:
-        """The job type of a step: a simulate step's comes from its run's stack."""
-        if step.stage == PipelineStage.SIMULATE:
-            return simulation_job_type(self.runs[step.run_index].stack)
         return STAGE_JOB_TYPES[step.stage]
 
-    def stage_jobs(self, stage: PipelineStage) -> List[JobType]:
-        """The job types a stage may queue; the simulate stage has one per distinct simulation layer of the runs."""
+    def stage_needs(self, stage: PipelineStage) -> List[JobNeed]:
+        """The job type and components of the jobs a stage may queue; the simulate stage has one need per distinct component set of the runs."""
         if stage not in STAGE_JOB_TYPES:
             return []
-        if stage != PipelineStage.SIMULATE or not self.runs:
-            return [STAGE_JOB_TYPES[stage]]
-        jobs: List[JobType] = []
-        for run in self.runs:
-            job_type = simulation_job_type(run.stack)
-            if job_type not in jobs:
-                jobs.append(job_type)
-        return jobs
+        job_type = STAGE_JOB_TYPES[stage]
+        if stage != PipelineStage.SIMULATE:
+            return [(job_type, (JOB_TYPE_COMPONENTS[job_type],))]
+        needs: List[JobNeed] = []
+        for run_index in range(len(self.runs)):
+            need = (job_type, self.run_components(run_index))
+            if need not in needs:
+                needs.append(need)
+        return needs
 
-    def run_job_type(self, run_index: int) -> JobType:
-        """The run's simulation job type, which decides its images."""
-        return simulation_job_type(self.runs[run_index].stack)
+    def run_components(self, run_index: int) -> Tuple[ComponentId, ...]:
+        """The components the run's simulation job needs, which decide its images."""
+        return run_stack_components(self.runs[run_index].stack)
 
     def run_tier(self, run_index: int) -> Optional[str]:
-        """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (replay_mavlink_lockstep), unknown on the kinematic layer."""
-        return "bounded" if isinstance(self.runs[run_index].stack, ArdupilotStackConfig) else None
+        """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (the lockstep MAVLink adapters) and on the custom controller (gz_transport_actuator), unknown on the kinematic layer."""
+        return "bounded" if isinstance(self.runs[run_index].stack, (ArdupilotStackConfig, CustomStackConfig)) else None
 
     def simulate_steps(self) -> List[Step]:
         return [Step(PipelineStage.SIMULATE, run_index, repeat) for run_index, run in enumerate(self.runs) for repeat in range(run.repeats)]

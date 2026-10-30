@@ -141,9 +141,7 @@ class Mqtt:
             "altitude": alt,
         }
 
-        self.client.publish(
-            f"{AgentConfig.BASE_TOPIC}/sensor/position", json.dumps(payload)
-        )
+        self.client.publish(AgentConfig.POSITION_TOPIC, json.dumps(payload))
 
     def send_speed(self, val: float) -> None:
         if not val:

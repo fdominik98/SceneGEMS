@@ -1,4 +1,4 @@
-"""Campaign runs on the ArduPilot stacks on Postgres with a fake fleet: the job type per run, the images, run records, verdicts, calibration and the stall check."""
+"""Campaign runs on the ArduPilot stacks on Postgres with a fake fleet: the components per run, the images, run records, verdicts, calibration and the stall check."""
 
 import json
 
@@ -6,7 +6,8 @@ import pytest
 
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE
+from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
+from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import CampaignActualState, CampaignDesiredState, CampaignEventKind, MonitorImplementation, PipelineStage, VerdictState
 from tests.scenegems_tool.assurance.pipeline.checks import assert_consistent
@@ -20,8 +21,9 @@ pytestmark = pytest.mark.postgres
 SIMULATE, MONITOR, CALIBRATE = PipelineStage.SIMULATE, PipelineStage.MONITOR, PipelineStage.CALIBRATE
 SITL_RUN = {"name": "sitl", "stack": {"simulation_layer": "ardupilot_sim"}, "monitor": "post_hoc"}
 GAZEBO_RUN = {"name": "world", "stack": {"simulation_layer": "gazebo", "speedup": 2}, "monitor": "live"}
-ON_SITL, ON_GAZEBO = JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO
-NO_ARDUPILOT = {job_type: 100000 for job_type in JobType if job_type not in (ON_SITL, ON_GAZEBO)}
+ON_SITL = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]
+ON_GAZEBO = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+NO_ARDUPILOT = ("asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring", "calibration")
 
 
 def _cases(harness, campaign):
@@ -32,7 +34,7 @@ def _jobs(harness, case):
     return {(job.stage, job.run_index, job.repeat_index): harness.job_store.get(job.job_id) for job in harness.stores.pipeline.pipeline_jobs_of_case(case.case_id)}
 
 
-def test_each_run_is_simulated_by_the_job_of_its_stack_with_its_images(make_harness):
+def test_each_run_is_simulated_by_a_job_needing_its_stacks_components_with_their_images(make_harness):
     harness = make_harness(scripts={(CLASS_A, 0): CaseScript(tier="exact")})
     runs = [{"name": "kinematic", "monitor": "post_hoc"}, SITL_RUN, GAZEBO_RUN]
     campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, runs=runs, resources={"priority": 5}))
@@ -41,10 +43,12 @@ def test_each_run_is_simulated_by_the_job_of_its_stack_with_its_images(make_harn
     (case,) = _cases(harness, campaign)
     jobs = _jobs(harness, case)
     kinematic, sitl, world = (jobs[(SIMULATE, run, 0)] for run in range(3))
-    assert [job.job_type for job in (kinematic, sitl, world)] == [JobType.SIMULATION_KINEMATIC, ON_SITL, ON_GAZEBO]
-    assert set(kinematic.requirements.fingerprints) == {SCENARIO_EXECUTION_IMAGE}
-    assert set(sitl.requirements.fingerprints) == {SCENARIO_EXECUTION_IMAGE, SITL_IMAGE}
-    assert set(world.requirements.fingerprints) == {SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE}
+    assert [job.job_type for job in (kinematic, sitl, world)] == [JobType.SIMULATION] * 3
+    assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO]
+    assert (kinematic.payload["runner"], sitl.payload["runner"], world.payload["runner"]) == ("kinematic", "ardupilot", "ardupilot")
+    assert set(kinematic.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE]))
+    assert set(sitl.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE, SITL_IMAGE]))
+    assert set(world.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]))
     assert (sitl.payload["simulation_layer"], sitl.payload["include_trajectories"], "monitor" not in sitl.payload) == ("ardupilot_sim", True, True)
     assert (world.payload["monitor"], world.payload["speedup"], world.payload["seed"]) == ("live", 2, harness.stores.results.list_run_records(campaign.campaign_id)[2].seed)
     assert {job.priority for job in (kinematic, sitl, world)} == {7}
@@ -92,12 +96,12 @@ def test_repeats_of_an_ardupilot_run_are_calibrated_against_the_images_it_ran_on
     assert_consistent(harness.stores, campaign.campaign_id)
     (case,) = _cases(harness, campaign)
     jobs = _jobs(harness, case)
-    assert [jobs[(SIMULATE, 0, repeat)].job_type for repeat in range(3)] == [ON_SITL] * 3
+    assert [jobs[(SIMULATE, 0, repeat)].requirements.components for repeat in range(3)] == [ON_SITL] * 3
     calibrate = jobs[(CALIBRATE, 0, None)]
     assert len(calibrate.payload["trajectories"]) == 3 and calibrate.payload["stack"]["simulation_layer"] == "ardupilot_sim"
     (calibration,) = harness.stores.calibrations.list_results()
     assert (calibration.exact, calibration.deviation_bound_m, calibration.repeats) == (False, 0.8, 3)
-    assert calibration.fingerprints == {SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE], SITL_IMAGE: EXPECTED[SITL_IMAGE]}
+    assert calibration.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE], SITL_IMAGE: EXPECTED[SITL_IMAGE]})
     (verdict,) = harness.stores.results.list_verdicts(campaign.campaign_id)
     assert verdict.sensitive is False, "the stack was calibrated on these fingerprints"
     assert {record.repeatability_tier for record in harness.stores.results.list_run_records(campaign.campaign_id)} == {"bounded"}
@@ -115,7 +119,7 @@ def test_a_simulation_campaign_over_items_runs_on_ardupilot(make_harness):
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     (case,) = _cases(harness, campaign)
     job = _jobs(harness, case)[(SIMULATE, 0, 0)]
-    assert job.job_type == ON_GAZEBO and job.payload["trajectories"]["sha256"] == ref["sha256"]
+    assert job.requirements.components == ON_GAZEBO and job.payload["trajectories"]["sha256"] == ref["sha256"]
     (record,) = harness.stores.results.list_run_records(campaign.campaign_id)
     assert (record.repeatability_tier, record.trajectory_generator, record.artifacts["trajectories"]) == ("bounded", None, ref["sha256"])
 
@@ -123,18 +127,19 @@ def test_a_simulation_campaign_over_items_runs_on_ardupilot(make_harness):
 # Stalling
 
 
-def test_a_campaign_with_an_ardupilot_run_stalls_without_a_node_for_the_job(make_harness):
-    harness = make_harness(slots=NO_ARDUPILOT)
+def test_a_campaign_with_an_ardupilot_run_stalls_without_a_node_with_its_components(make_harness):
+    harness = make_harness(components=NO_ARDUPILOT)
     campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, runs=[SITL_RUN]))
     kinematic = create_campaign(harness.stores, config_dict(classes=(CLASS_A,), quota=1, failure_budget=0, runs=[{"monitor": "post_hoc"}]))
     harness.drive(campaign.campaign_id)
     harness.clock.advance(31)
     harness.settle()
     stalled = harness.campaign(campaign.campaign_id)
-    assert stalled.actual_state == CampaignActualState.STALLED and "simulation.ardupilot_sim" in stalled.state_reason and "simulation.kinematic" not in stalled.state_reason
+    assert stalled.actual_state == CampaignActualState.STALLED
+    assert "simulation with asv_software/replay, control_layer/ardupilot, simulation_layer/ardupilot_sim" in stalled.state_reason
     assert harness.campaign(kinematic.campaign_id).actual_state != CampaignActualState.STALLED
     stall = next(event for event in harness.stores.campaigns.list_events(campaign.campaign_id) if event.kind == CampaignEventKind.STALLED)
-    assert stall.detail["job_types"] == ["simulation.ardupilot_sim"]
+    assert (stall.detail["job_types"], stall.detail["components"]) == (["simulation"], ON_SITL)
     harness.nodes[:] = [NodeAvailability(harness.executor.node)]
 
 
@@ -148,4 +153,4 @@ def test_a_gazebo_run_needs_the_gazebo_image_of_the_pinned_release(make_harness)
     harness.clock.advance(31)
     harness.settle()
     stalled = harness.campaign(world.campaign_id)
-    assert stalled.actual_state == CampaignActualState.STALLED and "simulation.gazebo" in stalled.state_reason
+    assert stalled.actual_state == CampaignActualState.STALLED and "simulation_layer/gazebo" in stalled.state_reason

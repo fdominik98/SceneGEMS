@@ -17,9 +17,10 @@ import yaml
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
 from scenegems_tool.vessel_stack.contracts.docker_stack import DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
-from scenegems_tool.vessel_stack.contracts.roles import LayerRef
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+from scenegems_tool.vessel_stack.contracts.roles import LayerRef
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -57,7 +58,8 @@ def build_simulation_docker_stack_artifacts(
     request = DockerStackRequest(
         simulation=simulation_config,
         trajectories=trajectories,
-        mqtt_connection=mqtt_connection,
+        # ArduAgent containers publish under the session's prefix only when every vessel is simulated.
+        mqtt_connection=agent_mqtt_connection(mqtt_connection, simulation_config),
         reference_geofence=reference_geofence,
         headless=headless,
         gen_folder=gen_folder,

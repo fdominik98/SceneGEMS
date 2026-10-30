@@ -43,6 +43,11 @@ class InMemoryArtifactRecords:
     def get(self, artifact_hash: str, *, session=None) -> Optional[ArtifactRecord]:
         return self.records.get(artifact_hash)
 
+    def existing_hashes(self, artifact_hashes: Collection[str], *, session=None) -> Set[str]:
+        with self._lock:
+            self.calls.append("existing_hashes")
+            return {sha256 for sha256 in artifact_hashes if sha256 in self.records}
+
     def mark_used(self, artifact_hash: str, *, session=None) -> Optional[ArtifactRecord]:
         with self._lock:
             self.calls.append("mark_used")

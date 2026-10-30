@@ -26,7 +26,7 @@ from scenegems_tool.cluster.protocol.messages import (
     ProtocolErrorCode,
     Welcome,
 )
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer
+from scenegems_tool.cluster.protocol.node_description import SlotOffer
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION, ProtocolVersionMismatch
 
 
@@ -37,13 +37,14 @@ def node_frames(resources, instant):
             node_id="n1",
             node_name="lab-1",
             software_revision="4ac7ef2",
-            capabilities=[CapabilityOffer(job_type=JobType.SIMULATION_KINEMATIC, slots=4), CapabilityOffer(job_type=JobType.SCENE_GENERATION, slots=1)],
+            slots=[SlotOffer(job_type=JobType.SIMULATION, slots=4), SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1)],
+            components=["asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"],
             labels={"site": "lab"},
             resources=resources,
             fingerprints={"scenegems-scenario-execution": "abc123"},
             running_lease_ids=["l0"],
         ),
-        Heartbeat(resources=resources, slots_in_use={JobType.SIMULATION_KINEMATIC: 2}, running_lease_ids=["l1", "l2"]),
+        Heartbeat(resources=resources, slots_in_use={JobType.SIMULATION: 2}, running_lease_ids=["l1", "l2"]),
         LeaseAccept(lease_id="l1"),
         LeaseReject(lease_id="l1", reason="no free slot"),
         LeaseRenew(lease_id="l1"),

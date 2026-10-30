@@ -11,7 +11,11 @@ The payload names exactly one of trajectories (a state log or planned trajectori
 scene (a generated scene: a scene generation's EvaluationData, a scene, or a document with
 the scene under scene or initial_scene, inline or as a reference). A scene is judged as a
 one-scene log with time step 1, so its result has the same shape: the initial situation's
-rule outcomes at time 0.
+rule outcomes at time 0. At time 0 only the rules that need one scene's state are judged
+(SafeDistance: a pair that starts inside its safety domain fails); the rules on how the
+vessels move stay unknown, so a scene alone either fails or passes with no outcome listed.
+The safety domain guard applies: a pair inside its encounter's own domain is OTHER, so
+SafeDistance judges it against the default circle.
 """
 
 import threading

@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, Optional
 
+from scenegems_tool.cluster.node.instance_scope import InstanceScope
 from scenegems_tool.gateway.protocol import ServerMessage
 from scenegems_tool.subsystems.monitoring.empty_monitor_session import EmptyMonitorSession
 from scenegems_tool.subsystems.monitoring.monitor_session import MonitorSession
@@ -15,6 +16,8 @@ class SubsystemIntegrationSession(ABC):
 
     Scene and trajectory generation are not here: the workbench runs them as jobs on the cluster.
     """
+
+    session_scope: Optional[InstanceScope] = None  # the live session's scope; names its simulation stack
 
     def __init__(self, send_payload: Callable[[ServerMessage], None]):
         self.send_payload = send_payload
@@ -45,7 +48,7 @@ class SubsystemIntegrationSession(ABC):
 
     def reset_simulation_session(self) -> None:
         previous = self.simulation_session
-        self.simulation_session = EmptySimulationSession(send_payload=self.send_payload)
+        self.simulation_session = EmptySimulationSession(send_payload=self.send_payload, session_scope=self.session_scope)
         previous.teardown()
 
     async def reset_simulation_session_async(self) -> None:

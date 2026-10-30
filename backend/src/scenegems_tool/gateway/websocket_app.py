@@ -8,6 +8,7 @@ Or mount `websocket_router` on your existing app.
 
 import atexit
 import json
+import logging
 import multiprocessing
 import signal
 from contextlib import asynccontextmanager
@@ -20,6 +21,7 @@ from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder
 from scenegems_tool.gateway.web_socket_session_manager import WebSocketSessionManager
 from utils.file_system_utils import ensure_directories
 
+logger = logging.getLogger(__name__)
 websocket_session_manager = WebSocketSessionManager()
 _shutdown_handlers_registered = False
 
@@ -43,6 +45,13 @@ def _register_process_shutdown_handlers() -> None:
 async def lifespan(_app: FastAPI):
     ensure_directories()
     _register_process_shutdown_handlers()
+    recorder = run_recorder(_app)
+    if recorder is not None:
+        # No connection exists yet, so a live session entry still running without a run lost its session with the last process
+        try:
+            await recorder.stop_stranded_entries()
+        except Exception:
+            logger.exception("Cannot stop the live session entries the last master process left running")
     yield
     websocket_session_manager.shutdown_all()
     shutdown_all_docker_subsystems()
@@ -50,6 +59,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="SceneGEMS Tool Backend", lifespan=lifespan)
 app.state.run_recorder = None  # the master sets its LiveRunRecorder (set_run_recorder); on its own the gateway records nothing
+app.state.live_sessions = True  # the master turns them off without the Docker socket (set_live_sessions)
 
 
 def set_run_recorder(recorder: Optional[LiveRunRecorder], gateway: FastAPI = app) -> None:
@@ -61,6 +71,15 @@ def run_recorder(gateway: FastAPI = app) -> Optional[LiveRunRecorder]:
     return getattr(gateway.state, "run_recorder", None)
 
 
+def set_live_sessions(enabled: bool, gateway: FastAPI = app) -> None:
+    """Whether this gateway's new connections may start live sessions (the master's SCENEGEMS_LIVE_SESSIONS); when off they are refused."""
+    gateway.state.live_sessions = enabled
+
+
+def live_sessions(gateway: FastAPI = app) -> bool:
+    return bool(getattr(gateway.state, "live_sessions", True))
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -69,7 +88,7 @@ def health() -> dict[str, str]:
 @app.websocket("/ws/scenegems_backend_service")
 async def backend_service_socket(websocket: WebSocket) -> None:  # noqa: C901
     await websocket.accept()
-    session, message_processor = websocket_session_manager.create_session(websocket=websocket)
+    session, message_processor = websocket_session_manager.create_session(websocket=websocket, live_sessions=live_sessions())
     session.run_recorder = run_recorder()
     try:
         session.send_payload(session.mqtt_broker_status_message(status="disconnected"))
@@ -95,8 +114,6 @@ async def backend_service_socket(websocket: WebSocket) -> None:  # noqa: C901
     except WebSocketDisconnect:
         websocket_session_manager.remove_session(websocket=websocket)
         return
-
-
 
 
 if __name__ == "__main__":

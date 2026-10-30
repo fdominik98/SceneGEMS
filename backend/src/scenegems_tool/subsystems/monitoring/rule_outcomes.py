@@ -5,6 +5,8 @@ simulation step by step; both add every monitored scene in order. The summary:
 
     rules         relation, rule, outcome ("passed", "failed"): the first timestamp it held
     failed_rules  [{relation, rule, first_failed_at}], by first failure time, then relation and rule
+    encounters    per relation (keyed like rules), the situation types (COLREGSType names) of the pair
+                  in order of first appearance; a scene judged alone has its one type per pair
     passed        no rule failed
 
 How rule results evolve (concrete_level/colregs_monitoring): while a rule is active, its
@@ -21,17 +23,23 @@ from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults
 
 FirstOutcomes = Dict[str, Dict[str, Dict[str, int]]]  # relation, rule, outcome: first timestamp
+Encounters = Dict[str, List[str]]  # relation: situation types (COLREGSType names) in order of first appearance
 
 
 class RuleOutcomes:
     def __init__(self) -> None:
         self.first_outcomes: FirstOutcomes = {}
+        self.encounters: Encounters = {}
         self.monitored_scenes = 0
         self._latest: Optional[COLREGSRuleResultMapSet] = None
 
     def add(self, monitored_scene: MonitoredSceneWithResults) -> None:
         self.monitored_scenes += 1
         self._latest = monitored_scene.monitor_result_map_set
+        for relation, context in monitored_scene.situation_context_set.items():
+            types = self.encounters.setdefault(str(relation), [])
+            if context.situation_type.name not in types:
+                types.append(context.situation_type.name)
         for relation, result_map in monitored_scene.monitor_result_map_set.items():
             rules = self.first_outcomes.setdefault(str(relation), {})
             for rule, outcome in result_map.items():
@@ -62,4 +70,4 @@ class RuleOutcomes:
 
     def summary(self) -> Dict[str, Any]:
         failed = self.failed_rules()
-        return {"rules": self.first_outcomes, "failed_rules": failed, "passed": not failed}
+        return {"rules": self.first_outcomes, "failed_rules": failed, "encounters": self.encounters, "passed": not failed}

@@ -46,6 +46,7 @@ class JobRow(Base):
     # JobRequirements, one column each so the claim filters on them in SQL
     required_labels: Mapped[Dict[str, str]] = mapped_column(JSONB)
     required_fingerprints: Mapped[Dict[str, str]] = mapped_column(JSONB)
+    required_components: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # contained in the claiming node's usable components
     min_memory_mb: Mapped[int] = mapped_column(Integer)
     min_cpus: Mapped[float] = mapped_column(Float)
     allowed_nodes: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # node ids that may claim the job, empty for any

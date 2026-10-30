@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 import { campaignInputSchema } from "../../../domain/cluster/campaignApi";
+import type { GazeboCustomRunPlan } from "../cluster/simulationJobs";
 import { defaultReferenceGeofence } from "../connection/referenceGeofence";
 import {
   entryName,
@@ -103,7 +104,7 @@ describe("simulation entries", () => {
     const config = simulationEntryConfig({
       name: "Simulation",
       trajectories: { name: "planned", ref: trajectoriesRef, source: { campaign_id: "wb1", case_id: 1, step: "trajectory_generation" } },
-      plan: { where: "cluster", jobType: "simulation.kinematic", mode: "usv_navigation", ownShipId: 0, summary: "" },
+      plan: { where: "cluster", jobType: "simulation", runner: "kinematic", mode: "usv_navigation", ownShipId: 0, components: [], summary: "" },
       colregsConstraintsContent: "colregs: 1\n",
       seed: 5,
     });
@@ -124,7 +125,7 @@ describe("ArduPilot simulation entries", () => {
     const config = simulationEntryConfig({
       name: "Simulation",
       trajectories,
-      plan: { where: "cluster", jobType: "simulation.ardupilot_sim", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" },
+      plan: { where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "ardupilot_sim", mode: "replay", ownShipId: null, speedup: 4, components: [], summary: "" },
       colregsConstraintsContent: "colregs: 1\n",
       seed: 5,
       geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 },
@@ -136,16 +137,31 @@ describe("ArduPilot simulation entries", () => {
       execution: { runs: [{ stack: { simulation_layer: "ardupilot_sim", mode: "replay", speedup: 4, geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 } }, monitor: "live" }] },
       policy: { keep_frames: true, seed: 5 },
     });
-    expect(config.execution).toEqual({ runs: [{ stack: simulationStack({ where: "cluster", jobType: "simulation.ardupilot_sim", simulationLayer: "ardupilot_sim", speedup: 4, summary: "" }, { latitude: 58.1, longitude: 15.2, radius_meters: 35 }), monitor: "live" }] });
+    expect(config.execution).toEqual({ runs: [{ stack: simulationStack({ where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "ardupilot_sim", mode: "replay", ownShipId: null, speedup: 4, components: [], summary: "" }, { latitude: 58.1, longitude: 15.2, radius_meters: 35 }), monitor: "live" }] });
   });
 
   it("uses the workbench's default reference area when none is given, and Gazebo as its own layer", () => {
-    const stack = simulationStack({ where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 1, summary: "" });
+    const stack = simulationStack({ where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "gazebo", mode: "replay", ownShipId: null, speedup: 1, components: [], summary: "" });
     expect(stack).toEqual({ simulation_layer: "gazebo", mode: "replay", speedup: 1, geofence: { ...defaultReferenceGeofence } });
   });
 
+  it("names USV Navigation on ArduPilot by its mode", () => {
+    const stack = simulationStack({ where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "gazebo", mode: "usv_navigation", ownShipId: 0, speedup: 2, components: [], summary: "" });
+    expect(stack).toMatchObject({ simulation_layer: "gazebo", mode: "usv_navigation", speedup: 2 });
+  });
+
+  it("runs the custom controller on Gazebo with its control layer and the setup's wind", () => {
+    const plan: GazeboCustomRunPlan = { where: "cluster", jobType: "simulation", runner: "gazebo_custom", mode: "usv_navigation", ownShipId: 0, windVector: [0, 3, 0], components: [], summary: "" };
+    const config = simulationEntryConfig({ name: "Simulation", trajectories, plan: { ...plan, windVector: [0, 3, 0] }, colregsConstraintsContent: "", seed: 5 });
+    expect(config.execution).toEqual({
+      runs: [{ stack: { simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }, environment: { wind_vector: [0, 3, 0] }, monitor: "live" }],
+    });
+    const calm = simulationEntryConfig({ name: "Simulation", trajectories, plan: { ...plan, windVector: [0, 0, 0] }, colregsConstraintsContent: "", seed: 5 });
+    expect(calm.execution).toEqual({ runs: [{ stack: { simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }, monitor: "live" }] });
+  });
+
   it("leaves the kinematic stack as it was, without a speedup or a geofence", () => {
-    expect(simulationStack({ where: "cluster", jobType: "simulation.kinematic", mode: "replay", ownShipId: null, summary: "" })).toEqual({ simulation_layer: "kinematic", mode: "replay" });
+    expect(simulationStack({ where: "cluster", jobType: "simulation", runner: "kinematic", mode: "replay", ownShipId: null, components: [], summary: "" })).toEqual({ simulation_layer: "kinematic", mode: "replay" });
   });
 });
 

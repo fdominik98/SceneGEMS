@@ -12,19 +12,23 @@ from pathlib import Path
 
 import pytest
 
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
+from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.master.control_plane import InvalidPayload
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobRequirements, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import Cancel, Drain, LeaseOffer, LeaseRelease, LeaseRenewed, ProtocolError, ProtocolErrorCode, Welcome
 from scenegems_tool.persistence.schema import JobEventKind, NodeStatus
 from scenegems_tool.persistence.stores import AssuranceStores
 from tests.scenegems_tool.cluster.master.conftest import EXPECTED, KINEMATIC, SCENE
-from tests.scenegems_tool.cluster.payloads import valid_payload
+from tests.scenegems_tool.cluster.payloads import ardupilot_payload, valid_payload
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_resources
+from utils.image_names import image_repository
 
-SITL = JobType.SIMULATION_ARDUPILOT_SIM
-GAZEBO = JobType.SIMULATION_GAZEBO
+SIMULATION = JobType.SIMULATION
+KINEMATIC_NODE = ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation")
+SITL_NODE = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+GAZEBO_NODE = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
 
 
 def _submit(on_loop, plane, job_type=SCENE, **fields):
@@ -167,39 +171,77 @@ def test_labels_must_match(make_node, plane, on_loop, schedule):
     assert gpu.expect(LeaseOffer).job.job_id == job.job_id
 
 
-def test_a_gazebo_job_goes_to_a_gazebo_node_with_the_gazebo_image(make_node, plane, stores, on_loop, schedule):
+def test_a_submission_needs_the_components_of_its_payload_and_their_images(plane, stores, on_loop):
+    gazebo_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("gazebo"))
+    sitl_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("ardupilot_sim"))
+    usv_job = _submit(on_loop, plane, job_type=SIMULATION, payload=valid_payload(SIMULATION, mode="usv_navigation"))
+    scene_job = _submit(on_loop, plane, requirements=JobRequirements(components=["gpu"]))
+    assert stores.jobs.get(gazebo_job.job_id).requirements.components == list(GAZEBO_NODE)
+    assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"})
+    assert stores.jobs.get(sitl_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"})
+    assert stores.jobs.get(usv_job.job_id).requirements.components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]
+    assert stores.jobs.get(scene_job.job_id).requirements.components == ["scene_generation"], "the master sets the components from the payload"
+
+
+def test_a_job_goes_to_a_node_with_its_components(make_node, plane, on_loop, schedule):
+    kinematic = make_node("kinematic", slots={SIMULATION: 2, SCENE: 1}, components=KINEMATIC_NODE)
+    sitl = make_node("sitl", slots={SIMULATION: 2}, components=SITL_NODE)
+    kinematic.connect()
+    sitl.connect()
+    gazebo_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("gazebo"))
+    sitl_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("ardupilot_sim"))
+    kinematic_job = _submit(on_loop, plane, job_type=SIMULATION, payload=valid_payload(SIMULATION))
+    _submit(on_loop, plane, job_type=SIMULATION, payload=valid_payload(SIMULATION, mode="usv_navigation"))
+    assert schedule() == 2, "neither node has the Gazebo layer or USV Navigation"
+    assert kinematic.expect(LeaseOffer).job.job_id == kinematic_job.job_id
+    assert sitl.expect(LeaseOffer).job.job_id == sitl_job.job_id
+    gazebo = make_node("gazebo", slots={SIMULATION: 1}, components=GAZEBO_NODE)
+    gazebo.connect()
+    assert schedule() == 1
+    assert gazebo.expect(LeaseOffer).job.job_id == gazebo_job.job_id
+
+
+def test_a_stale_component_is_unusable_while_the_others_work(make_node, plane, stores, on_loop, schedule):
     without_gazebo = {image: fingerprint for image, fingerprint in EXPECTED.items() if image != GAZEBO_IMAGE}
-    sitl_only = make_node("sitl only", slots={SITL: 2}, fingerprints=without_gazebo)
-    sitl_only.connect()
-    gazebo_job = _submit(on_loop, plane, job_type=GAZEBO, payload=valid_payload(GAZEBO))
-    sim_job = _submit(on_loop, plane, job_type=SITL, payload=valid_payload(SITL))
-    assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}
-    assert stores.jobs.get(sim_job.job_id).requirements.fingerprints == {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}
+    node = make_node("sitl and gazebo", slots={SIMULATION: 2}, components=SITL_NODE + ("simulation_layer/gazebo",), fingerprints=without_gazebo)
+    node.connect()
+    gazebo_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("gazebo"))
+    sitl_job = _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("ardupilot_sim"))
     assert schedule() == 1
-    assert sitl_only.expect(LeaseOffer).job.job_id == sim_job.job_id
-    # a Gazebo node without the Gazebo image is out of date and gets nothing
-    gazebo_without_image = make_node("gazebo without its image", slots={GAZEBO: 1}, fingerprints=without_gazebo)
-    gazebo_without_image.connect()
-    assert schedule() == 0
-    with_gazebo = make_node("with gazebo", slots={GAZEBO: 1})
-    with_gazebo.connect()
-    assert schedule() == 1
-    assert with_gazebo.expect(LeaseOffer).job.job_id == gazebo_job.job_id
+    assert node.expect(LeaseOffer).job.job_id == sitl_job.job_id
+    session = plane.registry.session(node.node_id)
+    assert session.stale_components == {"simulation_layer/gazebo"} and [mismatch.image for mismatch in session.out_of_date] == [image_repository(GAZEBO_IMAGE)]
+    assert stores.jobs.get(gazebo_job.job_id).state == JobState.QUEUED
 
 
-def test_an_out_of_date_node_gets_no_jobs_and_is_reported(make_node, plane, stores, on_loop, schedule):
+def test_an_out_of_date_component_gets_no_jobs_and_is_reported(make_node, plane, stores, on_loop, schedule):
     stale = dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "fp-older"})
-    # The node offers scene generation, whose image matches, and kinematic simulation, whose image does not
-    outdated = make_node("outdated", slots={SCENE: 2, KINEMATIC: 1}, fingerprints=stale)
+    # The node offers scene generation, whose image matches, and kinematic simulation, whose runner image does not
+    outdated = make_node("outdated", slots={SCENE: 2, KINEMATIC: 1}, fingerprints=stale, components=KINEMATIC_NODE)
     outdated.connect()
-    _submit(on_loop, plane)
-    assert schedule() == 0
+    simulation = _submit(on_loop, plane, job_type=KINEMATIC)
+    scene = _submit(on_loop, plane)
+    assert schedule() == 1
+    assert outdated.expect(LeaseOffer).job.job_id == scene.job_id, "the scene generation component is up to date"
     session = plane.registry.session(outdated.node_id)
-    assert [(mismatch.image, mismatch.required, mismatch.actual) for mismatch in session.out_of_date] == [(SCENARIO_EXECUTION_IMAGE, "fp-execution", "fp-older")]
-    current = make_node("current", slots={SCENE: 1})
+    assert [(mismatch.image, mismatch.required, mismatch.actual) for mismatch in session.out_of_date] == [(image_repository(SCENARIO_EXECUTION_IMAGE), "fp-execution", "fp-older")]
+    assert session.stale_components == {"simulation_layer/kinematic"}
+    current = make_node("current", slots={KINEMATIC: 1}, components=KINEMATIC_NODE)
     current.connect()
     assert schedule() == 1
-    current.expect(LeaseOffer)
+    assert current.expect(LeaseOffer).job.job_id == simulation.job_id
+
+
+def test_a_node_whose_every_component_is_stale_is_out_of_date(make_node, plane, on_loop, schedule):
+    from scenegems_tool.cluster.master.scheduling.node_eligibility import Ineligibility, ResourceGuard, ineligibility
+
+    node = make_node("stale", slots={SCENE: 1}, components=("scene_generation",), fingerprints={})
+    node.connect()
+    _submit(on_loop, plane)
+    assert schedule() == 0
+    session = plane.registry.session(node.node_id)
+    assert session.usable_components == frozenset()
+    assert ineligibility(session.record, session.usable_components, True, ResourceGuard()) == Ineligibility.OUT_OF_DATE
 
 
 def test_a_node_without_a_required_image_is_out_of_date(make_node, plane, on_loop, schedule):
@@ -287,6 +329,21 @@ def test_a_rejected_job_is_held_back_from_that_node_only(make_node, plane, store
     other.connect()
     assert schedule() == 1
     assert other.expect(LeaseOffer).job.job_id == job.job_id
+
+
+def test_a_restarted_master_keeps_its_reject_holds(make_node, plane, stores, on_loop, schedule):
+    picky = make_node("picky", slots={SCENE: 1})
+    picky.connect()
+    job = _submit(on_loop, plane)
+    schedule()
+    picky.reject(picky.expect(LeaseOffer), "not now")
+    picky.sync()
+    assert plane.backoff.held_jobs(picky.node_id) == [job.job_id]
+    plane.backoff._holds.clear()  # what a new master process starts with
+    on_loop(plane._restore_reject_holds)  # what ControlPlane.start does first
+    assert plane.backoff.held_jobs(picky.node_id) == [job.job_id]
+    picky.heartbeat()
+    assert schedule() == 0  # still held back from picky
 
 
 def test_a_released_job_returns_without_using_an_attempt(make_node, plane, stores, on_loop, schedule):
@@ -415,17 +472,20 @@ def test_a_payload_that_does_not_match_its_job_type_is_refused_before_it_is_stor
     assert {error["loc"][0] for error in refusal.value.errors} >= {"functional_scenario_content", "scene"}
     with pytest.raises(InvalidPayload):
         _submit(on_loop, plane, job_type=KINEMATIC, payload=valid_payload(KINEMATIC, monitor="post_hoc"))
-    with pytest.raises(InvalidPayload):  # each ArduPilot job type runs its own layer only
-        _submit(on_loop, plane, job_type=SITL, payload=valid_payload(SITL, simulation_layer="gazebo"))
+    with pytest.raises(InvalidPayload):  # the runner picks the payload model
+        _submit(on_loop, plane, job_type=SIMULATION, payload=ardupilot_payload("gazebo", runner="kinematic"))
+    with pytest.raises(InvalidPayload) as refusal:
+        _submit(on_loop, plane, job_type=SIMULATION, payload={"trajectories": valid_payload(SIMULATION)["trajectories"]})
+    assert "runner" in str(refusal.value)
     assert stores.jobs.list_jobs() == []
 
 
 def test_a_referenced_input_gets_a_structural_check_only(plane, stores, on_loop):
     reference = {"sha256": "ab" * 32, "size_bytes": 1024, "kind": "trajectories"}
-    job = _submit(on_loop, plane, job_type=KINEMATIC, payload={"trajectories": reference, "monitor": "live"})
+    job = _submit(on_loop, plane, job_type=KINEMATIC, payload={"runner": "kinematic", "trajectories": reference, "monitor": "live"})
     assert stores.jobs.get(job.job_id).payload["trajectories"] == reference
     with pytest.raises(InvalidPayload):
-        _submit(on_loop, plane, job_type=KINEMATIC, payload={"trajectories": {**reference, "sha256": "AB" * 32}})
+        _submit(on_loop, plane, job_type=KINEMATIC, payload={"runner": "kinematic", "trajectories": {**reference, "sha256": "AB" * 32}})
 
 
 def test_the_master_imports_no_job_type_module_until_a_submission():
@@ -443,7 +503,7 @@ def test_the_pipeline_engine_sees_the_connected_nodes(make_node, plane):
     assert plane.node_availability() == []
     node.connect()
     (available,) = plane.node_availability()
-    assert available.record.node_id == node.node_id and not available.out_of_date
+    assert available.record.node_id == node.node_id and available.stale_components == frozenset()
 
 
 def test_an_attached_pipeline_engine_submits_through_the_control_plane(plane):

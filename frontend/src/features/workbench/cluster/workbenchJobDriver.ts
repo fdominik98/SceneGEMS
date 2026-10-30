@@ -1,5 +1,6 @@
 import { followJob, jobFailureMessage, readResultField, type JobProgressEvent } from "../../../domain/cluster/clusterJobs";
 import { createCampaign } from "../../../domain/cluster/campaignApi";
+import { jobComponents } from "../../../domain/cluster/components";
 import { instanceTopic, jobInstanceName } from "../../../domain/cluster/liveProtocol";
 import { INSTANCE_FRAMES_KEPT, instanceReducer, type InstanceTopicState, type SceneSample, type TrajectoryPreview } from "../../../domain/cluster/liveTopics";
 import { LiveTopicWatcher } from "../../../domain/cluster/liveTopicWatcher";
@@ -67,7 +68,7 @@ import {
 
 export interface ClusterAccess {
   cluster: WorkbenchCluster | null;
-  resources: (jobType: string) => JobTypeResources;
+  resources: (jobType: string, components?: readonly string[]) => JobTypeResources;
 }
 
 export type SceneJobOutcome =
@@ -134,7 +135,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const NO_CLUSTER: ClusterAccess = {
   cluster: null,
-  resources: (jobType) => ({ jobType, nodes: 0, slots: 0, freeSlots: 0, blocker: "No cluster is selected." }),
+  resources: (jobType, components = []) => ({ jobType, components: [...components], nodes: 0, slots: 0, freeSlots: 0, blocker: "No cluster is selected." }),
 };
 
 const NO_HOOKS: SimulationPageHooks = {
@@ -188,10 +189,11 @@ export class WorkbenchJobDriver {
     this.hooks = hooks;
   }
 
-  /** Why the active cluster cannot run a job type now, null when it can. */
-  blocker(jobType: string): string | null {
+  /** Why the active cluster cannot run a job of the type with these components now (its subsystem's when left out), null when it can. */
+  blocker(jobType: string, components?: readonly string[]): string | null {
     const { cluster, resources } = this.access();
-    return cluster === null ? resources(jobType).blocker ?? "No cluster is selected." : resources(jobType).blocker;
+    const blocker = resources(jobType, components).blocker;
+    return cluster === null ? blocker ?? "No cluster is selected." : blocker;
   }
 
   /** The step monitor of an entry: post-hoc when a node monitors, else none, so the case does not wait for a job no node takes. */
@@ -630,7 +632,7 @@ export class WorkbenchJobDriver {
     this.abortTask(this.simulationJob);
     const run = useClusterRunStore.getState();
     const cluster = this.access().cluster;
-    const blocker = this.blocker(plan.jobType);
+    const blocker = this.blocker(plan.jobType, plan.components);
     if (cluster === null || blocker !== null) {
       run.update({ status: "failed", jobId: null, nodeId: null, message: blocker ?? "No cluster is selected." });
       return;
@@ -790,7 +792,7 @@ export class WorkbenchJobDriver {
     this.abortTask(this.simulationJob);
     const run = useClusterRunStore.getState();
     const cluster = this.access().cluster;
-    const blocker = this.blocker(submission.job_type);
+    const blocker = this.blocker(submission.job_type, jobComponents(submission.job_type, submission.payload));
     if (cluster === null || blocker !== null) {
       run.update({ status: "failed", jobId: null, nodeId: null, message: blocker ?? "No cluster is selected." });
       return;

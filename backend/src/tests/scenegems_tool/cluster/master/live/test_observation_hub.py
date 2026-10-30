@@ -37,7 +37,7 @@ def plane() -> ControlPlane:
     clock = ManualClock()
     nodes = InMemoryNodeStore(clock)
     plane = ControlPlane("lab-master", nodes, InMemoryJobStore(nodes, clock), ExpectedFingerprints.fixed(EXPECTED), clock=clock)
-    nodes.register(make_hello(NODE, slots={JobType.SCENE_GENERATION: 1, JobType.SIMULATION_KINEMATIC: 1}))
+    nodes.register(make_hello(NODE, slots={JobType.SCENE_GENERATION: 1, JobType.SIMULATION: 1}))
     return plane
 
 
@@ -143,7 +143,7 @@ async def test_an_unknown_node_is_an_error(channel):
 
 
 async def test_a_job_instance_gets_status_and_simulation_frames(channel, plane, broker):
-    job = plane.jobs.submit(JobSubmission(job_type=JobType.SIMULATION_KINEMATIC, payload=valid_payload(JobType.SIMULATION_KINEMATIC))).job
+    job = plane.jobs.submit(JobSubmission(job_type=JobType.SIMULATION, payload=valid_payload(JobType.SIMULATION))).job
     lease = plane.jobs.claim_next(NODE, 10.0)
     assert lease.job.job_id == job.job_id and lease.job.attempt == 1
     observations = []
@@ -171,6 +171,32 @@ async def test_a_job_instance_gets_status_and_simulation_frames(channel, plane, 
 
     await browser.leave()
     assert observations[-1] == (NODE, job.job_id, 1, False) and not hub.observes_job(job.job_id)
+
+
+async def test_frames_reach_a_job_topic_that_names_another_node_than_the_lease_holder(broker):
+    clock = ManualClock()
+    nodes = InMemoryNodeStore(clock)
+    plane = ControlPlane("lab-master", nodes, InMemoryJobStore(nodes, clock), ExpectedFingerprints.fixed(EXPECTED), clock=clock)
+    for node in (NODE, "lab-2"):
+        nodes.register(make_hello(node, slots={JobType.SIMULATION: 1}))
+    channel = create_live_channel(plane, broker=lambda: broker, settings=LiveSettings(preview_interval_s=0.0, frames_interval_s=0.0))
+    job = plane.jobs.submit(JobSubmission(job_type=JobType.SIMULATION, payload=valid_payload(JobType.SIMULATION))).job
+    assert plane.jobs.claim_next(NODE, 10.0).job.job_id == job.job_id
+    hub = channel.producers.hub
+    hub.on_job_observation = lambda *arguments: None
+    elsewhere, later_attempt = Browser(channel), Browser(channel)
+    elsewhere.socket.subscribe(instance_topic("lab-2", job_instance(job.job_id, 1)))  # say, the holder of an earlier lease
+    later_attempt.socket.subscribe(instance_topic(NODE, job_instance(job.job_id, 2)))
+    await elsewhere.messages(1)
+    await later_attempt.messages(1)
+
+    hub.publish_simulation_frames(NODE, job.job_id, 1, [{"timestamp": 0}])
+    await settle()
+    frames = [message["data"]["frames"] for message in elsewhere.socket.take() if message.get("data", {}).get("kind") == "simulation_frames"]
+    assert frames == [[{"timestamp": 0}]]
+    assert [message for message in later_attempt.socket.take() if message.get("data", {}).get("kind") == "simulation_frames"] == []  # another attempt's run
+    await elsewhere.leave()
+    await later_attempt.leave()
 
 
 async def test_an_observed_job_instance_hears_state_changes(channel, plane):

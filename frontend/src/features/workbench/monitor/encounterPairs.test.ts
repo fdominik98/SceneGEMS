@@ -8,6 +8,8 @@ import {
   roleOf,
 } from "./encounterPairs";
 import { buildRuleTimeline } from "./ruleTimelineModel";
+import { parseFrame } from "../../../domain/simulation/protocol";
+import { RULE_16_ID, monitoredFrames } from "../../../test/fixtures/monitoredFrames";
 
 describe("buildPairModels on the recorded two-vessel crossing", () => {
   const frames = twoVesselFrames();
@@ -133,5 +135,28 @@ describe("encounter helpers", () => {
     const frame = frameAt(threeVesselFrames(), 500);
     expect(roleOf(frame.situationContexts[0], "0")).toBeNull();
     expect(roleOf(undefined, "0")).toBeNull();
+  });
+});
+
+describe("buildPairModels with the monitor's rule ids and first failures", () => {
+  const frames = monitoredFrames(40, 12, true).map(parseFrame);
+
+  it("keys the rules by rule id and takes the first failure from the frame", () => {
+    // no timeline: only the frame at 30 s was received
+    const [pair] = buildPairModels(frames[30]!, null);
+    const r16 = pair!.rules.find((rule) => rule.key === RULE_16_ID)!;
+    expect([r16.result, r16.firstFailure]).toEqual(["FAILED", 12]);
+    expect(pair!.rules.find((rule) => rule.ruleNumber === "8")!.firstFailure).toBeNull();
+  });
+
+  it("trusts a rule that never failed over the timeline", () => {
+    const timeline = buildRuleTimeline(frames);
+    const [pair] = buildPairModels(frames[5]!, timeline);
+    expect(pair!.rules.find((rule) => rule.key === RULE_16_ID)!.firstFailure).toBeNull();
+  });
+
+  it("falls back to the frame's time on an older frame without a timeline", () => {
+    const [pair] = buildPairModels(parseFrame(monitoredFrames(40, 12)[30]!), null);
+    expect(pair!.rules.find((rule) => rule.ruleNumber === "16")!.firstFailure).toBe(30);
   });
 });

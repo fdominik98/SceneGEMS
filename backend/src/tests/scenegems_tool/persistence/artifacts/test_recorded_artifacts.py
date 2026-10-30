@@ -1,4 +1,6 @@
+import os
 import threading
+import time
 
 import pytest
 
@@ -135,6 +137,50 @@ def test_an_upload_during_a_sweep_keeps_its_file(tmp_path, clock):
     uploader.join(timeout=10)
     assert upload_done.is_set()
     assert records.get(SHA) is not None and store.exists(SHA) and store.read(SHA) == DOCUMENT
+
+
+def _age_file(artifacts, sha256, seconds):
+    then = time.time() - seconds
+    os.utime(artifacts.store.path(sha256), (then, then))
+
+
+def test_the_orphan_sweep_deletes_old_files_without_a_record(artifacts, records):
+    orphan = artifacts.store.put(b'{"orphan":true}').sha256  # a file whose record was never written
+    recorded = artifacts.put(DOCUMENT, "scene", "application/json").stored.sha256
+    young = artifacts.store.put(b'{"young orphan":true}').sha256
+    _age_file(artifacts, orphan, GRACE_S + 60)
+    _age_file(artifacts, recorded, GRACE_S + 60)
+    assert artifacts.sweep_orphans(GRACE_S) == [orphan]
+    assert not artifacts.store.exists(orphan)
+    assert artifacts.store.exists(recorded) and records.get(recorded) is not None  # its record keeps it, however old the file
+    assert artifacts.store.exists(young)  # inside the grace period
+    assert artifacts.sweep_orphans(GRACE_S) == []
+
+
+def test_an_orphan_recorded_while_the_sweep_runs_is_kept(artifacts, records, monkeypatch):
+    sha256 = artifacts.store.put(DOCUMENT).sha256
+    _age_file(artifacts, sha256, GRACE_S + 60)
+    existing = records.existing_hashes
+
+    def record_meanwhile(hashes, **options):
+        found = existing(hashes, **options)  # listed without a record
+        artifacts.put(DOCUMENT, "scene", "application/json")  # then an upload of equal content records it
+        return found
+
+    monkeypatch.setattr(records, "existing_hashes", record_meanwhile)
+    assert artifacts.sweep_orphans(GRACE_S) == []
+    assert artifacts.store.exists(sha256) and records.get(sha256) is not None
+
+
+def test_the_orphan_sweep_checks_records_in_batches(artifacts, records, monkeypatch):
+    orphans = [artifacts.store.put(f'{{"orphan":{n}}}'.encode()).sha256 for n in range(5)]
+    for sha256 in orphans:
+        _age_file(artifacts, sha256, GRACE_S + 60)
+    batches = []
+    existing = records.existing_hashes
+    monkeypatch.setattr(records, "existing_hashes", lambda hashes, **options: batches.append(len(hashes)) or existing(hashes, **options))
+    assert sorted(artifacts.sweep_orphans(GRACE_S, batch=2)) == sorted(orphans)
+    assert sorted(batches) == [1, 2, 2]
 
 
 def test_a_file_without_a_record_is_still_served(artifacts):

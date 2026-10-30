@@ -60,6 +60,9 @@ def generate_vessel_service(
         "LOCAL_BRIDGE": "udp:host.docker.internal:14550",
         "GCS_1": f"udp:host.docker.internal:{str(port)}",
     }
+    if mqtt_connection.topic_prefix:
+        # A scoped ArduAgent publishes and subscribes under the live session's prefix (agent_topics.py in its image).
+        agent_env["MQTT_TOPIC_PREFIX"] = mqtt_connection.topic_prefix
     env_list = [f"{name}={value}" for name, value in agent_env.items()]
     sitl_env = [
         "SITL_SIMULATOR=ardupilot" if is_ardupilot_sim else "SITL_SIMULATOR=gazebo",

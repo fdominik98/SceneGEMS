@@ -10,10 +10,10 @@ function feed(nodes: Record<string, unknown>[], extra: Partial<NodesFeedState> =
 describe("workbench resources", () => {
   it("counts the slots of usable nodes that offer the job type", () => {
     const resources = jobTypeResources(
-      feed([sampleNode(), sampleNode({ node_id: "node-b", name: "worker-b", capabilities: { scene_generation: { slots: 2, slots_in_use: 0 } } })]),
+      feed([sampleNode(), sampleNode({ node_id: "node-b", name: "worker-b", slots: { scene_generation: { slots: 2, slots_in_use: 0 } } })]),
       "scene_generation"
     );
-    expect(resources).toEqual({ jobType: "scene_generation", nodes: 2, slots: 6, freeSlots: 5, blocker: null });
+    expect(resources).toEqual({ jobType: "scene_generation", components: ["scene_generation"], nodes: 2, slots: 6, freeSlots: 5, blocker: null });
     expect(describeResources(resources)).toBe("6 slots on 2 machines, 5 free");
   });
 
@@ -24,10 +24,21 @@ describe("workbench resources", () => {
   });
 
   it("leaves out offline, draining and out of date machines, and says so", () => {
-    const nodes = [sampleNode({ status: "offline" }), sampleNode({ node_id: "n2", status: "draining" }), sampleNode({ node_id: "n3", out_of_date: true })];
+    const stale = { node_id: "n3", out_of_date: true, components: [{ component: "scene_generation", images: [], state: "out_of_date" }] };
+    const nodes = [sampleNode({ status: "offline" }), sampleNode({ node_id: "n2", status: "draining" }), sampleNode(stale)];
     const resources = jobTypeResources(feed(nodes), "scene_generation");
     expect(resources.nodes).toBe(0);
     expect(resources.blocker).toBe("The machines that offer scene generation are offline, draining or out of date.");
+  });
+
+  it("counts a simulation only on machines with every component of the plan", () => {
+    const gazebo = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
+    const kinematic = jobTypeResources(feed([sampleNode()]), "simulation");
+    expect([kinematic.components, kinematic.nodes, kinematic.slots, kinematic.blocker]).toEqual([["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], 1, 8, null]);
+    const missing = jobTypeResources(feed([sampleNode()]), "simulation", gazebo);
+    expect(missing.blocker).toBe("No machine of the active cluster offers simulation with Replay, ArduPilot and Gazebo.");
+    const withGazebo = sampleNode({ node_id: "g", components: gazebo.map((component) => ({ component, images: [], state: "usable" })) });
+    expect(jobTypeResources(feed([sampleNode(), withGazebo]), "simulation", gazebo).nodes).toBe(1);
   });
 
   it("explains a missing cluster, an unreachable one and one still loading", () => {

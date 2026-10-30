@@ -142,7 +142,7 @@ describe("entry loader", () => {
     if (loaded.step !== "simulation") throw new Error("wrong step");
     expect(loaded.frames).toHaveLength(3);
     expect(loaded.scenario).toEqual({ trajectories: inputDoc });
-    expect(loaded.setup).toEqual({ simulationLayer: "kinematic", mode: "usv_navigation", speedup: null, windVector: [1, 2, 0], waves: null });
+    expect(loaded.setup).toEqual({ simulationLayer: "kinematic", controlLayer: null, mode: "usv_navigation", speedup: null, windVector: [1, 2, 0], waves: null });
     expect(loaded.input?.ref).toMatchObject({ sha256: INPUT, kind: "trajectories", pointer: null });
   });
 
@@ -177,7 +177,12 @@ describe("loader helpers", () => {
   });
 
   it("reads a run's stack and environment, with defaults for a record without them", () => {
-    expect(runSetupOf({ stack: {}, environment: {} })).toEqual({ simulationLayer: "kinematic", mode: null, speedup: null, windVector: [0, 0, 0], waves: null });
+    expect(runSetupOf({ stack: {}, environment: {} })).toEqual({ simulationLayer: "kinematic", controlLayer: null, mode: null, speedup: null, windVector: [0, 0, 0], waves: null });
+    expect(runSetupOf({ stack: { config: { simulation_layer: "gazebo", control_layer: "custom", mode: "replay" } }, environment: { wind_vector: [0, 3, 0] } })).toMatchObject({
+      simulationLayer: "gazebo",
+      controlLayer: "custom",
+      windVector: [0, 3, 0],
+    });
     expect(runSetupOf({ stack: { config: { simulation_layer: "gazebo", mode: "replay", speedup: 4, geofence: {} } }, environment: {} })).toMatchObject({ simulationLayer: "gazebo", mode: "replay", speedup: 4 });
     expect(runSetupOf({ stack: { config: { mode: "replay" } }, environment: { waves: { amplitude: 1, period: 8, steepness: 0.1, direction: [1, 0] } } }).waves).toEqual({
       amplitude: 1,

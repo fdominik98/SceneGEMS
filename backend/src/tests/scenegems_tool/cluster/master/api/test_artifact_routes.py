@@ -25,7 +25,7 @@ from scenegems_tool.persistence.stores import ArtifactRecordStore, JobStore
 from tests.scenegems_tool.cluster.payloads import valid_payload
 from tests.scenegems_tool.persistence.artifacts.fake_artifact_records import InMemoryArtifactRecords
 
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 DOCUMENT = json.dumps({"trajectories": {str(vessel): [[float(step), 0.0, 8.0, 0.0] for step in range(500)] for vessel in range(3)}}).encode()
 SHA = sha256_hex(DOCUMENT)
 LIMIT = len(DOCUMENT) + 100

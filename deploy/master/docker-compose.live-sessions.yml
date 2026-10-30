@@ -1,0 +1,25 @@
+# The workbench's live sessions on this master (MQTT broker, real vessels, Mission Planner,
+# ArduPilot live): master-api starts their containers, the scenario execution service, the
+# monitor and the vessel stacks, on this machine's Docker. Compose reads this file on top of
+# docker-compose.yml when COMPOSE_FILE in .env names it, which is the master role's default
+# (scenegems_tool.cluster.release.roles). Without it master-api has no Docker socket and
+# refuses live sessions with a clear error; campaigns and cluster jobs do not need it.
+# The live sessions run the images of this machine under SCENEGEMS_IMAGE_TAG of master-api,
+# which is not set, so latest: the images ./build.sh builds on the workbench machine.
+
+services:
+  master-api:
+    environment:
+      SCENEGEMS_LIVE_SESSIONS: "true"
+      # The volume and network the live sessions' containers use
+      SCENEGEMS_RUNTIME_VOLUME: scenegems-${SCENEGEMS_MASTER_ID}-runtime
+      SCENEGEMS_DOCKER_NETWORK: scenegems-${SCENEGEMS_MASTER_ID}_default
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - runtime:/app/assets/runtime_assets
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  runtime:
+    name: scenegems-${SCENEGEMS_MASTER_ID}-runtime

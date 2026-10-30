@@ -3,7 +3,7 @@ import { catalogStacksSchema, type CatalogClass } from "../../../domain/cluster/
 import { nodeViewSchema } from "../../../domain/cluster/schemas";
 import { sampleCatalogClasses, sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
 import { sampleNode } from "../../../test/fixtures/clusterViews";
-import type { ResourcePlan } from "../resourcePlan";
+import { needLabel, type RequiredCapability, type ResourcePlan } from "../resourcePlan";
 import { buildCampaignMap, CARD_WIDTH, drawingOffset, plannedCases, reviewStatusOf, STAGE_HEIGHT, type MapContext, type MapFact } from "./campaignMapModel";
 import { emptyDraft, emptyRun, WIZARD_STEPS, type InputItemDraft, type WizardDraft, type WizardStepId } from "./wizardState";
 
@@ -189,10 +189,12 @@ describe("what the cards say", () => {
 });
 
 describe("the settings of the whole campaign", () => {
-  const plan = (missing: string[]): ResourcePlan => ({
+  const KINEMATIC_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], stage: "simulate", reason: "the runs" };
+  const GAZEBO_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], stage: "simulate", reason: "the runs" };
+  const plan = (missing: RequiredCapability[]): ResourcePlan => ({
     required: [],
     coverage: [],
-    missing: missing.map((jobType) => ({ jobType, stage: "simulate", reason: "the runs" })),
+    missing,
     usable: [nodeViewSchema.parse(sampleNode())],
     unknownNodes: [],
   });
@@ -221,14 +223,16 @@ describe("the settings of the whole campaign", () => {
         draft.name = " ";
         draft.steps = ["scene_generation"];
       }),
-      context({ plan: plan(["simulation.kinematic", "simulation.gazebo"]) })
+      context({ plan: plan([KINEMATIC_RUNS, GAZEBO_RUNS]) })
     );
     const [steps, , resources] = map.settings;
     expect(steps.facts).toEqual([
       { text: "No name yet", tone: "warn" },
       { text: "Scene generation only", tone: "muted" },
     ]);
-    expect(resources.facts).toEqual([{ text: "Missing: Kinematic simulation and 1 more", tone: "bad" }]);
+    const first = needLabel(KINEMATIC_RUNS); // the resources step's name of the need, with the components the runs need
+    expect(first.startsWith("simulation with ")).toBe(true);
+    expect(resources.facts).toEqual([{ text: `Missing: S${first.slice(1)} and 1 more`, tone: "bad" }]);
   });
 
   it("says the machines are not read yet without a plan", () => {

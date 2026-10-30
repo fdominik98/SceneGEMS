@@ -1,7 +1,9 @@
 """Write a release bundle: `python -m scenegems_tool.cluster.release --out <folder>`.
 
-Called by `./build.sh --release <folder>` after the images are built. The revision is the
-checkout's HEAD commit; `dirty` says whether the checkout had uncommitted changes.
+Called by `./build.sh --release <folder>` after the images are built as :latest. The revision is
+the checkout's HEAD commit; `dirty` says whether the checkout had uncommitted changes. The images
+are tagged with the revision (with -dirty for a dirty checkout) and release.json lists them by
+those names.
 """
 
 import argparse
@@ -10,8 +12,9 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
-from scenegems_tool.cluster.fingerprints.job_images import unrun_campaign_stacks
+from scenegems_tool.cluster.fingerprints.components import unrun_campaign_stacks
 from scenegems_tool.cluster.release.bundle import build_bundle
+from scenegems_tool.cluster.release.roles import release_image_tag
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 
@@ -31,14 +34,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         revision, dirty = checkout_revision(arguments.repo_root)
         release = build_bundle(arguments.out, arguments.repo_root, revision, dirty)
-    except (ValueError, subprocess.CalledProcessError, OSError) as error:  # a ReleaseError, or a job's stack the vessel stack matrix does not offer
+    except subprocess.CalledProcessError as error:  # git, or docker tag
+        print(f"error: {' '.join(error.cmd)} failed: {(error.stderr or '').strip() or error}", file=sys.stderr)
+        return 1
+    except (ValueError, OSError) as error:  # a ReleaseError, or a job's stack the vessel stack matrix does not offer
         print(f"error: {error}", file=sys.stderr)
         return 1
     state = " with uncommitted changes" if release.dirty else ""
-    print(f"Release {release.revision[:12]}{state}: {len(release.images)} images, roles {', '.join(release.roles)}, written to {arguments.out}")
+    tag = release_image_tag(release.revision, release.dirty)
+    print(f"Release {release.revision[:12]}{state}: {len(release.images)} images tagged {tag}, roles {', '.join(release.roles)}, written to {arguments.out}")
     unrun = unrun_campaign_stacks()
     if unrun:
-        print(f"No job type runs these campaign stacks of the vessel stack matrix, so no node capability offers them: {'; '.join(f'({stack})' for stack in unrun)}")
+        print(f"No simulation runner runs these campaign stacks of the vessel stack matrix, so campaigns cannot use them yet: {'; '.join(f'({stack})' for stack in unrun)}")
     return 0
 
 

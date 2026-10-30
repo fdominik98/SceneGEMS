@@ -241,11 +241,15 @@ export function buildPairModels(
           subjectActorId: evaluation.subjectActorId,
           subjectActorName: evaluation.subjectActorName,
           result: evaluation.result,
+          // The monitor's own first failure time when the frame has it (null: never failed);
+          // older frames fall back to the timeline, then to this frame.
           firstFailure:
-            firstFailureAtOrBefore(
-              pairTrack?.rules.find((track) => track.key === key),
-              now
-            ) ?? (evaluation.result === "FAILED" ? frame.timestamp : null),
+            evaluation.firstFailedAt !== undefined
+              ? evaluation.firstFailedAt
+              : (firstFailureAtOrBefore(
+                  pairTrack?.rules.find((track) => track.key === key),
+                  now
+                ) ?? (evaluation.result === "FAILED" ? frame.timestamp : null)),
         };
       })
       .sort(compareRules);

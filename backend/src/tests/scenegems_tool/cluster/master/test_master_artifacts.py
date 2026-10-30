@@ -123,6 +123,20 @@ def test_an_upload_a_campaign_took_over_survives_the_end_of_its_hold(artifacts, 
     assert asyncio.run(MasterArtifacts(artifacts, sweep_grace_s=60).sweep_once()) == [] and artifacts.store.exists(sha256)
 
 
+def test_a_round_also_deletes_old_files_without_a_record(artifacts, clock):
+    import os
+    import time
+
+    unreferenced = artifacts.put(b'{"unreferenced":true}', "scene", "application/json").stored.sha256
+    orphan = artifacts.store.put(b'{"orphan":true}').sha256
+    then = time.time() - 120
+    os.utime(artifacts.store.path(orphan), (then, then))
+    clock.advance(120)
+    assert asyncio.run(MasterArtifacts(artifacts, sweep_grace_s=60).sweep_once()) == [unreferenced, orphan]
+    assert not artifacts.store.exists(unreferenced) and not artifacts.store.exists(orphan)
+    assert artifacts.records.calls[-2:] == ["delete_unreferenced", "existing_hashes"]  # records first, then the files without one
+
+
 def test_the_hold_is_dropped_before_the_sweep_lists(artifacts, clock, monkeypatch):
     from datetime import timedelta
 

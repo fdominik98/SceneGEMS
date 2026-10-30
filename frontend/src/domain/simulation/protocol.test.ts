@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseFrame, parseServerMessage } from "./protocol";
+import { CPA_POSITIONS, RULE_16_ID, RULE_8_ID, monitoredFrame } from "../../test/fixtures/monitoredFrames";
 import { sampleFrames } from "../../test/fixtures/sampleFrames";
 import { sampleRunRecordingMessages } from "../../test/fixtures/historyViews";
 
@@ -448,5 +449,41 @@ describe("trajectory_generation_result", () => {
       expect(msg.complete).toBeNull();
       expect(msg.valid).toBe(true);
     }
+  });
+});
+
+describe("parseFrame: rule ids, first failures and CPA positions", () => {
+  it("keeps the rule id and first failure time of every rule", () => {
+    const frame = parseFrame(monitoredFrame({ timestamp: 30, failFrom: 12, monitorHistory: true }));
+    const rules = frame.ruleResults[0]!.evaluations;
+    expect(rules.map((rule) => [rule.ruleId, rule.firstFailedAt])).toEqual([
+      [RULE_16_ID, 12],
+      [RULE_8_ID, null],
+    ]);
+  });
+
+  it("collects the CPA positions per relation and leaves out a relation without one", () => {
+    expect(parseFrame(monitoredFrame({ timestamp: 30, monitorHistory: true })).metrics?.cpaPositionsByRelationId).toEqual({
+      "0->1": CPA_POSITIONS,
+    });
+    const passed = parseFrame(monitoredFrame({ timestamp: 70, monitorHistory: true }));
+    expect(passed.metrics?.cpaPositionsByRelationId).toBeUndefined();
+    expect(passed.metrics?.relations?.["0->1"]?.cpaPositionsByActorId).toBeNull();
+  });
+
+  it("drops malformed CPA positions", () => {
+    const raw = monitoredFrame({ timestamp: 30, monitorHistory: true });
+    const relation = ((raw.metrics as Record<string, unknown>).relations as Record<string, Record<string, unknown>>)["0->1"]!;
+    relation.cpaPositionsByActorId = { "0": { x: 1, y: "2" }, "1": { x: 3, y: 4 } };
+    expect(parseFrame(raw).metrics?.cpaPositionsByRelationId).toBeUndefined();
+  });
+
+  it("leaves the fields out on an older frame", () => {
+    const frame = parseFrame(monitoredFrame({ timestamp: 30, failFrom: 12 }));
+    for (const rule of frame.ruleResults[0]!.evaluations) {
+      expect(rule).not.toHaveProperty("ruleId");
+      expect(rule).not.toHaveProperty("firstFailedAt");
+    }
+    expect(frame.metrics?.cpaPositionsByRelationId).toBeUndefined();
   });
 });

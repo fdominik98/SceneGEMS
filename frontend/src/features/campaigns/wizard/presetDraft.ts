@@ -88,11 +88,18 @@ function trajectoriesOf(config: ConfigObject, catalog: BuilderCatalog): WizardDr
   return { generator, parameters, timeoutS: numberOr(trajectories.timeout_s, DEFAULT_TRAJECTORY_TIMEOUT_S) };
 }
 
-/** The catalog stack a run's stack section names (its layer and mode; kinematic replay when it names none), or "" when the master offers none. */
+/**
+ * The catalog stack a run's stack section names, or "" when the master offers none: its layer and
+ * mode (kinematic replay when it names none), and its control layer when it names one. A section
+ * without a control layer is the option whose own section names none (the layer's implied one).
+ */
 export function stackIdOf(stack: ConfigObject, catalog: BuilderCatalog): string {
   const layer = typeof stack.simulation_layer === "string" ? stack.simulation_layer : "kinematic";
   const mode = typeof stack.mode === "string" ? stack.mode : "replay";
-  return catalog.stacks.find((entry) => entry.simulation_layer === layer && entry.mode === mode)?.id ?? "";
+  const control = typeof stack.control_layer === "string" ? stack.control_layer : undefined;
+  const matches = (entry: BuilderCatalog["stacks"][number]) =>
+    control === undefined ? entry.stack_section?.control_layer === undefined : (entry.stack_section?.control_layer ?? entry.control_layer) === control;
+  return catalog.stacks.find((entry) => entry.simulation_layer === layer && entry.mode === mode && matches(entry))?.id ?? "";
 }
 
 function runOf(item: unknown, catalog: BuilderCatalog): RunDraft {
