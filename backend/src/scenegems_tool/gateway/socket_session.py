@@ -5,6 +5,7 @@ from typing import Mapping, Optional, Tuple, Union
 
 from fastapi import WebSocket
 
+from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import new_live_session_scope
 from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder, LiveRunSetup, LiveSessionRecording
 from scenegems_tool.gateway.protocol import ClientMessage, ServerMessage, make_error_message, make_monitor_status_message, make_mqtt_broker_status_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
@@ -105,7 +106,15 @@ class SocketSession:
         use_master_broker: bool = False,
     ):
         """Connect the interactive simulation to a broker: the master's own (plain, anonymous, on the
-        compose network the session's containers join) or any other, resolved for this container."""
+        compose network the session's containers join) or any other, resolved for this container.
+
+        Every connection is a live session with its own scope, which names its simulation stack. On
+        the master's broker its topics are scoped too, so several live sessions share that broker; on
+        any other broker (WARA-PS, a lab broker) they stay the unscoped WARA-PS topics that real
+        vessels, the WARA-PS map and external monitors use. Real vessels keep the unscoped topics
+        on the master's broker as well (vessel_stack/agent_topic_scope.py)."""
+        session_scope = new_live_session_scope()
+        topic_prefix = ""
         if use_master_broker:
             broker = master_broker()
             if broker is None:
@@ -113,6 +122,7 @@ class SocketSession:
             agent_broker = client_broker = broker[0]
             port = broker[1]
             user, password, tls_connection, allow_certificates = "", "", False, False
+            topic_prefix = session_scope.topic_prefix
         else:
             requested_broker = client_broker.strip()
             agent_broker, client_broker, port = resolve_mqtt_broker_endpoints(
@@ -126,10 +136,18 @@ class SocketSession:
         self.subsystem_integration_session.cancel()
         session = LiveSubsystemIntegrationSession(
             mqtt_connection=MQttConnectionInfo(
-                user=user, password=password, agent_broker=agent_broker, client_broker=client_broker, port=port, tls_connection=tls_connection, allow_certificates=allow_certificates
+                user=user,
+                password=password,
+                agent_broker=agent_broker,
+                client_broker=client_broker,
+                port=port,
+                tls_connection=tls_connection,
+                allow_certificates=allow_certificates,
+                topic_prefix=topic_prefix,
             ),
             reference_geofence=reference_geofence,
             send_payload=self.send_payload,
+            session_scope=session_scope,
         )
         try:
             await session.start()

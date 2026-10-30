@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional, Protocol
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
+from scenegems_tool.cluster.node.instance_scope import InstanceScope
 from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import SimulationSessionStack
 from scenegems_tool.gateway.protocol import ServerMessage, SimulationStatus, make_error_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
@@ -59,6 +60,7 @@ class LiveSimulationSession(SimulationSession):
         monitor_session: MonitorSession,
         send_payload: Callable[[ServerMessage], None],
         time_step: int = ONE_SECOND,
+        session_scope: Optional[InstanceScope] = None,
     ):
         super().__init__(send_payload, SimulationStatus.INITIALIZING)
         self._destroyed = False
@@ -78,6 +80,7 @@ class LiveSimulationSession(SimulationSession):
             trajectories,
             time_step,
             on_ground_control_ports=self._set_ground_control_ports,
+            scope=session_scope,
         )
         self._client = MqttScenarioExecutionClient(
             mqtt_connection=mqtt_connection,

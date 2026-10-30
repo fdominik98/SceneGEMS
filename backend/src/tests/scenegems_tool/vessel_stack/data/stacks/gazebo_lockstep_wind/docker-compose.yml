@@ -65,7 +65,6 @@ services:
     - maritime_net
   gazebo:
     image: ${GAZEBO_IMAGE:-scenegems-gazebo-harmonic:latest}
-    container_name: gazebo
     hostname: gazebo
     environment:
       GZ_HEADLESS: '1'
@@ -85,8 +84,6 @@ services:
       chmod +x /tmp/entrypoint.sh
 
       exec /tmp/entrypoint.sh'
-    ports:
-    - 11345:11345
     networks:
     - maritime_net
     depends_on:

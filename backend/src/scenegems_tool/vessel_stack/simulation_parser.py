@@ -6,6 +6,7 @@ from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
+from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
 from scenegems_tool.vessel_stack.asv_software.replay.replay_mission import cap_mission_trajectories, replay_mission_waypoints
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS, arduagent_control_mode
@@ -65,6 +66,8 @@ class SimulationParser:
         if not_arduagent:
             raise StackUnavailableError([f"the scenario execution worker drives vessels only through ArduAgent: {', '.join(not_arduagent)}"])
         mission_trajectories = cap_mission_trajectories(trajectories)
+        # The service's own topics carry the session's prefix; a real vessel's ArduAgent, and so every agent of its instance, the unscoped ones.
+        agent_connection = agent_mqtt_connection(mqtt_connection, simulation_config)
 
         pending_writes = None
         docker_compose = None
@@ -91,7 +94,7 @@ class SimulationParser:
             agent_config = vessel_config.require_connection()
             client = MqttAgentClient(
                 vessel=vessel,
-                mqtt_connection=mqtt_connection,
+                mqtt_connection=agent_connection,
                 topic=agent_config.topic,
                 control_mode=arduagent_control_mode(vessel_config.stack.asv_software),
                 agent_name=agent_config.agent_name,

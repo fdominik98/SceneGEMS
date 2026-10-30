@@ -1,7 +1,9 @@
 import asyncio
 import time
-from typing import Callable
+from typing import Callable, Optional
 
+from scenegems_tool.cluster.node.instance_scope import InstanceScope
+from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import new_live_session_scope
 from scenegems_tool.gateway.protocol import ServerMessage
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenegems_client import MqttSceneGEMSClient
@@ -18,9 +20,17 @@ _CONNECT_POLL_INTERVAL_SEC = 0.1
 
 
 class LiveSubsystemIntegrationSession(SubsystemIntegrationSession):
-    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, send_payload: Callable[[ServerMessage], None]):
+    def __init__(
+        self,
+        mqtt_connection: MQttConnectionInfo,
+        reference_geofence: Geofence,
+        send_payload: Callable[[ServerMessage], None],
+        session_scope: Optional[InstanceScope] = None,
+    ):
+        """session_scope names the session's simulation stack; mqtt_connection carries its topic prefix when it has one."""
         super().__init__(send_payload)
 
+        self.session_scope = session_scope or new_live_session_scope()
         self.mqtt_connection = mqtt_connection
         self.reference_geofence = reference_geofence
 
@@ -92,6 +102,7 @@ class LiveSubsystemIntegrationSession(SubsystemIntegrationSession):
             monitor_session=self.monitor_session,
             reference_geofence=self.reference_geofence,
             send_payload=self.send_payload,
+            session_scope=self.session_scope,
         )
         previous.teardown()
 

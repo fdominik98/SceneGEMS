@@ -112,3 +112,45 @@ def test_scoped_monitor_is_named_by_scope(no_docker, mqtt_connection, geofence):
     assert service["container_name"] == "scenegems-m1-n1-monitoring-0"
     assert service["environment"]["MQTT_TOPIC_PREFIX"] == "scenegems/m1/n1/monitoring-0/"
     assert monitor.names.scoped
+
+
+LIVE_SESSION_PREFIX = "scenegems/m1/workbench/live-ab12cd34/"
+_MONITOR_LIFECYCLE = MonitorService._run_container_lifecycle_startup  # before no_docker replaces it
+
+
+def test_a_live_session_monitor_keeps_the_session_prefix(no_docker, mqtt_connection, geofence):
+    monitor = MonitorService.for_workbench(mqtt_connection.with_topic_prefix(LIVE_SESSION_PREFIX), geofence, "scenario_monitor", "waraps/service/virtual/real/scenario_monitor", "rules: []\n")
+    instance_id = monitor.names.compose_project.rsplit("-", 1)[1]
+    assert monitor.mqtt_connection.topic_prefix == LIVE_SESSION_PREFIX
+    assert monitor.build_compose()["services"]["monitoring"]["environment"]["MQTT_TOPIC_PREFIX"] == LIVE_SESSION_PREFIX
+    assert monitor.container_name == f"scenegems-m1-workbench-live-ab12cd34-{instance_id}", "named by the session, not by the agent"
+
+
+def _reaped(monkeypatch, monitor, names):
+    from scenegems_tool.cluster.node.launchers.pooled import monitor_service
+
+    removed = []
+    monkeypatch.setattr(monitor_service, "container_names_and_ids", lambda: [(f"id-{name}", name) for name in names])
+    monkeypatch.setattr(monitor_service, "force_remove_containers", lambda ids: removed.extend(ids))
+    monitor._reap_same_agent_containers()
+    return removed
+
+
+def test_an_unscoped_monitor_reaps_only_its_own_kind_of_leftover(no_docker, monkeypatch, mqtt_connection, geofence):
+    monitor = MonitorService.for_workbench(mqtt_connection, geofence, "scenario_monitor", "waraps/service/virtual/real/scenario_monitor", "rules: []\n")
+    leftover, session_monitor = "scenario_monitor-0badf00d", "scenegems-m1-workbench-live-ab12cd34-1234abcd"
+    removed = _reaped(monkeypatch, monitor, [monitor.container_name, leftover, session_monitor, "scenario_monitor-other-1234abcd"])
+    assert removed == [f"id-{leftover}"]
+
+
+def test_a_live_session_monitor_reaps_nothing(no_docker, monkeypatch, mqtt_connection, geofence):
+    from scenegems_tool.cluster.node.launchers.pooled import monitor_service
+
+    monitor = MonitorService.for_workbench(mqtt_connection.with_topic_prefix(LIVE_SESSION_PREFIX), geofence, "scenario_monitor", "t", "rules: []\n")
+    reaped, started = [], []
+    monkeypatch.setattr(monitor_service.MonitorService, "_reap_same_agent_containers", lambda self: reaped.append(self))
+    monkeypatch.setattr(monitor.project, "write", lambda compose: None)
+    monkeypatch.setattr(monitor.project, "up", lambda *options: started.append(True))
+    monkeypatch.setattr(monitor_service.os, "makedirs", lambda *args, **kwargs: None)
+    _MONITOR_LIFECYCLE(monitor, {})
+    assert started == [True] and reaped == [], "another session's monitor of the same agent stays"
