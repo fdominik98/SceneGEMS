@@ -6,7 +6,7 @@ Replace `build_stub_frame` with serializers from your `MonitoredTrajectory` / mo
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import COLREGSRuleResultMap
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import RULE_KIND, COLREGSRule
@@ -139,6 +139,18 @@ def rule_display_order(rule: COLREGSRule) -> Tuple[int, int, str, int, str]:
     return (0 if rule.kind == RULE_KIND else 1, number, rule.subject_actor_name, rule.subject_actor_id, rule.name)
 
 
+def _first_failed_at(monitored_scene: MonitoredSceneWithResults, relation: Relation, rule: COLREGSRule) -> Optional[int]:
+    """When ``rule``, listed under the encounter ``relation``, first failed: under the encounter, or under its vessel for a per-vessel rule."""
+    first_failed_at = monitored_scene.first_failed_at
+    if (relation, rule) in first_failed_at:
+        return first_failed_at[(relation, rule)]
+    for actor in (relation.actor1, relation.actor2):
+        own = Relation(actor, actor)
+        if rule in monitored_scene.monitor_result_map_set.get_result(own):
+            return first_failed_at.get((own, rule))
+    return None
+
+
 def _encounter_rule_results(monitored_scene: MonitoredSceneWithResults, relation: Relation) -> COLREGSRuleResultMap:
     """The encounter's rules and the per-vessel rules of both its vessels.
 
@@ -150,6 +162,17 @@ def _encounter_rule_results(monitored_scene: MonitoredSceneWithResults, relation
     for actor in (relation.actor1, relation.actor2):
         results.update(monitored_scene.monitor_result_map_set.get_result(Relation(actor, actor)))
     return results
+
+
+def _cpa_positions_payload(relation: Relation, positions: Optional[Tuple[Any, Any]]) -> Optional[Dict[str, Dict[str, float]]]:
+    """Both vessels' positions at the closest point of approach, by actor id; None without one."""
+    if positions is None:
+        return None
+    position1, position2 = positions
+    return {
+        str(relation.actor1.id): {"x": float(position1[0]), "y": float(position1[1])},
+        str(relation.actor2.id): {"x": float(position2[0]), "y": float(position2[1])},
+    }
 
 
 def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Dict[str, Any]:
@@ -242,6 +265,7 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
         for rule, result in sorted(relation_rule_result.items(), key=lambda item: rule_display_order(item[0])):
             rules.append(
                 {
+                    "ruleId": rule.rule_id,
                     "name": rule.name,
                     "title": rule.title,
                     "ruleNumber": rule.rule_number,
@@ -250,6 +274,9 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
                     "subjectActorId": None if rule.subject_actor_id < 0 else str(rule.subject_actor_id),
                     "subjectActorName": rule.subject_actor_name,
                     "result": result.name,
+                    # The first timestamp the rule was FAILED at in the run so far, also when
+                    # it has since restarted as unknown; None when it never failed.
+                    "firstFailedAt": _first_failed_at(monitored_scene, relation, rule),
                 }
             )
         rule_results.append(
@@ -308,6 +335,7 @@ def monitor_payload_from_scene(monitored_scene: MonitoredSceneWithResults) -> Di
             "distance": props.o_distance,
             "tcpa": props.tcpa,
             "dcpa": props.dcpa,
+            "cpaPositionsByActorId": _cpa_positions_payload(relation, props.cpa_positions),
             "safetyDistance": props.safety_dist,
             "visibilityDistance": props.vis_distance,
         }

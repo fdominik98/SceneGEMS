@@ -109,9 +109,45 @@ export interface CpaMark {
 /** CPA marks further ahead than this are left out. */
 export const CPA_HORIZON_S = 3600;
 
+export interface MonitorCpa {
+  pointA: Point;
+  pointB: Point;
+  tcpa: number | null;
+  dcpa: number;
+}
+
 /**
- * Where each approaching pair will be closest, from the states held on course and speed.
- * Drawn for pairs in an encounter, pairs on a collision course and the selected pair (or for
+ * The pair's CPA as the monitor computed it: both positions at its tcpa. Null when the
+ * monitor reports no CPA ahead (no relative motion, or already behind); undefined when the
+ * frame predates the monitor's CPA positions.
+ */
+export function monitorCpa(
+  frame: SimulationFrame,
+  relationId: string,
+  actor1Id: string,
+  actor2Id: string
+): MonitorCpa | null | undefined {
+  const raw = frame.metrics?.relations?.[relationId];
+  if (!raw || !("cpaPositionsByActorId" in raw)) {
+    return undefined;
+  }
+  const positions = frame.metrics?.cpaPositionsByRelationId?.[relationId];
+  const pointA = positions?.[actor1Id];
+  const pointB = positions?.[actor2Id];
+  if (!pointA || !pointB) {
+    return null;
+  }
+  return {
+    pointA,
+    pointB,
+    tcpa: typeof raw.tcpa === "number" ? raw.tcpa : null,
+    dcpa: typeof raw.dcpa === "number" ? raw.dcpa : Math.hypot(pointB.x - pointA.x, pointB.y - pointA.y),
+  };
+}
+
+/**
+ * Where each approaching pair will be closest: the monitor's CPA positions when the frame has
+ * them, else computed from the states held on course and speed. Drawn for pairs in an encounter, pairs on a collision course and the selected pair (or for
  * every approaching pair with `allPairs`), when the CPA lies within the horizon.
  */
 export function cpaMarks(
@@ -139,7 +175,11 @@ export function cpaMarks(
     if (!wanted) {
       continue;
     }
-    const cpa = computeCpa(a, b);
+    const fromMonitor = monitorCpa(frame, relation.relationId, relation.actor1Id, relation.actor2Id);
+    if (fromMonitor === null) {
+      continue;
+    }
+    const cpa = fromMonitor ?? computeCpa(a, b);
     if (cpa.tcpa === null || cpa.tcpa <= 0 || cpa.tcpa > CPA_HORIZON_S || !cpa.pointA || !cpa.pointB) {
       continue;
     }

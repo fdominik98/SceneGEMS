@@ -33,6 +33,18 @@ class SafeDistanceCondition(RuleCondition):
             return COLREGSRuleResult.FAILED
         return COLREGSRuleResult.UNKNOWN
 
+    def initial_condition(self, initial_monitored_scene: MonitoredScene) -> COLREGSRuleResult:
+        """A pair that starts inside its safety domain has already failed.
+
+        The domain is the one of the context in force on the initial scene. A pair inside an
+        encounter's own domain never starts that encounter (the safety domain guard makes it
+        OTHER), so it is judged against the default circle like any OTHER pair: inside the
+        head-on ellipse but outside the circle is not a failure.
+        """
+        if initial_monitored_scene.colregs_state_set[self.relation].actors_violate_safety_domain:
+            return COLREGSRuleResult.FAILED
+        return COLREGSRuleResult.UNKNOWN
+
     def maneuver_suggestions(self, current_monitored_scene: MonitoredScene, time_step: int) -> ManeuverSuggestions:
         if current_monitored_scene.colregs_state_set[self.relation].actors_violate_safety_domain:
             return ManeuverSuggestions(

@@ -2,7 +2,7 @@ from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import
 from concrete_level.colregs_monitoring.colregs_state_machine import COLREGSStateMachine
 from concrete_level.colregs_monitoring.maneuver_context import ManeuverContextSet
 from concrete_level.colregs_monitoring.maneuver_state_machine import ManeuverStateMachine
-from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredScene, MonitoredSceneWithResults
+from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredScene, MonitoredSceneWithResults, record_first_failures
 from concrete_level.colregs_monitoring.rule_state_machine import RuleStateMachine
 from concrete_level.colregs_monitoring.situation_context_set_state_machine import SituationContextSetStateMachine
 from concrete_level.models.concrete_scene import ConcreteScene
@@ -10,7 +10,15 @@ from utils.colregs_approximations import COLREGSConstraints
 
 
 class COLREGSMonitor:
-    def __init__(self, initial_scene: ConcreteScene, colregs_constants: COLREGSConstraints) -> None:
+    def __init__(self, initial_scene: ConcreteScene, colregs_constants: COLREGSConstraints, judge_initial_scene: bool = True) -> None:
+        """Monitor a run that starts at ``initial_scene`` (timestamp 0).
+
+        The initial result lists every active rule. Rules that need only one scene's state
+        (SafeDistance) are judged on it, so a run, or a scene judged alone, can fail at 0;
+        the others start unknown. ``judge_initial_scene=False`` leaves every rule unknown at
+        0: the trajectory planner uses it, since a failure already present at the root
+        sticks to every node and would prune the whole tree, while no path can undo it.
+        """
         self.colregs_constants = colregs_constants
 
         # Store initial maneuver states for each vessel
@@ -29,10 +37,15 @@ class COLREGSMonitor:
             maneuver_state_set=self.initial_maneuver_state_set,
             timestamp=0,
         )
+        if judge_initial_scene:
+            initial_results = self.initial_rules.check_initial(monitored_scene)
+        else:
+            initial_results = RuleStateMachine.transition_rule_results(self.initial_rules, COLREGSRuleResultMapSet(), self.initial_rules)
         self.initial_monitored_scene_with_results = MonitoredSceneWithResults(
             monitored_scene=monitored_scene,
-            monitor_result_map_set=COLREGSRuleResultMapSet(),
+            monitor_result_map_set=initial_results,
             maneuver_suggestions=self.initial_rules.suggest_maneuvers(monitored_scene, 0),
+            first_failed_at=record_first_failures({}, initial_results, 0),
         )
 
     def step(self, current_monitored_scene_with_results: MonitoredSceneWithResults, next_scene: ConcreteScene, time_step: int) -> MonitoredSceneWithResults:
@@ -71,4 +84,5 @@ class COLREGSMonitor:
             monitored_scene=next_monitored_scene,
             monitor_result_map_set=next_monitor_result_map_set,
             maneuver_suggestions=next_rules.suggest_maneuvers(next_monitored_scene, time_step),
+            first_failed_at=record_first_failures(current_monitored_scene_with_results.first_failed_at, next_monitor_result_map_set, next_timestamp),
         )

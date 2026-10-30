@@ -108,6 +108,11 @@ export interface ColregsMonitorStateData {
 export type RuleKind = "rule" | "suggestion";
 
 export interface RuleEvaluation {
+  /**
+   * Stable id of the rule from its identity (kind, number, title, relation, subject vessel),
+   * unique within its relation's rules. Absent on frames from before the monitor sent it.
+   */
+  ruleId?: string;
   /** Full display label, e.g. "Rule 16: Give-Way Vessel Takes Early and Substantial Action". */
   ruleName: string;
   /** Short title without the rule-number prefix. */
@@ -122,6 +127,11 @@ export interface RuleEvaluation {
   /** Display name of the subject vessel, e.g. "OS_0"; empty when encounter-scoped. */
   subjectActorName: string;
   result: RuleResult;
+  /**
+   * First time (scenario seconds) the monitor saw the rule FAILED in this relation, also when
+   * it has since restarted as UNKNOWN; null when it never failed. Absent on older frames.
+   */
+  firstFailedAt?: number | null;
 }
 
 export interface RuleResultData {
@@ -156,15 +166,38 @@ export interface ManeuverStateData {
   readilyApparentTimePassed: boolean;
 }
 
+export interface PlanePoint {
+  x: number;
+  y: number;
+}
+
+/** Per-relation metrics as the monitor sends them under `metrics.relations`. */
+export interface RelationMetrics {
+  distance?: number;
+  dcpa?: number;
+  /** Seconds to the closest point of approach; negative once it is behind. */
+  tcpa?: number;
+  safetyDistance?: number;
+  visibilityDistance?: number;
+  /**
+   * Both vessels' positions at the closest point of approach, from the same tcpa; null when
+   * the relative speed is zero or the point is behind. Absent on older frames.
+   */
+  cpaPositionsByActorId?: Record<string, PlanePoint> | null;
+  [key: string]: unknown;
+}
+
 export interface ScenarioMetrics {
   distanceByRelationId?: Record<string, number>;
   dcpaByRelationId?: Record<string, number>;
   tcpaByRelationId?: Record<string, number>;
   dsIndexByRelationId?: Record<string, number>;
+  /** CPA positions of the relations that have one, from `relations[*].cpaPositionsByActorId`. */
+  cpaPositionsByRelationId?: Record<string, Record<string, PlanePoint>>;
   /** Raw scene-level metrics passed through from the backend serializer. */
   scene?: Record<string, number>;
-  /** Raw per-relation metrics (distance, dcpa, tcpa, safetyDistance, visibilityDistance). */
-  relations?: Record<string, Record<string, number>>;
+  /** Raw per-relation metrics (distance, dcpa, tcpa, safetyDistance, visibilityDistance, CPA positions). */
+  relations?: Record<string, RelationMetrics>;
 }
 
 export interface SimulationFrame {

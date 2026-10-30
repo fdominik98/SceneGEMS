@@ -1,3 +1,4 @@
+import re
 from abc import ABC
 from dataclasses import dataclass, field
 from math import degrees
@@ -44,6 +45,21 @@ class COLREGSRule(ABC):
         if self.kind == SUGGESTION_KIND:
             return f"Suggestion: {self.title}"
         return f"Rule {self.rule_number}: {self.title}"
+
+    @property
+    def rule_id(self) -> str:
+        """Stable id of the rule on the wire, built from its identity fields only.
+
+        ``kind:number:title-slug:actor1-actor2:subject``, with ``-`` for an empty rule
+        number and for an encounter-scoped rule's subject, e.g.
+        ``rule:8:passing-at-a-safe-distance:1-2:-`` or
+        ``rule:17:stand-on-vessel-keeps-course-and-speed:2-2:2``. Actor ids, not names, so
+        renaming a vessel keeps the id; no hashing, so it is the same in every process.
+        """
+        slug = re.sub(r"[^a-z0-9]+", "-", self.title.lower()).strip("-")
+        number = self.rule_number or "-"
+        subject = str(self.subject_actor_id) if self.subject_actor_id >= 0 else "-"
+        return f"{self.kind}:{number}:{slug}:{self.relation.actor1.id}-{self.relation.actor2.id}:{subject}"
 
     @property
     def scope(self) -> str:

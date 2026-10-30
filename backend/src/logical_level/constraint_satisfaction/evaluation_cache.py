@@ -112,6 +112,17 @@ class GeometricProperties(ABC):
         return self.__dcpa
 
     @property
+    def cpa_positions(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+        """Where the two actors are at the closest point of approach, each holding course and speed.
+
+        Taken at ``tcpa``, so it agrees with ``tcpa`` and ``dcpa``. None when the relative
+        speed is zero (no closest point) or the closest point is already behind them.
+        """
+        if magnitude(self.v12) < EPSILON or self.tcpa < 0:
+            return None
+        return self.val1.p + self.val1.v * self.tcpa, self.val2.p + self.val2.v * self.tcpa
+
+    @property
     def vis_distance(self) -> float:
         if self.__vis_distance is None:
             self.__vis_distance = vis_distance(
