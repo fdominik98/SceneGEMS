@@ -16,8 +16,8 @@ from scenegems_tool.assurance.pipeline.case_machine import RecordedRun
 from scenegems_tool.gateway.live_run_recorder import OpenedEntry
 from scenegems_tool.gateway.protocol import SimulationStatus
 from scenegems_tool.gateway.socket_session import NO_TRAJECTORIES_MESSAGE, SocketSession, master_broker, master_broker_label
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselStackConfig
 from scenegems_tool.workbench.empty_subsystem_integration_session import EmptySubsystemIntegrationSession
 from tests.scenegems_tool.gateway.conftest import settle
@@ -123,6 +123,60 @@ class TestMasterBroker:
         assert master_broker({}) is None
         assert master_broker({"SCENEGEMS_BROKER_HOST": "  ", "SCENEGEMS_BROKER_PORT": "1883"}) is None
         assert master_broker_label({}) is None
+
+
+class FakeIntegrationSession:
+    """Records how the socket session builds the live session, without a broker."""
+
+    created = []
+
+    def __init__(self, mqtt_connection, reference_geofence, send_payload, session_scope):
+        self.mqtt_connection = mqtt_connection
+        self.session_scope = session_scope
+        self.cancelled = False
+        FakeIntegrationSession.created.append(self)
+
+    async def start(self):
+        pass
+
+    def cancel(self):
+        self.cancelled = True
+
+
+class TestLiveSessionScope:
+    @pytest.fixture(autouse=True)
+    def fake_sessions(self, monkeypatch):
+        from scenegems_tool.gateway import socket_session
+
+        FakeIntegrationSession.created = []
+        monkeypatch.setattr(socket_session, "LiveSubsystemIntegrationSession", FakeIntegrationSession)
+        monkeypatch.setenv("SCENEGEMS_MASTER_ID", "m1")
+        monkeypatch.setenv("SCENEGEMS_BROKER_HOST", "cluster-broker")
+
+    async def test_on_the_master_broker_the_session_topics_carry_its_scope(self, session):
+        await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+        (live,) = FakeIntegrationSession.created
+        assert live.session_scope.master_id == "m1" and live.session_scope.node_id == "workbench"
+        assert live.mqtt_connection.topic_prefix == live.session_scope.topic_prefix
+        assert live.mqtt_connection.topic_prefix.startswith("scenegems/m1/workbench/live-")
+
+    async def test_another_broker_keeps_the_unscoped_wara_ps_topics_but_the_stack_is_still_the_sessions(self, session):
+        await session.connect_to_mqtt_broker("user", "secret", "broker.waraps.org", "broker.waraps.org", 8883, True, False, Geofence(57.7, 11.9, 1000.0))
+        (live,) = FakeIntegrationSession.created
+        assert live.mqtt_connection.topic_prefix == ""
+        assert live.session_scope.compose_project.startswith("scenegems-m1-workbench-live-")
+
+    async def test_every_connection_is_a_session_of_its_own(self, session, websocket):
+        other = SocketSession(websocket)
+        try:
+            await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+            await other.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+            first, second = FakeIntegrationSession.created
+            assert first.session_scope != second.session_scope
+            assert first.mqtt_connection.topic_prefix != second.mqtt_connection.topic_prefix
+            assert not first.cancelled, "the second browser's session leaves the first one running"
+        finally:
+            other.cancel()
 
 
 class TestSimulationConfigValidation:
