@@ -59,6 +59,14 @@ def test_a_cluster_job_gets_every_scene_with_its_final_flag():
     assert monitored == []
 
 
+def test_the_cancel_names_the_request_to_stop():
+    client = _client()
+    client.publish_cancel_command("r1")
+    [(topic, command)] = client.client.published
+    assert topic == client.exec_command_topic
+    assert (command["command"], command["execution-unit"], command["signal"]) == ("signal-task", SCENE_GENERATION_SERVICE_NAME, {"name": "cancel", "request-id": "r1"})
+
+
 def _service_task(service):
     from scenegems_tool.subsystems.scene_generation.scene_generation_types import MqttSceneGenerationTask
 

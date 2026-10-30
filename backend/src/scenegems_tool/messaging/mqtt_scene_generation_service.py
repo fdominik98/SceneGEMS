@@ -5,7 +5,8 @@ import queue
 import threading
 import time
 from multiprocessing import Process, Queue
-from typing import Any, List, Optional, Tuple
+from multiprocessing.synchronize import Event
+from typing import Any, Dict, List, Optional, Tuple
 
 import paho.mqtt.client as mqtt
 
@@ -31,9 +32,10 @@ class MqttSceneGenerationService(MqttClient):
         super().__init__(SCENE_GENERATION_SERVICE_NAME, SCENE_GENERATION_SERVICE_TOPIC, mqtt_connection, reference_geofence)
         self.scene_generation_task_queue: Queue[MqttSceneGenerationTask] = Queue()
         self.generated_scene_queue: Queue[Tuple[MqttSceneGenerationTask, EvaluationData, bool]] = Queue()  # task, scene, final
-        self.terminate_last_generation_event = multiprocessing.Event()
-        self.current_tasks: List[MqttSceneGenerationTask] = []
-        self._active_workers: List[Process] = []
+        self.current_tasks: List[MqttSceneGenerationTask] = []  # queued and running, in arrival order
+        self._cancel_events: Dict[str, Event] = {}  # by task uuid: each search stops on its own event only
+        self._tasks_lock = threading.Lock()
+        self._active_workers: List[Tuple[Process, MqttSceneGenerationTask]] = []
         self._worker_pool_stop_event = threading.Event()
         self._worker_pool_thread: Optional[threading.Thread] = None
         self._publisher_thread: Optional[threading.Thread] = None
@@ -46,7 +48,9 @@ class MqttSceneGenerationService(MqttClient):
         self._publisher_thread.start()
 
     def stop_runtime(self) -> None:
-        self.terminate_last_generation_event.set()
+        with self._tasks_lock:
+            for event in self._cancel_events.values():
+                event.set()
         self._worker_pool_stop_event.set()
         self._terminate_active_workers()
         if self._worker_pool_thread is not None:
@@ -55,7 +59,9 @@ class MqttSceneGenerationService(MqttClient):
         if self._publisher_thread is not None:
             self._publisher_thread.join(timeout=2.0)
             self._publisher_thread = None
-        self.current_tasks.clear()
+        with self._tasks_lock:
+            self.current_tasks.clear()
+            self._cancel_events.clear()
         self._drain_task_queue()
 
     def _on_message(self, msg: mqtt.MQTTMessage, payload: Any):
@@ -74,8 +80,25 @@ class MqttSceneGenerationService(MqttClient):
                 enforce_low_tcpa=bool(payload["task"]["params"].get("enforce-low-tcpa", False)),
                 seed=payload["task"]["params"].get("seed"),
             )
+            with self._tasks_lock:
+                self.current_tasks.append(task)
+                self._cancel_events[task.task_uuid] = multiprocessing.Event()
             self.scene_generation_task_queue.put_nowait(task)
-            self.current_tasks.append(task)
+        elif payload["command"] == "signal-task" and payload.get("signal", {}).get("name") == "cancel":
+            self.cancel_request(payload["signal"].get("request-id"))
+
+    def cancel_request(self, request_id: Optional[str]) -> None:
+        """Stop the generations of one request: a running one ends without a scene, a queued one never starts."""
+        if not request_id:
+            _logger.warning("Ignored a cancel that names no request")
+            return
+        with self._tasks_lock:
+            events = [self._cancel_events[task.task_uuid] for task in self.current_tasks if task.request_id == request_id and task.task_uuid in self._cancel_events]
+        if not events:
+            _logger.info("Cancel for request %s, which this pool does not hold", request_id)
+            return
+        for event in events:
+            event.set()
 
     @property
     def listen_topics(self) -> List[str]:
@@ -125,7 +148,7 @@ class MqttSceneGenerationService(MqttClient):
             "tasks-available": [
                 {
                     "name": "generate-scene",
-                    "signals": [],
+                    "signals": ["cancel"],
                 }
             ],
             "tasks-executing": tasks_executing,
@@ -149,7 +172,7 @@ class MqttSceneGenerationService(MqttClient):
 
     def _manage_worker_pool(self) -> None:
         while not self._worker_pool_stop_event.is_set():
-            self._active_workers = [worker for worker in self._active_workers if worker.is_alive()]
+            self._reap_workers()
             if len(self._active_workers) >= self.max_workers:
                 time.sleep(0.1)
                 continue
@@ -157,30 +180,58 @@ class MqttSceneGenerationService(MqttClient):
                 task = self.scene_generation_task_queue.get(timeout=0.5)
             except queue.Empty:
                 continue
-            self.terminate_last_generation_event.clear()
-            worker = Process(
-                target=run_scene_generation_worker,
-                args=(task, self.generated_scene_queue, self.terminate_last_generation_event),
-                name=f"scene_generation_worker_{task.request_id}",
-                daemon=True,
-            )
-            worker.start()
-            self._active_workers.append(worker)
+            self._start_worker(task)
+
+    def _start_worker(self, task: MqttSceneGenerationTask) -> None:
+        with self._tasks_lock:
+            cancel_event = self._cancel_events.get(task.task_uuid)
+            if cancel_event is None or cancel_event.is_set():
+                # Cancelled while it queued: it never starts and publishes nothing.
+                self._forget(task)
+                return
+        worker = Process(
+            target=run_scene_generation_worker,
+            args=(task, self.generated_scene_queue, cancel_event),
+            name=f"scene_generation_worker_{task.request_id}",
+            daemon=True,
+        )
+        worker.start()
+        self._active_workers.append((worker, task))
+
+    def _reap_workers(self) -> None:
+        """Forget the tasks of workers that ended; a cancelled worker publishes no final scene, so this is what frees its task."""
+        ended = [(worker, task) for worker, task in self._active_workers if not worker.is_alive()]
+        if not ended:
+            return
+        self._active_workers = [entry for entry in self._active_workers if entry not in ended]
+        with self._tasks_lock:
+            for _, task in ended:
+                self._forget(task)
 
     def _poll_generated_scenes(self) -> None:
         while not self._worker_pool_stop_event.is_set():
-            try:
-                result = self.generated_scene_queue.get(timeout=0.5)
-            except queue.Empty:
-                continue
-            if not self.is_connected:
-                continue
-            task, eval_data, final = result
+            self._publish_next_scene(timeout=0.5)
+
+    def _publish_next_scene(self, timeout: float) -> bool:
+        """Publish the next scene a worker queued; False when there was none."""
+        try:
+            task, eval_data, final = self.generated_scene_queue.get(timeout=timeout) if timeout > 0 else self.generated_scene_queue.get_nowait()
+        except queue.Empty:
+            return False
+        if self.is_connected:
             self.publish_generated_scene(task, eval_data, final)
-            self.current_tasks = [current_task for current_task in self.current_tasks if current_task.task_uuid != task.task_uuid]
+        if final:
+            with self._tasks_lock:
+                self._forget(task)
+        return True
+
+    def _forget(self, task: MqttSceneGenerationTask) -> None:
+        """Drop a task that ended or never started; the caller holds _tasks_lock."""
+        self.current_tasks = [t for t in self.current_tasks if t.task_uuid != task.task_uuid]
+        self._cancel_events.pop(task.task_uuid, None)
 
     def _terminate_active_workers(self) -> None:
-        for worker in self._active_workers:
+        for worker, _ in self._active_workers:
             if worker.is_alive():
                 worker.terminate()
                 worker.join(timeout=2.0)
