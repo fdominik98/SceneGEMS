@@ -16,6 +16,7 @@ import {
 import { nodeViewSchema } from "./schemas";
 
 const GAZEBO = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
+const CUSTOM = ["asv_software/replay", "control_layer/custom", "simulation_layer/gazebo"];
 
 function nodeWith(components: [string, "usable" | "out_of_date"][], slots: Record<string, number> = { simulation: 2 }) {
   return nodeViewSchema.parse(
@@ -44,11 +45,28 @@ describe("the component catalog", () => {
       "simulation_layer/kinematic",
     ]);
     expect(runStackComponents({ simulation_layer: "gazebo", speedup: 2 })).toEqual(GAZEBO);
+    expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "ardupilot" })).toEqual(GAZEBO);
+    expect(runStackComponents({ simulation_layer: "ardupilot_sim", mode: "usv_navigation" })).toEqual([
+      "asv_software/replay",
+      "asv_software/usv_navigation",
+      "control_layer/ardupilot",
+      "simulation_layer/ardupilot_sim",
+    ]);
+    expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom" })).toEqual(CUSTOM);
+    expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" })).toEqual([
+      "asv_software/replay",
+      "asv_software/usv_navigation",
+      "control_layer/custom",
+      "simulation_layer/gazebo",
+    ]);
   });
 
   it("derives a job's components from its payload as the master does", () => {
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo" })).toEqual(GAZEBO);
     expect(simulationPayloadComponents({ runner: "kinematic", mode: "replay" })).toEqual(runStackComponents({}));
+    expect(simulationPayloadComponents({ runner: "gazebo_custom" })).toEqual(CUSTOM);
+    expect(simulationPayloadComponents({ runner: "gazebo_custom", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }));
+    expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", mode: "usv_navigation" }));
     expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
     expect(jobComponents("monitoring.post_hoc")).toEqual(["monitoring"]);
     expect(jobComponents("calibration.deviation")).toEqual(["calibration"]);

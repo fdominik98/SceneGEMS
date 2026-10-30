@@ -112,11 +112,8 @@ const nodeViewFields = z.object({
   last_seen_at: isoTime,
 });
 
-/**
- * A node of the operator API. `capabilities` repeats `slots` under the name the campaign wizard's
- * resources step reads; it goes once that step reads `slots`.
- */
-export const nodeViewSchema = nodeViewFields.transform((node) => ({ ...node, capabilities: node.slots }));
+/** A node of the operator API. */
+export const nodeViewSchema = nodeViewFields;
 
 export const nodeListSchema = z.array(nodeViewSchema);
 

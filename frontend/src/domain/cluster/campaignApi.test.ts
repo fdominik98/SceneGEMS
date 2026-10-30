@@ -41,10 +41,20 @@ describe("catalog schemas", () => {
 
   it("parses the stacks catalog with its groups, monitors and generators", () => {
     const parsed = catalogStacksSchema.parse(sampleCatalogStacks);
-    expect(parsed.stacks.map((stack) => stack.id)).toEqual(["kinematic.replay", "kinematic.usv_navigation", "ardupilot_sim.replay"]);
+    expect(parsed.stacks.map((stack) => stack.id)).toEqual([
+      "kinematic.replay",
+      "kinematic.usv_navigation",
+      "ardupilot_sim.replay",
+      "ardupilot_sim.usv_navigation",
+      "gazebo_custom.replay",
+      "gazebo_custom.usv_navigation",
+    ]);
     expect(parsed.stacks[1].groups[0].parameters.map((parameter) => parameter.key)).toContain("goal");
     expect(parsed.stacks[0].environment.wind).toBe("unsupported");
-    expect(parsed.stacks.map((stack) => stack.supports_early_stop)).toEqual([true, true, false]);
+    expect(parsed.stacks.map((stack) => stack.supports_early_stop)).toEqual([true, true, false, false, false, false]);
+    expect(parsed.stacks[4].stack_section).toEqual({ simulation_layer: "gazebo", control_layer: "custom", mode: "replay" });
+    const older = catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], control_layer: undefined, stack_section: undefined }); // an older master leaves both out
+    expect([older.control_layer, older.stack_section]).toEqual([undefined, undefined]);
     expect(parsed.stacks[2].groups[0].key).toBe("geofence");
     expect(catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], supports_early_stop: undefined }).supports_early_stop).toBe(true); // an older master leaves it out
     expect(parsed.trajectory_generators.find((generator) => generator.id === "straight")?.params_field).toBeNull();

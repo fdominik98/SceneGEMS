@@ -123,6 +123,8 @@ export interface PlaybackState {
   errorMessage: string | null;
   isPlaying: boolean;
   speed: number;
+  /** Playback waits at the end of the buffered frames instead of stopping, while frames keep arriving. */
+  holdAtLiveEdge: boolean;
   /** When true, ingested push frames move the play head to the latest timestamp. */
   followLatestPush: boolean;
   /** Active scenario load id; trajectory chunks must match this when set. */
@@ -219,6 +221,8 @@ export interface PlaybackState {
   cancelSceneGeneration: () => void;
   clearVisualizedScenario: () => void;
   setPlaying: (value: boolean) => void;
+  /** Keep playing at the end of the buffered frames, waiting for more (a cluster run whose watch speed is the playback speed). */
+  setHoldAtLiveEdge: (value: boolean) => void;
   setSpeed: (value: number) => void;
   stepBy: (delta: number) => void;
   seek: (timestamp: number) => void;
@@ -250,6 +254,7 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     errorMessage: null,
     isPlaying: false,
     speed: 1,
+    holdAtLiveEdge: false,
     followLatestPush: true,
     activeScenarioId: null,
     serverTimeStep: null,
@@ -542,6 +547,7 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
         ...clearedLoadedPlaybackState,
       }),
     setPlaying: (value) => set({ isPlaying: value }),
+    setHoldAtLiveEdge: (value) => set({ holdAtLiveEdge: value }),
     setSpeed: (value) => set({ speed: Math.max(0.1, Math.min(240, value)) }),
     stepBy: (delta) => {
       const state = get();

@@ -51,7 +51,14 @@ export const catalogStackSchema = z.object({
   label: z.string(),
   description: z.string(),
   simulation_layer: z.string(),
+  /** The control layer of the run's vessels; an older master leaves it out. */
+  control_layer: z.string().nullish(),
   mode: z.string(),
+  /**
+   * The fields of a run's stack section that pick this option, as the config writes them
+   * (simulation_layer and mode, and control_layer for the custom controller); an older master leaves it out.
+   */
+  stack_section: z.record(z.string(), z.string()).nullish(),
   available: z.boolean(),
   reasons: z.array(z.string()),
   repeatability_tier: z.string().nullable(),

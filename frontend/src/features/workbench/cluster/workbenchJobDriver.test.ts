@@ -233,7 +233,7 @@ describe("workbench job driver", () => {
     driver.jobPollMs = 1;
     const ref = { sha256: TRAJECTORY_SHA, size_bytes: 9, kind: "trajectories", media_type: "application/json", pointer: null };
     await driver.runSimulationEntry(
-      { where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "gazebo", speedup: 3, components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], summary: "" },
+      { where: "cluster", jobType: "simulation", runner: "ardupilot", simulationLayer: "gazebo", mode: "replay", ownShipId: null, speedup: 3, components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], summary: "" },
       {
         input: { label: "planned", origin: "history", ref, source: { campaign_id: "c1", case_id: 5, step: "trajectory_generation" } },
         scenarioContent: null,

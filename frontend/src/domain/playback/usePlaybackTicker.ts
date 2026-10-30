@@ -33,8 +33,8 @@ export function usePlaybackTicker(store: PlaybackStore = usePlaybackStore) {
       const next = Math.min(state.playbackCursor + state.speed * elapsedSec, maxT);
       state.advancePlayback(next);
       // Stop at the end of the buffered trajectory instead of spinning RAF forever
-      // (which also left the Play/Pause button stuck showing "Pause").
-      if (maxT > minT && next >= maxT) {
+      // (which also left the Play/Pause button stuck showing "Pause"), unless more frames are on their way.
+      if (maxT > minT && next >= maxT && !state.holdAtLiveEdge) {
         state.setPlaying(false);
         lastTickRef.current = null;
         rafRef.current = null;

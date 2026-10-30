@@ -36,10 +36,11 @@ const LAYER_WHERE: Record<string, string> = {
   "simulation_layer/gazebo": "on Gazebo",
 };
 
-/** Where runs with these components are simulated ("on Gazebo", "on the kinematic layer with USV Navigation"). */
+/** Where runs with these components are simulated ("on Gazebo", "on the custom controller with Gazebo", "on the kinematic layer with USV Navigation"). */
 function simulatedWhere(components: readonly string[]): string {
   const layer = components.find((component) => component.startsWith("simulation_layer/"));
-  const where = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
+  const layerWhere = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
+  const where = components.includes("control_layer/custom") ? `on the custom controller with ${layerWhere.replace(/^on /, "")}` : layerWhere;
   return components.includes("asv_software/usv_navigation") ? `${where} with USV Navigation` : where;
 }
 
@@ -275,6 +276,11 @@ export function startBlocker(plan: ResourcePlan | null): string | null {
   }
   const names = plan.missing.map(needLabel);
   return `No usable machine of the campaign runs ${listed(names)}.`;
+}
+
+/** A need's key: its stage and components, since a campaign whose runs mix stacks has one simulation need per component set. */
+export function needKey(capability: RequiredCapability): string {
+  return `${capability.stage}:${capability.components.join(",")}`;
 }
 
 /** A need in a sentence: the job type, and for a simulation the components it needs ("simulation with Replay, ArduPilot and Gazebo"). */

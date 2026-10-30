@@ -43,7 +43,7 @@ describe("operator API schemas", () => {
     const node = nodeViewSchema.parse(sampleNode());
     expect(node.machine).toBe("lab-gpu-1");
     expect(node.slots.simulation).toEqual({ slots: 8, slots_in_use: 8 });
-    expect(node.capabilities, "the slots under the name the wizard reads").toBe(node.slots);
+    expect(node, "no capabilities alias of the slots").not.toHaveProperty("capabilities");
     expect(node.components[2]).toEqual({ component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" });
 
     const { machine: _machine, ...withoutMachine } = sampleNode();

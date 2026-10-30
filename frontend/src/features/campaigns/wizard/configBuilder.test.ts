@@ -138,6 +138,30 @@ describe("buildCampaignConfig", () => {
     expect(text).toContain("goal: [100, -20.5]");
   });
 
+  it("writes the stack section that picks the catalog option: the control layer only for the custom controller", () => {
+    const draft = exitDraft();
+    const stackOf = (stackId: string) => {
+      draft.runs[0] = { ...draft.runs[0], stackId, stackParameters: {}, groups: {} };
+      return (buildCampaignConfig(draft, catalog).execution as { runs: { stack: Record<string, unknown> }[] }).runs[0].stack;
+    };
+    expect(stackOf("ardupilot_sim.usv_navigation")).toEqual({ simulation_layer: "ardupilot_sim", mode: "usv_navigation" });
+    expect(stackOf("ardupilot_sim.replay")).toEqual({ simulation_layer: "ardupilot_sim", mode: "replay" });
+    expect(stackOf("gazebo_custom.replay")).toEqual({ simulation_layer: "gazebo", control_layer: "custom", mode: "replay" });
+    const older = { ...catalog, stacks: catalog.stacks.map((stack) => ({ ...stack, stack_section: undefined })) };
+    draft.runs[0].stackId = "kinematic.usv_navigation";
+    expect((buildCampaignConfig(draft, older).execution as { runs: { stack: Record<string, unknown> }[] }).runs[0].stack).toEqual({
+      simulation_layer: "kinematic",
+      mode: "usv_navigation",
+    }); // an older master's catalog
+  });
+
+  it("keeps the wind and waves of the custom controller, which supports them", () => {
+    const draft = exitDraft();
+    Object.assign(draft.runs[0], { stackId: "gazebo_custom.replay", groups: {}, windVector: [0, 3, 0], waves: { amplitude: 0.5, period: 5, steepness: 0, direction: [1, 0] } });
+    const run = (buildCampaignConfig(draft, catalog).execution as { runs: Record<string, unknown>[] }).runs[0];
+    expect(run.environment).toEqual({ wind_vector: [0, 3, 0], waves: { amplitude: 0.5, period: 5, steepness: 0, direction: [1, 0] } });
+  });
+
   it("drops the environment of a stack that does not support it", () => {
     const draft = exitDraft();
     Object.assign(draft.runs[0], { windVector: [1, 2, 0], waves: { amplitude: 1, period: 2, steepness: 0.1, direction: [1, 0] } });

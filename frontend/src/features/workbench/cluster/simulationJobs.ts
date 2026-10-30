@@ -5,18 +5,22 @@ import type { AsvSoftware, ControlLayer, GlobalSimulatorType, SimulationContext 
 
 /**
  * Where a workbench simulation runs. A setup a runner of the cluster's simulation job runs goes
- * there as one job, judged live by the COLREGS monitor in the job: kinematic replay or USV
- * Navigation on the kinematic layer (runner kinematic), or replay on ArduPilot SITL or Gazebo over
- * the lockstep MAVLink adapter (runner ardupilot). Every other setup is a live session on the
- * master over the MQTT broker: real vessels and Mission Planner are only ever run that way, and the
- * stacks no runner runs yet (the custom controller, USV Navigation on ArduPilot) are run that way for now.
- * A plan names the components its job needs, so the workbench counts the nodes that have them.
+ * there as one job, judged live by the COLREGS monitor in the job: on the kinematic layer (runner
+ * kinematic), on ArduPilot SITL or Gazebo over the lockstep MAVLink adapters (runner ardupilot), or
+ * on the custom controller in a Gazebo world the runner steps (runner gazebo_custom). Each runs
+ * every vessel on replay, or USV Navigation on the own ship and replay on the others. Every other
+ * setup is a live session on the master over the MQTT broker: real vessels and Mission Planner are
+ * only ever run that way, and so are setups no runner takes (USV Navigation on a target ship,
+ * mixed control layers, the weather a job does not apply). A plan names the components its job
+ * needs, so the workbench counts the nodes that have them.
  */
 
 export { SIMULATION_JOB };
 /** The simulation job type, as every cluster plan submits it. */
 export const KINEMATIC_SIMULATION_JOB = SIMULATION_JOB;
 export type ArduPilotSimulationLayer = "ardupilot_sim" | "gazebo";
+/** What a cluster run runs on the vessels: every one replays, or the own ship runs USV Navigation. */
+export type RunMode = "replay" | "usv_navigation";
 
 export interface SimulationVesselSetup {
   vesselId: string;
@@ -39,7 +43,8 @@ export type KinematicRunPlan = {
   where: "cluster";
   jobType: typeof SIMULATION_JOB;
   runner: "kinematic";
-  mode: "replay" | "usv_navigation";
+  mode: RunMode;
+  /** The vessel that runs USV Navigation; null for replay, or for the scene's own ship. */
   ownShipId: number | null;
   /** The components the job needs, every layer of every vessel's stack. */
   components: string[];
@@ -51,12 +56,26 @@ export type ArduPilotRunPlan = {
   jobType: typeof SIMULATION_JOB;
   runner: "ardupilot";
   simulationLayer: ArduPilotSimulationLayer;
+  mode: RunMode;
+  ownShipId: number | null;
   speedup: number;
   components: string[];
   summary: string;
 };
 
-export type ClusterRunPlan = KinematicRunPlan | ArduPilotRunPlan;
+export type GazeboCustomRunPlan = {
+  where: "cluster";
+  jobType: typeof SIMULATION_JOB;
+  runner: "gazebo_custom";
+  mode: RunMode;
+  ownShipId: number | null;
+  /** The wind of the world and of the controller's hulls, [east, north, up] m/s. */
+  windVector: [number, number, number];
+  components: string[];
+  summary: string;
+};
+
+export type ClusterRunPlan = KinematicRunPlan | ArduPilotRunPlan | GazeboCustomRunPlan;
 
 export type SimulationRunPlan = ClusterRunPlan | { where: "session"; reason: string };
 
@@ -65,13 +84,33 @@ const ARDUPILOT_LAYERS: Partial<Record<GlobalSimulatorType, ArduPilotSimulationL
   Gazebo: "gazebo",
 };
 
-function isReplayOnKinematic(vessel: SimulationVesselSetup): boolean {
-  return vessel.asvSoftware === "replay" && vessel.controlLayer === "none";
+type ControlLayerOfPlan = "none" | "ardupilot" | "custom";
+
+/** The run mode of vessels that all sit on one control layer: replay, or USV Navigation on the own ship alone; null when no runner takes it. */
+function modeOf(vessels: readonly SimulationVesselSetup[]): Pick<KinematicRunPlan, "mode" | "ownShipId"> | null {
+  const navigators = vessels.filter((vessel) => vessel.asvSoftware !== "replay");
+  if (navigators.length === 0) {
+    return { mode: "replay", ownShipId: null };
+  }
+  const ownShip = navigators[0];
+  if (navigators.length === 1 && ownShip.isOwnShip && ownShip.asvSoftware === "usv_navigation") {
+    const ownShipId = Number.parseInt(ownShip.vesselId, 10);
+    return { mode: "usv_navigation", ownShipId: Number.isFinite(ownShipId) ? ownShipId : null };
+  }
+  return null;
 }
 
-function isReplayOnArduPilot(vessel: SimulationVesselSetup): boolean {
-  return vessel.asvSoftware === "replay" && vessel.controlLayer === "ardupilot";
+function onControlLayer(vessels: readonly SimulationVesselSetup[], controlLayer: ControlLayerOfPlan): boolean {
+  return vessels.every((vessel) => vessel.controlLayer === controlLayer);
 }
+
+const SUMMARIES: Record<ControlLayerOfPlan, Record<RunMode, string>> = {
+  none: { replay: "every vessel replays its trajectory", usv_navigation: "USV Navigation steers the own ship, the others replay" },
+  ardupilot: { replay: "every vessel replays its trajectory through ArduPilot", usv_navigation: "USV Navigation steers the own ship through ArduPilot, the others replay" },
+  custom: { replay: "every vessel follows its trajectory with the custom controller", usv_navigation: "USV Navigation steers the own ship through the custom controller, the others replay" },
+};
+
+const MODE_ONLY = "On the cluster only the own ship may run USV Navigation; this setup runs as a live session.";
 
 export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   const { vessels } = setup;
@@ -81,7 +120,13 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   if (vessels.some((vessel) => vessel.asvSoftware === "mission_planner")) {
     return { where: "session", reason: "Mission Planner is flown from the desktop in a live session." };
   }
+  if (vessels.length === 0) {
+    return { where: "session", reason: "Load a scenario first." };
+  }
   const arduPilotLayer = ARDUPILOT_LAYERS[setup.simulatorType];
+  if (setup.simulatorType === "Gazebo" && onControlLayer(vessels, "custom")) {
+    return planGazeboCustomRun(setup);
+  }
   if (arduPilotLayer !== undefined) {
     return planArduPilotRun(setup, arduPilotLayer);
   }
@@ -91,42 +136,21 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
     return { where: "session", reason: "The kinematic layer has no wind or waves." };
   }
-  if (vessels.length === 0) {
-    return { where: "session", reason: "Load a scenario first." };
+  const mode = onControlLayer(vessels, "none") ? modeOf(vessels) : null;
+  if (mode === null) {
+    return { where: "session", reason: MODE_ONLY };
   }
-  if (vessels.every(isReplayOnKinematic)) {
-    return { where: "cluster", ...kinematicPlan("replay"), ownShipId: null, summary: "every vessel replays its trajectory" };
-  }
-  const navigators = vessels.filter((vessel) => !isReplayOnKinematic(vessel));
-  const ownShip = navigators[0];
-  if (
-    navigators.length === 1 &&
-    ownShip.isOwnShip &&
-    ownShip.asvSoftware === "usv_navigation" &&
-    ownShip.controlLayer === "none"
-  ) {
-    const ownShipId = Number.parseInt(ownShip.vesselId, 10);
-    return {
-      where: "cluster",
-      ...kinematicPlan("usv_navigation"),
-      ownShipId: Number.isFinite(ownShipId) ? ownShipId : null,
-      summary: "USV Navigation steers the own ship, the others replay",
-    };
-  }
-  return { where: "session", reason: "On the cluster only the own ship may run USV Navigation; this setup runs as a live session." };
+  return { where: "cluster", jobType: SIMULATION_JOB, runner: "kinematic", ...mode, components: simulationPayloadComponents({ runner: "kinematic", mode: mode.mode }), summary: SUMMARIES.none[mode.mode] };
 }
 
-function kinematicPlan(mode: KinematicRunPlan["mode"]): Pick<KinematicRunPlan, "jobType" | "runner" | "mode" | "components"> {
-  return { jobType: SIMULATION_JOB, runner: "kinematic", mode, components: simulationPayloadComponents({ runner: "kinematic", mode }) };
-}
-
-/** Replay on SITL or Gazebo runs as one job; the job's stack runs in calm weather. */
+/** Replay or USV Navigation on SITL or Gazebo runs as one job; the job's stack runs in calm weather. */
 function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimulationLayer): SimulationRunPlan {
-  if (setup.vessels.length === 0) {
-    return { where: "session", reason: "Load a scenario first." };
-  }
-  if (!setup.vessels.every(isReplayOnArduPilot)) {
-    return { where: "session", reason: `On the cluster ${setup.simulatorType} runs replay on ArduPilot only; this setup runs as a live session.` };
+  const mode = onControlLayer(setup.vessels, "ardupilot") ? modeOf(setup.vessels) : null;
+  if (mode === null) {
+    return {
+      where: "session",
+      reason: `On the cluster ${setup.simulatorType} runs replay on ArduPilot, with USV Navigation on the own ship only${setup.simulatorType === "Gazebo" ? ", or every vessel on the custom controller" : ""}; this setup runs as a live session.`,
+    };
   }
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
     return { where: "session", reason: "The cluster's ArduPilot job runs in calm weather; with wind or waves the setup runs as a live session." };
@@ -136,9 +160,30 @@ function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimu
     jobType: SIMULATION_JOB,
     runner: "ardupilot",
     simulationLayer,
-    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer }),
+    ...mode,
+    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer, mode: mode.mode }),
     speedup: Math.max(1, Math.round(setup.speedup)),
-    summary: "every vessel replays its trajectory through ArduPilot",
+    summary: SUMMARIES.ardupilot[mode.mode],
+  };
+}
+
+/** The custom controller on Gazebo runs as one job that steps the world itself, in the setup's wind. */
+function planGazeboCustomRun(setup: SimulationSetup): SimulationRunPlan {
+  const mode = modeOf(setup.vessels);
+  if (mode === null) {
+    return { where: "session", reason: MODE_ONLY };
+  }
+  if (setup.waveAmplitude > 0) {
+    return { where: "session", reason: "The cluster's custom controller job takes the wind from the workbench, not the waves; with waves the setup runs as a live session." };
+  }
+  return {
+    where: "cluster",
+    jobType: SIMULATION_JOB,
+    runner: "gazebo_custom",
+    ...mode,
+    windVector: [...setup.windVector],
+    components: simulationPayloadComponents({ runner: "gazebo_custom", mode: mode.mode }),
+    summary: SUMMARIES.custom[mode.mode],
   };
 }
 
@@ -154,9 +199,7 @@ function liveMonitorFields(colregsConstraintsContent: string): Record<string, un
 /** The simulation job's kinematic runner (cluster/node/jobs/simulation_runners/kinematic_runner.py) with the COLREGS monitor live, over the loaded trajectories. */
 export function kinematicSimulationSubmission(plan: KinematicRunPlan, trajectories: Record<string, unknown>, colregsConstraintsContent: string): JobSubmission {
   const payload: Record<string, unknown> = { runner: plan.runner, mode: plan.mode, trajectories, ...liveMonitorFields(colregsConstraintsContent) };
-  if (plan.mode === "usv_navigation" && plan.ownShipId !== null) {
-    payload.own_ship_id = plan.ownShipId;
-  }
+  withOwnShip(payload, plan);
   // A failed run would fail the same way again: the workbench shows it at once.
   return { job_type: plan.jobType, payload, max_attempts: 1 };
 }
@@ -175,12 +218,42 @@ export function arduPilotSimulationSubmission(
   const payload: Record<string, unknown> = {
     runner: plan.runner,
     simulation_layer: plan.simulationLayer,
+    mode: plan.mode,
     trajectories,
     geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
     speedup: plan.speedup,
     ...liveMonitorFields(colregsConstraintsContent),
   };
+  withOwnShip(payload, plan);
   return { job_type: plan.jobType, payload, max_attempts: 1 };
+}
+
+/**
+ * The simulation job's gazebo_custom runner (cluster/node/jobs/simulation_runners/gazebo_custom_runner.py): the custom
+ * controller on a Gazebo world the runner steps, in the setup's wind, with the COLREGS monitor live.
+ */
+export function gazeboCustomSimulationSubmission(
+  plan: GazeboCustomRunPlan,
+  trajectories: Record<string, unknown>,
+  geofence: ReferenceGeofence,
+  colregsConstraintsContent: string
+): JobSubmission {
+  const payload: Record<string, unknown> = {
+    runner: plan.runner,
+    mode: plan.mode,
+    trajectories,
+    environment: { wind_vector: [...plan.windVector] },
+    geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
+    ...liveMonitorFields(colregsConstraintsContent),
+  };
+  withOwnShip(payload, plan);
+  return { job_type: plan.jobType, payload, max_attempts: 1 };
+}
+
+function withOwnShip(payload: Record<string, unknown>, plan: ClusterRunPlan): void {
+  if (plan.mode === "usv_navigation" && plan.ownShipId !== null) {
+    payload.own_ship_id = plan.ownShipId;
+  }
 }
 
 export interface SimulationJobInput {
@@ -191,9 +264,13 @@ export interface SimulationJobInput {
 
 /** The job a cluster plan submits. */
 export function simulationSubmission(plan: ClusterRunPlan, input: SimulationJobInput): JobSubmission {
-  return plan.runner === "kinematic"
-    ? kinematicSimulationSubmission(plan, input.trajectories, input.colregsConstraintsContent)
-    : arduPilotSimulationSubmission(plan, input.trajectories, input.geofence, input.colregsConstraintsContent);
+  if (plan.runner === "kinematic") {
+    return kinematicSimulationSubmission(plan, input.trajectories, input.colregsConstraintsContent);
+  }
+  if (plan.runner === "gazebo_custom") {
+    return gazeboCustomSimulationSubmission(plan, input.trajectories, input.geofence, input.colregsConstraintsContent);
+  }
+  return arduPilotSimulationSubmission(plan, input.trajectories, input.geofence, input.colregsConstraintsContent);
 }
 
 const LAYER_LABELS: Record<ArduPilotSimulationLayer, string> = { ardupilot_sim: "ArduPilot SITL", gazebo: "ArduPilot SITL on Gazebo" };
@@ -203,10 +280,21 @@ export function describeClusterPlan(plan: ClusterRunPlan): string {
   if (plan.runner === "kinematic") {
     return `Runs on the cluster as one kinematic job (${plan.summary}), judged by the COLREGS monitor as it runs.`;
   }
-  return `Runs on the cluster as one ${LAYER_LABELS[plan.simulationLayer]} job (${plan.summary}) at ${plan.speedup}x real time, judged by the COLREGS monitor as it runs.`;
+  if (plan.runner === "gazebo_custom") {
+    const windy = plan.windVector.some((component) => component !== 0);
+    return `Runs on the cluster as one Gazebo job with the custom controller (${plan.summary})${windy ? " in the setup's wind" : ""}, judged by the COLREGS monitor as it runs.`;
+  }
+  return (
+    `Runs on the cluster as one ${LAYER_LABELS[plan.simulationLayer]} job (${plan.summary}) at ${plan.speedup}x real time, judged by the COLREGS monitor as it runs. ` +
+    "SITL runs free, so the watch speed plays the arriving run in the browser."
+  );
 }
 
-/** Whether the watch speed paces the run; SITL runs free at the job's speedup instead. */
+/**
+ * Whether the watch speed paces the run on the node: the kinematic and the custom controller's runners
+ * step their run themselves. SITL runs free at the job's speedup, so an ArduPilot run's watch speed
+ * is the playback speed of the shown run in the browser instead.
+ */
 export function isPacedByWatchSpeed(plan: ClusterRunPlan): boolean {
-  return plan.runner === "kinematic";
+  return plan.runner !== "ardupilot";
 }
