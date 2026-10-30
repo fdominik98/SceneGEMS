@@ -6,7 +6,7 @@ from tests.scenegems_tool.persistence.stores.builders import START
 
 SCENE = JobType.SCENE_GENERATION
 TRAJECTORY = JobType.TRAJECTORY_GENERATION
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 
 
 def test_free_job_types_need_a_free_slot():
@@ -43,6 +43,7 @@ def test_claim_query_filters_in_sql():
     assert "job.available_at <= %(available_at_1)s" in sql
     assert "job.job_type IN" in sql
     assert "job.required_labels <@ %(required_labels_1)s::JSONB" in sql
+    assert "job.required_components <@ %(required_components_1)s::JSONB" in sql
     assert "job.required_fingerprints <@ %(required_fingerprints_1)s::JSONB" in sql
     assert "job.min_memory_mb <= %(min_memory_mb_1)s" in sql
     assert "job.min_cpus <= %(min_cpus_1)s" in sql
@@ -53,6 +54,11 @@ def test_claim_query_excludes_held_back_jobs_only_when_asked():
     assert "NOT IN" not in _compiled_query()
     query = next_queued_job_query([SCENE], {}, {}, free_memory_mb=4000, cpus=4.0, exclude_job_ids=["job-a", "job-b"], now=START, node_id="node-1")
     assert "job.id NOT IN (__[POSTCOMPILE_id_1])" in str(query.compile(dialect=postgresql.dialect()))
+
+
+def test_claim_query_binds_the_nodes_components():
+    params = next_queued_job_query([SCENE], {}, {}, free_memory_mb=4000, cpus=4.0, now=START, node_id="node-7", components=["scene_generation"]).compile(dialect=postgresql.dialect()).params
+    assert params["required_components_1"] == ["scene_generation"]
 
 
 def test_claim_query_binds_the_node_for_allowed_nodes():

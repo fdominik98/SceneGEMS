@@ -23,7 +23,7 @@ from pydantic import AwareDatetime, Field
 
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame, ProtocolModel
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer, NodeResources, SlotUsage
+from scenegems_tool.cluster.protocol.node_description import NodeResources, SlotOffer, SlotUsage
 
 DEFAULT_OBSERVED_SPEED = 10.0  # an observed run's pace as a multiple of real time, unless the observer chooses one
 MAX_OBSERVED_SPEED = 1000.0
@@ -39,7 +39,8 @@ class Hello(ProtocolFrame):
     node_name: str
     software_revision: str  # git commit of the checkout the node runs
     machine: Optional[str] = None  # the machine the node runs on, as the deployment tool names it
-    capabilities: List[CapabilityOffer]
+    slots: List[SlotOffer]  # how many jobs of each type the node runs at once
+    components: List[str]  # what it runs them with (cluster/fingerprints/components.py), images installed
     labels: Dict[str, str] = Field(default_factory=dict)
     resources: NodeResources
     fingerprints: Dict[str, str] = Field(default_factory=dict)  # image name to build fingerprint

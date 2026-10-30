@@ -142,7 +142,8 @@ def node(master, tmp_path_factory):
         "SCENEGEMS_MASTER_URL": f"http://{HOST}:{master.node_port}",
         "SCENEGEMS_MASTER_ID": master.master_id,
         "SCENEGEMS_NODE_NAME": node_name,
-        "SCENEGEMS_NODE_CAPABILITIES": "simulation.kinematic:1",
+        "SCENEGEMS_NODE_SLOTS": "simulation:1",
+        "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic",
         "SCENEGEMS_NODE_IMAGE_TAG": NODE_IMAGE_TAG,
         "SCENEGEMS_SOFTWARE_REVISION": "live-simulation-test",
         **{variable: _image(subsystem) for subsystem, variable in IMAGE_ENVIRONMENT_VARIABLES.items()},
@@ -199,8 +200,8 @@ async def _watch(master: Master, topic: str, job_id: str):
 
 def test_a_browser_watches_an_observed_kinematic_run_at_its_speed(master, node):
     trajectories = _trajectories()
-    payload = {"trajectories": trajectories.to_dict(), "monitor": "live", "include_trajectories": False}
-    job = master.post(JOBS_PATH, JobSubmission(job_type=JobType.SIMULATION_KINEMATIC, payload=payload).model_dump(mode="json"))
+    payload = {"runner": "kinematic", "trajectories": trajectories.to_dict(), "monitor": "live", "include_trajectories": False}
+    job = master.post(JOBS_PATH, JobSubmission(job_type=JobType.SIMULATION, payload=payload).model_dump(mode="json"))
     leased = _wait_for_attempt(master, job["job_id"])
     topic = instance_topic(leased["lease_owner"], job_instance(job["job_id"], 1))
 

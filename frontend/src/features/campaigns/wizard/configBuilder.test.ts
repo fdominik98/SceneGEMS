@@ -172,7 +172,7 @@ describe("buildCampaignConfig", () => {
     draft.resources.nodes = ["node-a"];
     draft.resources.queueDepth.simulate = 4;
     expect(buildCampaignConfig(draft, catalog).resources).toEqual({ priority: 0 });
-    const cluster: BuilderCatalog = { ...catalog, slots: { scene_generation: 40, "simulation.kinematic": 12, "monitoring.post_hoc": 64 } };
+    const cluster: BuilderCatalog = { ...catalog, slots: { scene_generation: 40, simulation: 12, "monitoring.post_hoc": 64 } };
     expect(buildCampaignConfig(draft, cluster).resources).toEqual({ queue_depth: { generate_scene: 40, monitor: 64 }, priority: 0 });
   });
 

@@ -24,7 +24,7 @@ from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_h
 pytestmark = pytest.mark.anyio
 
 NODE = "lab-1"
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 
 
 @pytest.fixture

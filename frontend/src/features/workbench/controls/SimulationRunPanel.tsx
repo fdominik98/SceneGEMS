@@ -72,7 +72,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
 
   const plan = setup ? planSimulationRun(setup) : null;
   const onCluster = plan?.where === "cluster";
-  const resources = streamControls.clusterResources(plan?.where === "cluster" ? plan.jobType : KINEMATIC_SIMULATION_JOB);
+  const resources = plan?.where === "cluster" ? streamControls.clusterResources(plan.jobType, plan.components) : streamControls.clusterResources(KINEMATIC_SIMULATION_JOB);
   const clusterActive = isClusterRunActive(run.status);
   const sessionStatus = SESSION_STATUS[simulationStatus] ?? { label: simulationStatus, tone: "idle" as const };
   const status = onCluster ? CLUSTER_STATUS[run.status] : sessionStatus;

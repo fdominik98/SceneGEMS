@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from scenegems_tool.cluster.protocol.messages import Heartbeat, Hello
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.database import transaction
-from scenegems_tool.persistence.schema import JobRow, NodeCapabilityRow, NodeFingerprintRow, NodeRow, NodeStatus
+from scenegems_tool.persistence.schema import JobRow, NodeCapabilityRow, NodeComponentRow, NodeFingerprintRow, NodeRow, NodeStatus
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES
 from scenegems_tool.persistence.stores.node_records import NodeRecord
 
@@ -27,7 +27,7 @@ class NodeStore:
         self._clock = clock
 
     def register(self, hello: Hello) -> NodeRecord:
-        """Creates or updates the node from its Hello and replaces its capabilities and fingerprints.
+        """Creates or updates the node from its Hello and replaces its slots, components and fingerprints.
 
         Slot usage starts at zero until the first heartbeat.
         """
@@ -57,8 +57,10 @@ class NodeStore:
                 )
             )
             session.execute(delete(NodeCapabilityRow).where(NodeCapabilityRow.node_id == hello.node_id))
+            session.execute(delete(NodeComponentRow).where(NodeComponentRow.node_id == hello.node_id))
             session.execute(delete(NodeFingerprintRow).where(NodeFingerprintRow.node_id == hello.node_id))
-            session.add_all(NodeCapabilityRow(node_id=hello.node_id, job_type=offer.job_type, slots=offer.slots, slots_in_use=0) for offer in hello.capabilities)
+            session.add_all(NodeCapabilityRow(node_id=hello.node_id, job_type=offer.job_type, slots=offer.slots, slots_in_use=0) for offer in hello.slots)
+            session.add_all(NodeComponentRow(node_id=hello.node_id, component=component) for component in sorted(set(hello.components)))
             session.add_all(NodeFingerprintRow(node_id=hello.node_id, image=image, fingerprint=fingerprint) for image, fingerprint in hello.fingerprints.items())
             session.flush()
             return NodeRecord.from_row(self._load(session, hello.node_id))
@@ -102,7 +104,7 @@ class NodeStore:
             return sorted(session.execute(statement).scalars())
 
     def remove_offline(self, node_id: str) -> Optional[bool]:
-        """Deletes an offline node with its capabilities and fingerprints; None for an unknown node, False for one that is not offline or still holds a lease.
+        """Deletes an offline node with its slots, components and fingerprints; None for an unknown node, False for one that is not offline or still holds a lease.
 
         The node's finished and queued jobs lose their lease owner, which has a foreign key to the node; run records and events keep the node id they carry.
         A node that is heard from again registers anew.

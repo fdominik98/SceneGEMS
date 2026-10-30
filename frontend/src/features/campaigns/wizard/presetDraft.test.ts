@@ -111,7 +111,7 @@ describe("presetConfigOf", () => {
     draft.steps = ["trajectory_generation", "simulation"];
     draft.input.items = [{ id: "i", name: "scene", ref: { sha256: "a".repeat(64), size_bytes: 1, kind: "scene" }, source: { file: "s.json" }, uploadedAt: 0 }];
     draft.runs = [{ ...emptyRun("kinematic.replay"), id: "r" }];
-    const config = presetConfigOf(draft, { ...catalog, slots: { "simulation.kinematic": 64 } });
+    const config = presetConfigOf(draft, { ...catalog, slots: { simulation: 64 } });
     expect(config.input).toBeUndefined();
     expect(config.resources).toEqual({ priority: 0 });
     expect(draftFromConfig(config, catalog).steps).toEqual(["trajectory_generation", "simulation"]);

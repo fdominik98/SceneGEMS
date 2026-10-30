@@ -24,12 +24,20 @@ function setup(vessels: SimulationVesselSetup[], overrides: Partial<SimulationSe
 
 describe("where a simulation runs", () => {
   it("runs a kinematic replay on the cluster", () => {
-    expect(planSimulationRun(setup([vessel("0"), vessel("1")]))).toMatchObject({ where: "cluster", jobType: "simulation.kinematic", mode: "replay", ownShipId: null });
+    expect(planSimulationRun(setup([vessel("0"), vessel("1")]))).toMatchObject({
+      where: "cluster",
+      jobType: "simulation",
+      runner: "kinematic",
+      mode: "replay",
+      ownShipId: null,
+      components: ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"],
+    });
   });
 
   it("runs USV Navigation on the own ship on the cluster", () => {
     const plan = planSimulationRun(setup([vessel("0", { asvSoftware: "usv_navigation" }), vessel("1")]));
     expect(plan).toMatchObject({ where: "cluster", mode: "usv_navigation", ownShipId: 0 });
+    expect(clusterPlan(plan).components).toEqual(["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
   });
 
   it("keeps real vessels and Mission Planner in a live session", () => {
@@ -41,11 +49,20 @@ describe("where a simulation runs", () => {
     const onArduPilot = [vessel("0", { controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot" })];
     expect(planSimulationRun(setup(onArduPilot, { simulatorType: "ArduPilot Sim", speedup: 5 }))).toMatchObject({
       where: "cluster",
-      jobType: "simulation.ardupilot_sim",
+      jobType: "simulation",
+      runner: "ardupilot",
       simulationLayer: "ardupilot_sim",
       speedup: 5,
+      components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"],
     });
-    expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({ where: "cluster", jobType: "simulation.gazebo", simulationLayer: "gazebo", speedup: 1 });
+    expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({
+      where: "cluster",
+      jobType: "simulation",
+      runner: "ardupilot",
+      simulationLayer: "gazebo",
+      speedup: 1,
+      components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"],
+    });
   });
 
   it("keeps ArduPilot setups the job does not run in a live session", () => {
@@ -66,13 +83,13 @@ describe("where a simulation runs", () => {
 
   it("builds the kinematic job with the live monitor", () => {
     const plan = clusterPlan(planSimulationRun(setup([vessel("0", { asvSoftware: "usv_navigation" }), vessel("1")])));
-    if (plan.jobType !== "simulation.kinematic") {
+    if (plan.runner !== "kinematic") {
       throw new Error("expected a kinematic plan");
     }
     const submission = kinematicSimulationSubmission(plan, { scene_list: [] }, "rules");
     expect(submission).toEqual({
-      job_type: "simulation.kinematic",
-      payload: { mode: "usv_navigation", trajectories: { scene_list: [] }, monitor: "live", colregs_constraints_content: "rules", include_trajectories: true, own_ship_id: 0 },
+      job_type: "simulation",
+      payload: { runner: "kinematic", mode: "usv_navigation", trajectories: { scene_list: [] }, monitor: "live", colregs_constraints_content: "rules", include_trajectories: true, own_ship_id: 0 },
       max_attempts: 1,
     });
   });
@@ -80,8 +97,9 @@ describe("where a simulation runs", () => {
   it("builds the ArduPilot job with the reference geofence", () => {
     const plan = clusterPlan(planSimulationRun(setup([vessel("0", { controlLayer: "ardupilot" })], { simulatorType: "Gazebo", speedup: 10 })));
     expect(simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules", geofence: GEOFENCE })).toEqual({
-      job_type: "simulation.gazebo",
+      job_type: "simulation",
       payload: {
+        runner: "ardupilot",
         simulation_layer: "gazebo",
         trajectories: { scene_list: [] },
         geofence: GEOFENCE,
@@ -92,7 +110,7 @@ describe("where a simulation runs", () => {
       },
       max_attempts: 1,
     });
-    if (plan.jobType !== "simulation.gazebo") {
+    if (plan.runner !== "ardupilot") {
       throw new Error("expected an ArduPilot plan");
     }
     expect(arduPilotSimulationSubmission(plan, {}, { ...GEOFENCE, radius_meters: 20 }, "  ").payload).toMatchObject({ geofence: { radius_meters: 20 }, colregs_constraints_content: null });
@@ -101,8 +119,8 @@ describe("where a simulation runs", () => {
   it("submits a kinematic plan as the kinematic job", () => {
     const plan = clusterPlan(planSimulationRun(setup([vessel("0")])));
     expect(simulationSubmission(plan, { trajectories: {}, colregsConstraintsContent: "", geofence: GEOFENCE })).toMatchObject({
-      job_type: "simulation.kinematic",
-      payload: { mode: "replay", monitor: "live", colregs_constraints_content: null },
+      job_type: "simulation",
+      payload: { runner: "kinematic", mode: "replay", monitor: "live", colregs_constraints_content: null },
     });
   });
 

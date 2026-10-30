@@ -9,9 +9,7 @@ def test_job_type_wire_values_are_stable():
     assert {job_type.value for job_type in JobType} == {
         "scene_generation",
         "trajectory_generation",
-        "simulation.kinematic",
-        "simulation.ardupilot_sim",
-        "simulation.gazebo",
+        "simulation",
         "monitoring.post_hoc",
         "calibration.deviation",
     }

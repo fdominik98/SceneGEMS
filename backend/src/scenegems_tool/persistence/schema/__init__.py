@@ -38,7 +38,7 @@ from scenegems_tool.persistence.schema.campaign_tables import (
     VerdictState,
 )
 from scenegems_tool.persistence.schema.job_tables import HELD_UNTIL, JobEventKind, JobEventRow, JobRow
-from scenegems_tool.persistence.schema.node_tables import NodeCapabilityRow, NodeFingerprintRow, NodeRow, NodeStatus
+from scenegems_tool.persistence.schema.node_tables import NodeCapabilityRow, NodeComponentRow, NodeFingerprintRow, NodeRow, NodeStatus
 from scenegems_tool.persistence.schema.setting_tables import CLUSTER_DOMAIN_ROW_ID, CampaignPresetRow, ClusterDomainRow
 
 __all__ = [
@@ -67,6 +67,7 @@ __all__ = [
     "JobRow",
     "MonitorImplementation",
     "NodeCapabilityRow",
+    "NodeComponentRow",
     "NodeFingerprintRow",
     "NodeRow",
     "NodeStatus",

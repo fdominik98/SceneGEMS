@@ -27,7 +27,7 @@ from scenegems_tool.cluster.protocol.messages import (
 )
 from tests.scenegems_tool.cluster.node.daemon.conftest import make_job, make_offer, wait_for
 
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 
 
 class RecordingSender:
@@ -58,9 +58,13 @@ class Clock:
 
 class FakeNode:
     node_id = "n1"
+    components = frozenset({"asv_software/replay", "control_layer/none", "simulation_layer/kinematic"})
 
     def __init__(self, clock) -> None:
         self.observations = JobObservations(clock)
+
+    def lacks(self, job):
+        return [component for component in job.requirements.components if component not in self.components]
 
 
 @pytest.fixture
@@ -106,8 +110,18 @@ def test_offers_beyond_the_slots_and_unknown_types_are_rejected(manager, sender,
     manager.on_offer(make_offer("c"))
     manager.on_offer(make_offer("t", make_job("job-t", job_type=JobType.TRAJECTORY_GENERATION)))
     reasons = {frame.lease_id: frame.reason for frame in sender.of(LeaseReject)}
-    assert reasons == {"c": "all 2 simulation.kinematic slots are in use", "t": "this node offers no trajectory_generation slots"}
+    assert reasons == {"c": "all 2 simulation slots are in use", "t": "this node offers no trajectory_generation slots"}
     assert jobs.most_running == 2
+
+
+def test_an_offer_needing_a_component_the_node_lacks_is_rejected(manager, sender, jobs):
+    from scenegems_tool.cluster.protocol.jobs import JobRequirements
+
+    gazebo = make_job("job-g").model_copy(update={"requirements": JobRequirements(components=["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"])})
+    manager.on_offer(make_offer("g", gazebo))
+    (reject,) = sender.of(LeaseReject)
+    assert reject.reason == "this node does not offer the components control_layer/ardupilot, simulation_layer/gazebo"
+    assert manager.slots_in_use() == {}
 
 
 def test_a_repeated_offer_of_a_held_lease_is_accepted_again_without_a_second_run(manager, sender, jobs):

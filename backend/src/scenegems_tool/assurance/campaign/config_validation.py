@@ -32,7 +32,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, item_class_spec, scenario_class_spec
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import ClassSpec
 from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId

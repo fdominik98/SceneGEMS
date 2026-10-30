@@ -7,7 +7,7 @@ import type { JobTypeResources } from "../cluster/workbenchResources";
 import { useEntrySeedStore } from "../pages/entrySeedStore";
 import { SceneGenerationControls } from "./SceneGenerationControls";
 
-const RESOURCES: JobTypeResources = { jobType: "scene_generation", nodes: 2, slots: 4, freeSlots: 3, blocker: null };
+const RESOURCES: JobTypeResources = { jobType: "scene_generation", components: ["scene_generation"], nodes: 2, slots: 4, freeSlots: 3, blocker: null };
 
 const VALID_SCENE: GeneratedSceneData = {
   scene: sampleFrames[0]!,

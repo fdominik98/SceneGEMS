@@ -5,7 +5,7 @@ import pytest
 from scenegems_tool.cluster.node.daemon.leases.slot_table import SlotTable
 from scenegems_tool.cluster.protocol.jobs import JobType
 
-KINEMATIC, SCENES = JobType.SIMULATION_KINEMATIC, JobType.SCENE_GENERATION
+KINEMATIC, SCENES = JobType.SIMULATION, JobType.SCENE_GENERATION
 
 
 def test_slots_are_taken_up_to_the_count_and_given_back():

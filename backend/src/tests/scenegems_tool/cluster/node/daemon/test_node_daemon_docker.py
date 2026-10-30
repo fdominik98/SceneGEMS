@@ -107,7 +107,8 @@ def _node_container(cluster, tmp_path_factory):
         "SCENEGEMS_MASTER_ID": cluster.master_id,
         "SCENEGEMS_BROKER_PORT": str(cluster.broker_port),
         "SCENEGEMS_NODE_NAME": node_name,
-        "SCENEGEMS_NODE_CAPABILITIES": "simulation.kinematic:2,scene_generation:1",
+        "SCENEGEMS_NODE_SLOTS": "simulation:2,scene_generation:1",
+        "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_NODE_LABELS": "test=docker",
         "SCENEGEMS_NODE_IMAGE_TAG": NODE_IMAGE_TAG,
         "SCENEGEMS_SOFTWARE_REVISION": "docker-test",
@@ -192,12 +193,12 @@ def test_the_node_container_connects_without_pairing_and_runs_jobs_within_its_sl
     master_id, node_id = cluster.master_id, hello.node_id
     assert hello.node_name == node.name.rsplit(f"{master_id}-", 1)[1] == node_id and hello.labels == {"test": "docker"}  # the node id is its name
     assert hello.software_revision == "docker-test" and hello.resources.cpus >= 1 and hello.resources.memory_mb > 0
-    assert {offer.job_type: offer.slots for offer in hello.capabilities} == {JobType.SIMULATION_KINEMATIC: 2, JobType.SCENE_GENERATION: 1}
+    assert {offer.job_type: offer.slots for offer in hello.slots} == {JobType.SIMULATION: 2, JobType.SCENE_GENERATION: 1}
 
     # Nothing was paired: the node's volume holds no pairing state.
     assert "pairing.json" not in _docker("exec", node.name, "ls", "/var/lib/scenegems-node").stdout.split()
 
-    payload = {"trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}
+    payload = {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}
     with RunnerWatch(master_id, node_id) as runners:
         try:
             for index in range(3):
@@ -205,7 +206,7 @@ def test_the_node_container_connects_without_pairing_and_runs_jobs_within_its_sl
             connection.send(make_offer("scene-0", make_job("scene-0", job_type=JobType.SCENE_GENERATION, payload=_scene_generation_payload())))
             answers = _answers(connection, 4)
             assert {lease for lease, frame in answers.items() if isinstance(frame, LeaseAccept)} == {"kinematic-0", "kinematic-1", "scene-0"}
-            assert "2 simulation.kinematic slots are in use" in answers["kinematic-2"].reason
+            assert "2 simulation slots are in use" in answers["kinematic-2"].reason
             results = _results(connection, 4, payload)
         except AssertionError as error:
             pytest.fail(f"{error}\nNode log:\n{node.logs()}")
@@ -247,7 +248,7 @@ def test_a_job_s_inputs_and_results_travel_as_artifacts(cluster, artifact_node, 
     document = encode_document(trajectory_data, ArtifactContent.JSON)
     stored = cluster.artifacts.put(document, ArtifactKind.TRAJECTORY_DATA.value, "application/json")
     reference = ArtifactRef(sha256=stored.stored.sha256, size_bytes=len(document), kind=ArtifactKind.TRAJECTORY_DATA, pointer="/trajectories")
-    job = make_job("artifact-job", payload={"trajectories": reference.model_dump(mode="json"), "include_trajectories": True})
+    job = make_job("artifact-job", payload={"runner": "kinematic", "trajectories": reference.model_dump(mode="json"), "include_trajectories": True})
     connection.send(make_offer("artifact-0", job))
     try:
         connection.expect(LeaseAccept, skip=BACKGROUND)
@@ -280,7 +281,8 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from scenegems_tool.cluster.node.jobs import job_types, simulation_ardupilot_job
+from scenegems_tool.cluster.node.jobs import job_types, simulation_job
+from scenegems_tool.cluster.node.jobs.simulation_runners import ardupilot_runner
 from scenegems_tool.cluster.node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.node.node_context import NodeContext
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
@@ -293,30 +295,21 @@ def vessel(vessel_id, own):
 scene = ConcreteScene({vessel(0, True): ActorState(0.0, 0.0, 8.0, 0.0), vessel(1, False): ActorState(3000.0, 0.0, 8.0, math.pi)})
 trajectories = TrajectoryBuilder.default_trajectory_from_scene(scene, 1, 60).to_dict()
 geofence = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
-payloads = {
-    JobType.SCENE_GENERATION: json.load(sys.stdin),  # the test data folders are not in the image
-    JobType.TRAJECTORY_GENERATION: {"scenario_content": "{}", "colregs_constraints_content": "", "params": {"maxIterations": 100}},
-    JobType.SIMULATION_KINEMATIC: {"mode": "usv_navigation", "trajectories": trajectories},
-    JobType.SIMULATION_ARDUPILOT_SIM: {"simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": geofence},
-    JobType.SIMULATION_GAZEBO: {"simulation_layer": "gazebo", "trajectories": trajectories, "geofence": geofence},
-    JobType.MONITORING_POST_HOC: {"trajectories": trajectories},
-}
-models = {
-    JobType.SCENE_GENERATION: "SceneGenerationPayload",
-    JobType.TRAJECTORY_GENERATION: "TrajectoryGenerationPayload",
-    JobType.SIMULATION_KINEMATIC: "KinematicSimulationPayload",
-    JobType.SIMULATION_ARDUPILOT_SIM: "ArduPilotSimPayload",
-    JobType.SIMULATION_GAZEBO: "GazeboSimulationPayload",
-    JobType.MONITORING_POST_HOC: "PostHocMonitoringPayload",
-}
-for job_type, payload in payloads.items():
-    model = getattr(job_types.job_type_module(job_type), models[job_type])
-    parse_payload(model, JobSpec(job_id="check", job_type=job_type, payload=payload, attempt=1, idempotency_key="check"))
-node = NodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION_ARDUPILOT_SIM: 1})
-job = JobSpec(job_id="check", job_type=JobType.SIMULATION_ARDUPILOT_SIM, payload=payloads[JobType.SIMULATION_ARDUPILOT_SIM], attempt=1, idempotency_key="check")
-stack = simulation_ardupilot_job.build_job_stack(job, node, parse_payload(simulation_ardupilot_job.ArduPilotSimPayload, job))
+payloads = [
+    ("scene_generation", JobType.SCENE_GENERATION, json.load(sys.stdin)),  # the test data folders are not in the image
+    ("trajectory_generation", JobType.TRAJECTORY_GENERATION, {"scenario_content": "{}", "colregs_constraints_content": "", "params": {"maxIterations": 100}}),
+    ("simulation kinematic", JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": trajectories}),
+    ("simulation ardupilot_sim", JobType.SIMULATION, {"runner": "ardupilot", "simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": geofence}),
+    ("simulation gazebo", JobType.SIMULATION, {"runner": "ardupilot", "simulation_layer": "gazebo", "trajectories": trajectories, "geofence": geofence}),
+    ("monitoring.post_hoc", JobType.MONITORING_POST_HOC, {"trajectories": trajectories}),
+]
+for _, job_type, payload in payloads:
+    parse_payload(job_types.payload_model(job_type), JobSpec(job_id="check", job_type=job_type, payload=payload, attempt=1, idempotency_key="check"))
+node = NodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION: 1})
+job = JobSpec(job_id="check", job_type=JobType.SIMULATION, payload=payloads[3][2], attempt=1, idempotency_key="check")
+stack = ardupilot_runner.build_job_stack(job, node, parse_payload(simulation_job.SimulationPayload, job).root)
 assert "runner" in stack.compose["services"] and len(stack.compose["services"]) >= 3, stack.compose["services"].keys()
-print("node side ok:", ", ".join(sorted(job_type.value for job_type in payloads)))
+print("node side ok:", ", ".join(sorted(name for name, _, _ in payloads)))
 """
 
 
@@ -331,4 +324,4 @@ def test_every_job_type_s_node_side_runs_in_the_node_image():
         timeout=300,
     )
     assert result.returncode == 0, result.stderr[-4000:]
-    assert "node side ok: monitoring.post_hoc, scene_generation, simulation.ardupilot_sim, simulation.gazebo, simulation.kinematic, trajectory_generation" in result.stdout
+    assert "node side ok: monitoring.post_hoc, scene_generation, simulation ardupilot_sim, simulation gazebo, simulation kinematic, trajectory_generation" in result.stdout

@@ -119,6 +119,8 @@ def test_remove_refuses_an_online_node_without_a_link(registry, nodes, clock):
 
 def test_out_of_date_is_recomputed_against_the_expected_set(registry, clock):
     session = _connect(registry, clock, "node-a", fingerprints={})
-    assert registry.refresh_out_of_date(session, None) is False  # nothing to compare with yet
-    assert registry.refresh_out_of_date(session, EXPECTED) is True and session.out_of_date[0].missing
-    assert registry.refresh_out_of_date(session, {}) is False and session.out_of_date == []
+    assert registry.refresh_out_of_date(session, None) == frozenset()  # nothing to compare with yet
+    stale = registry.refresh_out_of_date(session, EXPECTED)
+    assert stale == session.stale_components and "scene_generation" in stale and session.out_of_date[0].missing
+    assert "asv_software/replay" not in stale and "asv_software/replay" in session.usable_components, "a component without images is never stale"
+    assert registry.refresh_out_of_date(session, {}) == frozenset() and session.out_of_date == [] and session.stale_components == frozenset()

@@ -18,7 +18,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.config_validation import validate_campaign_config
 from scenegems_tool.cluster.master.api.master_apps import create_operator_app
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode, UsvNavigationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
 from scenegems_tool.cluster.protocol.routes import CATALOG_PATH
 from scenegems_tool.persistence.schema import MonitorImplementation, TrajectoryGeneratorImplementation
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -199,7 +199,7 @@ def test_the_monitors_are_the_ones_a_run_names(stacks):
     assert set(monitors) == {monitor.value for monitor in MonitorImplementation}
     assert {name for name, monitor in monitors.items() if monitor["supports_early_stop"]} == {"live"}
     assert monitors["post_hoc"]["job_types"] == ["monitoring.post_hoc"] and monitors["empty"]["job_types"] == []
-    assert monitors["live"]["job_types"] == ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"]  # every simulation job judges a run in process
+    assert monitors["live"]["job_types"] == ["simulation"]  # every runner of the simulation job judges a run in process
     assert all(monitor["label"] and monitor["description"] for monitor in monitors.values())
 
 

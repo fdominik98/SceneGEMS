@@ -13,7 +13,9 @@ The Cluster page shows the machines of the selected cluster: whether each node i
 
 ## Nodes
 
-The tiles count the nodes online, the slots in use and the nodes whose images differ from the master's release. Each node card shows its state, its machine, the slots in use and, under **Details**, its capabilities, resources, labels and leases.
+The tiles count the nodes online, the slots in use and the nodes whose images differ from the master's release. Each node card shows its state, its machine, its components, the slots in use and, under **Details**, its slots per job type, resources, labels and leases.
+
+A node's capability is a set of components: the vessel stack layers it runs (replay, USV Navigation, no control layer, ArduPilot, the custom controller, the kinematic layer, ArduPilot SITL, Gazebo) and the subsystems (scene generation, trajectory generation, monitoring, calibration). A job runs on a node that has slots for its job type and every component it needs: a simulation needs every layer of every vessel's stack, so a Gazebo replay needs replay, ArduPilot and Gazebo. A component whose images differ from the master's release is marked **out of date** on the card and gets no jobs there; the node's other components keep working. A node is out of date as a whole only when all its components are.
 
 | Action | What it does |
 |--------|--------------|

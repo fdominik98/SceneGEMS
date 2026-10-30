@@ -8,7 +8,7 @@ def _check_constraint(table, name):
     return next(constraint for constraint in table.constraints if constraint.name == name)
 
 
-CLUSTER_TABLES = {"node", "node_capability", "node_fingerprint", "job", "job_event"}
+CLUSTER_TABLES = {"node", "node_capability", "node_component", "node_fingerprint", "job", "job_event"}
 CAMPAIGN_TABLES = {
     "campaign",
     "campaign_config_version",
@@ -63,6 +63,12 @@ def test_enum_constraints_follow_the_naming_convention():
     assert "ck_node_status" in {constraint.name for constraint in NodeRow.__table__.constraints}
 
 
+def test_a_job_requires_components_and_a_node_offers_them():
+    column = JobRow.__table__.c.required_components
+    assert not column.nullable and "'[]'::jsonb" in str(column.server_default.arg)
+    assert [column.name for column in Base.metadata.tables["node_component"].primary_key.columns] == ["node_id", "component"]
+
+
 def test_idempotency_key_is_unique_and_required():
     column = JobRow.__table__.c.idempotency_key
     assert column.unique and not column.nullable
@@ -86,6 +92,6 @@ def test_active_lease_must_be_complete():
 
 
 def test_node_children_are_deleted_with_the_node():
-    for table_name in ("node_capability", "node_fingerprint"):
+    for table_name in ("node_capability", "node_component", "node_fingerprint"):
         (foreign_key,) = Base.metadata.tables[table_name].c.node_id.foreign_keys
         assert foreign_key.ondelete == "CASCADE"

@@ -5,8 +5,8 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 
 
 def test_job_scope_is_per_attempt(node, make_job):
-    first = node.job_scope(make_job(JobType.SIMULATION_KINEMATIC, {}, job_id="abc", attempt=1))
-    second = node.job_scope(make_job(JobType.SIMULATION_KINEMATIC, {}, job_id="abc", attempt=2))
+    first = node.job_scope(make_job(JobType.SIMULATION, {}, job_id="abc", attempt=1))
+    second = node.job_scope(make_job(JobType.SIMULATION, {}, job_id="abc", attempt=2))
     assert first.instance_id == "job-abc-1"
     assert first.docker_name != second.docker_name
 
@@ -28,3 +28,14 @@ def test_pools_start_once_with_scoped_names(monkeypatch, node):
     assert pool.mqtt_connection.topic_prefix == "scenegems/m1/n1/scene_generation-0/"
     node.shutdown()
     assert destroyed == [pool]
+
+
+def test_a_node_lacks_the_components_of_a_job_it_does_not_offer(node, make_job):
+    from dataclasses import replace
+
+    from scenegems_tool.cluster.protocol.jobs import JobRequirements
+
+    job = make_job(JobType.SIMULATION, {}).model_copy(update={"requirements": JobRequirements(components=["asv_software/replay", "simulation_layer/gazebo"])})
+    assert node.lacks(job) == [], "a node that names no components (the workbench) runs anything"
+    kinematic = replace(node, components=frozenset({"asv_software/replay", "control_layer/none", "simulation_layer/kinematic"}))
+    assert kinematic.lacks(job) == ["simulation_layer/gazebo"]

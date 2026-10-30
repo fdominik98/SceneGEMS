@@ -10,7 +10,7 @@ from scenegems_tool.cluster.node.jobs.in_container import job_container_main
 from scenegems_tool.cluster.node.jobs.in_container.job_container_main import json_safe
 from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
 from scenegems_tool.cluster.node.jobs.monitoring_post_hoc_job import execute as execute_post_hoc
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import execute as execute_kinematic
+from scenegems_tool.cluster.node.jobs.simulation_job import execute as execute_kinematic
 from scenegems_tool.cluster.node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_closed_loop, run_kinematic_replay
@@ -42,7 +42,7 @@ def test_json_safe_converts_numpy_enums_tuples_and_non_finite_floats():
 
 
 def test_kinematic_replay_matches_the_in_process_run(make_job, head_on_trajectories):
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "seed": 4})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "seed": 4})
     statuses = []
     result = execute_kinematic(job, lambda message, progress=None: statuses.append(message))
     direct = run_kinematic_replay(head_on_trajectories)
@@ -54,7 +54,7 @@ def test_kinematic_replay_matches_the_in_process_run(make_job, head_on_trajector
 
 
 def test_kinematic_closed_loop_matches_the_in_process_run(make_job, head_on_trajectories):
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False})
     result = execute_kinematic(job, lambda message, progress=None: None)
     assert result["state_digest"] == run_kinematic_closed_loop(head_on_trajectories).state_digest()
     assert "trajectories" not in result
@@ -74,7 +74,7 @@ def test_post_hoc_monitoring_summarizes_the_verdicts(make_job, head_on_trajector
 
 
 def test_main_writes_the_result_document(job_folder, make_job, head_on_trajectories, capsys):
-    write_job(job_folder, make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}))
+    write_job(job_folder, make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}))
     assert job_container_main.main() == 0
     outcome = read_outcome(job_folder)
     assert outcome["result"]["state_digest"] == run_kinematic_replay(head_on_trajectories).state_digest()
@@ -82,7 +82,7 @@ def test_main_writes_the_result_document(job_folder, make_job, head_on_trajector
 
 
 def test_main_writes_an_error_document_when_the_job_fails(job_folder, make_job, head_on_trajectories):
-    write_job(job_folder, make_job(JobType.SIMULATION_KINEMATIC, {"mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "own_ship_id": 99}))
+    write_job(job_folder, make_job(JobType.SIMULATION, {"runner": "kinematic", "mode": "usv_navigation", "trajectories": head_on_trajectories.to_dict(), "own_ship_id": 99}))
     assert job_container_main.main() == 1
     outcome = read_outcome(job_folder)
     assert "No vessel with id 99" in outcome["error"]
@@ -92,7 +92,7 @@ def test_main_writes_an_error_document_when_the_job_fails(job_folder, make_job, 
 
 def test_an_observed_simulation_writes_frame_lines_and_the_same_result(job_folder, make_job, head_on_trajectories, capsys, monkeypatch):
     monkeypatch.setattr(job_container_main, "ContainerObservation", lambda folder: ContainerObservation(folder, sleep=lambda seconds: None))
-    write_job(job_folder, make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}))
+    write_job(job_folder, make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}))
     assert job_container_main.main() == 0
     plain = read_outcome(job_folder)
     assert not [line for line in capsys.readouterr().out.splitlines() if parse_frame_line(line)]  # nobody observes: no frames

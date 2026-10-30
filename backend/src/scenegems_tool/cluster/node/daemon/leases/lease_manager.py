@@ -183,6 +183,9 @@ class LeaseManager:
             return f"the node is draining ({self.drain_reason})" if self.drain_reason else "the node is draining"
         if not self.slots.offers(job.job_type):
             return f"this node offers no {job.job_type.value} slots"
+        lacking = self.node.lacks(job)
+        if lacking:
+            return f"this node does not offer the components {', '.join(lacking)}"
         return None
 
     # Workers

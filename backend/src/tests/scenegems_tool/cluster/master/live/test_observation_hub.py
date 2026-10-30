@@ -37,7 +37,7 @@ def plane() -> ControlPlane:
     clock = ManualClock()
     nodes = InMemoryNodeStore(clock)
     plane = ControlPlane("lab-master", nodes, InMemoryJobStore(nodes, clock), ExpectedFingerprints.fixed(EXPECTED), clock=clock)
-    nodes.register(make_hello(NODE, slots={JobType.SCENE_GENERATION: 1, JobType.SIMULATION_KINEMATIC: 1}))
+    nodes.register(make_hello(NODE, slots={JobType.SCENE_GENERATION: 1, JobType.SIMULATION: 1}))
     return plane
 
 
@@ -143,7 +143,7 @@ async def test_an_unknown_node_is_an_error(channel):
 
 
 async def test_a_job_instance_gets_status_and_simulation_frames(channel, plane, broker):
-    job = plane.jobs.submit(JobSubmission(job_type=JobType.SIMULATION_KINEMATIC, payload=valid_payload(JobType.SIMULATION_KINEMATIC))).job
+    job = plane.jobs.submit(JobSubmission(job_type=JobType.SIMULATION, payload=valid_payload(JobType.SIMULATION))).job
     lease = plane.jobs.claim_next(NODE, 10.0)
     assert lease.job.job_id == job.job_id and lease.job.attempt == 1
     observations = []

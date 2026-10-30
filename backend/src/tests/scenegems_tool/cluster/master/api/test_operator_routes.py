@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from starlette.testclient import TestClient
 
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.master.api.master_apps import create_operator_app
 from scenegems_tool.cluster.master.api.operator_routes import NODES_PATH, STATUS_PATH
 from scenegems_tool.cluster.master.control_plane import ControlPlane
@@ -43,11 +43,11 @@ def test_an_invalid_submission_is_refused(client):
 
 
 def test_a_payload_that_does_not_match_its_job_type_is_answered_with_422(client):
-    response = _submit(client, job_type=KINEMATIC.value, payload={"trajectories": {"time_step": 1, "scene_list": []}})
+    response = _submit(client, job_type=KINEMATIC.value, payload={"runner": "kinematic", "trajectories": {"time_step": 1, "scene_list": []}})
     assert response.status_code == 422
     detail = response.json()["detail"]
-    assert detail["job_type"] == "simulation.kinematic" and "no scene" in detail["message"]
-    assert [error["loc"] for error in detail["errors"]] == [["trajectories", "inline"]]
+    assert detail["job_type"] == "simulation" and "no scene" in detail["message"]
+    assert [error["loc"] for error in detail["errors"]] == [["kinematic", "trajectories", "inline"]], "the runner leads the path"
     assert client.get(JOBS_PATH).json() == []
 
 
@@ -112,8 +112,10 @@ def test_cancel_tells_the_node(client, make_node, schedule):
 
 
 def test_nodes_show_connection_and_fingerprint_state(client, make_node, schedule):
-    current = make_node("current", slots={SCENE: 1})
-    stale = make_node("stale", slots={KINEMATIC: 1}, fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"}))
+    current = make_node("current", slots={SCENE: 1}, components=["scene_generation"])
+    stale = make_node(
+        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "asv_software/replay"], fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"})
+    )
     current.connect()
     stale.connect()
     schedule()  # the scheduler compares the fingerprints
@@ -121,7 +123,14 @@ def test_nodes_show_connection_and_fingerprint_state(client, make_node, schedule
     assert nodes[current.node_id]["connected"] and not nodes[current.node_id]["out_of_date"]
     assert nodes[stale.node_id]["out_of_date"]
     assert nodes[stale.node_id]["fingerprint_mismatches"] == [{"image": SCENARIO_EXECUTION_IMAGE, "required": "fp-execution", "actual": "old"}]
-    assert nodes[current.node_id]["capabilities"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
+    assert nodes[current.node_id]["slots"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
+    assert nodes[current.node_id]["components"] == [{"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"}]
+    assert nodes[stale.node_id]["components"] == [
+        {"component": "asv_software/replay", "images": [], "state": "usable"},
+        {"component": "simulation_layer/kinematic", "images": [SCENARIO_EXECUTION_IMAGE], "state": "out_of_date"},
+        {"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"},
+    ], "in catalog order, the stale one marked"
+    assert "capabilities" not in nodes[current.node_id]
     assert client.get(f"{NODES_PATH}/{stale.node_id}").json()["status"] == "online"
     assert client.get(f"{NODES_PATH}/nobody").status_code == 404
 

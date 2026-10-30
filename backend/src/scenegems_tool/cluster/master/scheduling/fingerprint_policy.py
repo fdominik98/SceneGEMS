@@ -2,22 +2,23 @@
 
 The master's required set is the image fingerprints of the release it runs, read once at
 start from its release.json (cluster/release). The deployment tool installs the same
-release's images on every node, so a node of the master's release matches, and any other
-node is out of date and gets no jobs.
+release's images on every node, so a node of the master's release matches. Out of date is
+per component (cluster/fingerprints/components.py): a component whose images differ from the
+release is stale and unusable on that node, while the node's other components keep working.
 
-A submission without fingerprints gets the expected ones of the images its job runs in; a
-submission that names fingerprints keeps them (a campaign's pinned set, Phase 4).
+A submission without fingerprints gets the expected ones of the images of its required components;
+a submission that names fingerprints keeps them (a campaign's pinned set, Phase 4).
 """
 
 import logging
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Collection, Dict, FrozenSet, List, Optional
 
 import anyio
 
 from scenegems_tool.cluster.fingerprints.comparison import FingerprintMismatch, find_mismatches
-from scenegems_tool.cluster.fingerprints.job_images import capability_images, job_images
+from scenegems_tool.cluster.fingerprints.components import component_images, images_of
 from scenegems_tool.cluster.protocol.jobs import JobSubmission
 from scenegems_tool.cluster.release.manifest import read_release
 from scenegems_tool.persistence.stores import NodeRecord
@@ -81,14 +82,21 @@ class ExpectedFingerprints:
 
 
 def with_required_fingerprints(submission: JobSubmission, expected: Dict[str, str]) -> JobSubmission:
-    """The submission with the expected fingerprints of its job's images, unless it names its own."""
+    """The submission with the expected fingerprints of its required components' images, unless it names its own."""
     if submission.requirements.fingerprints:
         return submission
-    required = {image: expected[image] for image in job_images(submission.job_type) if image in expected}
+    required = {image: expected[image] for image in sorted(images_of(submission.requirements.components)) if image in expected}
     return submission.model_copy(update={"requirements": submission.requirements.model_copy(update={"fingerprints": required})})
 
 
 def node_mismatches(node: NodeRecord, expected: Dict[str, str]) -> List[FingerprintMismatch]:
-    """The images the node's capabilities need whose fingerprint differs from the expected one; empty when up to date."""
-    required = {image: expected[image] for image in capability_images(node.capabilities) if image in expected}
+    """The images the node's components need whose fingerprint differs from the expected one; empty when up to date."""
+    required = {image: expected[image] for image in sorted(images_of(node.components)) if image in expected}
     return find_mismatches(node.fingerprints, required)
+
+
+def stale_components(components: Collection[str], mismatches: Collection[FingerprintMismatch]) -> FrozenSet[str]:
+    """The components that need an image among the mismatches: unusable on the node until it is updated."""
+    stale_images = {mismatch.image for mismatch in mismatches}
+    catalog = component_images()
+    return frozenset(component for component in components if stale_images & set(catalog.get(component, ())))

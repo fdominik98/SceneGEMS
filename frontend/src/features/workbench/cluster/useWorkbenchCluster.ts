@@ -11,8 +11,8 @@ export interface WorkbenchClusterView {
   operatorUrl: string | null;
   /** Client and live channel of the active cluster, null when none is selected. */
   cluster: WorkbenchCluster | null;
-  /** What the active cluster offers for a job type, and why the workbench cannot run it when it cannot. */
-  resources: (jobType: string) => JobTypeResources;
+  /** What the active cluster offers for a job type with these components (its subsystem's when left out), and why the workbench cannot run it when it cannot. */
+  resources: (jobType: string, components?: readonly string[]) => JobTypeResources;
 }
 
 /** The active cluster the workbench runs its jobs on, with its nodes followed while mounted. */
@@ -30,12 +30,13 @@ export function useWorkbenchCluster(): WorkbenchClusterView {
     [operatorUrl]
   );
   const resources = useCallback(
-    (jobType: string) => {
+    (jobType: string, components?: readonly string[]) => {
       // Nodes of another cluster, from a feed that has not switched yet, count as unknown.
       const current = feedUrl === operatorUrl;
       return jobTypeResources(
         { operatorUrl, nodes: current ? nodes : [], loaded: current && loaded, unreachable: current && unreachable },
-        jobType
+        jobType,
+        components
       );
     },
     [feedUrl, loaded, nodes, operatorUrl, unreachable]

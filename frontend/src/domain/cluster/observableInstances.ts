@@ -4,7 +4,7 @@ import type { JobView, NodeView } from "./schemas";
 
 /**
  * The subsystem instances of a node that the Cluster page can show (its instance browser) and follow (design doc 5.2 and
- * 5.3, topic `instance:<node>/<instance>`): the pool instances its capabilities and slots
+ * 5.3, topic `instance:<node>/<instance>`): the pool instances its slots
  * give (`scene_generation-<n>`, `trajectory_generation-<n>`) and the instances of the jobs
  * it has leased or runs (`job-<job id>-<attempt>`).
  */
@@ -51,7 +51,7 @@ export function jobInstanceKind(jobType: string): InstanceKind {
 export function poolInstances(node: NodeView): ObservableInstance[] {
   const result: ObservableInstance[] = [];
   for (const kind of POOL_KINDS) {
-    const usage = node.capabilities[kind];
+    const usage = node.slots[kind];
     if (!usage) {
       continue;
     }

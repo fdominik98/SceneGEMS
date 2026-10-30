@@ -83,7 +83,7 @@ def monitor_specs() -> Tuple[MonitorSpec, ...]:
             MonitorImplementation.LIVE,
             "Live",
             "The engine runs inside the simulation, step by step, and can stop the run once every rule is decided.",
-            "scenegems_tool/cluster/node/jobs/simulation_kinematic_job.py",
+            "scenegems_tool/cluster/node/jobs/simulation_job.py",
             ("simulation_job", "mqtt_service"),
             True,
             (Fact("early_stop", "Early stop", True, GROUP_CAPABILITY),),
@@ -125,8 +125,8 @@ _HOSTS = (
     (
         "simulation_job",
         "Simulation job",
-        "The kinematic simulation job: the engine steps with the simulation and the run ends early once every rule is decided.",
-        "scenegems_tool/cluster/node/jobs/simulation_kinematic_job.py",
+        "The simulation job: the engine steps with the simulation, and on the kinematic layer the run ends early once every rule is decided.",
+        "scenegems_tool/cluster/node/jobs/simulation_job.py",
         "cluster",
     ),
     (

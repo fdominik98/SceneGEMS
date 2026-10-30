@@ -5,9 +5,7 @@ import type { NodeView } from "../../domain/cluster/schemas";
 const JOB_TYPE_LABELS: Record<string, string> = {
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
-  "simulation.kinematic": "Simulation, kinematic",
-  "simulation.ardupilot_sim": "Simulation, ArduPilot SITL",
-  "simulation.gazebo": "Simulation, Gazebo",
+  simulation: "Simulation",
   "monitoring.post_hoc": "Monitoring, post hoc",
   "calibration.deviation": "Calibration deviation",
 };
@@ -71,7 +69,7 @@ export interface SlotTotals {
 export function nodeSlotTotals(node: NodeView): SlotTotals {
   let slots = 0;
   let inUse = 0;
-  for (const usage of Object.values(node.capabilities)) {
+  for (const usage of Object.values(node.slots)) {
     slots += usage.slots;
     inUse += usage.slots_in_use;
   }

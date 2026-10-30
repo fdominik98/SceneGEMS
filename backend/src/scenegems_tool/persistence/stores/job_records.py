@@ -10,7 +10,13 @@ from scenegems_tool.persistence.schema import JobEventKind, JobEventRow, JobRow
 
 
 def requirements_of(row: JobRow) -> JobRequirements:
-    return JobRequirements(labels=dict(row.required_labels), fingerprints=dict(row.required_fingerprints), min_memory_mb=row.min_memory_mb, min_cpus=row.min_cpus)
+    return JobRequirements(
+        labels=dict(row.required_labels),
+        components=list(row.required_components or ()),  # unset on a row that was never flushed
+        fingerprints=dict(row.required_fingerprints),
+        min_memory_mb=row.min_memory_mb,
+        min_cpus=row.min_cpus,
+    )
 
 
 @dataclass(frozen=True)

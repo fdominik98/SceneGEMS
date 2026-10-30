@@ -3,8 +3,8 @@
 from datetime import datetime, timedelta, timezone
 
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobState, JobType
-from scenegems_tool.persistence.schema import JobRow, NodeCapabilityRow, NodeFingerprintRow, NodeRow, NodeStatus
-from scenegems_tool.persistence.stores import CapabilityUsage, JobRecord, Lease, NodeRecord
+from scenegems_tool.persistence.schema import JobRow, NodeCapabilityRow, NodeComponentRow, NodeFingerprintRow, NodeRow, NodeStatus
+from scenegems_tool.persistence.stores import JobRecord, Lease, NodeRecord, SlotState
 
 START = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -13,7 +13,7 @@ def _job_row(**overrides) -> JobRow:
     values = dict(
         id="job-1",
         seq=1,
-        job_type=JobType.SIMULATION_KINEMATIC,
+        job_type=JobType.SIMULATION,
         payload={"steps": 300},
         required_labels={"site": "lab"},
         required_fingerprints={"scenegems-scenario-execution": "f1"},
@@ -81,8 +81,10 @@ def test_node_record():
     )
     row.capabilities = [NodeCapabilityRow(job_type=JobType.SCENE_GENERATION, slots=4, slots_in_use=1)]
     row.fingerprints = [NodeFingerprintRow(image="scenegems-scene-generation", fingerprint="f1")]
+    row.components = [NodeComponentRow(component="monitoring"), NodeComponentRow(component="scene_generation")]
     record = NodeRecord.from_row(row)
     assert record.status == NodeStatus.DRAINING
-    assert record.capabilities == {JobType.SCENE_GENERATION: CapabilityUsage(slots=4, slots_in_use=1)}
+    assert record.slots == {JobType.SCENE_GENERATION: SlotState(slots=4, slots_in_use=1)}
+    assert record.components == ("monitoring", "scene_generation")
     assert record.fingerprints == {"scenegems-scene-generation": "f1"}
     assert record.resources.free_memory_mb == 9000

@@ -15,10 +15,16 @@ export function sampleNode(overrides: Record<string, unknown> = {}): Record<stri
     software_revision: "2c8a4001f00dbeef",
     labels: { site: "lab", gpu: "true" },
     resources: { cpus: 16, memory_mb: 32000, free_memory_mb: 20000, free_disk_mb: 250000, load_average: 0.42 },
-    capabilities: {
+    slots: {
       scene_generation: { slots: 4, slots_in_use: 1 },
-      "simulation.kinematic": { slots: 8, slots_in_use: 8 },
+      simulation: { slots: 8, slots_in_use: 8 },
     },
+    components: [
+      { component: "asv_software/replay", images: [], state: "usable" },
+      { component: "control_layer/none", images: [], state: "usable" },
+      { component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" },
+      { component: "scene_generation", images: ["scenegems-scene-generation-subsystem:latest"], state: "usable" },
+    ],
     leases: ["lease-1"],
     registered_at: "2026-10-26T08:00:00+00:00",
     last_seen_at: "2026-10-26T09:59:50+00:00",
@@ -46,7 +52,7 @@ export function sampleJob(overrides: Record<string, unknown> = {}): Record<strin
     failed_attempts: 0,
     max_attempts: 3,
     idempotency_key: "campaign:c1:case:1:generate_scene",
-    requirements: { labels: {}, fingerprints: { "scenegems-node": "sha256:aaaa" }, min_memory_mb: 0, min_cpus: 0 },
+    requirements: { labels: {}, components: ["scene_generation"], fingerprints: { "scenegems-node": "sha256:aaaa" }, min_memory_mb: 0, min_cpus: 0 },
     lease_owner: "node-a1",
     lease_expires_at: "2026-10-26T10:05:00+00:00",
     submitted_at: "2026-10-26T09:58:00+00:00",

@@ -56,10 +56,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0008"]
+    assert scripts.get_heads() == ["0009"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -77,9 +77,11 @@ def test_revision_enum_values_match_the_code():
     # The revisions spell the CHECK constraint values out; a new enum value needs a new revision.
     # Each enum is checked against the latest revision that names its values.
     first, second, fifth, eighth = _revision("0001_cluster_tables"), _revision("0002_campaigns"), _revision("0005_partial_campaigns"), _revision("0008_split_ardupilot_simulation")
+    ninth = _revision("0009_simulation_job_and_node_components")
     assert set(first.JOB_TYPES) == set(second.PREVIOUS_JOB_TYPES)
     assert set(second.JOB_TYPES) == set(eighth.PREVIOUS_JOB_TYPES)
-    assert set(eighth.JOB_TYPES) == _values(JobType)
+    assert set(eighth.JOB_TYPES) == set(ninth.PREVIOUS_JOB_TYPES)
+    assert set(ninth.JOB_TYPES) == _values(JobType)
     assert set(first.JOB_STATES) == _values(JobState)
     assert set(first.NODE_STATUSES) == _values(NodeStatus)
     assert set(first.JOB_EVENT_KINDS) == _values(JobEventKind)
@@ -118,6 +120,8 @@ def test_offline_upgrade_renders_the_tables(capsys):
     assert "UPDATE run_record SET source = 'job'" in sql
     assert "'monitor_scene'" in sql and "'upload'" in sql
     assert "UPDATE job SET job_type = 'simulation.gazebo'" in sql and "'simulation.ardupilot_sim'" in sql
+    assert "UPDATE job SET job_type = 'simulation', payload = jsonb_set(payload, '{runner}', '\"kinematic\"') WHERE job_type = 'simulation.kinematic'" in sql
+    assert "ALTER TABLE job ADD COLUMN required_components JSONB DEFAULT '[]'::jsonb NOT NULL" in sql
 
 
 @pytest.mark.postgres
@@ -127,7 +131,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0008"
+            assert MigrationContext.configure(connection).get_current_revision() == "0009"
     finally:
         engine.dispose()
 
@@ -356,7 +360,7 @@ def test_downgrade_to_the_cluster_tables_and_upgrade_again(empty_database_url):
     engine = create_engine(empty_database_url)
     try:
         inspector = inspect(engine)
-        assert set(inspector.get_table_names()) == CLUSTER_TABLES | {"alembic_version"}
+        assert set(inspector.get_table_names()) == CLUSTER_TABLES - {"node_component"} | {"alembic_version"}
         assert "available_at" not in {column["name"] for column in inspector.get_columns("job")}
         assert "tx_id" not in {column["name"] for column in inspector.get_columns("job_event")}
         command.upgrade(config, "head")
@@ -479,5 +483,71 @@ def test_revision_0008_splits_the_ardupilot_jobs_by_their_layer_and_drops_the_ol
         with engine.connect() as connection:
             assert set(connection.execute(text("SELECT job_type FROM job")).scalars().all()) == {"simulation.ardupilot"}
             assert connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all() == ["simulation.kinematic"]
+    finally:
+        engine.dispose()
+
+
+def _insert_a_simulation_job(connection, job_id: str, job_type: str, payload: str, at) -> None:
+    connection.execute(
+        text(
+            "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+            " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at, allowed_nodes)"
+            " VALUES (:id, :job_type, :payload, '{}', '{}', 0, 0, 0, 3, :id, 'queued', 0, 0, :at, :at, :at, '[]')"
+        ),
+        {"id": job_id, "job_type": job_type, "payload": payload, "at": at},
+    )
+
+
+@pytest.mark.postgres
+def test_revision_0009_merges_the_simulation_jobs_by_their_runner_and_stores_node_components(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0008")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 10, 30, 9, 30, tzinfo=timezone.utc)
+    try:
+        with engine.begin() as connection:
+            _insert_a_simulation_job(connection, "kinematic", "simulation.kinematic", '{"mode": "replay"}', at)
+            _insert_a_simulation_job(connection, "sitl", "simulation.ardupilot_sim", '{"simulation_layer": "ardupilot_sim"}', at)
+            _insert_a_simulation_job(connection, "world", "simulation.gazebo", '{"simulation_layer": "gazebo"}', at)
+            _insert_a_simulation_job(connection, "scene", "scene_generation", '{"seed": 1}', at)
+            connection.execute(
+                text(
+                    "INSERT INTO node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('node-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation.kinematic', 2, 0), ('node-1', 'simulation.gazebo', 1, 0), ('node-1', 'scene_generation', 1, 0)"
+                )
+            )
+        command.upgrade(config, "0009")
+        with engine.begin() as connection:
+            jobs = {row.id: (row.job_type, row.payload, row.required_components) for row in connection.execute(text("SELECT id, job_type, payload, required_components FROM job"))}
+            assert jobs == {
+                "kinematic": ("simulation", {"mode": "replay", "runner": "kinematic"}, []),
+                "sitl": ("simulation", {"simulation_layer": "ardupilot_sim", "runner": "ardupilot"}, []),
+                "world": ("simulation", {"simulation_layer": "gazebo", "runner": "ardupilot"}, []),
+                "scene": ("scene_generation", {"seed": 1}, []),
+            }
+            capabilities = connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all()
+            assert capabilities == ["scene_generation"], "the node lists its slots again in its Hello"
+            connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation', 2, 0)"))
+            connection.execute(text("INSERT INTO node_component (node_id, component) VALUES ('node-1', 'simulation_layer/kinematic')"))
+        with pytest.raises(IntegrityError):
+            with engine.begin() as connection:
+                connection.execute(text("UPDATE job SET job_type = 'simulation.kinematic' WHERE id = 'kinematic'"))
+        command.downgrade(config, "0008")
+        with engine.connect() as connection:
+            jobs = {row.id: (row.job_type, row.payload) for row in connection.execute(text("SELECT id, job_type, payload FROM job"))}
+            assert jobs == {
+                "kinematic": ("simulation.kinematic", {"mode": "replay"}),
+                "sitl": ("simulation.ardupilot_sim", {"simulation_layer": "ardupilot_sim"}),
+                "world": ("simulation.gazebo", {"simulation_layer": "gazebo"}),
+                "scene": ("scene_generation", {"seed": 1}),
+            }
+            assert connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all() == ["scene_generation"]
+            assert "node_component" not in inspect(connection).get_table_names()
     finally:
         engine.dispose()

@@ -144,8 +144,8 @@ for the vessel stack, the availability matrix. Nothing in the frontend lists imp
 simulator or generator declared in the backend specs appears after the master restarts.
 
 - `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix, the
-  `cluster_job` fact of an available stack: the job type that runs it on a node, or none for a stack the
-  workbench runs only as a live session).
+  `cluster_job` fact of an available stack: the job and runner that run it on a node ("simulation,
+  runner kinematic"), or none for a stack the workbench runs only as a live session).
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
 - `ArchitectureGraph.tsx` (React Flow canvas, custom edge with a label), `GraphNodes.tsx` (cards and
   lane bands), `cardSizes.ts`, `DetailPanel.tsx`, `MatrixView.tsx`, `CapabilitiesSection.tsx`.
@@ -173,7 +173,7 @@ flowchart LR
 2. **Generate scenes and trajectories**: jobs on the active cluster (`features/workbench/cluster/`: `WorkbenchJobDriver` submits `scene_generation`, `trajectory_generation` and `monitoring.post_hoc` jobs through the operator API, follows them on the live channel and reports them to the stores as `generated_scene`, `trajectory_generation_preview` and `trajectory_generation_result`). A job type no usable node offers is not submitted; `workbenchResources.ts` says why.
 3. **Load scenario**: `load_scenario_file` -> `preview_trajectory_chunk`(s), then the cluster's post-hoc monitor replaces the preview with monitored frames
    A bare scene loads as its initial scene only (`initial_state` with trajectory length 0); trajectories come from the trajectory generator, and the simulation refuses to run without them.
-4. **Run on the cluster**: a kinematic setup runs as one `simulation.kinematic` job, a replay on ArduPilot SITL or Gazebo as one `simulation.ardupilot_sim` or `simulation.gazebo` job (`simulationJobs.ts`), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<node>/job-<id>-<attempt>`
+4. **Run on the cluster**: a kinematic setup runs as one `simulation` job with runner `kinematic`, a replay on ArduPilot SITL or Gazebo as one with runner `ardupilot` and its `simulation_layer` (`simulationJobs.ts`; a plan names the components its job needs, and `workbenchResources.ts` counts the nodes that have them up to date), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<node>/job-<id>-<attempt>`
 5. **Live session**: `connect_to_mqtt_broker` (the master's broker by default), `initialize_simulation` -> `initial_state`, `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
 
 `playbackStore.ts` makes one store per page (`createPlaybackStore`): `useScenePlaybackStore` (the

@@ -5,7 +5,7 @@ The node daemon builds one NodeContext from its configuration
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, FrozenSet, List, Optional
 
 from scenegems_tool.cluster.node.artifacts.node_artifacts import ArtifactTransport
 from scenegems_tool.cluster.node.instance_scope import InstanceScope
@@ -32,6 +32,7 @@ class NodeContext:
     mqtt_connection: MQttConnectionInfo
     reference_geofence: Geofence  # frame of the pooled services; simulation payloads carry their own
     slots: Dict[JobType, int] = field(default_factory=dict)
+    components: FrozenSet[str] = frozenset()  # what the node runs jobs with; empty for any (the workbench)
     broker_network: Optional[str] = None  # Docker network the broker is reachable on; SCENEGEMS_DOCKER_NETWORK when None
     artifacts: Optional[ArtifactTransport] = None  # downloads referenced inputs and uploads results; None keeps results inline
     observations: JobObservations = field(default_factory=JobObservations)  # running jobs' live observations; the daemon's lease manager opens them
@@ -39,6 +40,12 @@ class NodeContext:
 
     def __post_init__(self) -> None:
         self.pools = ServicePools(self.master_id, self.node_id, self.mqtt_connection, self.reference_geofence, self.pool_workers, self.broker_network)
+
+    def lacks(self, job: JobSpec) -> List[str]:
+        """The components the job requires that this node does not offer; empty when it offers them all, or when it names none."""
+        if not self.components:
+            return []
+        return [component for component in job.requirements.components if component not in self.components]
 
     def pool_workers(self, subsystem: Subsystem) -> int:
         return max(1, self.slots.get(_POOL_JOB_TYPES[subsystem], 1))

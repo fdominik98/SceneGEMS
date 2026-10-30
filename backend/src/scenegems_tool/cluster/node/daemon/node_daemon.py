@@ -107,13 +107,14 @@ class NodeDaemon:
         node = self._node_context(self.configuration)
         if self._clean_leftovers:
             remove_leftover_instances(master_id, node_id)
-        self.manager = LeaseManager(SlotTable(self.configuration.capabilities), node, self._current, run=self._run)
+        self.manager = LeaseManager(SlotTable(self.configuration.slots), node, self._current, run=self._run)
         self.status = StatusFrames(
             node_id=node_id,
             node_name=self.configuration.node_name,
             software_revision=software_revision(self.configuration.software_revision),
             machine=self.configuration.machine,
-            capabilities=self.configuration.capabilities,
+            slots=self.configuration.slots,
+            components=self.configuration.components,
             labels=self.configuration.labels,
             resources=self._probe.read,
             fingerprints=self._fingerprints or _local_image_fingerprints,
@@ -124,7 +125,14 @@ class NodeDaemon:
         ticker.start()
         relay = threading.Thread(target=self._relay_loop, args=(ticker_stop,), name="node-observation-relay", daemon=True)
         relay.start()
-        _logger.info("Node %s of master %s at %s starts with slots %s", node_id, master_id, self.configuration.master_url, _slots_text(self.configuration))
+        _logger.info(
+            "Node %s of master %s at %s starts with slots %s and components %s",
+            node_id,
+            master_id,
+            self.configuration.master_url,
+            _slots_text(self.configuration),
+            ", ".join(sorted(self.configuration.components)),
+        )
         try:
             self._connection_loop(stop)
         finally:
@@ -255,4 +263,4 @@ def _local_image_fingerprints() -> dict:
 
 
 def _slots_text(configuration: NodeConfiguration) -> str:
-    return ", ".join(f"{job_type.value}:{slots}" for job_type, slots in sorted(configuration.capabilities.items(), key=lambda item: item[0].value))
+    return ", ".join(f"{job_type.value}:{slots}" for job_type, slots in sorted(configuration.slots.items(), key=lambda item: item[0].value))

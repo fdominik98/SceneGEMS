@@ -1,8 +1,7 @@
-"""simulation.ardupilot_sim and simulation.gazebo: replay over the lockstep MAVLink adapter, on a SITL or Gazebo stack per job.
+"""The simulation job's ardupilot runner: replay over the lockstep MAVLink adapter, on a SITL or Gazebo stack per job.
 
-The job type decides the simulation layer: simulation.ardupilot_sim runs SITL's own physics,
-simulation.gazebo SITL's JSON backend against a Gazebo world, and each type's payload model
-accepts only its own layer. The node resolves the instance (every vessel replay to ardupilot
+The payload's simulation_layer decides the layer: ardupilot_sim runs SITL's own physics, gazebo
+SITL's JSON backend against a Gazebo world. The node resolves the instance (every vessel replay to ardupilot
 on that layer, through replay_mavlink_lockstep), generates the vessel stack into the job's folder and adds
 a runner from the scenario execution image on the stack network. The runner drives every
 vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
@@ -24,20 +23,22 @@ or the workbench backend's.
 
 import threading
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Tuple, Type
+from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Tuple
 
 from pydantic import Field, model_validator
 
+from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
 from scenegems_tool.cluster.node.job_report import JobFailed, JobReport, JobResultData
-from scenegems_tool.cluster.node.jobs.job_payload import GeofencePayload, TrajectoriesInput, parse_payload, to_trajectories
+from scenegems_tool.cluster.node.jobs.job_payload import GeofencePayload, TrajectoriesInput, to_trajectories
 from scenegems_tool.cluster.node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, job_document
 from scenegems_tool.cluster.node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, runner_service
 from scenegems_tool.cluster.node.node_context import NodeContext
 from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
-from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
+from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
+from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
@@ -56,7 +57,13 @@ class ArduPilotSimulationLayer(str, Enum):
     GAZEBO = "gazebo"  # SITL's JSON backend against a Gazebo world
 
 
+def vessel_stacks(simulation_layer: ArduPilotSimulationLayer) -> Tuple[StackTriple, ...]:
+    """The vessel stacks a run on the layer runs: every vessel replays on ArduPilot."""
+    return ((AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId(simulation_layer.value)),)
+
+
 class ArduPilotSimulationPayload(ProtocolModel):
+    runner: Literal[SimulationRunner.ARDUPILOT]
     simulation_layer: ArduPilotSimulationLayer
     trajectories: TrajectoriesInput
     geofence: GeofencePayload  # maps the local frame to SITL's home positions
@@ -68,7 +75,7 @@ class ArduPilotSimulationPayload(ProtocolModel):
     include_states: bool = True  # return the observed state of every vessel at every step
     monitor: SimulationMonitor = SimulationMonitor.NONE
     colregs_constraints_content: Optional[str] = None  # live only: COLREGS constants YAML; the general maritime defaults when None
-    include_trajectories: bool = False  # return the observed run as trajectories, as simulation.kinematic does
+    include_trajectories: bool = False  # return the observed run as trajectories, as the kinematic runner does
     timeout_s: float = Field(default=1800.0, gt=0.0)
 
     @model_validator(mode="after")
@@ -79,24 +86,11 @@ class ArduPilotSimulationPayload(ProtocolModel):
             raise ValueError("the live monitor and the trajectories need a whole number of seconds as dt")
         return self
 
-
-class ArduPilotSimPayload(ArduPilotSimulationPayload):
-    """The payload of simulation.ardupilot_sim; the layer may be left out."""
-
-    simulation_layer: Literal[ArduPilotSimulationLayer.ARDUPILOT_SIM] = ArduPilotSimulationLayer.ARDUPILOT_SIM
+    def vessel_stacks(self) -> Tuple[StackTriple, ...]:
+        return vessel_stacks(self.simulation_layer)
 
 
-class GazeboSimulationPayload(ArduPilotSimulationPayload):
-    """The payload of simulation.gazebo; the layer may be left out."""
-
-    simulation_layer: Literal[ArduPilotSimulationLayer.GAZEBO] = ArduPilotSimulationLayer.GAZEBO
-
-
-# One model per job type of this module, so a payload naming another layer is refused at submission
-PAYLOAD_MODELS: Dict[JobType, Type[ArduPilotSimulationPayload]] = {
-    JobType.SIMULATION_ARDUPILOT_SIM: ArduPilotSimPayload,
-    JobType.SIMULATION_GAZEBO: GazeboSimulationPayload,
-}
+PAYLOAD_MODEL = ArduPilotSimulationPayload
 
 
 def _instance(payload: ArduPilotSimulationPayload):
@@ -134,8 +128,7 @@ def build_job_stack(job: JobSpec, node: NodeContext, payload: ArduPilotSimulatio
     return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"))
 
 
-def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    payload = parse_payload(PAYLOAD_MODELS[job.job_type], job)
+def run(job: JobSpec, node: NodeContext, report: JobReport, payload: ArduPilotSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
     report.status(f"generating the {payload.simulation_layer.value} stack")
     stack = build_job_stack(job, node, payload)
     # SITL runs free at the payload's speedup, so an observed run is not slowed down and keeps its timeout
@@ -199,11 +192,10 @@ def observed_trajectories(trajectories, result, dt: float):
     return builder.build()
 
 
-def execute(job: JobSpec, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
+def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
     """The in-container part: drive every vessel's SITL in lockstep and describe the run; observation forwards its states live."""
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import run_mavlink_stack
 
-    payload = parse_payload(PAYLOAD_MODELS[job.job_type], job)
     trajectories, instance = _instance(payload)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))

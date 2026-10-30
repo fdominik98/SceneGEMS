@@ -9,7 +9,7 @@ from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 DATA = b'{"trajectories":{}}'
 SHA = hashlib.sha256(DATA).hexdigest()
 REFERENCE = ArtifactRef(sha256=SHA, size_bytes=len(DATA), kind=ArtifactKind.TRAJECTORIES)
-JOB = JobSpec(job_id="job-3", job_type=JobType.SIMULATION_KINEMATIC, attempt=1, idempotency_key="k")
+JOB = JobSpec(job_id="job-3", job_type=JobType.SIMULATION, attempt=1, idempotency_key="k")
 
 
 class FakeClient:

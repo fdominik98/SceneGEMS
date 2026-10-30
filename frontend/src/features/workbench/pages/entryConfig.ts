@@ -173,7 +173,7 @@ export interface SimulationEntryInput {
 
 /** The run's stack section (`campaign_config.KinematicStackConfig`, `ArdupilotStackConfig`) for the plan the workbench made of the setup. */
 export function simulationStack(plan: ClusterRunPlan, geofence: ReferenceGeofence = defaultReferenceGeofence): Record<string, unknown> {
-  if (plan.jobType === "simulation.kinematic") {
+  if (plan.runner === "kinematic") {
     return { simulation_layer: "kinematic", mode: plan.mode };
   }
   return {

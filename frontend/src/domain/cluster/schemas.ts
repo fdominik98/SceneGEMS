@@ -78,29 +78,45 @@ export const nodeResourcesSchema = z.object({
   load_average: z.number().default(0),
 });
 
-export const capabilityUsageSchema = z.object({
+export const slotUsageSchema = z.object({
   slots: z.number().int(),
   slots_in_use: z.number().int(),
 });
 
-export const nodeViewSchema = z.object({
+/** A component the node offers (`views.component_views`): its images, and out_of_date while one of them differs from the release. */
+export const nodeComponentSchema = z.object({
+  component: z.string(),
+  images: z.array(z.string()),
+  state: z.enum(["usable", "out_of_date"]),
+});
+
+const nodeViewFields = z.object({
   node_id: z.string(),
   name: z.string(),
   /** The machine the node runs on (P5.1); missing or null from masters before it. */
   machine: z.string().nullable().optional(),
   status: nodeStatusSchema,
   connected: z.boolean(),
+  /** Some component's images differ from the release; those components get no jobs, the others do. */
   out_of_date: z.boolean(),
   fingerprint_mismatches: z.array(fingerprintMismatchSchema),
   software_revision: z.string(),
   labels: stringMap,
   resources: nodeResourcesSchema,
   /** Job type to its slots and slots in use. */
-  capabilities: z.record(z.string(), capabilityUsageSchema),
+  slots: z.record(z.string(), slotUsageSchema),
+  /** The components the node runs its jobs with, in catalog order. */
+  components: z.array(nodeComponentSchema),
   leases: z.array(z.string()),
   registered_at: isoTime,
   last_seen_at: isoTime,
 });
+
+/**
+ * A node of the operator API. `capabilities` repeats `slots` under the name the campaign wizard's
+ * resources step reads; it goes once that step reads `slots`.
+ */
+export const nodeViewSchema = nodeViewFields.transform((node) => ({ ...node, capabilities: node.slots }));
 
 export const nodeListSchema = z.array(nodeViewSchema);
 
@@ -114,12 +130,15 @@ export const masterStatusSchema = z.object({
   connected_nodes: z.array(z.string()),
 });
 export type NodeView = z.infer<typeof nodeViewSchema>;
+export type NodeComponentView = z.infer<typeof nodeComponentSchema>;
 export type MasterStatus = z.infer<typeof masterStatusSchema>;
 
 // Jobs (views.py)
 
 export const jobRequirementsSchema = z.object({
   labels: stringMap,
+  /** The components a node must offer (protocol 6). */
+  components: z.array(z.string()).default([]),
   fingerprints: stringMap,
   min_memory_mb: z.number(),
   min_cpus: z.number(),

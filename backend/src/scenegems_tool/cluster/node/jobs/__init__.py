@@ -7,8 +7,7 @@ pool_client.py                waiting on a pooled service (heartbeat, reply)
 runner_container.py           running a job in one runner container
 scene_generation_job.py       scene_generation, on the scene generation pool
 trajectory_generation_job.py  trajectory_generation, on the trajectory generation pool
-simulation_kinematic_job.py   simulation.kinematic, in a scenario execution container
-simulation_ardupilot_job.py   simulation.ardupilot_sim and simulation.gazebo, on a SITL or Gazebo stack per job
+simulation_job.py             simulation, by the runner its payload names (simulation_runners/: kinematic, ardupilot)
 monitoring_post_hoc_job.py    monitoring.post_hoc, in a monitoring container
 calibration_deviation_job.py  calibration.deviation, in a scenario execution container
 in_container/                 the entry point inside a runner container

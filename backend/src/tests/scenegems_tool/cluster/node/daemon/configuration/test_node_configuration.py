@@ -6,11 +6,13 @@ from scenegems_tool.cluster.node.daemon.configuration.node_configuration import 
     DEFAULT_REFERENCE_GEOFENCE,
     ConfigurationError,
     NodeConfiguration,
-    parse_capabilities,
+    parse_components,
     parse_geofence,
     parse_labels,
     parse_master_url,
     parse_port,
+    parse_slots,
+    slots_without_components,
 )
 from scenegems_tool.cluster.protocol.jobs import JobType
 
@@ -18,7 +20,8 @@ VALID = {
     "SCENEGEMS_MASTER_URL": "http://192.168.1.10:8443",
     "SCENEGEMS_MASTER_ID": "lab-master",
     "SCENEGEMS_NODE_NAME": "worker-1",
-    "SCENEGEMS_NODE_CAPABILITIES": "simulation.kinematic:4,scene_generation:1",
+    "SCENEGEMS_NODE_SLOTS": "simulation:4,scene_generation:1",
+    "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
     "SCENEGEMS_NODE_STATE_DIR": "/var/lib/scenegems-node",
 }
 
@@ -39,7 +42,8 @@ def test_a_complete_configuration_parses():
     assert configuration.master_id == "lab-master"
     assert configuration.node_id == configuration.node_name == "worker-1"
     assert (configuration.broker_host, configuration.broker_port) == ("192.168.1.10", 1883)
-    assert configuration.capabilities == {JobType.SIMULATION_KINEMATIC: 4, JobType.SCENE_GENERATION: 1}
+    assert configuration.slots == {JobType.SIMULATION: 4, JobType.SCENE_GENERATION: 1}
+    assert configuration.components == {"asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"}
     assert configuration.labels == {"gpu": "true", "site": "lab"}
     assert configuration.state_dir == Path("/var/lib/scenegems-node")
     assert configuration.reference_geofence == DEFAULT_REFERENCE_GEOFENCE
@@ -80,12 +84,19 @@ def test_invalid_ports_fail(text):
 def test_every_problem_is_reported_at_once():
     with pytest.raises(ConfigurationError) as raised:
         NodeConfiguration.from_values(
-            values(SCENEGEMS_MASTER_URL="https://master", SCENEGEMS_MASTER_ID=None, SCENEGEMS_BROKER_PORT="0", SCENEGEMS_NODE_CAPABILITIES="unknown:1", SCENEGEMS_NODE_STATE_DIR=None)
+            values(
+                SCENEGEMS_MASTER_URL="https://master",
+                SCENEGEMS_MASTER_ID=None,
+                SCENEGEMS_BROKER_PORT="0",
+                SCENEGEMS_NODE_SLOTS="unknown:1",
+                SCENEGEMS_NODE_COMPONENTS="gpu",
+                SCENEGEMS_NODE_STATE_DIR=None,
+            )
         )
     problems = raised.value.problems
-    assert len(problems) == 5
+    assert len(problems) == 6
     message = str(raised.value)
-    for name in ("SCENEGEMS_MASTER_URL", "SCENEGEMS_MASTER_ID", "SCENEGEMS_BROKER_PORT", "SCENEGEMS_NODE_CAPABILITIES", "SCENEGEMS_NODE_STATE_DIR"):
+    for name in ("SCENEGEMS_MASTER_URL", "SCENEGEMS_MASTER_ID", "SCENEGEMS_BROKER_PORT", "SCENEGEMS_NODE_SLOTS", "SCENEGEMS_NODE_COMPONENTS", "SCENEGEMS_NODE_STATE_DIR"):
         assert name in message
 
 
@@ -131,34 +142,61 @@ def test_invalid_master_urls_fail(text):
     "text, problem",
     [
         ("", "lists no job type"),
-        ("simulation.kinematic", "<job type>:<slots>"),
-        ("simulation.kinematic:0", "at least 1"),
-        ("simulation.kinematic:two", "whole number"),
-        ("simulation.kinematic:1,simulation.kinematic:2", "listed twice"),
-        ("simulation:1", "unknown job type"),
+        ("simulation", "<job type>:<slots>"),
+        ("simulation:0", "at least 1"),
+        ("simulation:two", "whole number"),
+        ("simulation:1,simulation:2", "listed twice"),
+        ("rendering:1", "unknown job type"),
     ],
 )
-def test_invalid_capabilities_fail(text, problem):
+def test_invalid_slots_fail(text, problem):
     with pytest.raises(ValueError, match=problem):
-        parse_capabilities(text)
+        parse_slots(text)
 
 
-def test_capabilities_cover_every_job_type():
-    text = "scene_generation:1,trajectory_generation:2,simulation.kinematic:3,simulation.ardupilot_sim:1,simulation.gazebo:1,monitoring.post_hoc:5,calibration.deviation:2"
-    assert parse_capabilities(text) == {
+def test_slots_cover_every_job_type():
+    text = "scene_generation:1,trajectory_generation:2,simulation:3,monitoring.post_hoc:5,calibration.deviation:2"
+    assert parse_slots(text) == {
         JobType.SCENE_GENERATION: 1,
         JobType.TRAJECTORY_GENERATION: 2,
-        JobType.SIMULATION_KINEMATIC: 3,
-        JobType.SIMULATION_ARDUPILOT_SIM: 1,
-        JobType.SIMULATION_GAZEBO: 1,
+        JobType.SIMULATION: 3,
         JobType.MONITORING_POST_HOC: 5,
         JobType.CALIBRATION_DEVIATION: 2,
     }
 
 
-def test_the_job_type_of_earlier_releases_names_its_replacements():
-    with pytest.raises(ValueError, match="simulation.ardupilot is split into simulation.ardupilot_sim and simulation.gazebo"):
-        parse_capabilities("simulation.kinematic:2,simulation.ardupilot:1")
+@pytest.mark.parametrize("old", ["simulation.kinematic", "simulation.ardupilot", "simulation.ardupilot_sim", "simulation.gazebo"])
+def test_the_simulation_job_types_of_earlier_releases_name_their_replacement(old):
+    with pytest.raises(ValueError, match=f"{old} is replaced by simulation; give it slots here and list its layers in SCENEGEMS_NODE_COMPONENTS"):
+        parse_slots(f"scene_generation:1,{old}:2")
+
+
+def test_the_capabilities_variable_of_earlier_releases_is_refused_naming_its_replacements():
+    with pytest.raises(ConfigurationError) as raised:
+        NodeConfiguration.from_values(values(SCENEGEMS_NODE_CAPABILITIES="simulation.kinematic:2", SCENEGEMS_NODE_SLOTS=None, SCENEGEMS_NODE_COMPONENTS=None))
+    message = str(raised.value)
+    assert "SCENEGEMS_NODE_CAPABILITIES is replaced by SCENEGEMS_NODE_SLOTS" in message and "SCENEGEMS_NODE_COMPONENTS (what the node runs them with" in message
+    with pytest.raises(ConfigurationError, match="SCENEGEMS_NODE_CAPABILITIES is replaced"):
+        NodeConfiguration.from_values(values(SCENEGEMS_NODE_CAPABILITIES="simulation:2"))
+
+
+def test_components_are_the_catalogs():
+    assert parse_components(" control_layer/ardupilot , simulation_layer/gazebo,asv_software/replay ") == {"control_layer/ardupilot", "simulation_layer/gazebo", "asv_software/replay"}
+    with pytest.raises(ValueError, match="unknown component 'simulation.kinematic'"):
+        parse_components("simulation.kinematic")
+    with pytest.raises(ValueError, match="listed twice"):
+        parse_components("monitoring,monitoring")
+    with pytest.raises(ValueError, match="lists no component"):
+        parse_components(" , ")
+
+
+def test_a_job_type_with_slots_needs_a_component_that_serves_it():
+    assert slots_without_components({JobType.SIMULATION: 1, JobType.MONITORING_POST_HOC: 1}, frozenset({"simulation_layer/gazebo", "monitoring"})) == []
+    problems = slots_without_components({JobType.SIMULATION: 1, JobType.CALIBRATION_DEVIATION: 1}, frozenset({"asv_software/replay", "control_layer/ardupilot"}))
+    assert problems[0].startswith("simulation needs a simulation layer among SCENEGEMS_NODE_COMPONENTS")
+    assert problems[1] == "calibration.deviation needs the component calibration among SCENEGEMS_NODE_COMPONENTS"
+    with pytest.raises(ConfigurationError, match="SCENEGEMS_NODE_SLOTS: monitoring.post_hoc needs the component monitoring"):
+        NodeConfiguration.from_values(values(SCENEGEMS_NODE_SLOTS="monitoring.post_hoc:1"))
 
 
 @pytest.mark.parametrize("text", ["gpu", "gpu=", "=true", "gpu=true,gpu=false", "g pu=true"])

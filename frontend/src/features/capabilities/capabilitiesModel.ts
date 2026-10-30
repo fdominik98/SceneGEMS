@@ -8,7 +8,7 @@ export type DocumentView = GraphView | "matrix";
 export type Tone = "ok" | "warn" | "bad" | "neutral";
 
 export const UNBOUNDED = "unbounded";
-/** The fact of an available stack that names the job type running it on a node, null when it runs on the workbench only (vessel_stack_description.CLUSTER_JOB_FACT). */
+/** The fact of an available stack that names the job and runner running it on a node ("simulation, runner kinematic"), null when it runs on the workbench only (vessel_stack_description.CLUSTER_JOB_FACT). */
 export const CLUSTER_JOB_FACT = "cluster_job";
 
 /** How good a capability value is: green for what a run can rely on, amber for what is limited or unconfirmed, red for what is missing. */

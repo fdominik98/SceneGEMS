@@ -12,7 +12,8 @@ def configuration(tmp_path, **changes) -> NodeConfiguration:
         "SCENEGEMS_MASTER_URL": "http://192.168.1.10:8443",
         "SCENEGEMS_MASTER_ID": "lab-master",
         "SCENEGEMS_NODE_NAME": "worker-1",
-        "SCENEGEMS_NODE_CAPABILITIES": "scene_generation:3,simulation.kinematic:2",
+        "SCENEGEMS_NODE_SLOTS": "scene_generation:3,simulation:2",
+        "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_NODE_STATE_DIR": str(tmp_path / "state"),
         "SCENEGEMS_DOCKER_NETWORK": "scenegems-node-lab-master-worker-1",
         "SCENEGEMS_NODE_REFERENCE_GEOFENCE": "57.7,11.9,2000",
@@ -33,7 +34,7 @@ def test_the_broker_is_the_masters_plain_anonymous_one_on_its_host(tmp_path):
 def test_the_node_context_carries_ids_slots_and_network(tmp_path):
     node = build_node_context(configuration(tmp_path))
     assert (node.master_id, node.node_id) == ("lab-master", "worker-1")
-    assert node.slots == {JobType.SCENE_GENERATION: 3, JobType.SIMULATION_KINEMATIC: 2}
+    assert node.slots == {JobType.SCENE_GENERATION: 3, JobType.SIMULATION: 2}
     assert node.pool_workers(Subsystem.SCENE_GENERATION) == 3
     assert node.broker_network == "scenegems-node-lab-master-worker-1"
     assert (node.reference_geofence.latitude, node.reference_geofence.radius_meters) == (57.7, 2000.0)
