@@ -1,5 +1,5 @@
 import type { Verdict } from "../../domain/cluster/schemas";
-import { clampPage, describeRange, pageCount, PAGE_SIZES, splitFailedRule, type SortDirection, type VerdictPaging } from "../../domain/cluster/resultsApi";
+import { clampPage, describeRange, pageCount, PAGE_SIZES, splitFailedRule, type VerdictPaging, type VerdictSort } from "../../domain/cluster/resultsApi";
 import { StateChip } from "./CaseParts";
 import { formatSeconds, shortClassId } from "./resultsFormat";
 
@@ -11,8 +11,22 @@ interface VerdictTableProps {
   onOpenCase: (verdict: Verdict) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
-  onDirection: (direction: SortDirection) => void;
+  /** Whether the master sorts by any column; an older one has the FEC order only, which FEC, Case and Run flip together. */
+  sortable: boolean;
+  onSort: (sort: VerdictSort) => void;
 }
+
+const SORT_LABEL: Record<VerdictSort, string> = {
+  fec_id: "FEC",
+  case_index: "case",
+  run_index: "run",
+  state: "state",
+  first_failure_time_s: "first failure",
+  step: "step",
+  created_at: "time",
+};
+/** The columns of the FEC order, the only order of a master before Phase 7. */
+const FEC_ORDER: readonly VerdictSort[] = ["fec_id", "case_index", "run_index"];
 
 /** The failed rules by name (a rule that failed for several vessel pairs shows once); the full text is the tooltip. */
 function FailedRules({ rules }: { rules: string[] }) {
@@ -33,19 +47,28 @@ function FailedRules({ rules }: { rules: string[] }) {
   );
 }
 
-export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onPage, onPageSize, onDirection }: VerdictTableProps) {
+export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onPage, onPageSize, sortable, onSort }: VerdictTableProps) {
   const known = total ?? verdicts.length;
   const pages = pageCount(known, paging.pageSize);
   const page = clampPage(paging.page, known, paging.pageSize);
-  const next: SortDirection = paging.direction === "asc" ? "desc" : "asc";
-  const ariaSort = paging.direction === "asc" ? "ascending" : "descending";
-  const orderHint = `Ordered by FEC, case and run, ${paging.direction === "asc" ? "ascending" : "descending"}. Select to ${next === "asc" ? "ascend" : "descend"}.`;
-  const sortHeader = (label: string) => (
-    <button type="button" className="results-sort" onClick={() => onDirection(next)} title={orderHint}>
-      {label}
-      <span aria-hidden="true">{paging.direction === "asc" ? " ▲" : " ▼"}</span>
-    </button>
-  );
+  const ascending = paging.direction === "asc";
+  const activeSort = paging.sort ?? "fec_id";
+  const sortHeader = (key: VerdictSort, label: string) => {
+    if (!sortable && !FEC_ORDER.includes(key)) {
+      return label;
+    }
+    const active = sortable ? activeSort === key : true;
+    const hint = active
+      ? `Sorted by ${SORT_LABEL[sortable ? key : "fec_id"]}${sortable ? "" : ", case and run"}, ${ascending ? "ascending" : "descending"}. Select to ${ascending ? "descend" : "ascend"}.`
+      : `Select to sort by ${SORT_LABEL[key]}.`;
+    return (
+      <button type="button" className="results-sort" onClick={() => onSort(key)} title={hint}>
+        {label}
+        {active && <span aria-hidden="true">{ascending ? " ▲" : " ▼"}</span>}
+      </button>
+    );
+  };
+  const ariaSort = (key: VerdictSort) => ((sortable ? activeSort === key : FEC_ORDER.includes(key)) ? (ascending ? "ascending" : "descending") : undefined);
 
   return (
     <section className="results-panel" aria-label="Verdicts">
@@ -53,13 +76,13 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
         <table className="results-table" aria-busy={loading}>
           <thead>
             <tr>
-              <th aria-sort={ariaSort}>{sortHeader("FEC")}</th>
-              <th aria-sort={ariaSort}>{sortHeader("Case")}</th>
-              <th aria-sort={ariaSort}>{sortHeader("Run")}</th>
-              <th>State</th>
+              <th aria-sort={ariaSort("fec_id")}>{sortHeader("fec_id", "FEC")}</th>
+              <th aria-sort={ariaSort("case_index")}>{sortHeader("case_index", "Case")}</th>
+              <th aria-sort={ariaSort("run_index")}>{sortHeader("run_index", "Run")}</th>
+              <th aria-sort={ariaSort("state")}>{sortHeader("state", "State")}</th>
               <th>Monitor</th>
               <th>Failed rules</th>
-              <th>First failure</th>
+              <th aria-sort={ariaSort("first_failure_time_s")}>{sortHeader("first_failure_time_s", "First failure")}</th>
               <th>Early stop</th>
               <th>Sensitive</th>
             </tr>

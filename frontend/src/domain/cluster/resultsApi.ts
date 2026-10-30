@@ -1,12 +1,15 @@
-import type { OperatorClient, ListPage, VerdictFilters } from "./operatorApi";
+import type { OperatorClient, ListPage, VerdictFilters, VerdictSort } from "./operatorApi";
 import type { CampaignDetail, Verdict, VerdictState, VerdictStep } from "./schemas";
 
 /**
  * Verdict table logic of the Results section: filter and paging state, how a page is read
- * from the master, and the summary over a filtered set. The master orders verdicts by class,
- * case index and run, ascending, and has no sort parameter; the descending order is read from
- * the end of the set.
+ * from the master, and the summary over a filtered set. A master of Phase 7 sorts verdicts
+ * (`sort`, `order`); an older one orders them by class, case index and run, ascending, and
+ * ignores both, so a descending page is read from the end of the set and the other sorts are
+ * not offered (`VerdictPage.serverSort` says which master answered).
  */
+
+export type { VerdictSort };
 
 export type SensitiveFilter = "any" | "yes" | "no";
 export type SortDirection = "asc" | "desc";
@@ -25,6 +28,8 @@ export interface VerdictPaging {
   page: number;
   pageSize: number;
   direction: SortDirection;
+  /** The column the master sorts by; `fec_id` (the default) is FEC, case, step and run. */
+  sort?: VerdictSort;
 }
 
 export const DEFAULT_VERDICT_FILTERS: VerdictFilterState = { classId: "", state: "any", runIndex: null, sensitive: "any" };
@@ -103,9 +108,19 @@ export interface VerdictPage {
   items: Verdict[];
   /** The number of verdicts the filters match; null when the master does not send `X-Total-Count`. */
   total: number | null;
+  /** Whether the master sorts (true) or only has the FEC order (false); left out while the page is empty and nothing was learned yet. */
+  serverSort?: boolean;
 }
 
 type VerdictLister = Pick<OperatorClient, "listVerdicts">;
+
+/** Per client: whether its master sorts verdicts, learned from the first non-empty page. */
+const sortSupport = new WeakMap<object, boolean>();
+
+/** A master of Phase 7 sends `encounters` on every verdict (null when there are none) and sorts; null when the page is empty and says nothing. */
+export function masterSorts(items: readonly Verdict[]): boolean | null {
+  return items.length === 0 ? null : items.every((item) => item.encounters !== undefined);
+}
 
 /** One page of the filtered verdicts, in the order the paging asks for. */
 export async function fetchVerdictPage(
@@ -117,6 +132,25 @@ export async function fetchVerdictPage(
   step?: VerdictStep
 ): Promise<VerdictPage> {
   const query = toApiFilters(filters, step);
+  const sort = paging.sort ?? "fec_id";
+  const plain = sort === "fec_id" && paging.direction === "asc";
+  if (sortSupport.get(client) !== false) {
+    const request = plain ? query : { ...query, sort, order: paging.direction };
+    const page = await client.listVerdicts(campaignId, { ...request, limit: paging.pageSize, offset: paging.page * paging.pageSize }, signal);
+    const sorts = masterSorts(page.items);
+    if (sorts !== null) {
+      sortSupport.set(client, sorts);
+    }
+    if (plain || sorts !== false) {
+      return { items: page.items, total: page.total, ...(sorts === null ? {} : { serverSort: sorts }) };
+    }
+  }
+  // An older master: the FEC order only, a descending page read from the end.
+  const page = await fetchInFecOrder(client, campaignId, query, paging, signal);
+  return { ...page, serverSort: false };
+}
+
+async function fetchInFecOrder(client: VerdictLister, campaignId: string, query: VerdictFilters, paging: VerdictPaging, signal?: AbortSignal): Promise<VerdictPage> {
   if (paging.direction === "asc") {
     const page = await client.listVerdicts(campaignId, { ...query, limit: paging.pageSize, offset: paging.page * paging.pageSize }, signal);
     return { items: page.items, total: page.total };
@@ -167,10 +201,13 @@ export interface VerdictSummary {
   sensitive: number;
 }
 
-/** A verdict's failed rule text is `<relation>: <rule>`; the rule name itself can hold a colon. */
+/** A relation reads `OS_0 - TS_1` (the backend) or `0->1`; a rule such as "Rule 16" or "Rule 17 - Stand-On" is not one. */
+const RELATION_TEXT = /^(?!Rule\b|Suggestion\b)[^:]+?(?: - |->)[^:]+$/;
+
+/** A verdict's failed rule text is `<relation>: <rule>`; the rule name itself can hold a colon, so it splits on the first `: ` after a relation. */
 export function splitFailedRule(text: string): { relation: string | null; rule: string } {
   const at = text.indexOf(": ");
-  if (at <= 0 || !text.slice(0, at).includes("->")) {
+  if (at <= 0 || !RELATION_TEXT.test(text.slice(0, at))) {
     return { relation: null, rule: text };
   }
   return { relation: text.slice(0, at), rule: text.slice(at + 2) };

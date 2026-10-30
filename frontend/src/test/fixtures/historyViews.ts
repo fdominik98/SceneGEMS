@@ -160,6 +160,7 @@ export function sampleFindings(overrides: Record<string, unknown> = {}): Record<
     outputs: { count: 5, valid: 5, complete: 3 },
     verdicts: { passed: 3, failed: 2, unmonitored: 0 },
     failed_rules: [{ rule: "rule_15", count: 2, first_failure_time_s: { min: 12.5, median: 20.1 } }],
+    encounter_types: { HEAD_ON: 4, OTHER: 2, CROSSING_FROM_PORT: 4 },
     fecs: [{ fec_id: "class-a", cases: 5, passed: 3, failed: 2 }],
     durations_s: { median: 4.2, p90: 9.8 },
     ...overrides,
@@ -172,6 +173,7 @@ export const sampleUnmonitoredFindings = sampleFindings({
   monitored: false,
   verdicts: { passed: 0, failed: 0, unmonitored: 0 },
   failed_rules: [],
+  encounter_types: {},
   durations_s: { median: null, p90: null },
 });
 

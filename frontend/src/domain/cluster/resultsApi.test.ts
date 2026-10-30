@@ -8,6 +8,7 @@ import {
   fetchVerdictPage,
   fetchVerdictSummary,
   hasActiveFilters,
+  masterSorts,
   pageCount,
   pageWindow,
   runIndexesOf,
@@ -106,13 +107,15 @@ describe("paging", () => {
     expect(page.items.map((item) => item.case_index)).toEqual(Array.from({ length: 50 }, (_, i) => 50 + i));
   });
 
-  it("fetches a descending page from the end and reverses it", async () => {
+  it("fetches a descending page from the end and reverses it on a master that does not sort", async () => {
     const { client, calls } = fakeLister(120);
     const first = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "desc" });
     expect(calls).toEqual([
+      { sort: "fec_id", order: "desc", limit: 50, offset: 0 }, // asked for the server order first: the rows came without encounters
       { limit: 1, offset: 0 },
       { limit: 50, offset: 70 },
     ]);
+    expect(first.serverSort).toBe(false);
     expect(first.items[0].case_index).toBe(119);
     expect(first.items[49].case_index).toBe(70);
     const last = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 2, pageSize: 50, direction: "desc" });
@@ -123,7 +126,7 @@ describe("paging", () => {
     const { client, listVerdicts } = fakeLister(0);
     const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "desc" });
     expect(page).toEqual({ items: [], total: 0 });
-    expect(listVerdicts).toHaveBeenCalledTimes(1);
+    expect(listVerdicts).toHaveBeenCalledTimes(1); // an empty page says nothing about the master: no fallback
   });
 
   it("falls back to the first page, reversed, when the master sends no total", async () => {
@@ -134,20 +137,106 @@ describe("paging", () => {
   });
 });
 
+/** A master of Phase 7: sorts like the route (a small subset of it) and sends `encounters` on every verdict. */
+function sortingLister(total: number) {
+  const calls: VerdictFilters[] = [];
+  const listVerdicts = vi.fn(async (_campaignId: string, filters: VerdictFilters = {}) => {
+    calls.push(filters);
+    const all = Array.from({ length: total }, (_, i) => verdict(i, { encounters: i % 2 === 0 ? { "OS_0 - TS_1": ["HEAD_ON"] } : null, first_failure_time_s: i % 3 === 0 ? null : i }));
+    if (filters.sort === "first_failure_time_s") {
+      const sign = filters.order === "desc" ? -1 : 1;
+      all.sort((a, b) => (a.first_failure_time_s === null ? 1 : b.first_failure_time_s === null ? -1 : sign * (a.first_failure_time_s - b.first_failure_time_s))); // nulls last, as the route does
+    } else if (filters.order === "desc") {
+      all.reverse();
+    }
+    const offset = filters.offset ?? 0;
+    return { items: all.slice(offset, offset + (filters.limit ?? 100)), total };
+  });
+  return { client: { listVerdicts } as never, calls, listVerdicts };
+}
+
+describe("verdict encounters", () => {
+  it("reads the encounter types of a verdict, null for an old one and nothing from an older master", () => {
+    expect(verdict(1, { encounters: { "OS_0 - TS_1": ["HEAD_ON", "OTHER"] } }).encounters).toEqual({ "OS_0 - TS_1": ["HEAD_ON", "OTHER"] });
+    expect(verdict(1, { encounters: null }).encounters).toBeNull();
+    expect(verdict(1).encounters).toBeUndefined();
+  });
+});
+
+describe("verdict sort", () => {
+  it("asks a master of Phase 7 for the sorted page and takes it as it comes", async () => {
+    const { client, calls } = sortingLister(120);
+    const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 1, pageSize: 50, direction: "desc", sort: "first_failure_time_s" });
+    expect(calls).toEqual([{ sort: "first_failure_time_s", order: "desc", limit: 50, offset: 50 }]);
+    expect(page.serverSort).toBe(true);
+    const times = page.items.map((item) => item.first_failure_time_s as number);
+    expect(times).toHaveLength(50);
+    expect([...times].sort((a, b) => b - a)).toEqual(times); // the server's order, not re-read from the end
+    expect(page.total).toBe(120);
+  });
+
+  it("sends no sort for the default order and still learns that the master sorts", async () => {
+    const { client, calls } = sortingLister(10);
+    const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 5, direction: "asc" });
+    expect(calls).toEqual([{ limit: 5, offset: 0 }]);
+    expect(page.serverSort).toBe(true);
+  });
+
+  it("sends a descending FEC order as a sort too", async () => {
+    const { client, calls } = sortingLister(10);
+    await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 5, direction: "desc", sort: "fec_id" });
+    expect(calls).toEqual([{ sort: "fec_id", order: "desc", limit: 5, offset: 0 }]);
+  });
+
+  it("keeps a verdict list with a null encounters value as a master that sorts", () => {
+    expect(masterSorts([verdict(1, { encounters: null })])).toBe(true);
+    expect(masterSorts([verdict(1)])).toBe(false);
+    expect(masterSorts([])).toBeNull();
+  });
+
+  it("falls back to the FEC order on a master that ignores sort, and remembers it", async () => {
+    const { client, calls } = fakeLister(120);
+    const first = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "asc", sort: "state" });
+    expect(first.serverSort).toBe(false);
+    expect(first.items.map((item) => item.case_index)).toEqual(Array.from({ length: 50 }, (_, i) => i)); // the FEC order, whatever column was asked
+    expect(calls).toEqual([
+      { sort: "state", order: "asc", limit: 50, offset: 0 },
+      { limit: 50, offset: 0 },
+    ]);
+    calls.length = 0;
+    const second = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 1, pageSize: 50, direction: "asc", sort: "first_failure_time_s" });
+    expect(second.serverSort).toBe(false);
+    expect(calls).toEqual([{ limit: 50, offset: 50 }]); // no second try with a sort the master ignored
+  });
+});
+
 describe("failed rule text", () => {
   it("splits the relation from a rule name that holds a colon", () => {
+    expect(splitFailedRule("OS_0 - TS_1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (OS_0)")).toEqual({
+      relation: "OS_0 - TS_1",
+      rule: "Rule 16: Give-Way Vessel Takes Early and Substantial Action (OS_0)",
+    });
+    expect(splitFailedRule("OS_0 - TS_1: Rule 8: Passing at a Safe Distance (OS_0 - TS_1)")).toEqual({
+      relation: "OS_0 - TS_1",
+      rule: "Rule 8: Passing at a Safe Distance (OS_0 - TS_1)",
+    });
     expect(splitFailedRule("0->1: Rule 16: Give-Way Vessel")).toEqual({ relation: "0->1", rule: "Rule 16: Give-Way Vessel" });
+  });
+
+  it("leaves a text without a relation alone, also when a rule name holds a dash", () => {
     expect(splitFailedRule("rule_8")).toEqual({ relation: null, rule: "rule_8" });
     expect(splitFailedRule("Rule 8: Passing")).toEqual({ relation: null, rule: "Rule 8: Passing" });
+    expect(splitFailedRule("Rule 17 - Stand-On: keeps course")).toEqual({ relation: null, rule: "Rule 17 - Stand-On: keeps course" });
+    expect(splitFailedRule("Rule 8: Passing at a Safe Distance (OS_0 - TS_1)")).toEqual({ relation: null, rule: "Rule 8: Passing at a Safe Distance (OS_0 - TS_1)" });
   });
 });
 
 describe("summarizeVerdicts", () => {
   const verdicts = [
-    verdict(1, { run_index: 0, state: "failed", failed_rules: ["0->1: Rule 16: A", "0->2: Rule 8: B"], first_failure_time_s: 30 }),
-    verdict(2, { run_index: 0, state: "failed", failed_rules: ["0->1: Rule 16: A"], first_failure_time_s: 12 }),
+    verdict(1, { run_index: 0, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A", "OS_0 - TS_2: Rule 8: B"], first_failure_time_s: 30 }),
+    verdict(2, { run_index: 0, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A"], first_failure_time_s: 12 }),
     verdict(3, { run_index: 0, state: "passed" }),
-    verdict(4, { run_index: 1, state: "failed", failed_rules: ["0->1: Rule 16: A", "0->2: Rule 16: A"], first_failure_time_s: 50, sensitive: true }),
+    verdict(4, { run_index: 1, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A", "OS_0 - TS_2: Rule 16: A"], first_failure_time_s: 50, sensitive: true }),
     verdict(5, { run_index: 1, state: "unmonitored" }),
   ];
 
@@ -169,7 +258,7 @@ describe("summarizeVerdicts", () => {
       ["Rule 16: A", 3],
       ["Rule 8: B", 1],
     ]);
-    expect(failedRules[0].relations).toEqual(["0->1", "0->2"]);
+    expect(failedRules[0].relations).toEqual(["OS_0 - TS_1", "OS_0 - TS_2"]);
     expect(failedRules[0].earliestFailureS).toBe(12);
   });
 
@@ -181,7 +270,7 @@ describe("summarizeVerdicts", () => {
 
 describe("fetchVerdictSummary", () => {
   it("reads the filtered set in pages until it is complete", async () => {
-    const { client, calls } = fakeLister(2300, (i) => verdict(i, { state: i % 2 === 0 ? "failed" : "passed", failed_rules: i % 2 === 0 ? ["0->1: Rule 8: B"] : [] }));
+    const { client, calls } = fakeLister(2300, (i) => verdict(i, { state: i % 2 === 0 ? "failed" : "passed", failed_rules: i % 2 === 0 ? ["OS_0 - TS_1: Rule 8: B"] : [] }));
     const summary = await fetchVerdictSummary(client, "c1", { ...DEFAULT_VERDICT_FILTERS, runIndex: 0 });
     expect(calls.map((call) => [call.run_index, call.limit, call.offset])).toEqual([
       [0, 1000, 0],

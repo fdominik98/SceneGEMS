@@ -17,6 +17,7 @@ import {
   describeFindings,
   describeOrigin,
   describeStepVerdict,
+  encounterTypeCounts,
   entryOption,
   executedSteps,
   hasStepViews,
@@ -109,6 +110,31 @@ describe("findings of a step", () => {
     expect(view.outputs).toEqual({ count: 5, valid: 5, complete: 3 });
     expect(view.showComplete).toBe(true);
     expect(view.duration).toEqual({ median: "4.2 s", p90: "9.8 s" });
+  });
+
+  it("lists the vessel pairs by encounter type, most first, with the monitor's labels", () => {
+    expect(describeFindings(findingsSchema.parse(sampleFindings())).encounters).toEqual([
+      { label: "Crossing from Port", count: 4 },
+      { label: "Head-On", count: 4 },
+      { label: "Other", count: 2 },
+    ]);
+  });
+
+  it("counts encounter types without zero entries, puts Other after an equal count and names an unknown type in words", () => {
+    expect(encounterTypeCounts({ OTHER: 3, HEAD_ON: 3, OVERTAKING_TO_PORT: 0, NEW_KIND_OF_PAIR: 1 })).toEqual([
+      { label: "Head-On", count: 3 },
+      { label: "Other", count: 3 },
+      { label: "New kind of pair", count: 1 },
+    ]);
+    expect(encounterTypeCounts(undefined)).toEqual([]);
+  });
+
+  it("shows no encounter types for an older master or an unmonitored step", () => {
+    const older = sampleFindings();
+    delete older.encounter_types;
+    expect(describeFindings(findingsSchema.parse(older)).encounters).toEqual([]);
+    expect(describeFindings(findingsSchema.parse(sampleFindings({ monitored: false }))).encounters).toEqual([]);
+    expect(describeFindings(findingsSchema.parse(sampleUnmonitoredFindings)).encounters).toEqual([]);
   });
 
   it("describes an unmonitored step as partial findings: statistics without verdicts or rules", () => {
