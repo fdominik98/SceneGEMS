@@ -23,6 +23,9 @@ class LiveMonitorSession(MonitorSession):
     ) -> None:
         super().__init__(send_payload)
 
+        if scope == "external":
+            # An external monitor is someone else's agent: it listens on the unscoped WARA-PS topics.
+            mqtt_connection = mqtt_connection.with_topic_prefix("")
         self.client = MqttMonitorClient(
             mqtt_connection,
             topic,

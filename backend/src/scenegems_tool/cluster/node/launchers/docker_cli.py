@@ -36,6 +36,15 @@ def container_ids_for_compose_project_prefix(prefix: str) -> List[str]:
     return container_ids
 
 
+def compose_projects_with_prefix(prefix: str) -> List[str]:
+    """Names of the compose projects with a container whose project name starts with prefix."""
+    result = subprocess.run(
+        ["docker", "ps", "-a", "--format", f'{{{{.Label "{COMPOSE_PROJECT_LABEL}"}}}}'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return sorted({project for project in result.stdout.split() if project.startswith(prefix)})
 
 
 def container_names_and_ids() -> List[tuple]:

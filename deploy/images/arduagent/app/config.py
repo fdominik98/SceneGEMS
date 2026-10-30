@@ -5,6 +5,8 @@ import string
 import uuid
 from dataclasses import dataclass
 
+from agent_topics import AgentTopics
+
 
 def id_generator(size=3, chars=string.ascii_lowercase + string.digits):
     return "".join(random.choice(chars) for _ in range(size))
@@ -40,12 +42,16 @@ class AgentConfig:
     AGENT_DESCRIPTION: str = str(os.getenv("AGENT_DESCRIPTION"))
     AGENT_MODEL: str = str(os.getenv("AGENT_MODEL"))
 
-    BASE_TOPIC: str = f"waraps/unit/{DOMAIN}/{REAL_SIM}/{NAME}"
-    COMMAND_TOPIC: str = f"{BASE_TOPIC}/exec/command"
-    POSITION_TOPIC: str = f"{BASE_TOPIC}/sensor/position"
-    OBSTACLE_DISTANCES_TOPIC: str = f"{BASE_TOPIC}/sensor/obstacle_distances"
-    OTHER_POSITIONS_TOPIC: str = f"waraps/unit/+/+/+/sensor/position"
-    RC_OVERRIDE_TOPIC: str = f"{BASE_TOPIC}/sensor/rc_override"
+    # Every topic from the effective base after the BASE_TOPIC and OTHER_POSITIONS_TOPIC
+    # overrides, under MQTT_TOPIC_PREFIX when the agent is scoped (agent_topics.py).
+    TOPICS: AgentTopics = AgentTopics.from_environment(os.environ)
+    TOPIC_PREFIX: str = TOPICS.prefix
+    BASE_TOPIC: str = TOPICS.base
+    COMMAND_TOPIC: str = TOPICS.command
+    POSITION_TOPIC: str = TOPICS.position
+    OBSTACLE_DISTANCES_TOPIC: str = TOPICS.obstacle_distances
+    OTHER_POSITIONS_TOPIC: str = TOPICS.other_positions
+    RC_OVERRIDE_TOPIC: str = TOPICS.rc_override
 
     UUID: str = str(uuid.uuid4())
 
@@ -67,16 +73,7 @@ class AgentConfig:
         str(os.getenv("WAYPOINT_ACCEPTANCE_RADIUS_M", "0.0"))
     )
 
-    os_BASE_TOPIC = os.getenv("BASE_TOPIC")
-    os_OTHER_POSITIONS_TOPIC = os.getenv("OTHER_POSITIONS_TOPIC")
     os_UUID = os.getenv("UUID")
-
-    # Replace values from .env if
-    if os_BASE_TOPIC:
-        BASE_TOPIC = str(os_BASE_TOPIC)
-
-    if os_OTHER_POSITIONS_TOPIC:
-        OTHER_POSITIONS_TOPIC = str(os_OTHER_POSITIONS_TOPIC)
 
     if os_UUID:
         UUID = str(os_UUID)

@@ -23,8 +23,9 @@ def anyio_backend() -> str:
 
 @pytest.fixture(autouse=True)
 def no_docker_teardown(monkeypatch):
-    """An empty simulation session schedules a Docker teardown of any leftover stack; keep it off the engine."""
-    monkeypatch.setattr(empty_simulation_session, "schedule_force_destroy_scenario_execution_stack", lambda **_: None)
+    """An empty simulation session schedules a Docker teardown of its session's stack or of leftover stacks; keep both off the engine."""
+    monkeypatch.setattr(empty_simulation_session, "schedule_force_destroy_session_stack", lambda *_, **__: None)
+    monkeypatch.setattr(empty_simulation_session, "schedule_leftover_sweep", lambda *_, **__: None)
 
 
 @pytest.fixture

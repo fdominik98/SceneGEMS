@@ -1,7 +1,7 @@
 """Force-remove Docker subsystem containers started by the SceneGEMS backend.
 
-These are the workbench's fixed-name containers. Scoped instances of a node belong to its
-NodeContext, which removes them in `shutdown`.
+These are the workbench's containers: the stacks of its live sessions and its monitors. Scoped
+instances of a node belong to its NodeContext, which removes them in `shutdown`.
 """
 
 from __future__ import annotations
@@ -33,9 +33,9 @@ def shutdown_all_docker_subsystems() -> None:
         _shutdown_done = True
 
     try:
-        from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import force_destroy_scenario_execution_stack
+        from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import force_destroy_session_stacks
 
-        force_destroy_scenario_execution_stack()
+        force_destroy_session_stacks()
         force_destroy_monitor_subsystem_stack()
     except BaseException:
         _logger.exception("Docker subsystem shutdown failed")

@@ -8,7 +8,7 @@ from concrete_level.models.actor_state import ActorState
 from scenegems_tool.messaging.mqtt_agent_client import ExecutionState
 from scenegems_tool.vessel_stack import simulation_parser
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
-from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig, VesselStackConfig
+from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_parser import SimulationParser
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
@@ -19,6 +19,7 @@ class FakeAgentClient:
 
     def __init__(self, vessel, mqtt_connection, topic, control_mode, agent_name, reference_geofence, initial_state, parent_service_name, mission_waypoints):
         self.actor = vessel
+        self.mqtt_connection = mqtt_connection
         self.topic = topic
         self.control_mode = control_mode
         self.agent_name = agent_name
@@ -61,8 +62,8 @@ def fake_clients(monkeypatch):
 PARENT = SimpleNamespace(name="scenario_execution_service", reference_geofence=GEOFENCE)
 
 
-def parser_for(instance, trajectories=None):
-    return SimulationParser(instance, trajectories or encounter_trajectories("head_on", 60), mqtt_connection(), PARENT, spawn_docker_stack=False)
+def parser_for(instance, trajectories=None, connection=None):
+    return SimulationParser(instance, trajectories or encounter_trajectories("head_on", 60), connection or mqtt_connection(), PARENT, spawn_docker_stack=False)
 
 
 ARDUAGENT = ["replay_arduagent_follower"]
@@ -180,3 +181,23 @@ def test_destroy_disconnects_every_client_without_touching_docker_when_no_stack_
     parser.destroy()
     assert all(client.disconnected for client in parser.clients)
     assert parser._shutdown.is_set()
+
+
+SESSION_PREFIX = "scenegems/m1/workbench/live-ab12cd34/"
+
+
+def test_the_agents_of_an_instance_of_simulated_vessels_use_the_session_prefix():
+    parser = parser_for(stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=ARDUAGENT), connection=mqtt_connection().with_topic_prefix(SESSION_PREFIX))
+    assert [client.mqtt_connection.topic_prefix for client in parser.clients] == [SESSION_PREFIX, SESSION_PREFIX]
+    assert [client.topic for client in parser.clients] == ["waraps/unit/surface/agent_0", "waraps/unit/surface/agent_1"], "the client adds the prefix itself"
+
+
+def test_with_a_real_vessel_every_agent_client_keeps_the_unscoped_wara_ps_topics():
+    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=ARDUAGENT)
+    instance.vessels["1"].context = AgentContext.REAL
+    instance.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+    instance.vessels["1"].adapter_ids = ("replay_arduagent_real_vessel",)
+    session_connection = mqtt_connection().with_topic_prefix(SESSION_PREFIX)
+    parser = parser_for(instance, connection=session_connection)
+    assert [client.mqtt_connection.topic_prefix for client in parser.clients] == ["", ""], "the real vessel's on-board ArduAgent and the simulated one that watches it"
+    assert session_connection.topic_prefix == SESSION_PREFIX, "the service's own connection keeps the session prefix"

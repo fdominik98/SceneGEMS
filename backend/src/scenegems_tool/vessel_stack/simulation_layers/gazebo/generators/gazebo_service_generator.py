@@ -6,10 +6,13 @@ from utils.file_system_utils import GAZEBO_ENTRYPOINT_CONTAINER_PATH, docker_vol
 
 def generate_gazebo_service(world_file: str, vessel_services: list[str], headless: bool = True, display: str = "", verbose: int = 4, actuator_port: Optional[int] = None) -> dict:
     """The Gazebo service. actuator_port: the world starts paused and the gz-transport actuator listens on that port
-    (custom control layer), instead of the world running on its own."""
+    (custom control layer), instead of the world running on its own.
+
+    No container name and no host port: SITL and the lockstep runners reach it as `gazebo` on the
+    stack's network, and the stack that runs it names its containers (one per live session or job).
+    """
     gazebo = {
         "image": GAZEBO_CONTAINER.image,
-        "container_name": "gazebo",
         "hostname": "gazebo",
         "environment": {
             "GZ_HEADLESS": "1" if headless else "0",
@@ -24,7 +27,6 @@ def generate_gazebo_service(world_file: str, vessel_services: list[str], headles
             "-c",
             "set -euo pipefail\n" f"tr -d '\\r' < {GAZEBO_ENTRYPOINT_CONTAINER_PATH} > /tmp/entrypoint.sh\n" "chmod +x /tmp/entrypoint.sh\n" "exec /tmp/entrypoint.sh",
         ],
-        "ports": ["11345:11345"],
         "networks": ["maritime_net"],
         "depends_on": vessel_services,
     }

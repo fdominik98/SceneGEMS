@@ -36,12 +36,13 @@ class Agent:
 
         self.mav.set_auto_arm(AgentConfig.REAL_SIM == "simulation")
 
-        self.pos_front_topic: str = "waraps/unit/"
+        # Positions of other agents, under the agent's topic prefix when it is scoped.
+        self.pos_front_topic: str = AgentConfig.TOPICS.positions_root
         self.pos_end_topic: str = "/sensor/position"
 
         self.follow_lead_name: str = None
 
-        self.ca_front_topic: str = f"{self.pos_front_topic}{AgentConfig.DOMAIN}/{AgentConfig.REAL_SIM}/"
+        self.ca_front_topic: str = AgentConfig.TOPICS.collision_avoidance_root
         self.ca_end_topic: str = self.pos_end_topic
 
         self.fl_front_topic: str = self.pos_front_topic
@@ -1208,7 +1209,7 @@ class Agent:
     # HELPERS ==========================================================================
 
     def is_own_topic(self, topic_str: str = None) -> bool:
-        return topic_str and topic_str.startswith(AgentConfig.BASE_TOPIC)
+        return bool(topic_str) and AgentConfig.TOPICS.is_own(topic_str)
 
     def is_lead_topic(self, topic_str: str = None) -> bool:
         if topic_str and self.follow_lead_name:
