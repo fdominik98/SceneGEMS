@@ -29,12 +29,15 @@ vi.mock("../../../domain/cluster/campaignApi", async (importOriginal) => ({
 
 const VALID = { valid: true, name: "n", config_hash: "f".repeat(64), fecs: [], cases_planned: 2, runs: [] };
 
+/** The pages in the list that replaces the campaign map. */
 function pages(): string[] {
   const nav = screen.getByRole("navigation", { name: "Wizard steps" });
   return within(nav)
     .getAllByRole("button")
     .map((button) => button.querySelector(".wiz-step-label")?.textContent ?? "");
 }
+
+const ALL_PAGES = ["Steps", "Input", "Domain", "Scene generation", "Trajectory generation", "Simulation", "Resources", "Policy", "Review"];
 
 beforeEach(() => {
   localStorage.removeItem(WIZARD_STORAGE_KEY);
@@ -53,18 +56,21 @@ function renderWizard(onCreated = vi.fn()) {
 }
 
 describe("the wizard's pages follow the chosen steps", () => {
-  it("goes through every page for the whole chain, starting with Steps and Input", () => {
-    renderWizard();
-    expect(pages()).toEqual(["Steps", "Input", "Domain", "Trajectories", "Runs", "Resources", "Policy", "Review"]);
+  it("goes through every page for the whole chain, starting with Steps and Input", async () => {
+    const { user } = renderWizard();
+    await user.click(screen.getByRole("button", { name: "List" }));
+    expect(pages()).toEqual(ALL_PAGES);
     expect(screen.getByRole("radio", { name: /Scene generation\s*Generates scenes/ })).toBeChecked();
+    expect(screen.getByText("Page 1 of 9")).toBeVisible();
   });
 
-  it("hides the trajectories and runs pages for scene generation alone, and the runs page without simulation", async () => {
+  it("shows a page for each step the campaign runs and hides the others", async () => {
     const { user } = renderWizard();
+    await user.click(screen.getByRole("button", { name: "List" }));
     await user.click(screen.getByRole("radio", { name: /Scene generation\s*Produces scenes/ }));
-    expect(pages()).toEqual(["Steps", "Input", "Domain", "Resources", "Policy", "Review"]);
+    expect(pages()).toEqual(["Steps", "Input", "Domain", "Scene generation", "Resources", "Policy", "Review"]);
     await user.click(screen.getByRole("radio", { name: /Trajectory generation\s*Produces trajectories/ }));
-    expect(pages()).toEqual(["Steps", "Input", "Domain", "Trajectories", "Resources", "Policy", "Review"]);
+    expect(pages()).toEqual(["Steps", "Input", "Domain", "Scene generation", "Trajectory generation", "Resources", "Policy", "Review"]);
   });
 
   it("shows the Input page of the first step and walks Next past the hidden pages", async () => {
@@ -74,15 +80,64 @@ describe("the wizard's pages follow the chosen steps", () => {
     await user.click(screen.getByRole("button", { name: "Next: Input" }));
     expect(screen.getByRole("heading", { name: "From Campaign History" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Next: Domain" }));
-    await user.click(screen.getByRole("button", { name: "Next: Trajectories" }));
+    await user.click(screen.getByRole("button", { name: "Next: Trajectory generation" }));
+    expect(screen.getByRole("heading", { name: "Trajectory generation", level: 3 })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Next: Resources" }));
     expect(screen.getByRole("button", { name: "Back" })).toBeEnabled();
+    expect(screen.getByText("Page 5 of 7")).toBeVisible();
   });
 
   it("falls back to the first page when the stored page is no longer part of the steps", () => {
     useWizardStore.setState({ step: "runs", draft: { ...emptyDraft(), steps: ["scene_generation"] } });
     renderWizard();
     expect(screen.getByRole("textbox", { name: "Name" })).toBeVisible();
+  });
+});
+
+describe("the campaign map", () => {
+  it("is shown in place of the list of pages and opens the page of the box clicked", async () => {
+    const { user } = renderWizard();
+    const map = screen.getByRole("region", { name: "Campaign map" });
+    expect(screen.queryByRole("navigation", { name: "Wizard steps" })).not.toBeInTheDocument();
+    expect(within(map).getByRole("button", { name: /^Steps/ })).toHaveAttribute("aria-current", "step");
+
+    await user.click(within(map).getByRole("button", { name: /^Scene generation/ }));
+    expect(screen.getByRole("heading", { name: "Scene generation", level: 3 })).toBeVisible();
+    expect(screen.getByRole("group", { name: "Monitor after scene generation" })).toBeVisible();
+    expect(within(map).getByRole("button", { name: /^Scene generation/ })).toHaveAttribute("aria-current", "step");
+  });
+
+  it("follows the draft: a changed monitor and a step left out show at once", async () => {
+    const { user } = renderWizard();
+    const map = screen.getByRole("region", { name: "Campaign map" });
+    expect(within(map).getByRole("button", { name: /^Run 1/ })).toBeVisible();
+    await user.click(screen.getByRole("radio", { name: /Trajectory generation\s*Produces trajectories/ }));
+    expect(within(map).getByRole("button", { name: /^Simulation\s*Not run/ })).toBeVisible();
+    expect(within(map).queryByRole("button", { name: /^Run 1/ })).not.toBeInTheDocument();
+
+    await user.click(within(map).getByRole("button", { name: /^Scene generation/ }));
+    await user.click(within(screen.getByRole("group", { name: "Monitor after scene generation" })).getByRole("radio", { name: /Post hoc monitor/ }));
+    expect(within(map).getByRole("button", { name: /^Scene generation/ })).toHaveTextContent("Post hoc monitor");
+  });
+
+  it("keeps the choice of the map or the list in this browser", async () => {
+    const { user } = renderWizard();
+    await user.click(screen.getByRole("button", { name: "List" }));
+    expect(screen.getByRole("button", { name: "List" })).toHaveAttribute("aria-pressed", "true");
+    expect(localStorage.getItem("scenegems:campaign-wizard-map")).toBe("false");
+    await user.click(screen.getByRole("button", { name: "Map" }));
+    expect(screen.getByRole("region", { name: "Campaign map" })).toBeVisible();
+  });
+});
+
+describe("explanations", () => {
+  it("are left out until asked for, and the choice is kept in this browser", async () => {
+    const { user } = renderWizard();
+    const wizard = screen.getByRole("heading", { name: "New campaign" }).closest(".wiz");
+    expect(wizard).toHaveClass("wiz--terse");
+    await user.click(screen.getByRole("checkbox", { name: "Show explanations" }));
+    expect(wizard).not.toHaveClass("wiz--terse");
+    expect(localStorage.getItem("scenegems:campaign-wizard-explanations")).toBe("true");
   });
 });
 

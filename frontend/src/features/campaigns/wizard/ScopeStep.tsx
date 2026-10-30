@@ -119,7 +119,8 @@ function CatalogBrowser({ catalog, onPickPattern, onPickClasses, picked }: { cat
   return (
     <div className="wiz-catalog">
       <p className="meta">
-        {plural(classes.length, "FEC")} in {plural(folders.length, "folder")}. A folder pattern selects every FEC of the folders it matches, so FECs added to the catalog later are not included: the campaign pins the FECs found when it is created.
+        {plural(classes.length, "FEC")} in {plural(folders.length, "folder")}.
+        <span className="wiz-explain"> A folder pattern selects every FEC of the folders it matches, so FECs added to the catalog later are not included: the campaign pins the FECs found when it is created.</span>
       </p>
       <Field label="Pattern" htmlFor="wiz-pattern" hint="Without a slash it matches folders, with a slash FEC ids. Wildcards: * ? [abc].">
         <span className="wiz-pattern-row">
@@ -213,7 +214,7 @@ export function ScopeStep({ draft, update, reasons, catalog }: StepProps & { cat
       <div className="wiz-columns">
         <div className="wiz-column">
           <h4 className="wiz-subhead">Catalog FECs</h4>
-          {draft.input.scenarios.length > 0 && <p className="meta">Scope entries without FECs are left out while scenario files give the campaign something to run.</p>}
+          {draft.input.scenarios.length > 0 && <p className="meta wiz-explain">Scope entries without FECs are left out while scenario files give the campaign something to run.</p>}
           <FieldIssues reasons={[...(own.byField.get("scope") ?? []), ...own.rest]} showField />
           {draft.scope.map((entry, index) => (
             <EntryCard
@@ -245,7 +246,7 @@ export function ScopeStep({ draft, update, reasons, catalog }: StepProps & { cat
           {plan && (
             <p className="wiz-total" role="status">
               <strong>{plural(plan.classes, "FEC")}</strong> selected, <strong>{plural(plan.casesPlanned, "case")}</strong> planned to complete (the quotas added up).
-              <span className="wiz-hint"> Spares and dropped cases come on top.</span>
+              <span className="wiz-hint wiz-explain"> Spares and dropped cases come on top.</span>
             </p>
           )}
         </div>

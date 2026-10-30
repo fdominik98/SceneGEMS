@@ -168,8 +168,11 @@ describe("checkDraft for partial campaigns", () => {
     draft.trajectories.generator = "unheard_of";
     draft.trajectories.timeoutS = null;
     expect(checks(draft)).toEqual([]);
-    draft.steps = ["trajectory_generation"];
+    draft.steps = ["scene_generation"];
     draft.domain.sceneGenerationTimeoutS = null;
+    // The scene generation timeout is set on the Scene generation page
+    expect(checks(draft)).toEqual(["scenes//-/scene_generation_timeout_s"]);
+    draft.steps = ["trajectory_generation"];
     draft.input.items = [item()];
     expect(checks(draft)).toEqual(["trajectories//-/generator", "trajectories//-/timeout_s"]);
     draft.steps = ["simulation"];

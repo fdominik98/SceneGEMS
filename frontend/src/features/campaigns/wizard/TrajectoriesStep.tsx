@@ -1,16 +1,16 @@
 import { describeOperatorError } from "../../../domain/cluster/operatorApi";
 import { Disclosure } from "../../../components/Disclosure";
-import { Field, FieldIssues, ParameterInput } from "./fields";
+import { Field, FieldIssues, MonitorChoice, ParameterInput } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
 import type { CatalogState, StepProps } from "./stepTypes";
 
-/** Trajectories: the generator and its parameters, built from the generators the master offers. */
+/** Trajectory generation: the generator and its parameters, built from the generators the master offers, and the monitor after the step. */
 export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps & { catalog: CatalogState }) {
   const generators = catalog.stacks?.trajectory_generators ?? [];
   const generator = generators.find((entry) => entry.id === draft.trajectories.generator);
   const own = reasonsOfEntry(reasons, null);
   const paramKeys = generator?.parameters.map((parameter) => parameter.key) ?? [];
-  const { byField, rest } = splitByField(own, ["generator", "timeout_s", "params", ...paramKeys]);
+  const { byField, rest } = splitByField(own, ["generator", "timeout_s", "monitor", "params", ...paramKeys]);
 
   const issuesOfParameter = (key: string) => [...(byField.get(key) ?? []), ...(byField.get("params")?.filter((reason) => reason.field === `params.${key}`) ?? [])];
 
@@ -65,7 +65,7 @@ export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps 
           forceOpen={generator.parameters.some((parameter) => (issuesOfParameter(parameter.key)?.length ?? 0) > 0)}
           headingLevel={4}
         >
-          <p className="meta">
+          <p className="meta wiz-explain">
             {generator.params_field
               ? "Only the values you enter are written to the config; the others keep the search's own defaults."
               : "These values go into the trajectories section of the config."}
@@ -106,6 +106,14 @@ export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps 
           <span className="meta">Choose a generator first.</span>
         </Field>
       )}
+      <MonitorChoice
+        name="wiz-trajectory-monitor"
+        legend="Monitor after trajectory generation"
+        output="trajectories as planned"
+        value={draft.trajectoryMonitor}
+        onChange={(value) => update((next) => void (next.trajectoryMonitor = value))}
+      />
+      <FieldIssues reasons={byField.get("monitor")} />
       <FieldIssues reasons={rest} showField />
     </div>
   );

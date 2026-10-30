@@ -10,15 +10,16 @@ import { CHAIN, normalizeSteps } from "./stepPlan";
  * stored draft survives a reload (one per browser).
  */
 
-export const WIZARD_STEPS = ["steps", "input", "domain", "trajectories", "runs", "resources", "policy", "review"] as const;
+export const WIZARD_STEPS = ["steps", "input", "domain", "scenes", "trajectories", "runs", "resources", "policy", "review"] as const;
 export type WizardStepId = (typeof WIZARD_STEPS)[number];
 
 export const WIZARD_STEP_LABELS: Record<WizardStepId, string> = {
   steps: "Steps",
   input: "Input",
   domain: "Domain",
-  trajectories: "Trajectories",
-  runs: "Runs",
+  scenes: "Scene generation",
+  trajectories: "Trajectory generation",
+  runs: "Simulation",
   resources: "Resources",
   policy: "Policy",
   review: "Review",

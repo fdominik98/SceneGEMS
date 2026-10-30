@@ -92,7 +92,7 @@ function RunCard({
     });
 
   return (
-    <section className={`wiz-card${reasons.length > 0 ? " wiz-card--invalid" : ""}`} aria-label={`Run ${index + 1}`}>
+    <section id={`wiz-run-${run.id}`} className={`wiz-card wiz-run${reasons.length > 0 ? " wiz-card--invalid" : ""}`} aria-label={`Run ${index + 1}`}>
       <header className="wiz-card-head">
         <h4>Run {index + 1}{run.name.trim() ? `: ${run.name.trim()}` : ""}</h4>
         <button type="button" onClick={onDuplicate}>
@@ -348,7 +348,7 @@ export function RunsStep({ draft, update, reasons, catalog }: StepProps & { cata
 
   return (
     <div className="wiz-step">
-      <p className="meta">
+      <p className="meta wiz-explain">
         Every case is simulated once per run (and per repeat). Add more runs to compare stacks, monitors or seeds on the same scenes.
       </p>
       {draft.runs.map((run, index) => (

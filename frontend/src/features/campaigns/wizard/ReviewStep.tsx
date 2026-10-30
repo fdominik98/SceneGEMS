@@ -194,7 +194,7 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
 
       <section className="wiz-create" aria-label="Create the campaign">
         <h4>Create</h4>
-        <p className="meta">A campaign is created paused unless you start it at once. A paused campaign holds its jobs until you start it in the campaign's page.</p>
+        <p className="meta wiz-explain">A campaign is created paused unless you start it at once. A paused campaign holds its jobs until you start it in the campaign's page.</p>
         <div className="wiz-create-actions">
           <button type="button" disabled={!ready || creating} onClick={() => onCreate(false)}>
             {creating ? "Creating..." : "Create paused"}

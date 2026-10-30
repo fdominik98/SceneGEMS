@@ -27,17 +27,30 @@ Above the pages, **Start from a preset** lists the campaign presets of the activ
 
 **Save this draft as a preset** stores the current draft on the master under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
+## Campaign map
+
+Above the pages, the campaign map draws the campaign as a graph of what it does, as set so far. The chain runs left to right: the input, each step the campaign runs, one box per simulation run inside the simulation frame (every case goes through each run), and the review. Arrows show what each part hands on. A step the campaign does not run is a dashed box marked "Not run". Under the chain, a row holds what applies to the whole campaign: Steps, Domain, Resources and Policy.
+
+Each box says in a few words what its page holds (the FECs and cases of the input, a step's monitor, a run's stack and repeats, whether the master accepted the config), so you see what the earlier pages set while you fill in the next one. A box opens its page; a run's box opens the Simulation page at that run. The boxes of the page shown are highlighted, and a red count marks the problems a page has. In a window too narrow for the whole map, it moves to the page you are on and shades the side that goes on; drag it sideways to see the rest.
+
+**List** shows the pages as a numbered list in place of the map, and **Map** brings the map back. The choice is kept in this browser. The footer says which page of how many you are on.
+
+## Explanations
+
+The pages show their fields with little text by default: a field's explanation appears while you edit it, and of a set of options only the chosen one explains itself. Tick **Show explanations** above the map to see every explanation and the notes about each page. The choice is kept in this browser.
+
 ## Pages
 
-The wizard shows only the pages the chosen steps need.
+The wizard shows only the pages the chosen steps need. Each step the campaign runs has a page of its own with its settings and the monitor after it.
 
 | Page | Shown when | What it holds |
 |------|------------|---------------|
-| Steps | always | The campaign's name and description, the first and the last step, and the monitor after scene generation and after trajectory generation |
+| Steps | always | The campaign's name and description, the first and the last step |
 | Input | always | What the first step starts from: catalog FECs and scenario files, scenes, or trajectories |
-| Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only. The scene generation timeout and the low TCPA option appear only with scene generation |
-| Trajectories | trajectory generation is a step | The trajectory generator and its parameters |
-| Runs | simulation is a step | The simulation runs: stack (kinematic, or replay on ArduPilot SITL or Gazebo), environment, seed, repeats and monitor |
+| Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only |
+| Scene generation | scene generation is a step | The monitor after scene generation, the scene generation timeout and the low TCPA option |
+| Trajectory generation | trajectory generation is a step | The trajectory generator and its parameters, and the monitor after trajectory generation |
+| Simulation | simulation is a step | The simulation runs: stack (kinematic, or replay on ArduPilot SITL or Gazebo), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
 | Policy | always | Retention, frames, the base seed and stop conditions |
 | Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the master's check of it and the buttons that create the campaign |
@@ -46,11 +59,13 @@ The wizard shows only the pages the chosen steps need.
 
 Choose **Start with** and **Stop after**. The steps in between run too, so the part is always consecutive: scene generation alone, scene generation and trajectory generation, all three, trajectory generation alone or with simulation, or simulation alone. A step that is not chosen hides its pages and writes nothing into the config.
 
+The monitor after each step is chosen on the step's own page:
+
 | Step | Monitor choice |
 |------|----------------|
 | Scene generation | No monitor, or the post hoc monitor, which judges each generated scene as a one-scene log (the initial situation) |
 | Trajectory generation | No monitor, or the post hoc monitor, which judges the planned trajectories |
-| Simulation | Set per run on the Runs page: post hoc, live or none, as before |
+| Simulation | Set per run on the Simulation page: post hoc, live or none |
 
 Changing the first step removes chosen input items that do not fit it, such as scenes when the campaign now starts with simulation.
 
@@ -77,7 +92,7 @@ Both apply to each FEC of the entry or file on its own.
 
 #### Seeds
 
-The base seed on the Policy page is where the case seeds start: case k of every FEC gets the base seed + k, and an item (a scene or trajectories a later start takes) gets the base seed + its number in the list. Every step of a case uses its seed: scene generation, trajectory generation and each run, with the ASV software in it. A run can set its own seed on the Runs page instead. The same config and base seed give the same cases again. The review repeats the base seed, and Campaign History shows it in the header of the entry.
+The base seed on the Policy page is where the case seeds start: case k of every FEC gets the base seed + k, and an item (a scene or trajectories a later start takes) gets the base seed + its number in the list. Every step of a case uses its seed: scene generation, trajectory generation and each run, with the ASV software in it. A run can set its own seed on the Simulation page instead. The same config and base seed give the same cases again. The review repeats the base seed, and Campaign History shows it in the header of the entry.
 
 ### Trajectory generation and simulation
 

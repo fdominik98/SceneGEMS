@@ -1,0 +1,219 @@
+/* The campaign map above the wizard's pages. App tokens only. */
+
+.cmap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.cmap-canvas {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-pane);
+  overflow: hidden;
+}
+
+.cmap-canvas.is-overflowing {
+  cursor: grab;
+}
+
+/* A canvas narrower than the drawing shades the side where it goes on; dragging shows the rest. */
+.cmap-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 5;
+  width: 56px;
+  pointer-events: none;
+}
+
+.cmap-fade--left {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-pane), transparent);
+}
+
+.cmap-fade--right {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-pane), transparent);
+}
+
+.cmap-canvas .react-flow {
+  --xy-background-color: transparent;
+  --xy-edge-stroke: #60a5fa;
+  --xy-edge-stroke-width: 2;
+}
+
+/* The cards are buttons: no node chrome around them. */
+.cmap-canvas .react-flow__node {
+  cursor: default;
+}
+
+.cmap-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cmap-edge .react-flow__edge-path {
+  stroke: #60a5fa;
+  stroke-width: 2;
+}
+
+.cmap-frame {
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(15, 23, 42, 0.6);
+  pointer-events: none;
+}
+
+.cmap-frame-title {
+  display: block;
+  padding: 6px var(--space-3) 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmap-card {
+  position: relative;
+  border-radius: var(--radius-md);
+}
+
+.cmap-card-button,
+.cmap-setting {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+  color: var(--text);
+  font-weight: 400;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.cmap-card--input .cmap-card-button {
+  border-left-color: #a78bfa;
+}
+
+.cmap-card--review .cmap-card-button {
+  border-left-color: #34d399;
+}
+
+.cmap-card--skipped .cmap-card-button {
+  border-style: dashed;
+  border-left-width: 1px;
+  border-left-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-faint);
+}
+
+.cmap-card--skipped .cmap-card-title {
+  font-weight: 500;
+}
+
+.cmap-card-button:hover:not(:disabled),
+.cmap-setting:hover:not(:disabled) {
+  background: var(--bg-control-hover);
+  border-color: var(--accent);
+}
+
+.cmap-card.is-current .cmap-card-button,
+.cmap-setting.is-current {
+  border-color: var(--accent-strong);
+  background: #1e3a8a;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
+}
+
+.cmap-card.has-problems:not(.is-current) .cmap-card-button,
+.cmap-setting.has-problems:not(.is-current) {
+  border-color: rgba(239, 68, 68, 0.7);
+}
+
+.cmap-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.cmap-card-title {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmap-problems {
+  flex: none;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #b91c1c;
+  color: #fff;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
+.cmap-fact {
+  display: block;
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmap-fact--plain {
+  color: var(--text);
+}
+
+.cmap-fact--muted {
+  color: var(--text-muted);
+}
+
+.cmap-fact--ok {
+  color: #6ee7b7;
+}
+
+.cmap-fact--warn {
+  color: #fcd34d;
+}
+
+.cmap-fact--bad {
+  color: #fca5a5;
+}
+
+/* The settings of the whole campaign: one row of buttons under the chain. */
+
+.cmap-settings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.cmap-setting {
+  min-height: var(--hit-target);
+  padding: var(--space-2) var(--space-3);
+  border-left-color: var(--border-strong);
+}

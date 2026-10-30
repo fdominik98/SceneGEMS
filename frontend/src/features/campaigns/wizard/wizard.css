@@ -7,13 +7,28 @@
   min-width: 0;
 }
 
+/* The header holds the title, the draft's actions and the preset bar. */
 .wiz-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+}
+
+.wiz-head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
+  gap: var(--space-3) var(--space-4);
+}
+
+.wiz-head-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  min-width: 0;
 }
 
 .wiz-head h3 {
@@ -23,6 +38,93 @@
 
 .wiz-head .meta {
   margin: 0;
+}
+
+.wiz-head .wiz-presets {
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--border);
+}
+
+/* The campaign map, or the list of pages in its place */
+.wiz-map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+
+.wiz-map-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.wiz-map-title {
+  margin: 0;
+  font-size: var(--font-size);
+  font-weight: 600;
+}
+
+.wiz-map-bar .meta {
+  margin: 0;
+}
+
+.wiz-map-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-left: auto;
+}
+
+.wiz-switch {
+  display: inline-flex;
+}
+
+.wiz-switch button {
+  border-radius: 0;
+  color: var(--text-muted);
+}
+
+.wiz-switch button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.wiz-switch button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin-left: -1px;
+}
+
+.wiz-switch button[aria-pressed="true"] {
+  position: relative;
+  border-color: var(--accent-strong);
+  background: #1e3a8a;
+  color: var(--text);
+}
+
+.wiz-body .wiz-page-title {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+}
+
+/* Without explanations a page keeps its fields: the explanatory paragraphs are hidden, an option explains itself
+   when it is chosen and a field while it is being edited. */
+.wiz--terse .wiz-explain {
+  display: none;
+}
+
+.wiz--terse .wiz-option:not(.wiz-option--on):not(:focus-within) .wiz-hint {
+  display: none;
+}
+
+.wiz--terse .wiz-field:not(:focus-within) .wiz-field-hint {
+  display: none;
+}
+
+.wiz-run {
+  scroll-margin-top: var(--space-4);
 }
 
 .wiz-head-actions,
@@ -826,6 +928,11 @@
   padding-bottom: var(--space-4);
 }
 
+.wiz-foot-page {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
 /* Resources */
 
 .wiz-resources-part {
@@ -1100,21 +1207,27 @@
 .wiz-presets-row {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--space-2) var(--space-4);
 }
 
 .wiz-presets-pick {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  gap: var(--space-3);
   flex: 1 1 320px;
   min-width: 0;
-  max-width: 640px;
+  max-width: 720px;
+}
+
+.wiz-presets-pick select {
+  flex: 1;
+  min-width: 0;
 }
 
 .wiz-presets-label {
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .wiz-presets-description {

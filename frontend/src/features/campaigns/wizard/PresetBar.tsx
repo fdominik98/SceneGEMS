@@ -90,7 +90,7 @@ export function PresetBar({ draft, catalog, onLoad }: PresetBarProps) {
   };
 
   return (
-    <section className="wiz-presets panel" aria-label="Campaign presets">
+    <section className="wiz-presets" aria-label="Campaign presets">
       <div className="wiz-presets-row">
         <label className="wiz-presets-pick">
           <span className="wiz-presets-label">Start from a preset</span>
@@ -145,7 +145,7 @@ export function PresetBar({ draft, catalog, onLoad }: PresetBarProps) {
             <input type="checkbox" checked={replace} onChange={(event) => setReplace(event.target.checked)} />
             Replace a saved preset of the same name
           </label>
-          <p className="meta">The preset keeps the steps, scope, domain, trajectories, runs, resources and policy. Uploaded files and picked outputs belong to one campaign and are not saved.</p>
+          <p className="meta wiz-explain">The preset keeps the steps, scope, domain, trajectories, runs, resources and policy. Uploaded files and picked outputs belong to one campaign and are not saved.</p>
           <button type="button" disabled={!catalog || save.isPending || !(name.trim() || draft.name.trim())} onClick={saveDraft}>
             {save.isPending ? "Saving..." : "Save as preset"}
           </button>

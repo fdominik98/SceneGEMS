@@ -82,10 +82,10 @@ export function ItemInput({ draft, update, reasons, client, now }: StepProps & {
 
   return (
     <div className="wiz-step">
-      <p className="meta">
+      <p className="meta wiz-explain">
         {first === "trajectory_generation"
           ? "Trajectory generation plans the trajectories of scenes you already have. Each scene is one case."
-          : "Simulation runs trajectories you already have: every run of the Runs step is simulated for each of them."}
+          : "Simulation runs trajectories you already have: every run of the Simulation page is simulated for each of them."}
       </p>
       <FieldIssues reasons={own} showField />
 
@@ -98,7 +98,7 @@ export function ItemInput({ draft, update, reasons, client, now }: StepProps & {
       <section className="wiz-subsection" aria-label="From files">
         <div className="wiz-column">
           <h4 className="wiz-subhead">From files</h4>
-          <p className="meta">
+          <p className="meta wiz-explain">
             A file is uploaded to the master as soon as you pick it and used as one {first === "trajectory_generation" ? "scene" : "trajectory set"}. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
           </p>
           <UploadControl client={client} kind={uploadKind} label={first === "trajectory_generation" ? "Add scene files (JSON)" : "Add trajectory files (JSON)"} accept=".json,application/json" onUploaded={onUploaded} />

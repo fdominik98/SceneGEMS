@@ -55,6 +55,9 @@ export function runsStep(steps: readonly CampaignStep[], step: CampaignStep): bo
 /** The wizard steps a campaign with these steps goes through, in order. Steps not run hide their own pages. */
 export function visibleWizardSteps(steps: readonly CampaignStep[]): WizardStepId[] {
   const shown: WizardStepId[] = ["steps", "input", "domain"];
+  if (runsStep(steps, "scene_generation")) {
+    shown.push("scenes");
+  }
   if (runsStep(steps, "trajectory_generation")) {
     shown.push("trajectories");
   }

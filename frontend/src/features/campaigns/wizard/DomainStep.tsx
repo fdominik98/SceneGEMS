@@ -2,7 +2,7 @@ import { useState } from "react";
 import { describeOperatorError } from "../../../domain/cluster/operatorApi";
 import { useClusterDomain } from "../../domain/useClusterDomain";
 import { ConstraintsEditor } from "../../workbench/controls/constraintsEditor";
-import { Field, FieldIssues, NumberField } from "./fields";
+import { FieldIssues } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
 import type { StepProps } from "./stepTypes";
 
@@ -14,13 +14,16 @@ const TEXT_TABS: { key: TextKey; field: string; label: string; protectedRows?: s
   { key: "obstacleTypes", field: "obstacle_types", label: "Obstacle types", protectedRows: ["UnspecifiedObstacleType"] },
 ];
 
-/** Domain: the cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types stored in the campaign. */
+/**
+ * Domain: the cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types stored in
+ * the campaign. The scene generation settings of the config's domain section are on the Scene generation page.
+ */
 export function DomainStep({ draft, update, reasons }: StepProps) {
   const [tab, setTab] = useState<TextKey>("colregsConstants");
   const [source, setSource] = useState<string | null>(null);
   const clusterDomain = useClusterDomain();
   const { domain } = draft;
-  const own = splitByField(reasonsOfEntry(reasons, null), ["colregs_constants", "vessel_types", "obstacle_types", "scene_generation_timeout_s", "enforce_low_tcpa"]);
+  const own = splitByField(reasonsOfEntry(reasons, null), ["colregs_constants", "vessel_types", "obstacle_types"]);
   const loadError = clusterDomain.isError ? describeOperatorError(clusterDomain.error) : null;
 
   /** Starts the customized texts from the cluster's domain configuration. */
@@ -68,7 +71,7 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
 
       {domain.custom && (
         <section className="wiz-card" aria-label="Customized domain content">
-          <p className="wiz-notice" role="note">
+          <p className="wiz-notice wiz-explain" role="note">
             Customized content is stored in the campaign: it becomes part of the campaign's config and its hash, so every case of this campaign uses exactly these texts, whatever the cluster's domain configuration says later.
           </p>
           <div className="wiz-domain-bar">
@@ -105,25 +108,6 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
         </section>
       )}
 
-      <div className="wiz-row">
-        <Field label="Scene generation timeout" htmlFor="wiz-scene-timeout" hint="The generation's own time limit for one scene." issues={own.byField.get("scene_generation_timeout_s")}>
-          <NumberField
-            id="wiz-scene-timeout"
-            integer
-            min={1}
-            suffix="s"
-            value={domain.sceneGenerationTimeoutS}
-            invalid={own.byField.has("scene_generation_timeout_s")}
-            onChange={(value) => update((next) => void (next.domain.sceneGenerationTimeoutS = value))}
-          />
-        </Field>
-        <Field label="Enforce low TCPA" htmlFor="wiz-low-tcpa" hint="Scenes are generated with the low time to the closest point of approach enforced." issues={own.byField.get("enforce_low_tcpa")}>
-          <label className="wiz-check">
-            <input id="wiz-low-tcpa" type="checkbox" checked={domain.enforceLowTcpa} onChange={(event) => update((next) => void (next.domain.enforceLowTcpa = event.target.checked))} />
-            enforce_low_tcpa
-          </label>
-        </Field>
-      </div>
       <FieldIssues reasons={own.rest} showField />
     </div>
   );

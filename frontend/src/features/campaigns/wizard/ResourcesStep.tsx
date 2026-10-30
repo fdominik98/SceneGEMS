@@ -143,7 +143,7 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
     <div className="wiz-step">
       <section className="wiz-resources-part" aria-labelledby="wiz-needs-title">
         <h4 id="wiz-needs-title">What the campaign needs</h4>
-        <p className="meta">Worked out from the runs. Each one needs at least one usable machine of the campaign, otherwise the campaign cannot start.</p>
+        <p className="meta wiz-explain">Worked out from the runs. Each one needs at least one usable machine of the campaign, otherwise the campaign cannot start.</p>
         {plan ? (
           <ul className="wiz-needs">
             {plan.coverage.map((entry) => (
@@ -209,10 +209,10 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
       >
         <div className="wiz-subsection wiz-subsection--first">
           <h5>Queue depth per stage</h5>
-          <p className="meta">A new case starts only while every stage has fewer queued jobs of this campaign than its cap. Smaller caps keep the campaign from flooding the cluster.</p>
+          <p className="meta wiz-explain">A new case starts only while every stage has fewer queued jobs of this campaign than its cap. Smaller caps keep the campaign from flooding the cluster.</p>
           {resources.fullUsage ? (
             <>
-              <p className="wiz-hint">Full usage sizes each cap to the cluster's slots for that stage, never below the default.</p>
+              <p className="wiz-hint wiz-explain">Full usage sizes each cap to the cluster's slots for that stage, never below the default.</p>
               <dl className="wiz-depths">
                 {queueStages.map(([stage, label]) => (
                   <div key={stage}>
@@ -269,7 +269,7 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
 
         <div className="wiz-subsection">
           <h5>Required node labels</h5>
-          <p className="meta">Every job of the campaign runs only on machines that carry all of these labels (for example site: lab). A machine without them is not usable.</p>
+          <p className="meta wiz-explain">Every job of the campaign runs only on machines that carry all of these labels (for example site: lab). A machine without them is not usable.</p>
           {resources.labels.map((label, index) => (
             <div key={index} className="wiz-map-row">
               <input
