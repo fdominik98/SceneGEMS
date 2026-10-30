@@ -5,14 +5,14 @@ import json
 import pytest
 
 from scenegems_tool.cluster.node.job_report import JobFailed
-from scenegems_tool.cluster.node.jobs import simulation_kinematic_job
+from scenegems_tool.cluster.node.jobs import simulation_job
 from scenegems_tool.cluster.node.jobs.calibration_deviation_job import CalibrationDeviationPayload
 from scenegems_tool.cluster.node.jobs.job_payload import parse_payload, validate_structure
 from scenegems_tool.cluster.node.jobs.live_monitor import SimulationMonitor
 from scenegems_tool.cluster.node.jobs.monitoring_post_hoc_job import PostHocMonitoringPayload
 from scenegems_tool.cluster.node.jobs.scene_generation_job import SceneGenerationPayload
-from scenegems_tool.cluster.node.jobs.simulation_ardupilot_job import ArduPilotSimulationLayer, ArduPilotSimulationPayload
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode, KinematicSimulationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationLayer, ArduPilotSimulationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, KinematicSimulationPayload
 from scenegems_tool.cluster.node.jobs.trajectory_generation_job import TrajectoryGenerationPayload
 from scenegems_tool.cluster.protocol.artifacts import find_references, resolve_references
 from scenegems_tool.cluster.protocol.jobs import JobType
@@ -28,14 +28,20 @@ def trajectories(head_on_trajectories):
 
 
 def test_kinematic_payload_defaults(trajectories):
-    payload = KinematicSimulationPayload.model_validate({"trajectories": trajectories})
+    payload = KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": trajectories})
     assert payload.mode == KinematicMode.REPLAY
     assert (payload.dt, payload.steps, payload.seed, payload.include_trajectories) == (None, None, 0, True)
 
 
 def test_kinematic_closed_loop_payload_with_parameters(trajectories):
     payload = KinematicSimulationPayload.model_validate(
-        {"mode": "usv_navigation", "trajectories": trajectories, "own_ship_id": 0, "usv_navigation": {"goal": [2000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}}
+        {
+            "runner": "kinematic",
+            "mode": "usv_navigation",
+            "trajectories": trajectories,
+            "own_ship_id": 0,
+            "usv_navigation": {"goal": [2000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0},
+        }
     )
     parameters = payload.usv_navigation.to_parameters()
     assert parameters.goal == (2000.0, 0.0)
@@ -56,17 +62,17 @@ def test_kinematic_closed_loop_payload_with_parameters(trajectories):
 )
 def test_invalid_kinematic_payloads_are_rejected(trajectories, change):
     with pytest.raises(ValueError):
-        KinematicSimulationPayload.model_validate({"trajectories": trajectories, **change})
+        KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": trajectories, **change})
 
 
 def test_ardupilot_payload(trajectories):
-    payload = ArduPilotSimulationPayload.model_validate({"simulation_layer": "gazebo", "trajectories": trajectories, "geofence": GEOFENCE, "speedup": 5})
+    payload = ArduPilotSimulationPayload.model_validate({"runner": "ardupilot", "simulation_layer": "gazebo", "trajectories": trajectories, "geofence": GEOFENCE, "speedup": 5})
     assert payload.simulation_layer == ArduPilotSimulationLayer.GAZEBO
     assert payload.geofence.to_geofence().radius_meters == 2000.0
 
 
 def test_ardupilot_payload_monitor_defaults_and_live(trajectories):
-    base = {"simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": GEOFENCE}
+    base = {"runner": "ardupilot", "simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": GEOFENCE}
     payload = ArduPilotSimulationPayload.model_validate(base)
     assert (payload.monitor, payload.colregs_constraints_content, payload.include_trajectories) == (SimulationMonitor.NONE, None, False)
     live = ArduPilotSimulationPayload.model_validate({**base, "monitor": "live", "colregs_constraints_content": "rules", "include_trajectories": True, "dt": 2.0})
@@ -88,7 +94,7 @@ def test_ardupilot_payload_monitor_defaults_and_live(trajectories):
 )
 def test_invalid_ardupilot_payloads_are_rejected(trajectories, change):
     with pytest.raises(ValueError):
-        ArduPilotSimulationPayload.model_validate({"simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": GEOFENCE, **change})
+        ArduPilotSimulationPayload.model_validate({"runner": "ardupilot", "simulation_layer": "ardupilot_sim", "trajectories": trajectories, "geofence": GEOFENCE, **change})
 
 
 def test_post_hoc_payload_defaults(trajectories):
@@ -116,11 +122,11 @@ def test_scene_generation_payload_parses_the_functional_scenario():
 
 
 def test_parse_payload_turns_validation_errors_into_final_failures(make_job):
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": {}})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": {}})
     with pytest.raises(JobFailed) as failure:
         parse_payload(KinematicSimulationPayload, job)
     assert not failure.value.retryable
-    assert "simulation.kinematic" in str(failure.value)
+    assert "Invalid simulation payload" in str(failure.value)
 
 
 # Artifact references and seeds (protocol version 2)
@@ -131,8 +137,8 @@ REFERENCE = {"sha256": "ab" * 32, "size_bytes": 100, "kind": "trajectories"}
 @pytest.mark.parametrize(
     "model, payload",
     [
-        (KinematicSimulationPayload, {"trajectories": REFERENCE}),
-        (ArduPilotSimulationPayload, {"simulation_layer": "ardupilot_sim", "trajectories": REFERENCE, "geofence": GEOFENCE}),
+        (KinematicSimulationPayload, {"runner": "kinematic", "trajectories": REFERENCE}),
+        (ArduPilotSimulationPayload, {"runner": "ardupilot", "simulation_layer": "ardupilot_sim", "trajectories": REFERENCE, "geofence": GEOFENCE}),
         (PostHocMonitoringPayload, {"trajectories": REFERENCE}),
         (TrajectoryGenerationPayload, {"scenario_content": {**REFERENCE, "kind": "scene"}, "colregs_constraints_content": ""}),
         (CalibrationDeviationPayload, {"trajectories": [REFERENCE, {**REFERENCE, "sha256": "cd" * 32}], "reference": "head_on"}),
@@ -148,7 +154,7 @@ def test_artifact_fields_take_a_reference_checked_for_shape_only(model, payload)
 
 
 def test_parse_payload_refuses_an_unresolved_reference(make_job):
-    job = make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": REFERENCE})
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": REFERENCE})
     with pytest.raises(JobFailed) as failure:
         parse_payload(KinematicSimulationPayload, job)
     assert not failure.value.retryable
@@ -160,8 +166,8 @@ def test_content_is_checked_once_the_reference_is_resolved(make_job, trajectorie
     good = json.dumps(trajectories).encode()
     bad = json.dumps({"time_step": 1, "scene_list": []}).encode()
     for data, valid in ((good, True), (bad, False)):
-        resolved = resolve_references({"trajectories": REFERENCE}, simulation_kinematic_job.ARTIFACT_INPUT_FIELDS, lambda reference: data)
-        job = make_job(JobType.SIMULATION_KINEMATIC, resolved)
+        resolved = resolve_references({"runner": "kinematic", "trajectories": REFERENCE}, simulation_job.ARTIFACT_INPUT_FIELDS, lambda reference: data)
+        job = make_job(JobType.SIMULATION, resolved)
         if valid:
             assert parse_payload(KinematicSimulationPayload, job).trajectories == json.loads(good)
         else:
@@ -196,13 +202,13 @@ def test_trajectory_generator_choice_is_a_search_parameter():
 
 
 def test_kinematic_monitor_options(trajectories):
-    payload = KinematicSimulationPayload.model_validate({"trajectories": trajectories})
+    payload = KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": trajectories})
     assert (payload.monitor, payload.early_stop) == (SimulationMonitor.NONE, False)
-    live = KinematicSimulationPayload.model_validate({"trajectories": trajectories, "monitor": "live", "early_stop": True, "dt": 2.0, "colregs_constraints_content": "x: 1"})
+    live = KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": trajectories, "monitor": "live", "early_stop": True, "dt": 2.0, "colregs_constraints_content": "x: 1"})
     assert live.monitor == SimulationMonitor.LIVE and live.early_stop
     for change in ({"early_stop": True}, {"colregs_constraints_content": ""}, {"monitor": "live", "dt": 0.5}, {"monitor": "post_hoc"}):
         with pytest.raises(ValueError):
-            KinematicSimulationPayload.model_validate({"trajectories": trajectories, **change})
+            KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": trajectories, **change})
 
 
 def test_calibration_payload_needs_two_repeats_and_a_reference(trajectories):

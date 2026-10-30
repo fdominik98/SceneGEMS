@@ -28,7 +28,7 @@ def _graph(*runs) -> StageGraph:
 
 def test_steps_name_their_stage_run_and_repeat():
     step = Step(SIMULATE, 1, 2)
-    assert step.name == "simulate:1:2" and step.job_type == JobType.SIMULATION_KINEMATIC
+    assert step.name == "simulate:1:2" and step.job_type == JobType.SIMULATION
     assert step.idempotency_key("c1", 42) == "campaign:c1:case:42:simulate:1:2"
     assert SCENE_STEP.idempotency_key("c1", 42) == "campaign:c1:case:42:generate_scene"
     assert Step(MONITOR, 0).name == "monitor:0" and Step(CALIBRATE, 3).job_type == JobType.CALIBRATION_DEVIATION

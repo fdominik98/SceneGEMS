@@ -6,7 +6,7 @@ Both sides import these definitions, so master and node cannot drift apart silen
     model_base.py        immutable models; frames carry the protocol version
     jobs.py              job types, states, requirements, submission and the leased job
     artifacts.py         artifact references in payloads and results, declared artifact fields
-    node_description.py  capability offers with slots, resources
+    node_description.py  slot offers, resources
     messages.py          WebSocket frames, node to master and master to node
     codec.py             encode and decode frames, version checked first
     routes.py            HTTP paths and the node id header of the master's cluster API

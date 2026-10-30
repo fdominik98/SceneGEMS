@@ -12,7 +12,7 @@ pytestmark = pytest.mark.postgres
 
 SCENE = JobType.SCENE_GENERATION
 TRAJECTORY = JobType.TRAJECTORY_GENERATION
-KINEMATIC = JobType.SIMULATION_KINEMATIC
+KINEMATIC = JobType.SIMULATION
 LEASE_S = 30.0
 
 
@@ -181,6 +181,20 @@ def test_claim_matches_labels(job_store, node_store):
     job = job_store.submit(make_submission(requirements=JobRequirements(labels={"gpu": "yes"}))).job
     assert job_store.claim_next("plain", LEASE_S) is None
     assert job_store.claim_next("gpu", LEASE_S).job.job_id == job.job_id
+
+
+def test_claim_matches_components(job_store, node_store):
+    gazebo = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+    node_store.register(make_hello("sitl", slots={SCENE: 5}, components=["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]))
+    node_store.register(make_hello("world", slots={SCENE: 5}, components=gazebo + ["scene_generation"]))
+    job = job_store.submit(make_submission(requirements=JobRequirements(components=gazebo))).job
+    assert job_store.get(job.job_id).requirements.components == gazebo
+    assert job_store.claim_next("sitl", LEASE_S) is None
+    assert job_store.claim_next("world", LEASE_S, components=["scene_generation"]) is None, "the scheduler passes the usable components only"
+    lease = job_store.claim_next("world", LEASE_S)
+    assert lease.job.job_id == job.job_id and lease.job.requirements.components == gazebo
+    unrestricted = job_store.submit(make_submission()).job
+    assert job_store.claim_next("sitl", LEASE_S).job.job_id == unrestricted.job_id, "a job of an earlier release needs no component"
 
 
 def test_claim_matches_allowed_nodes(job_store, node_store):

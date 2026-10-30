@@ -52,7 +52,7 @@ from scenegems_tool.persistence.stores.campaign_store import CampaignStateConfli
 from scenegems_tool.persistence.stores.case_store import UNSET, CaseConflict, CaseStore, ClassStateConflict, UnknownCase, UnknownClass
 from scenegems_tool.persistence.stores.job_records import CancelOutcome, ExpiredLease, JobEventRecord, JobRecord, Lease, ResultReport, ResultStatus, SubmitOutcome
 from scenegems_tool.persistence.stores.job_store import IdempotencyKeyMismatch, JobStore, UnknownJob, UnknownNode
-from scenegems_tool.persistence.stores.node_records import CapabilityUsage, NodeRecord
+from scenegems_tool.persistence.stores.node_records import NodeRecord, SlotState
 from scenegems_tool.persistence.stores.node_store import NodeStore
 from scenegems_tool.persistence.stores.pipeline_store import ENGINE_CURSOR, TERMINAL_EVENT_KINDS, CursorConflict, PipelineJobConflict, PipelineStore, UnknownPipelineJob
 from scenegems_tool.persistence.stores.result_records import ClassCoverage, ClassFindings, NewRunRecord, NewVerdict, RuleFindings, RunRecord, StepFindings, VerdictRecord
@@ -80,7 +80,7 @@ __all__ = [
     "CampaignStore",
     "CampaignTotals",
     "CancelOutcome",
-    "CapabilityUsage",
+    "SlotState",
     "CaseConflict",
     "CaseRecord",
     "CaseStore",

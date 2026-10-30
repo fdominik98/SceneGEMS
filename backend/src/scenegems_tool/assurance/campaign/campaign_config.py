@@ -48,7 +48,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError,
 
 from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode, UsvNavigationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
 from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
@@ -348,7 +348,7 @@ class ArdupilotStackConfig(ConfigModel):
     """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays its trajectory.
 
     The ASV software is replay over the replay_mavlink_lockstep adapter, in the bounded repeatability
-    tier, as simulation.ardupilot_sim and simulation.gazebo run it. The job applies no environment, so a run on this stack is calm.
+    tier, as the simulation job's ardupilot runner runs it. The job applies no environment, so a run on this stack is calm.
     """
 
     simulation_layer: Literal["ardupilot_sim", "gazebo"]

@@ -42,7 +42,8 @@ def build_node_context(configuration: NodeConfiguration) -> NodeContext:
         node_id=configuration.node_id,
         mqtt_connection=broker_connection(configuration),
         reference_geofence=Geofence(latitude, longitude, radius),
-        slots=dict(configuration.capabilities),
+        slots=dict(configuration.slots),
+        components=frozenset(configuration.components),
         broker_network=configuration.docker_network,
         artifacts=node_artifacts(configuration),
     )

@@ -222,7 +222,7 @@ def test_a_case_shows_its_jobs_run_records_and_verdicts(client, stores, plane):
     job = client.post(JOBS_PATH, json={"job_type": JobType.SCENE_GENERATION.value, "payload": valid_payload(JobType.SCENE_GENERATION, seed=1)}).json()
     stores.pipeline.add_intent(campaign_id, a1.case_id, PipelineStage.GENERATE_SCENE, "key-scene", None, None, {"job_type": "scene_generation"})
     stores.pipeline.link_job("key-scene", job["job_id"])
-    stores.pipeline.add_intent(campaign_id, a1.case_id, PipelineStage.SIMULATE, "key-sim", 0, 0, {"job_type": "simulation.kinematic"})
+    stores.pipeline.add_intent(campaign_id, a1.case_id, PipelineStage.SIMULATE, "key-sim", 0, 0, {"job_type": "simulation"})
     detail = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases/{a1.case_id}").json()
     assert detail["case_id"] == a1.case_id and detail["state"] == "complete"
     assert detail["input_artifact"] is None and detail["input_source"] is None  # a catalog class

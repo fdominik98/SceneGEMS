@@ -14,8 +14,9 @@ project. The fields are the contract with the tool:
     images           images the role always needs
     env              values the tool writes into .env
     parameters       values the operator may change per machine, with defaults; a parameter
-                     with `items` is a list (for example capabilities with slots), and
-                     `items.images` names the extra images each item needs
+                     with `items` is a list (components, or job types with slots), and
+                     `items.images` names the extra images each item needs; an item has an
+                     amount after `items.key_separator` when the parameter names one
     secrets          .env keys generated once on the machine (random) and kept afterwards
     requires         another role whose output's KEY=VALUE lines go into this role's .env,
                      kept afterwards like secrets (unused by this release: no role needs one)
@@ -34,7 +35,7 @@ because they become MQTT topic levels and Docker names.
 
 from typing import Any, Dict, List
 
-from scenegems_tool.cluster.fingerprints.job_images import job_type_images
+from scenegems_tool.cluster.fingerprints.components import check_runner_stacks, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN
 
@@ -45,7 +46,9 @@ NODE_IMAGE = "scenegems-node:latest"
 
 # Where the web UI is served from (cluster/master/settings.py)
 DEFAULT_OPERATOR_ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
-DEFAULT_NODE_CAPABILITIES = "simulation.kinematic:2,scene_generation:1,trajectory_generation:1,monitoring.post_hoc:1"
+# A kinematic node: replay and USV Navigation on the kinematic layer, scene and trajectory generation, post-hoc monitoring
+DEFAULT_NODE_COMPONENTS = "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring"
+DEFAULT_NODE_SLOTS = "simulation:2,scene_generation:1,trajectory_generation:1,monitoring.post_hoc:1"
 # The artifact store on the master and the artifact cache on a node (cluster/master/settings.py, node_configuration.py)
 DEFAULT_ARTIFACT_MAX_BYTES = str(256 * 1024 * 1024)
 DEFAULT_ARTIFACT_SWEEP_INTERVAL_S = "600"
@@ -53,10 +56,15 @@ DEFAULT_ARTIFACT_SWEEP_GRACE_S = "3600"
 DEFAULT_NODE_ARTIFACT_CACHE_MAX_BYTES = str(2 * 1024 * 1024 * 1024)
 
 
-def capability_item_images() -> Dict[str, List[str]]:
-    """The images a node needs for each job type it offers; a simulation type's come from the vessel stack matrix (job_images.SIMULATION_JOB_STACKS)."""
-    images = job_type_images()
-    return {job_type.value: list(images[job_type]) for job_type in JobType}
+def component_item_images() -> Dict[str, List[str]]:
+    """The images a node needs for each component it offers (cluster/fingerprints/components.py); fails when a simulation runner names a stack the vessel stack matrix does not offer."""
+    check_runner_stacks()
+    return {component: list(images) for component, images in component_images().items()}
+
+
+def slot_item_images() -> Dict[str, List[str]]:
+    """The job types a node may give slots, each with no image of its own: the components bring the images."""
+    return {job_type.value: [] for job_type in JobType}
 
 
 def master_role() -> Dict[str, Any]:
@@ -110,10 +118,15 @@ def node_role() -> Dict[str, Any]:
             "SCENEGEMS_SOFTWARE_REVISION": "{release.revision}",
         },
         "parameters": {
-            "SCENEGEMS_NODE_CAPABILITIES": {
-                "default": DEFAULT_NODE_CAPABILITIES,
+            "SCENEGEMS_NODE_COMPONENTS": {
+                "default": DEFAULT_NODE_COMPONENTS,
+                "description": "what the node runs: vessel stack layers and subsystems separated by commas; their images are installed",
+                "items": {"separator": ",", "images": component_item_images()},
+            },
+            "SCENEGEMS_NODE_SLOTS": {
+                "default": DEFAULT_NODE_SLOTS,
                 "description": "job types and how many of each run at once, as type:slots separated by commas",
-                "items": {"separator": ",", "key_separator": ":", "images": capability_item_images()},
+                "items": {"separator": ",", "key_separator": ":", "images": slot_item_images()},
             },
             "SCENEGEMS_NODE_LABELS": {"default": "", "description": "optional labels jobs can require, as key=value separated by commas"},
             "SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES": {"default": DEFAULT_NODE_ARTIFACT_CACHE_MAX_BYTES, "description": "bound of the node's artifact cache in bytes; 0 turns it off"},

@@ -21,7 +21,7 @@ def clock():
     return Clock()
 
 
-def job(job_type: JobType = JobType.SIMULATION_KINEMATIC, attempt: int = 1) -> JobSpec:
+def job(job_type: JobType = JobType.SIMULATION, attempt: int = 1) -> JobSpec:
     return JobSpec(job_id="j1", job_type=job_type, attempt=attempt, idempotency_key="j1/key")
 
 
@@ -95,7 +95,7 @@ def test_wait_for_change_returns_with_a_new_request_or_the_close(clock):
 
 def test_only_simulations_are_observable(clock):
     observations = JobObservations(clock)
-    assert set(OBSERVABLE_JOB_TYPES) == {JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO}
+    assert set(OBSERVABLE_JOB_TYPES) == {JobType.SIMULATION}
     assert observations.open(job(JobType.MONITORING_POST_HOC)) is None
     assert observations.of(job(JobType.MONITORING_POST_HOC)) is None
     opened = observations.open(job())

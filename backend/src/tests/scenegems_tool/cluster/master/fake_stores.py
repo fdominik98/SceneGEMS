@@ -9,7 +9,7 @@ import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from itertools import count
-from typing import Any, Collection, Dict, List, Optional
+from typing import Any, Collection, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
@@ -18,7 +18,6 @@ from scenegems_tool.cluster.protocol.node_description import NodeResources
 from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, NodeStatus
 from scenegems_tool.persistence.stores import (
     CancelOutcome,
-    CapabilityUsage,
     ExpiredLease,
     IdempotencyKeyMismatch,
     JobEventRecord,
@@ -27,6 +26,7 @@ from scenegems_tool.persistence.stores import (
     NodeRecord,
     ResultReport,
     ResultStatus,
+    SlotState,
     SubmitOutcome,
     UnknownJob,
     UnknownNode,
@@ -50,6 +50,7 @@ class _Node:
     registered_at: datetime
     last_seen_at: datetime
     machine: Optional[str] = None
+    components: Tuple[str, ...] = ()
 
     def record(self) -> NodeRecord:
         return NodeRecord(
@@ -59,11 +60,12 @@ class _Node:
             labels=dict(self.labels),
             software_revision=self.software_revision,
             resources=self.resources,
-            capabilities={job_type: CapabilityUsage(slots=slots, slots_in_use=self.slots_in_use.get(job_type, 0)) for job_type, slots in sorted(self.slots.items())},
+            slots={job_type: SlotState(slots=slots, slots_in_use=self.slots_in_use.get(job_type, 0)) for job_type, slots in sorted(self.slots.items())},
             fingerprints=dict(self.fingerprints),
             registered_at=self.registered_at,
             last_seen_at=self.last_seen_at,
             machine=self.machine,
+            components=self.components,
         )
 
 
@@ -85,12 +87,13 @@ class InMemoryNodeStore:
                 labels=dict(hello.labels),
                 software_revision=hello.software_revision,
                 resources=hello.resources,
-                slots={offer.job_type: offer.slots for offer in hello.capabilities},
+                slots={offer.job_type: offer.slots for offer in hello.slots},
                 slots_in_use={},
                 fingerprints=dict(hello.fingerprints),
                 registered_at=existing.registered_at if existing else now,
                 last_seen_at=now,
                 machine=hello.machine,
+                components=tuple(sorted(set(hello.components))),
             )
             return self.nodes[hello.node_id].record()
 
@@ -152,6 +155,7 @@ class _Job:
     payload: Dict[str, Any]
     required_labels: Dict[str, str]
     required_fingerprints: Dict[str, str]
+    required_components: List[str]
     min_memory_mb: int
     min_cpus: float
     priority: int
@@ -205,6 +209,7 @@ class InMemoryJobStore:
                 payload=dict(submission.payload),
                 required_labels=dict(requirements.labels),
                 required_fingerprints=dict(requirements.fingerprints),
+                required_components=list(requirements.components),
                 min_memory_mb=requirements.min_memory_mb,
                 min_cpus=requirements.min_cpus,
                 allowed_nodes=list(submission.allowed_nodes),
@@ -240,7 +245,9 @@ class InMemoryJobStore:
             jobs = sorted(self._jobs.values(), key=lambda job: job.seq)
             return [Lease.from_row(job) for job in jobs if job.state in ACTIVE_STATES and (node_id is None or job.lease_owner == node_id)]
 
-    def claim_next(self, node_id: str, lease_duration_s: float, job_types: Optional[Collection[JobType]] = None, exclude_job_ids: Collection[str] = ()) -> Optional[Lease]:
+    def claim_next(
+        self, node_id: str, lease_duration_s: float, job_types: Optional[Collection[JobType]] = None, exclude_job_ids: Collection[str] = (), components: Optional[Collection[str]] = None
+    ) -> Optional[Lease]:
         with self._lock:
             now = self._clock()
             expires_at = now + timedelta(seconds=lease_duration_s)
@@ -254,6 +261,7 @@ class InMemoryJobStore:
                 if job.lease_owner == node_id and job.state in ACTIVE_STATES:
                     active[job.job_type] = active.get(job.job_type, 0) + 1
             types = free_job_types(node.slots, active, job_types)
+            offered = set(node.components if components is None else components)
             candidates = [
                 job
                 for job in self._jobs.values()
@@ -261,6 +269,7 @@ class InMemoryJobStore:
                 and job.available_at <= now
                 and job.job_type in types
                 and job.required_labels.items() <= node.labels.items()
+                and set(job.required_components) <= offered
                 and job.required_fingerprints.items() <= node.fingerprints.items()
                 and job.min_memory_mb <= node.resources.free_memory_mb
                 and job.min_cpus <= node.resources.cpus

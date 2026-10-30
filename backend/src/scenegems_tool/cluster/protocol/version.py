@@ -16,9 +16,13 @@ node name) and in the node id header of the artifact routes; master and nodes tr
 
 Version 5: simulation.ardupilot is split into simulation.ardupilot_sim and simulation.gazebo, so a
 node offers SITL's own physics and Gazebo as separate capabilities.
+
+Version 6: a node's capability is a set of components (vessel stack layers and subsystems). Hello
+carries slots per job type and components; job requirements carry the components a job needs. The
+three simulation job types are one, simulation, whose payload names its runner (kinematic, ardupilot).
 """
 
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 6
 
 
 class ProtocolVersionMismatch(ValueError):

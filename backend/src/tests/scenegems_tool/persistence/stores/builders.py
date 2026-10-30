@@ -2,11 +2,12 @@
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional
+from typing import Collection, Dict, Optional
 
+from scenegems_tool.cluster.fingerprints.components import COMPONENTS
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import Hello
-from scenegems_tool.cluster.protocol.node_description import CapabilityOffer, NodeResources
+from scenegems_tool.cluster.protocol.node_description import NodeResources, SlotOffer
 from scenegems_tool.persistence.stores import ClassSpec
 
 START = datetime(2026, 10, 25, 12, 0, 0, tzinfo=timezone.utc)
@@ -38,14 +39,17 @@ def make_hello(
     resources: Optional[NodeResources] = None,
     name: Optional[str] = None,
     machine: Optional[str] = None,
+    components: Optional[Collection[str]] = None,
 ) -> Hello:
+    """A node's Hello; it offers every component of the catalog unless components names some."""
     slots = {JobType.SCENE_GENERATION: 2} if slots is None else slots
     return Hello(
         node_id=node_id,
         node_name=name or f"{node_id}-host",
         software_revision="755cbec",
         machine=machine,
-        capabilities=[CapabilityOffer(job_type=job_type, slots=count) for job_type, count in slots.items()],
+        slots=[SlotOffer(job_type=job_type, slots=count) for job_type, count in slots.items()],
+        components=list(COMPONENTS if components is None else components),
         labels=labels or {},
         resources=resources or make_resources(),
         fingerprints=fingerprints or {},

@@ -1,7 +1,7 @@
-"""Nodes as the master knows them: identity, status, labels, resources, capabilities, fingerprints.
+"""Nodes as the master knows them: identity, status, labels, resources, slots, components, fingerprints.
 
-A node row is written from the node's Hello and updated by its heartbeats. Capabilities
-and fingerprints are replaced as a whole on every Hello.
+A node row is written from the node's Hello and updated by its heartbeats. Slots (per job type,
+the node_capability table), components and fingerprints are replaced as a whole on every Hello.
 """
 
 from datetime import datetime
@@ -40,11 +40,14 @@ class NodeRow(Base):
     registered_at: Mapped[datetime] = mapped_column(utc_timestamp())
     last_seen_at: Mapped[datetime] = mapped_column(utc_timestamp(), index=True)
 
-    capabilities: Mapped[List["NodeCapabilityRow"]] = relationship(back_populates="node", cascade="all, delete-orphan", order_by="NodeCapabilityRow.job_type")
+    capabilities: Mapped[List["NodeCapabilityRow"]] = relationship(back_populates="node", cascade="all, delete-orphan", order_by="NodeCapabilityRow.job_type")  # slots per job type
+    components: Mapped[List["NodeComponentRow"]] = relationship(back_populates="node", cascade="all, delete-orphan", order_by="NodeComponentRow.component")
     fingerprints: Mapped[List["NodeFingerprintRow"]] = relationship(back_populates="node", cascade="all, delete-orphan", order_by="NodeFingerprintRow.image")
 
 
 class NodeCapabilityRow(Base):
+    """The slots of one job type: how many jobs of it the node runs at once."""
+
     __tablename__ = "node_capability"
     __table_args__ = (
         CheckConstraint("slots >= 1", name="slots_positive"),
@@ -57,6 +60,17 @@ class NodeCapabilityRow(Base):
     slots_in_use: Mapped[int] = mapped_column(Integer)  # as the node last reported it; the claim counts leases itself
 
     node: Mapped[NodeRow] = relationship(back_populates="capabilities")
+
+
+class NodeComponentRow(Base):
+    """One component the node offers (cluster/fingerprints/components.py), its images installed."""
+
+    __tablename__ = "node_component"
+
+    node_id: Mapped[str] = mapped_column(ForeignKey("node.id", ondelete="CASCADE"), primary_key=True)
+    component: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    node: Mapped[NodeRow] = relationship(back_populates="components")
 
 
 class NodeFingerprintRow(Base):

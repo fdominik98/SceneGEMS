@@ -44,7 +44,7 @@ def node() -> NodeContext:
         node_id="n1",
         mqtt_connection=MQttConnectionInfo("node", "secret", "broker", "localhost", 1883, False, False),
         reference_geofence=Geofence(57.7, 11.9, 2000.0),
-        slots={JobType.SCENE_GENERATION: 3, JobType.SIMULATION_KINEMATIC: 2},
+        slots={JobType.SCENE_GENERATION: 3, JobType.SIMULATION: 2},
     )
 
 

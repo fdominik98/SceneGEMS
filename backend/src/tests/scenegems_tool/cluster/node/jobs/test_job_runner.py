@@ -18,15 +18,15 @@ def test_every_job_type_has_a_module_with_a_runner():
 
 
 def test_runner_container_job_types_have_an_in_container_part():
-    for job_type in (JobType.SIMULATION_KINEMATIC, JobType.SIMULATION_ARDUPILOT_SIM, JobType.SIMULATION_GAZEBO, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
+    for job_type in (JobType.SIMULATION, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
         assert callable(JOB_TYPE_MODULES[job_type].execute)
 
 
 def test_run_job_dispatches_to_the_job_type(monkeypatch, node, make_job):
     calls = []
-    module = JOB_TYPE_MODULES[JobType.SIMULATION_KINEMATIC]
+    module = JOB_TYPE_MODULES[JobType.SIMULATION]
     monkeypatch.setattr(module, "run", lambda job, node, report, cancel: calls.append((job.job_id, report, cancel)) or {"ok": True})
-    assert job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {}), node, "report") == {"ok": True}
+    assert job_runner.run_job(make_job(JobType.SIMULATION, {}), node, "report") == {"ok": True}
     assert calls == [("job-1", "report", None)]
 
 
@@ -81,7 +81,7 @@ def ran(monkeypatch):
         seen["payload"] = job.payload
         return {"run_record": {"steps": 3}, "steps": 3, "state_digest": "d", "trajectories": {"0": [[1.0, 2.0]]}}
 
-    monkeypatch.setattr(JOB_TYPE_MODULES[JobType.SIMULATION_KINEMATIC], "run", run)
+    monkeypatch.setattr(JOB_TYPE_MODULES[JobType.SIMULATION], "run", run)
     return seen
 
 
@@ -102,7 +102,7 @@ def test_references_are_resolved_before_the_job_runs_and_results_go_back_as_refe
     trajectories = {"0": [[0.0, 0.0, 8.0, 0.0]], "1": [[3000.0, 0.0, 8.0, 3.14]]}
     reference = _stored(transport, {"algorithm_desc": "straight", "trajectories": trajectories}, kind=ArtifactKind.TRAJECTORY_DATA, pointer="/trajectories")
     report = Report()
-    result = job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": reference, "include_trajectories": True}), node, report)
+    result = job_runner.run_job(make_job(JobType.SIMULATION, {"trajectories": reference, "include_trajectories": True}), node, report)
     assert ran["payload"] == {"trajectories": trajectories, "include_trajectories": True}
     stored = ArtifactRef.model_validate(result["trajectories"])
     assert stored.kind == ArtifactKind.TRAJECTORIES and json.loads(transport.documents[stored.sha256]) == {"0": [[1.0, 2.0]]}
@@ -113,10 +113,10 @@ def test_references_are_resolved_before_the_job_runs_and_results_go_back_as_refe
 
 def test_a_job_without_references_runs_as_before(node, make_job, ran):
     payload = {"trajectories": {"0": [[0.0, 0.0, 8.0, 0.0]]}}
-    assert job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, payload), node, Report())["trajectories"] == {"0": [[1.0, 2.0]]}  # no transport: inline
+    assert job_runner.run_job(make_job(JobType.SIMULATION, payload), node, Report())["trajectories"] == {"0": [[1.0, 2.0]]}  # no transport: inline
     transport = FakeTransport()
     node.artifacts = transport
-    job = make_job(JobType.SIMULATION_KINEMATIC, payload)
+    job = make_job(JobType.SIMULATION, payload)
     result = job_runner.run_job(job, node, Report())
     assert ran["payload"] is job.payload and transport.loads == []  # the very job, untouched
     assert ArtifactRef.model_validate(result["trajectories"]).sha256 in transport.documents
@@ -124,7 +124,7 @@ def test_a_job_without_references_runs_as_before(node, make_job, ran):
 
 def test_references_on_a_node_without_transport_fail_for_good(node, make_job, ran):
     with pytest.raises(JobFailed) as failed:
-        job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": _missing_reference()}), node, Report())
+        job_runner.run_job(make_job(JobType.SIMULATION, {"trajectories": _missing_reference()}), node, Report())
     assert not failed.value.retryable and "no artifact transport" in str(failed.value) and "payload" not in ran
 
 
@@ -139,14 +139,14 @@ def test_references_on_a_node_without_transport_fail_for_good(node, make_job, ra
 def test_download_failures_keep_their_retryability(node, make_job, ran, failure, retryable):
     node.artifacts = FakeTransport(failure=failure)
     with pytest.raises(JobFailed) as failed:
-        job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": _missing_reference()}), node, Report())
+        job_runner.run_job(make_job(JobType.SIMULATION, {"trajectories": _missing_reference()}), node, Report())
     assert failed.value.retryable == retryable and "payload" not in ran
 
 
 def test_an_upload_failure_is_retryable(node, make_job, ran):
     node.artifacts = FakeTransport(failure=ArtifactTransferError("the master is restarting", retryable=True, status=503))
     with pytest.raises(JobFailed) as failed:
-        job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": {"0": []}}), node, Report())
+        job_runner.run_job(make_job(JobType.SIMULATION, {"trajectories": {"0": []}}), node, Report())
     assert failed.value.retryable and "upload" in str(failed.value)
 
 
@@ -155,7 +155,7 @@ def test_a_reference_that_does_not_fit_its_document_fails_for_good(node, make_jo
     node.artifacts = transport
     reference = _stored(transport, {"other": 1}, pointer="/trajectories")
     with pytest.raises(JobFailed) as failed:
-        job_runner.run_job(make_job(JobType.SIMULATION_KINEMATIC, {"trajectories": reference}), node, Report())
+        job_runner.run_job(make_job(JobType.SIMULATION, {"trajectories": reference}), node, Report())
     assert not failed.value.retryable and "payload" not in ran
 
 

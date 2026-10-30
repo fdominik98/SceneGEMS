@@ -28,7 +28,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     parse_campaign_config,
     with_domain_defaults,
 )
-from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.canonical_json import canonical_json
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
 

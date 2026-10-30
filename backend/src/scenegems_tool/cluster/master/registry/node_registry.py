@@ -12,12 +12,12 @@ heartbeat, drain, resume, offline, out of date); the live channel's nodes topic 
 
 import logging
 from functools import partial
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, FrozenSet, List, Optional
 
 import anyio
 
 from scenegems_tool.cluster.master.registry.node_session import NodeSession
-from scenegems_tool.cluster.master.scheduling.fingerprint_policy import node_mismatches
+from scenegems_tool.cluster.master.scheduling.fingerprint_policy import node_mismatches, stale_components
 from scenegems_tool.cluster.protocol.messages import Drain, Heartbeat, Hello
 from scenegems_tool.persistence.schema import NodeStatus
 from scenegems_tool.persistence.stores import NodeRecord, NodeStore
@@ -74,17 +74,24 @@ class NodeRegistry:
             session.record = record
             self.on_change(session.node_id)
 
-    def refresh_out_of_date(self, session: NodeSession, expected: Optional[Dict[str, str]]) -> bool:
-        """Compares the node's fingerprints with the expected ones; True when it is out of date."""
+    def refresh_out_of_date(self, session: NodeSession, expected: Optional[Dict[str, str]]) -> FrozenSet[str]:
+        """Compares the node's fingerprints with the expected ones per component; returns its stale components (empty when up to date)."""
         if expected is None:
-            return False
+            return frozenset()
         mismatches = node_mismatches(session.record, expected)
-        if mismatches and not session.out_of_date:
-            logger.warning("Node %s is out of date and gets no jobs: %s", session.node_id, ", ".join(mismatch.image for mismatch in mismatches))
-        if mismatches != session.out_of_date:
+        stale = stale_components(session.record.components, mismatches)
+        if mismatches != session.out_of_date or stale != session.stale_components:
+            if stale - session.stale_components:
+                logger.warning(
+                    "Node %s is out of date for %s, which get no jobs there: %s",
+                    session.node_id,
+                    ", ".join(sorted(stale)),
+                    ", ".join(mismatch.image for mismatch in mismatches),
+                )
             session.out_of_date = mismatches
+            session.stale_components = stale
             self.on_change(session.node_id)
-        return bool(mismatches)
+        return stale
 
     async def drain(self, node_id: str, reason: str) -> Optional[NodeRecord]:
         record = await anyio.to_thread.run_sync(self._nodes.set_status, node_id, NodeStatus.DRAINING)

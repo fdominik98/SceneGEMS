@@ -20,7 +20,7 @@ TIMEOUT_S = 10.0
 FINGERPRINTS = {"scenegems-scenario-execution-subsystem:latest": "f" * 64}
 
 
-def make_job(job_id: str = "job-1", job_type: JobType = JobType.SIMULATION_KINEMATIC, attempt: int = 1, payload: Optional[dict] = None) -> JobSpec:
+def make_job(job_id: str = "job-1", job_type: JobType = JobType.SIMULATION, attempt: int = 1, payload: Optional[dict] = None) -> JobSpec:
     return JobSpec(job_id=job_id, job_type=job_type, payload=payload or {}, attempt=attempt, idempotency_key=f"{job_id}/key")
 
 
@@ -118,7 +118,8 @@ def node_values(master: FakeMaster, state_dir, **overrides) -> Dict[str, str]:
         "SCENEGEMS_MASTER_URL": master.url,
         "SCENEGEMS_MASTER_ID": master.master_id,
         "SCENEGEMS_NODE_NAME": "test-node",
-        "SCENEGEMS_NODE_CAPABILITIES": "simulation.kinematic:2,scene_generation:1",
+        "SCENEGEMS_NODE_SLOTS": "simulation:2,scene_generation:1",
+        "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_NODE_LABELS": "site=lab",
         "SCENEGEMS_NODE_STATE_DIR": str(state_dir),
         "SCENEGEMS_SOFTWARE_REVISION": "test-revision",

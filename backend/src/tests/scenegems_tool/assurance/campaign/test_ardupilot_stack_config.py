@@ -13,7 +13,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.node.jobs.simulation_ardupilot_job import ArduPilotSimulationLayer
+from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationLayer
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver

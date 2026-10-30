@@ -8,7 +8,7 @@ lease the node kept across a reconnect.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Protocol, Set
+from typing import Dict, FrozenSet, List, Optional, Protocol, Set
 
 from scenegems_tool.cluster.fingerprints.comparison import FingerprintMismatch
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
@@ -17,6 +17,11 @@ from scenegems_tool.persistence.stores import Lease, NodeRecord
 
 class ControlSocket(Protocol):
     """The node's end of the control link as the master uses it; see control_link/."""
+
+    @property
+    def usable_components(self) -> FrozenSet[str]:
+        """The node's components whose images match the release."""
+        return frozenset(self.record.components) - self.stale_components
 
     async def send(self, frame: ProtocolFrame) -> bool: ...  # False when the frame could not be sent
 
@@ -31,10 +36,16 @@ class NodeSession:
     connected_at: datetime
     leases: Dict[str, str] = field(default_factory=dict)  # lease id to job id
     pending_offers: Set[str] = field(default_factory=set)  # offered on this connection, not accepted yet
-    out_of_date: List[FingerprintMismatch] = field(default_factory=list)
+    out_of_date: List[FingerprintMismatch] = field(default_factory=list)  # the images of its components that differ from the release
+    stale_components: FrozenSet[str] = frozenset()  # the components that need one of those images: unusable until the node is updated
     ready: bool = False  # Welcome sent and leases reconciled: the scheduler may offer
     replaced: bool = False  # a newer connection of the same node took over
     closed: bool = False
+
+    @property
+    def usable_components(self) -> FrozenSet[str]:
+        """The node's components whose images match the release."""
+        return frozenset(self.record.components) - self.stale_components
 
     async def send(self, frame: ProtocolFrame) -> bool:
         if self.closed:

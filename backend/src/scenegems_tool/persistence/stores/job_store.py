@@ -95,6 +95,7 @@ class JobStore:
                     payload=submission.payload,
                     required_labels=requirements.labels,
                     required_fingerprints=requirements.fingerprints,
+                    required_components=list(requirements.components),
                     min_memory_mb=requirements.min_memory_mb,
                     min_cpus=requirements.min_cpus,
                     allowed_nodes=list(submission.allowed_nodes),
@@ -145,12 +146,21 @@ class JobStore:
 
     # Leases
 
-    def claim_next(self, node_id: str, lease_duration_s: float, job_types: Optional[Collection[JobType]] = None, exclude_job_ids: Collection[str] = ()) -> Optional[Lease]:
+    def claim_next(
+        self,
+        node_id: str,
+        lease_duration_s: float,
+        job_types: Optional[Collection[JobType]] = None,
+        exclude_job_ids: Collection[str] = (),
+        components: Optional[Collection[str]] = None,
+    ) -> Optional[Lease]:
         """Leases the next matching queued job to the node, or returns None.
 
         Considers only online nodes and job types the node has a free slot for (slots minus
         its leased and running jobs of that type), optionally limited to job_types, and skips
-        the jobs in exclude_job_ids and those not available yet. The match on labels, fingerprints, resources and allowed nodes and the
+        the jobs in exclude_job_ids and those not available yet. A job's components must be among
+        components (the node's usable ones, which the scheduler passes) or, when None, among the
+        node's stored components. The match on labels, components, fingerprints, resources and allowed nodes and the
         order (priority, then submission) are in next_queued_job_query. The lease starts as
         an offer that holds for lease_duration_s; the node accepts it with accept().
         """
@@ -169,7 +179,9 @@ class JobStore:
             if not job_types:
                 return None
             fingerprints = {fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints}
-            row = session.execute(next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id)).scalar_one_or_none()
+            offered = sorted(components) if components is not None else [component.component for component in node.components]
+            query = next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id, components=offered)
+            row = session.execute(query).scalar_one_or_none()
             if row is None:
                 return None
             row.state = JobState.LEASED

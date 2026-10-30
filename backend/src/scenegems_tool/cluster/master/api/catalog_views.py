@@ -12,7 +12,7 @@ the job type modules, which the master keeps out of its startup.
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-CAMPAIGN_STACKS_NOTE = "Campaign configs offer the kinematic layer (simulation.kinematic) and replay on ArduPilot SITL (simulation.ardupilot_sim) or Gazebo (simulation.gazebo); the other stacks of the resolver follow with their jobs."
+CAMPAIGN_STACKS_NOTE = "Campaign configs offer the kinematic layer (the simulation job's kinematic runner) and replay on ArduPilot SITL or Gazebo (its ardupilot runner); the other stacks of the resolver follow with their runners."
 
 
 def class_view(scenario_class: Any) -> Dict[str, Any]:
@@ -121,7 +121,7 @@ def _ardupilot_parameters() -> List[Dict[str, Any]]:
 
 
 def _ardupilot_environment(resolver: Any, vessels: Dict[str, Any]) -> Dict[str, Any]:
-    """What a run on the stack can apply: the resolver's support, cut to what simulation.ardupilot_sim and simulation.gazebo do (they run calm water, so a configured wind or wave is refused)."""
+    """What a run on the stack can apply: the resolver's support, cut to what the ardupilot runner does (it runs calm water, so a configured wind or wave is refused)."""
     support = _environment_support(resolver, vessels)
     return {"wind": "unsupported", "waves": "unsupported", "interactive_only": support["interactive_only"]}
 
@@ -185,7 +185,7 @@ def _derived_geofence() -> str:
 def _kinematic_stacks(resolver: Any) -> List[Dict[str, Any]]:
     from scenegems_tool.assurance.campaign.campaign_config import KinematicStackConfig, RunConfig
     from scenegems_tool.assurance.campaign.config_validation import resolve_run, vessel_stacks
-    from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
+    from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
 
     labels = {
         KinematicMode.REPLAY: ("Replay on the kinematic layer", "Every vessel replays its generated trajectory; the scene is judged as it was generated."),
@@ -223,7 +223,7 @@ def unavailable_stacks(resolver: Any, offered: List[Dict[str, Any]]) -> List[Dic
     """Every other triple of the resolver's matrix with the reasons a campaign cannot use it."""
     from scenegems_tool.assurance.campaign.campaign_config import ARDUPILOT_LAYERS, ArdupilotStackConfig, KinematicStackConfig
     from scenegems_tool.assurance.campaign.config_validation import vessel_stacks
-    from scenegems_tool.cluster.node.jobs.simulation_kinematic_job import KinematicMode
+    from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
 
     configs = [KinematicStackConfig(mode=mode) for mode in KinematicMode] + [ArdupilotStackConfig(simulation_layer=layer) for layer in ARDUPILOT_LAYERS]
     taken = {_key(stack) for config in configs for stack in vessel_stacks(config).values()}
@@ -260,7 +260,7 @@ def monitors_view() -> List[Dict[str, Any]]:
         MonitorImplementation.LIVE: (
             "Live",
             "The COLREGS monitor runs inside the simulation step by step; on the kinematic layer it can stop the run early once every rule is decided.",
-            ["simulation.kinematic", "simulation.ardupilot_sim", "simulation.gazebo"],
+            ["simulation"],
             True,
         ),
         MonitorImplementation.EMPTY: ("None", "Nothing is judged; every verdict is unmonitored.", [], False),

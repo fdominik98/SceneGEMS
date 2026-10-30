@@ -86,8 +86,8 @@ class Scheduler:
         expected = self._expected.current()
         eligible = []
         for session in self._registry.connected():
-            out_of_date = self._registry.refresh_out_of_date(session, expected)
-            if ineligibility(session.record, out_of_date, expected is not None, self._guard) is None:
+            self._registry.refresh_out_of_date(session, expected)
+            if ineligibility(session.record, session.usable_components, expected is not None, self._guard) is None:
                 eligible.append(session)
         if eligible:
             self._turn = (self._turn + 1) % len(eligible)
@@ -97,7 +97,7 @@ class Scheduler:
     async def _claim(self, session: NodeSession) -> Optional[Lease]:
         if session.closed:
             return None
-        claim = partial(self._jobs.claim_next, session.node_id, self._timing.offer_timeout_s, exclude_job_ids=self._backoff.held_jobs(session.node_id))
+        claim = partial(self._jobs.claim_next, session.node_id, self._timing.offer_timeout_s, exclude_job_ids=self._backoff.held_jobs(session.node_id), components=session.usable_components)
         try:
             return await anyio.to_thread.run_sync(claim)
         except UnknownNode:

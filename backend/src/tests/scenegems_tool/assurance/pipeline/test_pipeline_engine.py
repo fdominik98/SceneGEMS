@@ -8,7 +8,7 @@ import pytest
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.case_machine import CaseMachine
 from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
-from scenegems_tool.cluster.fingerprints.job_images import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
 from scenegems_tool.persistence.schema import (
     HELD_UNTIL,
@@ -525,8 +525,20 @@ def test_a_campaign_runs_only_on_its_selected_nodes(harness):
 
 def test_node_availability_honours_the_selected_nodes(harness):
     (node,) = harness.nodes
-    assert node.runs(JobType.SCENE_GENERATION, {}, {}) and node.runs(JobType.SCENE_GENERATION, {}, {}, {harness.executor.node_id})
-    assert not node.runs(JobType.SCENE_GENERATION, {}, {}, {"another-node"})
+    scene = ("scene_generation",)
+    assert node.runs(JobType.SCENE_GENERATION, scene, {}, {}) and node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {harness.executor.node_id})
+    assert not node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {"another-node"})
+
+
+def test_node_availability_needs_the_components_up_to_date(harness):
+    from dataclasses import replace
+
+    (node,) = harness.nodes
+    gazebo = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+    assert node.runs(JobType.SIMULATION, gazebo, {}, {})
+    assert not replace(node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SIMULATION, gazebo, {}, {})
+    assert replace(node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SCENE_GENERATION, ("scene_generation",), {}, {}), "the other components still work"
+    assert not replace(node, record=replace(node.record, components=("scene_generation",))).runs(JobType.SIMULATION, gazebo, {}, {})
 
 
 def test_a_stop_condition_drains_the_campaign(harness):

@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
 
-from scenegems_tool.cluster.fingerprints.job_images import unrun_campaign_stacks
+from scenegems_tool.cluster.fingerprints.components import unrun_campaign_stacks
 from scenegems_tool.cluster.release.bundle import build_bundle
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
@@ -38,7 +38,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     print(f"Release {release.revision[:12]}{state}: {len(release.images)} images, roles {', '.join(release.roles)}, written to {arguments.out}")
     unrun = unrun_campaign_stacks()
     if unrun:
-        print(f"No job type runs these campaign stacks of the vessel stack matrix, so no node capability offers them: {'; '.join(f'({stack})' for stack in unrun)}")
+        print(f"No simulation runner runs these campaign stacks of the vessel stack matrix, so campaigns cannot use them yet: {'; '.join(f'({stack})' for stack in unrun)}")
     return 0
 
 

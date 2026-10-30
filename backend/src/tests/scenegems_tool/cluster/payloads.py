@@ -42,18 +42,22 @@ def trajectories_data() -> Dict[str, Any]:
     return TrajectoryBuilder.default_trajectory_from_scene(scene, 1, 10).to_dict()
 
 
-ARDUPILOT_LAYERS = {JobType.SIMULATION_ARDUPILOT_SIM: "ardupilot_sim", JobType.SIMULATION_GAZEBO: "gazebo"}
+GEOFENCE = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
+
+
+def ardupilot_payload(simulation_layer: str, **fields: Any) -> Dict[str, Any]:
+    """A simulation payload of the ardupilot runner on the layer (ardupilot_sim or gazebo), with `fields` set on top."""
+    return {"runner": "ardupilot", "simulation_layer": simulation_layer, "trajectories": trajectories_data(), "geofence": GEOFENCE, **fields}
 
 
 def valid_payload(job_type: JobType, **fields: Any) -> Dict[str, Any]:
-    """A payload the job type's model accepts, with `fields` set on top."""
+    """A payload the job type's model accepts, with `fields` set on top; a simulation's runs the kinematic runner."""
     if job_type == JobType.SCENE_GENERATION:
         base: Dict[str, Any] = {"functional_scenario_content": _functional_scenario(), "colregs_constraints_content": "", "vessel_types_content": "", "obstacle_types_content": ""}
     elif job_type == JobType.TRAJECTORY_GENERATION:
         base = {"scenario_content": "{}", "colregs_constraints_content": ""}
-    elif job_type in ARDUPILOT_LAYERS:
-        geofence = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
-        base = {"simulation_layer": ARDUPILOT_LAYERS[job_type], "trajectories": trajectories_data(), "geofence": geofence}
+    elif job_type == JobType.SIMULATION:
+        base = {"runner": "kinematic", "trajectories": trajectories_data()}
     elif job_type == JobType.CALIBRATION_DEVIATION:
         base = {"trajectories": [trajectories_data(), trajectories_data()], "reference": "head_on"}
     else:

@@ -16,9 +16,7 @@ from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 class JobType(str, Enum):
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
-    SIMULATION_KINEMATIC = "simulation.kinematic"  # replay or USV Navigation closed loop, in process
-    SIMULATION_ARDUPILOT_SIM = "simulation.ardupilot_sim"  # replay over the lockstep MAVLink adapter on SITL's own physics, one stack per job
-    SIMULATION_GAZEBO = "simulation.gazebo"  # the same against a Gazebo world
+    SIMULATION = "simulation"  # one run of every vessel's stack; the payload's runner picks how (cluster/node/jobs/simulation_job.py)
     MONITORING_POST_HOC = "monitoring.post_hoc"
     CALIBRATION_DEVIATION = "calibration.deviation"  # deviation between repeats of one case on one stack
 
@@ -42,9 +40,14 @@ class JobOutcome(str, Enum):
 
 
 class JobRequirements(ProtocolModel):
-    """What a node must offer to receive the job; the job type itself is matched separately."""
+    """What a node must offer to receive the job; the job type itself is matched separately.
+
+    The master sets components at submission from the payload (cluster/fingerprints/components.py):
+    a simulation needs every layer of every vessel's stack, any other job its subsystem component.
+    """
 
     labels: Dict[str, str] = Field(default_factory=dict)  # every pair must be among the node's labels
+    components: List[str] = Field(default_factory=list)  # every one must be among the node's usable components
     fingerprints: Dict[str, str] = Field(default_factory=dict)  # image name to required build fingerprint
     min_memory_mb: int = Field(default=0, ge=0)
     min_cpus: float = Field(default=0.0, ge=0.0)
