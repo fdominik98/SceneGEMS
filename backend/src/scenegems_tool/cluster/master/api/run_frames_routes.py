@@ -31,6 +31,7 @@ import anyio
 from fastapi import APIRouter, HTTPException, Response
 
 from scenegems_tool.assurance.pipeline.pipeline_queries import latest_job_by_key_family
+from scenegems_tool.cluster.fingerprints.comparison import fingerprints_of
 from scenegems_tool.cluster.fingerprints.components import MONITORING, images_of
 from scenegems_tool.cluster.master.api.views import job_view
 from scenegems_tool.cluster.master.control_plane import ControlPlane, FingerprintsUnavailable, InvalidPayload
@@ -104,7 +105,7 @@ def _submission(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, 
         "include_frames": True,
     }
     pinned = campaign.pinned_fingerprints if campaign is not None else {}
-    fingerprints = {image: pinned[image] for image in sorted(images_of([MONITORING])) if image in pinned}
+    fingerprints = fingerprints_of(images_of([MONITORING]), pinned)
     resources = config.get("resources", {})
     labels = dict(resources.get("required_labels", {}))
     return JobSubmission(

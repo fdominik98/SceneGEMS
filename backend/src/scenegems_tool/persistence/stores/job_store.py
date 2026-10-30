@@ -24,6 +24,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
+from scenegems_tool.cluster.fingerprints.comparison import with_legacy_names
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.clock import Clock, utc_now
@@ -183,7 +184,7 @@ class JobStore:
             job_types = free_job_types({capability.job_type: capability.slots for capability in node.capabilities}, active_counts, job_types)
             if not job_types:
                 return None
-            fingerprints = {fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints}
+            fingerprints = with_legacy_names({fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints})
             offered = sorted(components) if components is not None else [component.component for component in node.components]
             query = next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id, components=offered)
             row = session.execute(query).scalar_one_or_none()

@@ -15,6 +15,7 @@ from typing import FrozenSet, Optional, Tuple, Union
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities
 from scenegems_tool.vessel_stack.contracts.ports import Port
 from scenegems_tool.vessel_stack.contracts.roles import LayerRef, Role
+from utils.image_names import tagged
 
 
 class SpecStatus(str, Enum):
@@ -24,6 +25,14 @@ class SpecStatus(str, Enum):
 
 UPSTREAM_PINS_FILE = "deploy/images/upstream_pins.env"  # upstream commits the simulator images build from
 _IMAGE_VARIABLE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:-([^}]+)\}")  # a compose image reference with a default
+
+
+def image_reference(variable: str, repository: str) -> str:
+    """A compose image reference ${variable:-repository:tag}: the environment variable overrides the image, the tag is SCENEGEMS_IMAGE_TAG's.
+
+    The tag is written into the default here, not as a nested variable, since default_image reads one level only.
+    """
+    return f"${{{variable}:-{tagged(repository)}}}"
 
 
 @dataclass(frozen=True)

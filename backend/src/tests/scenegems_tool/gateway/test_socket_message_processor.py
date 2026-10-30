@@ -7,7 +7,7 @@ from typing import List, Tuple, get_args, get_type_hints
 import pytest
 
 from scenegems_tool.gateway.protocol import ClientMessage
-from scenegems_tool.gateway.socket_message_processor import SocketMessageProcessor
+from scenegems_tool.gateway.socket_message_processor import LIVE_SESSION_MESSAGES, SocketMessageProcessor
 from tests.scenegems_tool.gateway.conftest import settle
 
 pytestmark = pytest.mark.anyio
@@ -265,3 +265,29 @@ class TestErrors:
         await processor.inbound_queue.put({"type": "disconnect_from_mqtt_broker"})
         await settle()
         assert session.calls == []
+
+
+class TestLiveSessionsOff:
+    @pytest.fixture
+    async def off(self):
+        session = RecordingSession()
+        processor = SocketMessageProcessor(session, live_sessions=False)  # type: ignore[arg-type]
+        yield session, processor
+        processor.cancel()
+
+    @pytest.mark.parametrize("message_type", sorted(LIVE_SESSION_MESSAGES))
+    async def test_the_messages_that_start_containers_are_refused_with_the_reason(self, off, message_type):
+        session, processor = off
+        await send(processor, {"type": message_type})
+        assert session.calls == []
+        (error,) = session.errors
+        assert error.startswith("Live sessions are off on this master") and message_type in error and "docker-compose.live-sessions.yml" in error
+
+    async def test_everything_else_still_works(self, off):
+        session, processor = off
+        await send(processor, {"type": "load_scenario_file", "scenarioId": "s1", "fileName": "a.json", "filePath": "/a.json", "fileContent": "{}"})
+        await send(processor, {"type": "query_stack_options"})
+        assert session.names() == ["set_scenario_session", "send_payload"] and session.errors == []
+
+    def test_the_refused_messages_are_client_messages(self):
+        assert LIVE_SESSION_MESSAGES <= set(known_message_types())

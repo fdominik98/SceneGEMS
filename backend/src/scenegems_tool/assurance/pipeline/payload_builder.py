@@ -53,6 +53,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.stage_graph import StageGraph, Step
+from scenegems_tool.cluster.fingerprints.comparison import fingerprints_of
 from scenegems_tool.cluster.fingerprints.components import ComponentId, SimulationRunner, images_of
 from scenegems_tool.cluster.protocol.artifacts import ArtifactContent, encode_document, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSubmission, JobType
@@ -132,8 +133,8 @@ def validate_payload(job_type: JobType, payload: Mapping[str, Any]) -> Tuple[Com
 
 
 def required_fingerprints(components: Collection[ComponentId], pinned: Mapping[str, str]) -> Dict[str, str]:
-    """The pinned fingerprints of the images of these components."""
-    return {image: pinned[image] for image in sorted(images_of(components)) if image in pinned}
+    """The pinned fingerprints of the images of these components, keyed by repository; a pin under another tag (an older release's) holds."""
+    return fingerprints_of(images_of(components), pinned)
 
 
 class PayloadBuilder:

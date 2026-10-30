@@ -115,8 +115,8 @@ class TestRunRecorder:
         sessions = []
         create_session = websocket_app.websocket_session_manager.create_session
 
-        def created(websocket):
-            session, processor = create_session(websocket=websocket)
+        def created(websocket, live_sessions=True):
+            session, processor = create_session(websocket=websocket, live_sessions=live_sessions)
             sessions.append(session)
             return session, processor
 

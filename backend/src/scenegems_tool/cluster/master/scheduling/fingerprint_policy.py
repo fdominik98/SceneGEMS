@@ -8,6 +8,10 @@ release is stale and unusable on that node, while the node's other components ke
 
 A submission without fingerprints gets the expected ones of the images of its required components;
 a submission that names fingerprints keeps them (a campaign's pinned set, Phase 4).
+
+Every fingerprint map here is keyed by image repository (cluster/fingerprints/comparison.py): a
+release tags its images with its revision, so the master's tag, a node's and that of a campaign
+pinned under an older release may differ while the image is the same.
 """
 
 import logging
@@ -17,7 +21,7 @@ from typing import Callable, Collection, Dict, FrozenSet, List, Optional
 
 import anyio
 
-from scenegems_tool.cluster.fingerprints.comparison import FingerprintMismatch, find_mismatches
+from scenegems_tool.cluster.fingerprints.comparison import FingerprintMismatch, by_repository, find_mismatches, fingerprints_of, repositories
 from scenegems_tool.cluster.fingerprints.components import component_images, images_of
 from scenegems_tool.cluster.protocol.jobs import JobSubmission
 from scenegems_tool.cluster.release.manifest import read_release
@@ -57,7 +61,7 @@ class ExpectedFingerprints:
         return expected
 
     def current(self) -> Optional[Dict[str, str]]:
-        """Image tag to fingerprint, or None while the listing is not available."""
+        """Image repository to fingerprint, or None while the listing is not available."""
         return self._listing
 
     async def load(self) -> None:
@@ -77,26 +81,26 @@ class ExpectedFingerprints:
         logger.info("Expected image fingerprints ready for %d images", len(listing))
 
     def _set(self, listing: Dict[str, str]) -> None:
-        self._listing = listing
+        self._listing = by_repository(listing)
         self.state, self.error = ListingState.READY, None
 
 
 def with_required_fingerprints(submission: JobSubmission, expected: Dict[str, str]) -> JobSubmission:
-    """The submission with the expected fingerprints of its required components' images, unless it names its own."""
+    """The submission with the expected fingerprints of its required components' images, unless it names its own; either keyed by repository."""
     if submission.requirements.fingerprints:
-        return submission
-    required = {image: expected[image] for image in sorted(images_of(submission.requirements.components)) if image in expected}
+        required = by_repository(submission.requirements.fingerprints)
+    else:
+        required = fingerprints_of(images_of(submission.requirements.components), expected)
     return submission.model_copy(update={"requirements": submission.requirements.model_copy(update={"fingerprints": required})})
 
 
 def node_mismatches(node: NodeRecord, expected: Dict[str, str]) -> List[FingerprintMismatch]:
     """The images the node's components need whose fingerprint differs from the expected one; empty when up to date."""
-    required = {image: expected[image] for image in sorted(images_of(node.components)) if image in expected}
-    return find_mismatches(node.fingerprints, required)
+    return find_mismatches(node.fingerprints, fingerprints_of(images_of(node.components), expected))
 
 
 def stale_components(components: Collection[str], mismatches: Collection[FingerprintMismatch]) -> FrozenSet[str]:
     """The components that need an image among the mismatches: unusable on the node until it is updated."""
     stale_images = {mismatch.image for mismatch in mismatches}
     catalog = component_images()
-    return frozenset(component for component in components if stale_images & set(catalog.get(component, ())))
+    return frozenset(component for component in components if stale_images & set(repositories(catalog.get(component, ()))))

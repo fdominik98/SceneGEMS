@@ -12,6 +12,7 @@ from itertools import count
 from typing import Any, Collection, Dict, List, Optional, Tuple
 from uuid import uuid4
 
+from scenegems_tool.cluster.fingerprints.comparison import with_legacy_names
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import Heartbeat, Hello, JobResult
 from scenegems_tool.cluster.protocol.node_description import NodeResources
@@ -281,7 +282,7 @@ class InMemoryJobStore:
                 and job.job_type in types
                 and job.required_labels.items() <= node.labels.items()
                 and set(job.required_components) <= offered
-                and job.required_fingerprints.items() <= node.fingerprints.items()
+                and job.required_fingerprints.items() <= with_legacy_names(node.fingerprints).items()
                 and job.min_memory_mb <= node.resources.free_memory_mb
                 and job.min_cpus <= node.resources.cpus
                 and (not job.allowed_nodes or node_id in job.allowed_nodes)

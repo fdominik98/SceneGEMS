@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from scenegems_tool.vessel_stack.contracts.adapter_spec import UPSTREAM_PINS_FILE, AdapterSpec, ContainerSpec, LayerSpec
+from scenegems_tool.vessel_stack.contracts.adapter_spec import UPSTREAM_PINS_FILE, AdapterSpec, ContainerSpec, LayerSpec, image_reference
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, LayerRef, SimulationLayerId
@@ -24,7 +24,7 @@ def wave_forces_enabled(environment: Optional[EnvironmentConfig]) -> bool:
 GZ_TRANSPORT_ACTUATOR_SOURCE = "backend/src/scenegems_tool/vessel_stack/simulation_layers/gazebo/gz_transport_actuator.py"  # copied into the image
 
 GAZEBO_CONTAINER = ContainerSpec(
-    image="${GAZEBO_IMAGE:-scenegems-gazebo-harmonic:latest}",
+    image=image_reference("GAZEBO_IMAGE", "scenegems-gazebo-harmonic"),
     build_fingerprint_source="deploy/images/gazebo",
     entrypoint=GAZEBO_ENTRYPOINT_CONTAINER_PATH,
     upstream_pins_file=UPSTREAM_PINS_FILE,

@@ -7,16 +7,32 @@ from scenegems_tool.gateway.socket_session import SocketSession
 from scenegems_tool.gateway.stack_options import stack_options_message
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
+# The messages that start a live session's containers on the gateway's Docker (the scenario execution
+# service, the monitor, the vessel stacks); a master without the Docker socket refuses them.
+LIVE_SESSION_MESSAGES = frozenset({"connect_to_mqtt_broker", "initialize_simulation", "initialize_monitor"})
+
+
+def live_sessions_off_message(message_type: str) -> str:
+    return (
+        f"Live sessions are off on this master, so {message_type} is refused: master-api has no Docker socket "
+        "(SCENEGEMS_LIVE_SESSIONS=false; its COMPOSE_FILE leaves out docker-compose.live-sessions.yml). "
+        "Campaigns and cluster jobs still run; run live sessions on a master that has them on."
+    )
+
 
 class SocketMessageProcessor:
-    def __init__(self, session: SocketSession):
+    def __init__(self, session: SocketSession, live_sessions: bool = True):
         self.session = session
+        self.live_sessions = live_sessions
         self.inbound_queue: asyncio.Queue[ClientMessage] = asyncio.Queue()
         self.worker_task = asyncio.create_task(self._process_messages())
 
     async def _process_messages(self) -> None:
         while True:
             message = await self.inbound_queue.get()
+            if not self.live_sessions and message.get("type") in LIVE_SESSION_MESSAGES:
+                self.session.send_runtime_error(live_sessions_off_message(message["type"]))
+                continue
             try:
                 match message["type"]:
                     case "load_scenario_file":

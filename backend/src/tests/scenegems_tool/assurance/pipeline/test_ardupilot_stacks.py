@@ -5,6 +5,7 @@ import pytest
 from scenegems_tool.assurance.campaign import campaign_config_from_dict
 from scenegems_tool.assurance.pipeline.payload_builder import PayloadBuilder, PayloadError, required_fingerprints, validate_payload
 from scenegems_tool.assurance.pipeline.stage_graph import STAGE_JOB_TYPES, StageGraph, Step
+from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.node.jobs.job_types import payload_components
 from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationPayload
@@ -68,9 +69,9 @@ def test_a_run_knows_its_images_and_tier():
     graph = _graph(KINEMATIC, SITL, GAZEBO)
     assert [graph.run_tier(run) for run in range(3)] == [None, "bounded", "bounded"]
     assert [required_fingerprints(graph.run_components(run), EXPECTED) for run in range(3)] == [
-        {SCENARIO_EXECUTION_IMAGE: "fp-execution"},
-        {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"},
-        {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"},
+        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution"}),
+        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}),
+        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}),
     ]
     assert STAGE_JOB_TYPES[SIMULATE] == JobType.SIMULATION
 
@@ -135,7 +136,9 @@ def test_the_submission_has_the_runs_components_the_images_and_the_stage_priorit
         jobs.append(builder.submission(step, builder.simulation(5, run, TRAJECTORY_RESULT), step.idempotency_key("c1", 1), EXPECTED))
     assert [job.job_type for job in jobs] == [SIMULATION] * 3
     assert [tuple(job.requirements.components) for job in jobs] == [ON_KINEMATIC, ON_SITL, ON_GAZEBO]
-    assert [set(job.requirements.fingerprints) for job in jobs] == [{SCENARIO_EXECUTION_IMAGE}, {SCENARIO_EXECUTION_IMAGE, SITL_IMAGE}, {SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE}]
+    assert [set(job.requirements.fingerprints) for job in jobs] == [
+        set(repositories(images)) for images in ([SCENARIO_EXECUTION_IMAGE], [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE], [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE])
+    ]
     assert {job.priority for job in jobs} == {12} and jobs[1].idempotency_key == "campaign:c1:case:1:simulate:1:0"
 
 

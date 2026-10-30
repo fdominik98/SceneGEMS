@@ -86,6 +86,7 @@ from scenegems_tool.assurance.pipeline.engine_leadership import EngineLeadership
 from scenegems_tool.assurance.pipeline.payload_builder import required_fingerprints
 from scenegems_tool.assurance.pipeline.pipeline_queries import UNFINISHED_JOB_STATES, case_states, delete_intent, job_id_by_key, next_case_indexes, pin_fingerprints, unfinished_jobs_of_final_cases
 from scenegems_tool.assurance.pipeline.stage_graph import JobNeed
+from scenegems_tool.cluster.fingerprints.comparison import find_mismatches
 from scenegems_tool.cluster.protocol.jobs import JobSubmission, JobType
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.schema import (
@@ -127,7 +128,7 @@ class NodeAvailability:
             return False
         if any(record.labels.get(key) != value for key, value in labels.items()):
             return False
-        return all(record.fingerprints.get(image) == fingerprint for image, fingerprint in fingerprints.items())
+        return not find_mismatches(record.fingerprints, fingerprints)
 
 
 @dataclass(frozen=True)

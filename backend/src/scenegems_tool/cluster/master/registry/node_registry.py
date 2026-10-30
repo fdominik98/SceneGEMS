@@ -16,6 +16,7 @@ from typing import Callable, Dict, FrozenSet, List, Optional
 
 import anyio
 
+from scenegems_tool.cluster.fingerprints.comparison import LEGACY_TAG, by_repository
 from scenegems_tool.cluster.master.registry.node_session import NodeSession
 from scenegems_tool.cluster.master.scheduling.fingerprint_policy import node_mismatches, stale_components
 from scenegems_tool.cluster.protocol.messages import Drain, Heartbeat, Hello
@@ -45,6 +46,8 @@ class NodeRegistry:
         return self._sessions.get(node_id)
 
     async def register(self, hello: Hello) -> NodeRecord:
+        # Stored by image repository; a node older than release tags names its images, all :latest, by tag
+        hello = hello.model_copy(update={"fingerprints": by_repository(hello.fingerprints, LEGACY_TAG)})
         return await anyio.to_thread.run_sync(self._nodes.register, hello)
 
     async def connect(self, session: NodeSession) -> None:
