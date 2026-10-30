@@ -49,6 +49,12 @@ def test_references_are_added_and_removed_once(stores, campaign):
     assert not stores.artifacts.remove_reference(SCENE, ArtifactHolderKind.JOB, "job-1", "input")
 
 
+def test_existing_hashes_names_the_recorded_ones(stores):
+    _record(stores)
+    assert stores.artifacts.existing_hashes([SCENE, TRAJECTORIES, SCENE]) == {SCENE}
+    assert stores.artifacts.existing_hashes([]) == set()
+
+
 def test_a_reference_needs_a_recorded_artifact(stores):
     with pytest.raises(UnknownArtifact):
         stores.artifacts.add_reference(SCENE, CASE, "1", "scene")

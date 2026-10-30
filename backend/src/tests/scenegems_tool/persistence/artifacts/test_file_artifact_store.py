@@ -161,6 +161,47 @@ def test_stale_unfinished_writes_are_removed_when_the_store_opens(tmp_path):
     assert not stale.exists() and fresh.exists()
 
 
+def _age(store, sha256, seconds):
+    then = time.time() - seconds
+    os.utime(store.path(sha256), (then, then))
+
+
+def test_stored_hashes_lists_the_files_older_than_the_age(store):
+    old, young = store.put(b'{"old":true}').sha256, store.put(b'{"young":true}').sha256
+    _age(store, old, 7200)
+    _age(store, young, 60)
+    assert list(store.stored_hashes(3600)) == [old]
+    assert sorted(store.stored_hashes(30)) == sorted([old, young])
+
+
+def test_stored_hashes_skips_unfinished_writes_and_foreign_files(store):
+    stored = store.put(DOCUMENT).sha256
+    _age(store, stored, 7200)
+    old = time.time() - 7200
+    # another folder for the upper case name: Windows file systems ignore case, so in SHA's folder it would be SHA's own file
+    strays = [store.incoming / f"{'b' * 64}.gz", store.root / SHA[:2] / SHA[2:4] / "notes.gz", store.root / "zz" / "yy" / f"{'c' * 64}.gz", store.root / "dd" / "dd" / f"{'D' * 64}.gz"]
+    for stray in strays:
+        stray.parent.mkdir(parents=True, exist_ok=True)
+        stray.write_bytes(b"x")
+        os.utime(stray, (old, old))
+    assert list(store.stored_hashes(3600)) == [stored]
+
+
+def test_files_can_be_deleted_while_stored_hashes_iterates(store):
+    hashes = [store.put(f'{{"n":{n}}}'.encode()).sha256 for n in range(5)]
+    for sha256 in hashes:
+        _age(store, sha256, 7200)
+    seen = []
+    for sha256 in store.stored_hashes(3600):
+        seen.append(sha256)
+        store.delete(sha256)
+    assert sorted(seen) == sorted(hashes) and list(store.stored_hashes(0)) == []
+
+
+def test_stored_hashes_of_an_empty_store(store):
+    assert list(store.stored_hashes()) == []
+
+
 def test_empty_content(store):
     stored = store.put(b"")
     assert stored.sha256 == hashlib.sha256(b"").hexdigest() and store.read(stored.sha256) == b"" and store.size(stored.sha256) == 0

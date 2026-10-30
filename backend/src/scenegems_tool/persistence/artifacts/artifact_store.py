@@ -9,6 +9,7 @@ again is harmless.
     put(data, sha256)           the same for bytes in memory
     open(sha256, compressed)    the content as a binary stream, or the stored gzip bytes
     read, exists, delete, size, stored_size
+    stored_hashes(older_than_s) every stored address written more than older_than_s seconds ago
 
 The store knows bytes only. What an artifact is (its kind and media type) and who still
 needs it are recorded in Postgres (persistence/stores/artifact_records.py); recorded_artifacts.py
@@ -18,7 +19,7 @@ keeps the two in step.
 import hashlib
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import BinaryIO, Optional
+from typing import BinaryIO, Iterator, Optional
 
 from scenegems_tool.persistence.schema.artifact_tables import require_sha256_hex
 
@@ -115,6 +116,10 @@ class ArtifactStore(ABC):
     @abstractmethod
     def stored_size(self, sha256: str) -> int:
         """The size as stored; raises ArtifactNotFound."""
+
+    @abstractmethod
+    def stored_hashes(self, older_than_s: float = 0.0) -> Iterator[str]:
+        """The addresses of the stored artifacts first written more than older_than_s seconds ago, in no order."""
 
     def put(self, data: bytes, sha256: Optional[str] = None, max_bytes: Optional[int] = None) -> StoredArtifact:
         """Stores bytes in memory; without sha256 their own hash is the address."""
