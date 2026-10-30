@@ -116,8 +116,9 @@ def _combination(document, asv_software, control_layer, simulation_layer):
 def test_an_available_stack_names_the_cluster_job_that_runs_it(document):
     assert fact(_combination(document, "replay", "ardupilot", "gazebo"), CLUSTER_JOB_FACT).value == "simulation, runner ardupilot"
     assert fact(_combination(document, "usv_navigation", "none", "kinematic"), CLUSTER_JOB_FACT).value == "simulation, runner kinematic"
-    no_job = fact(_combination(document, "replay", "custom", "gazebo"), CLUSTER_JOB_FACT)
-    assert no_job.value is None and "no simulation runner runs it yet" in no_job.note
+    assert fact(_combination(document, "usv_navigation", "ardupilot", "ardupilot_sim"), CLUSTER_JOB_FACT).value == "simulation, runner ardupilot"
+    assert fact(_combination(document, "replay", "custom", "gazebo"), CLUSTER_JOB_FACT).value == "simulation, runner gazebo_custom"
+    assert fact(_combination(document, "usv_navigation", "custom", "gazebo"), CLUSTER_JOB_FACT).value == "simulation, runner gazebo_custom"
     workbench_only = fact(_combination(document, "mission_planner", "ardupilot", "gazebo"), CLUSTER_JOB_FACT)
     assert workbench_only.value is None and workbench_only.note.startswith("workbench only")
     assert not any(item.key == CLUSTER_JOB_FACT for item in _combination(document, "replay", "custom", "kinematic").facts), "a stack that is not available names none"

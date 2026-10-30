@@ -1,4 +1,4 @@
-"""Runs on the ArduPilot stacks in the stage graph and the payload builder: the simulate step's components, its images, and the ardupilot runner's payloads."""
+"""Runs on the ArduPilot stacks and the custom controller in the stage graph and the payload builder: the simulate step's components, its images, and the ardupilot and gazebo_custom runners' payloads."""
 
 import pytest
 
@@ -83,6 +83,7 @@ def test_a_sitl_run_gets_the_trajectories_the_geofence_and_the_observed_run_back
     assert payload == {
         "runner": "ardupilot",
         "simulation_layer": "ardupilot_sim",
+        "mode": "replay",
         "trajectories": TRAJECTORY_RESULT["trajectory_data"]["trajectories"],
         "geofence": {"latitude": 57.76080082972655, "longitude": 16.680965995056, "radius_meters": 20.0},
         "speedup": 1,
@@ -160,3 +161,51 @@ def test_an_ardupilot_payload_needs_its_layer_and_the_kinematic_runner_refuses_i
         validate_payload(SIMULATION, {key: value for key, value in payload.items() if key != "simulation_layer"})
     with pytest.raises(PayloadError, match="geofence"):
         validate_payload(SIMULATION, {**payload, "runner": "kinematic"})
+
+
+# USV Navigation on ArduPilot and the custom controller on Gazebo
+
+USV_NAVIGATION = {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}
+SITL_USV_NAVIGATION = {"stack": {"simulation_layer": "ardupilot_sim", "mode": "usv_navigation", "usv_navigation": USV_NAVIGATION}, "monitor": "live"}
+CUSTOM = {"stack": {"simulation_layer": "gazebo", "control_layer": "custom"}, "environment": {"wind_vector": [0.0, 3.0, 0.0]}, "monitor": "post_hoc"}
+CUSTOM_USV_NAVIGATION = {"stack": {"simulation_layer": "gazebo", "control_layer": "custom", "mode": "usv_navigation", "dt": 2, "steps": 20}, "monitor": "live", "seed": 9}
+ON_CUSTOM = ("asv_software/replay", "control_layer/custom", "simulation_layer/gazebo")
+
+
+@pytest.mark.parametrize("run", [SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION])
+def test_the_new_stacks_components_are_the_ones_the_master_computes_from_their_payloads(run):
+    assert _graph(run).run_components(0) == validate_payload(SIMULATION, _builder(run).simulation(5, 0, TRAJECTORY_RESULT))
+
+
+def test_the_new_stacks_need_their_layers_images_and_are_bounded():
+    graph = _graph(SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION)
+    assert graph.run_components(0) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+    assert graph.run_components(1) == ON_CUSTOM
+    assert graph.run_components(2) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
+    assert [graph.run_tier(run) for run in range(3)] == ["bounded"] * 3
+    assert required_fingerprints(graph.run_components(1), EXPECTED) == {SCENARIO_EXECUTION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}, "no SITL"
+    assert graph.stage_needs(SIMULATE) == [(SIMULATION, graph.run_components(run)) for run in range(3)]
+
+
+def test_usv_navigation_on_ardupilot_carries_its_mode_and_parameters():
+    payload = _builder(SITL_USV_NAVIGATION).simulation(5, 0, TRAJECTORY_RESULT)
+    assert (payload["runner"], payload["mode"], payload["usv_navigation"]["goal"], payload["monitor"]) == ("ardupilot", "usv_navigation", [3000.0, 0.0], "live")
+    assert "own_ship_id" not in payload, "the scene's own ship"
+
+
+def test_a_custom_run_carries_its_environment_and_no_ardupilot_fields():
+    payload = _builder(CUSTOM).simulation(5, 0, TRAJECTORY_RESULT)
+    assert payload == {
+        "runner": "gazebo_custom",
+        "mode": "replay",
+        "trajectories": TRAJECTORY_RESULT["trajectory_data"]["trajectories"],
+        "environment": {"wind_vector": [0.0, 3.0, 0.0], "waves": None},
+        "seed": payload["seed"],
+        "include_trajectories": True,
+    }
+
+
+def test_a_custom_usv_navigation_run_with_the_live_monitor_carries_its_settings():
+    payload = _builder(CUSTOM_USV_NAVIGATION).simulation(5, 0, TRAJECTORY_RESULT)
+    assert (payload["mode"], payload["dt"], payload["steps"], payload["seed"], payload["monitor"]) == ("usv_navigation", 2.0, 20, 9, "live")
+    assert payload["colregs_constraints_content"]
