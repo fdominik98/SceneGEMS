@@ -15,7 +15,7 @@ runs in two places:
                                         still there fails the job
 """
 
-from typing import Annotated, Any, Dict, Mapping, Type, TypeVar
+from typing import Annotated, Any, Dict, Mapping, Optional, Tuple, Type, TypeVar
 
 from pydantic import AfterValidator, Field, ValidationError
 
@@ -54,6 +54,32 @@ class GeofencePayload(ProtocolModel):
         from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
         return Geofence(latitude=self.latitude, longitude=self.longitude, radius_meters=self.radius_meters)
+
+
+class WavePayload(ProtocolModel):
+    amplitude: float = Field(ge=0.0)
+    period: float = Field(ge=0.0)
+    steepness: float = Field(ge=0.0)
+    direction: Tuple[float, float]  # propagation vector [east, north]; its norm is the wave speed
+
+
+class EnvironmentPayload(ProtocolModel):
+    """Wind and waves of a run, as a campaign run's environment section writes them; calm water when left out."""
+
+    wind_vector: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # [east, north, up] m/s
+    waves: Optional[WavePayload] = None
+
+    def to_environment(self, seed: int = 0):
+        """The EnvironmentConfig of the run with this seed."""
+        import numpy as np
+
+        from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, WaveConfig
+
+        waves = self.waves
+        wave = WaveConfig(amplitude=0.0, period=0.0, steepness=0.0, direction=np.zeros(2))
+        if waves is not None:
+            wave = WaveConfig(amplitude=waves.amplitude, period=waves.period, steepness=waves.steepness, direction=np.array(waves.direction, dtype=float))
+        return EnvironmentConfig(wind_vector=np.array(self.wind_vector, dtype=float), wave=wave, seed=seed)
 
 
 def to_trajectories(data: Dict[str, Any]):

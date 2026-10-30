@@ -75,6 +75,20 @@ class UsvNavigationPayload(ProtocolModel):
         )
 
 
+def check_closed_loop_options(mode: KinematicMode, own_ship_id: Optional[int], usv_navigation: Optional[UsvNavigationPayload]) -> None:
+    """own_ship_id and usv_navigation apply only to mode usv_navigation (every runner with the two modes checks it)."""
+    if mode == KinematicMode.REPLAY and (own_ship_id is not None or usv_navigation is not None):
+        raise ValueError("own_ship_id and usv_navigation apply only to mode usv_navigation")
+
+
+def own_ship(scene, own_ship_id: Optional[int]):
+    """The vessel that runs USV Navigation: the scene's own ship, or the vessel own_ship_id names; ValueError when the scene has none by that id."""
+    own = scene.os if own_ship_id is None else next((vessel for vessel in scene.vessels if vessel.id == own_ship_id), None)
+    if own is None:
+        raise ValueError(f"No vessel with id {own_ship_id} in the scene")
+    return own
+
+
 class KinematicSimulationPayload(ProtocolModel):
     runner: Literal[SimulationRunner.KINEMATIC]
     mode: KinematicMode = KinematicMode.REPLAY
@@ -92,8 +106,7 @@ class KinematicSimulationPayload(ProtocolModel):
 
     @model_validator(mode="after")
     def _closed_loop_options_need_closed_loop(self) -> "KinematicSimulationPayload":
-        if self.mode == KinematicMode.REPLAY and (self.own_ship_id is not None or self.usv_navigation is not None):
-            raise ValueError("own_ship_id and usv_navigation apply only to mode usv_navigation")
+        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation)
         return self
 
     @model_validator(mode="after")

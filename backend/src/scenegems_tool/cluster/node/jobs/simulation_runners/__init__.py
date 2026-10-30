@@ -1,7 +1,8 @@
 """The runners of the simulation job (simulation_job.py), one module per runner.
 
 kinematic_runner.py  runner kinematic: replay or USV Navigation on the kinematic layer, in a scenario execution container
-ardupilot_runner.py  runner ardupilot: replay over the lockstep MAVLink adapter, on a SITL or Gazebo stack per job
+ardupilot_runner.py  runner ardupilot: replay or USV Navigation over the lockstep MAVLink adapters, on a SITL or Gazebo stack per job
+gazebo_custom_runner.py  runner gazebo_custom: replay or USV Navigation on the custom controller, stepping a Gazebo world per job (no SITL)
 
 Each runner module defines its payload model (PAYLOAD_MODEL, with runner as a Literal), the vessel
 stacks a payload runs (vessel_stacks), `run` (the node's part, given the parsed payload) and

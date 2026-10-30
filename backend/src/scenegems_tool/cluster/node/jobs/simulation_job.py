@@ -4,11 +4,16 @@ The payload is the runner's payload model, chosen by its runner field (simulatio
 
     kinematic  replay or USV Navigation on the kinematic layer, in process in a scenario execution
                container (kinematic_runner.py; fields mode, own_ship_id, usv_navigation, early_stop)
-    ardupilot  replay over the lockstep MAVLink adapter on a SITL or Gazebo stack per job, the layer
-               named by simulation_layer (ardupilot_sim or gazebo; ardupilot_runner.py)
+    ardupilot  replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack
+               per job, the layer named by simulation_layer (ardupilot_sim or gazebo; ardupilot_runner.py;
+               fields mode, own_ship_id, usv_navigation as the kinematic runner's)
+    gazebo_custom  replay or USV Navigation on the custom controller, the runner stepping a paused
+               Gazebo world per job with no SITL (gazebo_custom_runner.py; fields mode, own_ship_id,
+               usv_navigation, environment)
 
-Each runner keeps the fields, observation, live monitor and result it had as its own job type
-(simulation.kinematic, simulation.ardupilot_sim, simulation.gazebo before protocol 6). The
+The kinematic and ardupilot runners keep the fields, observation, live monitor and result they had
+as their own job types (simulation.kinematic, simulation.ardupilot_sim, simulation.gazebo before
+protocol 6). The
 components a job requires are the layers of the vessel stacks its payload runs (required_components),
 so a node runs it only with every one of them. A new runner adds its module to RUNNER_MODULES.
 """
@@ -22,7 +27,7 @@ from scenegems_tool.cluster.fingerprints.components import ComponentId, Simulati
 from scenegems_tool.cluster.node.job_report import JobReport, JobResultData
 from scenegems_tool.cluster.node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback
-from scenegems_tool.cluster.node.jobs.simulation_runners import ardupilot_runner, kinematic_runner
+from scenegems_tool.cluster.node.jobs.simulation_runners import ardupilot_runner, gazebo_custom_runner, kinematic_runner
 from scenegems_tool.cluster.node.node_context import NodeContext
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobSpec
@@ -35,6 +40,7 @@ if TYPE_CHECKING:
 RUNNER_MODULES: Dict[SimulationRunner, "ModuleType"] = {
     SimulationRunner.KINEMATIC: kinematic_runner,
     SimulationRunner.ARDUPILOT: ardupilot_runner,
+    SimulationRunner.GAZEBO_CUSTOM: gazebo_custom_runner,
 }
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
@@ -43,7 +49,9 @@ ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (
     ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),
 )
 
-RunnerPayload = Annotated[Union[kinematic_runner.KinematicSimulationPayload, ardupilot_runner.ArduPilotSimulationPayload], Field(discriminator="runner")]
+RunnerPayload = Annotated[
+    Union[kinematic_runner.KinematicSimulationPayload, ardupilot_runner.ArduPilotSimulationPayload, gazebo_custom_runner.GazeboCustomSimulationPayload], Field(discriminator="runner")
+]
 
 
 class SimulationPayload(RootModel[RunnerPayload]):
