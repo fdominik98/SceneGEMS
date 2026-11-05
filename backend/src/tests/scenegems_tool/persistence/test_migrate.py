@@ -56,10 +56,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0010"]
+    assert scripts.get_heads() == ["0011"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -131,7 +131,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0010"
+            assert MigrationContext.configure(connection).get_current_revision() == "0011"
     finally:
         engine.dispose()
 
@@ -572,5 +572,28 @@ def test_revision_0010_adds_nullable_encounters_that_existing_verdicts_lack(empt
             connection.execute(text("""UPDATE verdict SET encounters = '{"OS_0 - TS_1": ["HEAD_ON"]}'"""))
         command.downgrade(config, "0009")
         assert "encounters" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0011_adds_nullable_encounter_roles_that_existing_verdicts_lack(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0004")
+    engine = create_engine(empty_database_url)
+    at = datetime(2026, 11, 4, 9, 30, tzinfo=timezone.utc)
+    try:
+        with engine.begin() as connection:
+            _insert_a_campaign_of_revision_0004(connection, at)
+        command.upgrade(config, "0010")
+        assert "encounter_roles" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
+        command.upgrade(config, "0011")
+        columns = {column["name"]: column for column in inspect(engine).get_columns("verdict")}
+        assert columns["encounter_roles"]["nullable"] and type(columns["encounter_roles"]["type"]).__name__ == "JSONB"
+        with engine.begin() as connection:
+            assert connection.execute(text("SELECT encounter_roles IS NULL FROM verdict")).scalar_one(), "an existing verdict has no roles (SQL NULL, not a JSON null)"
+            connection.execute(text("""UPDATE verdict SET encounter_roles = '{"OS_0 - TS_1": {"HEAD_ON": {"give_way": ["OS_0", "TS_1"], "stand_on": []}}}'"""))
+        command.downgrade(config, "0010")
+        assert "encounter_roles" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
     finally:
         engine.dispose()

@@ -9,7 +9,21 @@ The Campaigns section defines and starts campaigns. A campaign runs a consecutiv
 
 ## Presets
 
-Above the pages, **Start from a preset** lists the campaign presets of the active cluster's master: the ones its image ships for campaign runs that come up again and again (`backend/assets/campaign_presets/`), and the ones saved on the cluster. **Load into the wizard** replaces the draft with the preset (the wizard asks first when the draft has entries) and opens the Steps page, so you only adjust what differs.
+Above the pages, **Start from a preset** opens the catalog of the campaign presets of the active cluster's master: the ones its image ships for campaign runs that come up again and again (`backend/assets/campaign_presets/`), and the ones saved on the cluster. Each card says what the preset selects and runs: its vessel and obstacle counts, its FECs and cases, its simulation stacks and its steps.
+
+Find a preset with the search box, or with the filters:
+
+| Filter | What it looks at |
+|--------|------------------|
+| Source | Shipped with the master, or saved on this cluster |
+| Vessels | The vessel counts of the FECs in the preset's scope. **Set by the input** is a preset without a scope: the input you pick in the wizard decides |
+| Obstacles | The obstacle counts of those FECs, or **Set by the input** |
+| Simulation stack | The stacks of the preset's runs |
+| Steps | The steps the preset runs; with several ticked it needs to run all of them |
+
+Ticking several values of a filter shows the presets with any of them (Steps and the stack catalog's Supports need all of them), and different filters narrow together. The number beside a value says how many presets you would see with it. A filter that would not tell the presets apart is left out. **Group by** sorts the cards by source, vessels, simulation stack or steps; a preset with several values, such as two stacks, shows under each of them. The filters and the grouping are kept in this browser.
+
+**Load into the wizard** replaces the draft with the preset (the wizard asks first when the draft has entries) and opens the Steps page, so you only adjust what differs. A card warns when a run of the preset needs a stack this master cannot run.
 
 | Shipped preset | What it runs |
 |----------------|--------------|
@@ -24,6 +38,7 @@ Above the pages, **Start from a preset** lists the campaign presets of the activ
 | Scene generation over the whole catalog | One scene per functional scenario, judged as a single scene |
 | Trajectory planning check without simulation | Scene and trajectory generation with the planned trajectories judged |
 | Simulate saved trajectories: kinematic and ArduPilot SITL | Simulation only; pick the trajectories on the Input page |
+| USV Navigation on straight trajectories with low TCPA | One case per two-vessel FEC without obstacles, low TCPA enforced and straight trajectories, USV Navigation steering the own ship, with the post hoc monitor after every step |
 
 **Save this draft as a preset** stores the current draft on the master under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
@@ -55,6 +70,8 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Policy | always | Retention, frames, the base seed and stop conditions |
 | Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the master's check of it and the buttons that create the campaign |
 
+A run's **Stack** field opens the catalog of the master's stacks, with the same search, filters and grouping as the presets. It filters by simulation layer, control layer, own ship software, repeatability and what a run on the stack supports (wind, waves, early stop). A stack the master cannot run stays listed with the reason, but cannot be picked. Picking another stack clears the values that belonged to the old one; picking the same stack again changes nothing.
+
 ## Steps
 
 Choose **Start with** and **Stop after**. The steps in between run too, so the part is always consecutive: scene generation alone, scene generation and trajectory generation, all three, trajectory generation alone or with simulation, or simulation alone. A step that is not chosen hides its pages and writes nothing into the config.
@@ -78,7 +95,7 @@ The Input page depends on the first step.
 A functional equivalence class (FEC) is one functional scenario: a scenario of the master's catalog, or a file you add.
 
 - **Catalog FECs**: pick folders, patterns or FECs from the master's catalog, each scope entry with a quota and a failure budget.
-- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the master when you pick it and becomes an FEC of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
+- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the master when you pick it and becomes a FEC of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
 
 Use either or both. Scope entries without FECs are ignored while there are scenario files.
 
@@ -86,8 +103,8 @@ Use either or both. Scope entries without FECs are ignored while there are scena
 
 Both apply to each FEC of the entry or file on its own.
 
-- **Quota**: the complete cases the FEC needs. A case is complete when every run has its verdict. A failed verdict is a finding and counts toward the quota.
-- **Failure budget**: the cases the FEC may lose before it is abandoned. A case is lost when it is dropped (no valid scene within the timeout, or no complete trajectories) or failed (a job ran out of attempts). An FEC runs at most its quota of cases at once and starts no case it may not need; a lost case is replaced by the next one, with the next seed, once it is lost. Once the lost cases exceed the budget, the FEC is abandoned and its running cases are cancelled.
+- **Quota**: the complete cases the FEC needs. A case is complete when every run has its monitor summary. A failed monitor summary is a finding and counts toward the quota.
+- **Failure budget**: the cases the FEC may lose before it is abandoned. A case is lost when it is dropped (no valid scene within the timeout, or no complete trajectories) or failed (a job ran out of attempts). A FEC runs at most its quota of cases at once and starts no case it may not need; a lost case is replaced by the next one, with the next seed, once it is lost. Once the lost cases exceed the budget, the FEC is abandoned and its running cases are cancelled.
 - **Unlimited**: tick it next to the failure budget and the FEC is never abandoned: it replaces lost cases until its quota is complete. A scenario that never gives a valid scene then runs until a stop condition of the Policy page (a case count or a duration) ends the campaign, or until you stop it. The config says `failure_budget: unlimited`, and Campaign History shows the budget left as unlimited.
 
 #### Seeds

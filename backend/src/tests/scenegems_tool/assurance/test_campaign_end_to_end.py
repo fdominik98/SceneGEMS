@@ -37,8 +37,8 @@ NODE_PARAMETERS = {
     "SCENEGEMS_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
     "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
 }
-STRAIGHT_CLASSES = [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in range(5)]
-RRT_CLASSES = [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in (5, 6)]
+STRAIGHT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in range(5)]
+RRT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in (5, 6)]
 QUOTA = 4
 RUNS = ["replay_post_hoc", "usv_navigation_live", "replay_empty"]
 

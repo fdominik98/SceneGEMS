@@ -177,7 +177,7 @@ def _scene_generation_payload() -> dict:
             return file.read()
 
     return {
-        "functional_scenario_content": read(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/functional_model0.problem"),
+        "functional_scenario_content": read(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/fec0.problem"),
         "colregs_constraints_content": read(f"{COLREGS_CONSTANTS_FOLDER}/general_maritime_constants.yaml"),
         "vessel_types_content": read(f"{VESSEL_TYPES_FOLDER}/vessel_types.yaml"),
         "obstacle_types_content": read(f"{STATIC_OBSTACLE_TYPES_FOLDER}/static_obstacle_types.yaml"),

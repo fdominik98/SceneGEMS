@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobState
 from scenegems_tool.persistence.schema import (
@@ -236,8 +236,9 @@ class OutputRecord:
     """One output of one step of a case: its scene, its trajectories, or one simulated run (one row per case without runs yet).
 
     valid says the step gave a usable output: the output exists and the case did not drop at
-    the step. complete is the trajectories' completeness (None for scenes). verdict_state and
-    failed_rules are the step's verdict, None while the step has none (or is not monitored).
+    the step. complete is the trajectories' completeness (None for scenes). verdict_state,
+    failed_rules, first_failure_time_s, encounters and encounter_roles are the step's verdict,
+    None while the step has none (or is not monitored).
     """
 
     step: StepKind
@@ -255,6 +256,9 @@ class OutputRecord:
     verdict_state: Optional[VerdictState]
     failed_rules: Tuple[str, ...]
     input_source: Optional[Dict[str, Any]]
+    first_failure_time_s: Optional[float] = None
+    encounters: Optional[Dict[str, List[str]]] = None
+    encounter_roles: Optional[Dict[str, Dict[str, Dict[str, List[str]]]]] = None
 
 
 @dataclass(frozen=True)

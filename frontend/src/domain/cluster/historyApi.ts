@@ -62,6 +62,18 @@ export const inputSourceSchema = z.object({
 export const outputVerdictSchema = z.object({
   state: verdictStateSchema,
   failed_rules: z.array(z.string()),
+  /** The earliest failure over all rules, in seconds. This and the two below are missing from an older master. */
+  first_failure_time_s: z.number().nullable().optional(),
+  /** Per vessel pair (`OS_0 - TS_1`), the encounter types in order of first appearance; null for a verdict stored before them. */
+  encounters: z.record(z.string(), z.array(z.string())).nullable().optional(),
+  /**
+   * Per vessel pair and encounter type (OTHER has none), the vessel names by role when the type first
+   * appeared; null for a verdict stored before them, or when no pair met in an encounter.
+   */
+  encounter_roles: z
+    .record(z.string(), z.record(z.string(), z.object({ give_way: z.array(z.string()), stand_on: z.array(z.string()) })))
+    .nullable()
+    .optional(),
 });
 
 /** One output of a step: a scene, a trajectory set or a simulated run, with the verdict of the step when it was monitored. */
@@ -83,6 +95,7 @@ export const outputRowSchema = z.object({
 });
 
 export type InputSource = z.infer<typeof inputSourceSchema>;
+export type OutputVerdict = z.infer<typeof outputVerdictSchema>;
 export type OutputRow = z.infer<typeof outputRowSchema>;
 
 export interface OutputFilters {

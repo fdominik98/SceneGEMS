@@ -5,7 +5,7 @@ campaign stores. Like the other operator routes they have no authentication yet.
 
     GET CATALOG_PATH/fecs?folder=&pattern=&limit=&offset=   the catalog's FECs (functional equivalence classes) in catalog order:
                                            fec_id, folder, vessel and obstacle counts, content hash. folder is a catalog folder, pattern a
-                                           scope pattern (a folder pattern without a slash, an FEC id pattern with one); both narrow the
+                                           scope pattern (a folder pattern without a slash, a FEC id pattern with one); both narrow the
                                            list. The number of matching FECs is in X-Total-Count. 503 when the master has no catalog folder
     GET CATALOG_PATH/fecs/<fec id>         the FEC's functional scenario (.problem text, LF line endings, text/plain): the preset the
                                            workbench's scene generation loads into its editor. 404 for an unknown FEC, 503 without a catalog

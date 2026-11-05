@@ -20,7 +20,7 @@ def _text(value: Any) -> str:
 
 
 def verdicts_of(entry: Dict[str, Any]) -> Dict[str, int]:
-    """An FEC's verdict counts per state, summed over its runs."""
+    """A FEC's verdict counts per state, summed over its runs."""
     counts: Dict[str, int] = {}
     for states in entry["verdicts"].values():
         for state, count in states.items():
@@ -47,11 +47,11 @@ def campaign_summary(campaign: Dict[str, Any]) -> str:
         verdicts = ", ".join(f"{state} {count}" for state, count in sorted(totals["verdicts"].items())) or "none yet"
         lines.append(f"FECs {totals['fecs']}: open {totals['fecs_open']}, complete {totals['fecs_complete']}, abandoned {totals['fecs_abandoned']}")
         lines.append(f"cases: {totals['complete']} complete of quota {totals['quota']}, {totals['dropped']} dropped, {totals['in_flight']} in flight")
-        lines.append(f"verdicts: {verdicts}")
+        lines.append(f"monitor summaries: {verdicts}")
     return "\n".join(lines)
 
 
-OUTPUT_HEADERS = ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "verdict", "artifact", "from"]
+OUTPUT_HEADERS = ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "monitor summary", "artifact", "from"]
 
 
 def _short(sha256: Optional[str]) -> Optional[str]:
@@ -97,7 +97,7 @@ def findings_summary(findings: Dict[str, Any]) -> str:
     ]
     if findings["monitored"]:
         verdicts = findings["verdicts"]
-        lines.append(f"verdicts: passed {verdicts['passed']}, failed {verdicts['failed']}, unmonitored {verdicts['unmonitored']}")
+        lines.append(f"monitor summaries: passed {verdicts['passed']}, failed {verdicts['failed']}, unmonitored {verdicts['unmonitored']}")
     durations = findings["durations_s"]
     if durations["median"] is not None:
         lines.append(f"job duration s: median {durations['median']:.1f}, p90 {durations['p90']:.1f}")

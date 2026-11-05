@@ -58,7 +58,7 @@ describe("scene generation entries", () => {
   });
 
   it("names scenarios without slashes, distinct, and gives their class ids", () => {
-    expect(scenarioInputName("2vessel_0obstacle_scenarios/functional_model0.problem")).toBe("2vessel_0obstacle_scenarios_functional_model0");
+    expect(scenarioInputName("2vessel_0obstacle_scenarios/fec0.problem")).toBe("2vessel_0obstacle_scenarios_fec0");
     expect(scenarioInputName("   ")).toBe("scenario");
     expect(scenarioInputName("x", new Set(["x", "x_2"]))).toBe("x_3");
     expect(scenarioInputName("y".repeat(300)).length).toBeLessThanOrEqual(200);

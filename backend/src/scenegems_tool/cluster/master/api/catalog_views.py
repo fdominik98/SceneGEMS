@@ -72,20 +72,30 @@ def _usv_navigation_parameters() -> List[Dict[str, Any]]:
     return [
         parameter("goal", "number_pair", "waypoint [x, y] in the scene's local frame", required=True, unit="m"),
         parameter("speed", "number", "the speed the runtime holds and commands", required=True, exclusive_minimum=0.0, unit="m/s"),
-        parameter("safety_radius", "number", "clearance kept around every obstacle", required=True, exclusive_minimum=0.0, unit="m"),
-        parameter("control_horizon", "number", "horizon of the prescribed-time heading law", required=True, exclusive_minimum=0.0, unit="s"),
-        parameter("prescribed_time", "number", "prescribed time tp; it sizes the safety distance and the arrival radius", DEFAULT_PRESCRIBED_TIME_S, exclusive_minimum=0.0, unit="s"),
+        parameter("safety_radius", "number", "the radius the runtime steers around every obstacle; a target's motion can still bring it closer", required=True, exclusive_minimum=0.0, unit="m"),
+        parameter("control_horizon", "number", "horizon of the prescribed-time heading law, not a look-ahead", required=True, exclusive_minimum=0.0, unit="s"),
+        parameter(
+            "prescribed_time", "number", "prescribed time tp; it sizes the arrival radius, and the safety distance without a horizon", DEFAULT_PRESCRIBED_TIME_S, exclusive_minimum=0.0, unit="s"
+        ),
+        parameter("horizon", "number", "how far the navigator looks; every target at any range and the upstream safety distance when absent", exclusive_minimum=0.0, unit="m"),
         parameter("runtime_options", "number_map", "further runtime arguments by name (a, eta, K, K_off, v1_buffer, ...); the upstream defaults when absent", {}),
     ]
 
 
 def _derived_usv_navigation() -> str:
-    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import DEFAULT_CONTROL_HORIZON_STEPS, DEFAULT_PRESCRIBED_TIME_S
+    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import (
+        DCPA_BETA1_RADII,
+        DCPA_BETA2_RADII,
+        DEFAULT_CONTROL_HORIZON_STEPS,
+        DEFAULT_PRESCRIBED_TIME_S,
+    )
 
     return (
         "Left out, every scene gets its own values: goal is the end of the generated trajectory, speed the own ship's reference speed at the start "
         f"(capped at its maximum speed), safety_radius the largest safety radius in the scene, control_horizon the longest of {DEFAULT_CONTROL_HORIZON_STEPS} steps, "
-        f"{DEFAULT_PRESCRIBED_TIME_S:g} s and one full turn at the maximum yaw rate. Given, goal, speed, safety_radius and control_horizon are required and apply to every case."
+        f"{DEFAULT_PRESCRIBED_TIME_S:g} s and one full turn at the maximum yaw rate, horizon the largest visibility distance between the own ship and another actor, "
+        f"and the risk index's DCPA bounds at least {DCPA_BETA1_RADII:g} and {DCPA_BETA2_RADII:g} safety radii. "
+        "Given, goal, speed, safety_radius and control_horizon are required and apply to every case."
     )
 
 
@@ -314,14 +324,14 @@ def monitors_view() -> List[Dict[str, Any]]:
     from scenegems_tool.persistence.schema import MonitorImplementation
 
     described = {
-        MonitorImplementation.POST_HOC: ("Post hoc", "A monitoring job judges the recorded run after the simulation; the verdict is passed or failed.", ["monitoring.post_hoc"], False),
+        MonitorImplementation.POST_HOC: ("Post hoc", "A monitoring job judges the recorded run after the simulation; the monitor summary is passed or failed.", ["monitoring.post_hoc"], False),
         MonitorImplementation.LIVE: (
             "Live",
             "The COLREGS monitor runs inside the simulation step by step; on the kinematic layer it can stop the run early once every rule is decided.",
             ["simulation"],
             True,
         ),
-        MonitorImplementation.EMPTY: ("None", "Nothing is judged; every verdict is unmonitored.", [], False),
+        MonitorImplementation.EMPTY: ("None", "Nothing is judged; every monitor summary is unmonitored.", [], False),
     }
     return [
         {"id": monitor.value, "label": label, "description": description, "job_types": job_types, "supports_early_stop": early_stop}

@@ -222,11 +222,11 @@ describe("buildCampaignConfig", () => {
   it("writes several scope entries, classes and patterns apart", () => {
     const draft = exitDraft();
     draft.scope = [
-      { id: "a", classes: ["3vessel_0obstacle_scenarios/functional_model5"], patterns: [], quota: 3, failureBudget: 0 },
+      { id: "a", classes: ["3vessel_0obstacle_scenarios/fec5"], patterns: [], quota: 3, failureBudget: 0 },
       { id: "b", classes: [], patterns: ["4vessel_*_scenarios"], quota: 1, failureBudget: null },
     ];
     expect(buildCampaignConfig(draft, catalog).scope).toEqual([
-      { fecs: ["3vessel_0obstacle_scenarios/functional_model5"], quota: 3, failure_budget: 0 },
+      { fecs: ["3vessel_0obstacle_scenarios/fec5"], quota: 3, failure_budget: 0 },
       { patterns: ["4vessel_*_scenarios"], quota: 1 },
     ]);
   });

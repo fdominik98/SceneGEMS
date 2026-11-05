@@ -50,6 +50,11 @@ export function formatTime(iso: string | null | undefined): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+/** A pipeline stage as the page names it; the API calls the last stage, where the case has its monitor summaries, `verdict`. */
+export function stageLabel(stage: string): string {
+  return stage === "verdict" ? "monitor summary" : stage.replace("_", " ");
+}
+
 /** The last part of a class id (`folder/name`) with the folder kept short. */
 export function shortClassId(classId: string, maxLength = 42): string {
   return classId.length <= maxLength ? classId : `...${classId.slice(classId.length - maxLength + 3)}`;

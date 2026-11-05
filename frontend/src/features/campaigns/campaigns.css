@@ -12,27 +12,27 @@
 }
 
 .camp-badge--ok {
-  color: #4ade80;
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--ok-text);
+  border-color: rgb(var(--ok-rgb) / 0.45);
+  background: rgb(var(--ok-rgb) / 0.1);
 }
 
 .camp-badge--warn {
-  color: #fcd34d;
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--warn-text);
+  border-color: rgb(var(--warn-rgb) / 0.45);
+  background: rgb(var(--warn-rgb) / 0.1);
 }
 
 .camp-badge--bad {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-text);
+  border-color: rgb(var(--danger-rgb) / 0.45);
+  background: rgb(var(--danger-rgb) / 0.1);
 }
 
 .camp-badge--info {
   color: var(--accent);
-  border-color: rgba(56, 189, 248, 0.45);
-  background: rgba(56, 189, 248, 0.1);
+  border-color: rgb(var(--accent-rgb) / 0.45);
+  background: rgb(var(--accent-rgb) / 0.1);
 }
 
 .camp-state-cell {
@@ -86,15 +86,15 @@
 }
 
 .camp-progress-fill--ok {
-  background: #22c55e;
+  background: var(--ok);
 }
 
 .camp-progress-fill--bad {
-  background: #ef4444;
+  background: var(--danger);
 }
 
 .camp-progress-fill--warn {
-  background: #f59e0b;
+  background: var(--warn);
 }
 
 .camp-progress-fill--idle {
@@ -127,9 +127,9 @@
   gap: var(--space-5);
   flex-wrap: wrap;
   padding: var(--space-4) var(--space-5);
-  border: 1px solid rgba(245, 158, 11, 0.45);
+  border: 1px solid rgb(var(--warn-rgb) / 0.45);
   border-radius: var(--radius-md);
-  background: rgba(245, 158, 11, 0.08);
+  background: rgb(var(--warn-rgb) / 0.08);
   font-size: var(--font-size-sm);
 }
 
@@ -160,7 +160,7 @@
 .camp-chip--on {
   color: var(--text);
   border-color: var(--accent-strong);
-  background: #1e3a8a;
+  background: var(--accent-solid);
 }
 
 .camp-refreshing {
@@ -216,7 +216,7 @@
 }
 
 .camp-row:hover {
-  background: rgba(56, 189, 248, 0.06);
+  background: rgb(var(--accent-rgb) / 0.06);
 }
 
 .camp-cell-name {
@@ -252,7 +252,7 @@
 .camp-reason {
   display: block;
   max-width: 44ch;
-  color: #fcd34d;
+  color: var(--warn-text);
   font-size: var(--font-size-xs);
 }
 
@@ -318,20 +318,20 @@
   padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--border-strong);
   border-radius: var(--radius);
-  background: rgba(148, 163, 184, 0.08);
+  background: rgb(var(--neutral-rgb) / 0.08);
   font-size: var(--font-size-sm);
 }
 
 .camp-state-reason--stalled {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  border-left-color: var(--danger);
+  background: rgb(var(--danger-rgb) / 0.1);
+  color: var(--danger-text-soft);
 }
 
 .camp-state-reason--paused,
 .camp-state-reason--draining {
-  border-left-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
+  border-left-color: var(--warn);
+  background: rgb(var(--warn-rgb) / 0.1);
 }
 
 .camp-facts {
@@ -400,18 +400,18 @@
 }
 
 .camp-control-btn--primary {
-  background: #1e3a8a;
-  border-color: #60a5fa;
+  background: var(--accent-solid);
+  border-color: var(--accent-strong);
 }
 
 .camp-control-btn--danger {
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #fca5a5;
+  border-color: rgb(var(--danger-rgb) / 0.6);
+  color: var(--danger-text);
 }
 
 .camp-control-btn--danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.18);
-  border-color: #ef4444;
+  background: rgb(var(--danger-rgb) / 0.18);
+  border-color: var(--danger);
 }
 
 .camp-confirm,
@@ -424,15 +424,15 @@
 .camp-start-blocked {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  border-left: 3px solid #f59e0b;
+  border-left: 3px solid var(--warn);
   border-radius: var(--radius-sm);
-  background: rgba(245, 158, 11, 0.1);
+  background: rgb(var(--warn-rgb) / 0.1);
   font-size: var(--font-size-sm);
 }
 
 .camp-confirm {
-  border: 1px solid rgba(239, 68, 68, 0.55);
-  background: rgba(239, 68, 68, 0.09);
+  border: 1px solid rgb(var(--danger-rgb) / 0.55);
+  background: rgb(var(--danger-rgb) / 0.09);
 }
 
 .camp-confirm p {
@@ -449,10 +449,10 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-4);
-  border: 1px solid rgba(239, 68, 68, 0.55);
+  border: 1px solid rgb(var(--danger-rgb) / 0.55);
   border-left-width: 4px;
-  background: rgba(239, 68, 68, 0.12);
-  color: #fecaca;
+  background: rgb(var(--danger-rgb) / 0.12);
+  color: var(--danger-text-soft);
 }
 
 /* Totals */
@@ -553,11 +553,11 @@
 }
 
 .camp-class--abandoned {
-  background: rgba(239, 68, 68, 0.06);
+  background: rgb(var(--danger-rgb) / 0.06);
 }
 
 .camp-class--complete .camp-class-name {
-  color: #86efac;
+  color: var(--ok-text-alt);
 }
 
 .camp-num {
@@ -567,11 +567,11 @@
 }
 
 .camp-num--warn {
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .camp-num--bad {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .camp-num-of {
@@ -593,18 +593,18 @@
 }
 
 .camp-verdict--passed {
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--ok-text);
+  background: rgb(var(--ok-rgb) / 0.12);
 }
 
 .camp-verdict--failed {
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.14);
+  color: var(--danger-text);
+  background: rgb(var(--danger-rgb) / 0.14);
 }
 
 .camp-verdict--unmonitored {
   color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.14);
+  background: rgb(var(--neutral-rgb) / 0.14);
 }
 
 .camp-verdict--none {

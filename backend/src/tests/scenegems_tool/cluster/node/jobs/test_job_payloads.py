@@ -12,7 +12,7 @@ from scenegems_tool.cluster.node.jobs.live_monitor import SimulationMonitor
 from scenegems_tool.cluster.node.jobs.monitoring_post_hoc_job import PostHocMonitoringPayload
 from scenegems_tool.cluster.node.jobs.scene_generation_job import SceneGenerationPayload
 from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationLayer, ArduPilotSimulationPayload
-from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, KinematicSimulationPayload
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, KinematicSimulationPayload, UsvNavigationPayload
 from scenegems_tool.cluster.node.jobs.trajectory_generation_job import TrajectoryGenerationPayload
 from scenegems_tool.cluster.protocol.artifacts import find_references, resolve_references
 from scenegems_tool.cluster.protocol.jobs import JobType
@@ -46,6 +46,27 @@ def test_kinematic_closed_loop_payload_with_parameters(trajectories):
     parameters = payload.usv_navigation.to_parameters()
     assert parameters.goal == (2000.0, 0.0)
     assert parameters.prescribed_time == 3.0
+    assert parameters.horizon is None
+
+
+USV_NAVIGATION = {"goal": [2000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}
+
+
+def test_usv_navigation_horizon_reaches_the_parameters_and_the_json():
+    payload = UsvNavigationPayload.model_validate({**USV_NAVIGATION, "horizon": 5000.0})
+    assert payload.to_parameters().horizon == 5000.0
+    assert payload.model_dump(mode="json")["horizon"] == 5000.0
+
+
+def test_an_absent_usv_navigation_horizon_stays_out_of_the_json():
+    payload = UsvNavigationPayload.model_validate(USV_NAVIGATION)
+    assert "horizon" not in payload.model_dump(mode="json")
+    assert UsvNavigationPayload.model_validate(payload.model_dump(mode="json")).horizon is None
+
+
+def test_a_usv_navigation_horizon_must_be_positive():
+    with pytest.raises(ValueError, match="horizon"):
+        UsvNavigationPayload.model_validate({**USV_NAVIGATION, "horizon": 0.0})
 
 
 @pytest.mark.parametrize(
@@ -113,7 +134,7 @@ def test_trajectory_generation_params_are_checked():
 
 
 def test_scene_generation_payload_parses_the_functional_scenario():
-    with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/functional_model0.problem", encoding="utf-8") as file:
+    with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/fec0.problem", encoding="utf-8") as file:
         problem = file.read()
     contents = {"colregs_constraints_content": "", "vessel_types_content": "", "obstacle_types_content": ""}
     assert SceneGenerationPayload.model_validate({"functional_scenario_content": problem, **contents}).timeout_s == 60
@@ -178,7 +199,7 @@ def test_content_is_checked_once_the_reference_is_resolved(make_job, trajectorie
 @pytest.mark.parametrize("model", [SceneGenerationPayload, TrajectoryGenerationPayload])
 def test_generation_seeds_are_optional_and_bounded(model):
     if model is SceneGenerationPayload:
-        with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/1vessel_0obstacle_scenarios/functional_model0.problem", encoding="utf-8") as file:
+        with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/1vessel_0obstacle_scenarios/fec0.problem", encoding="utf-8") as file:
             base = {"functional_scenario_content": file.read(), "colregs_constraints_content": "", "vessel_types_content": "", "obstacle_types_content": ""}
     else:
         base = {"scenario_content": "{}", "colregs_constraints_content": ""}

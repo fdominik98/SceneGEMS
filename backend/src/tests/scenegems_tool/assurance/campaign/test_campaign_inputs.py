@@ -15,7 +15,7 @@ from scenegems_tool.assurance.campaign.campaign_inputs import (
 )
 from scenegems_tool.persistence.stores import ClassSpec
 
-CLASS = "3vessel_1obstacle_scenarios/functional_model5"
+CLASS = "3vessel_1obstacle_scenarios/fec5"
 SHA = "cd" * 32
 
 

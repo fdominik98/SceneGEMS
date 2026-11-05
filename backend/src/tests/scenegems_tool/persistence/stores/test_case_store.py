@@ -3,8 +3,8 @@ from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 
 from scenegems_tool.persistence.database import transaction
-from scenegems_tool.persistence.schema import CampaignClassRow, CampaignClassState, CaseState, PipelineStage, StepKind, VerdictState
-from scenegems_tool.persistence.stores import CaseConflict, ClassCounts, ClassStateConflict, NewCase, OutputArtifact, UnknownCase, UnknownClass
+from scenegems_tool.persistence.schema import CampaignClassRow, CampaignClassState, CaseState, MonitorImplementation, PipelineStage, StepKind, VerdictState
+from scenegems_tool.persistence.stores import CaseConflict, ClassCounts, ClassStateConflict, NewCase, NewVerdict, OutputArtifact, UnknownCase, UnknownClass
 from tests.scenegems_tool.persistence.stores.builders import sha256_of
 from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B, SCENE_0, SCENE_1, STATE_LOG_0, STATE_LOG_1, TRAJECTORY_DATA_0, TRAJECTORY_DATA_1, TRAJECTORY_FAILURES
 
@@ -45,7 +45,7 @@ def test_an_index_is_taken_once_per_class(stores, campaign):
 
 def test_cases_only_in_open_classes_of_the_campaign(stores, campaign):
     with pytest.raises(UnknownClass):
-        _create(stores, campaign, class_id="6vessel_0obstacle_scenarios/functional_model1")
+        _create(stores, campaign, class_id="6vessel_0obstacle_scenarios/fec1")
     stores.cases.set_class_state(campaign.campaign_id, CLASS_B, CampaignClassState.ABANDONED, reason="failure budget used up")
     with pytest.raises(ClassStateConflict):
         _create(stores, campaign, class_id=CLASS_B)
@@ -264,6 +264,28 @@ def test_a_case_at_simulation_without_runs_has_a_row(stores, campaign, step_outp
     (waiting,) = stores.cases.create_cases(campaign.campaign_id, [NewCase(class_id=CLASS_B, case_index=1, seed=1, stage=PipelineStage.SIMULATE)])
     (row,) = stores.cases.list_outputs(campaign.campaign_id, StepKind.SIMULATION, class_id=CLASS_B)
     assert (row.case_id, row.run_record_id, row.artifact, row.valid, row.complete, row.verdict_state) == (waiting.case_id, None, None, False, None, None)
+    assert (row.first_failure_time_s, row.encounters, row.encounter_roles) == (None, None, None)
+
+
+def test_outputs_carry_the_monitor_summary_of_the_verdict(stores, campaign):
+    (case,) = _create(stores, campaign)
+    encounters = {"OS_0 - TS_1": ["CROSSING_FROM_PORT", "OTHER"]}
+    roles = {"OS_0 - TS_1": {"CROSSING_FROM_PORT": {"give_way": ["TS_1"], "stand_on": ["OS_0"]}}}
+    stores.results.add_verdict(
+        NewVerdict(
+            case_id=case.case_id,
+            run_index=0,
+            state=VerdictState.FAILED,
+            monitor=MonitorImplementation.POST_HOC,
+            failed_rules=("OS_0 - TS_1: rule_16",),
+            first_failure_time_s=12.0,
+            step=StepKind.SCENE,
+            encounters=encounters,
+            encounter_roles=roles,
+        )
+    )
+    (row,) = stores.cases.list_outputs(campaign.campaign_id, StepKind.SCENE)
+    assert (row.first_failure_time_s, row.encounters, row.encounter_roles) == (12.0, encounters, roles)
 
 
 def test_outputs_carry_the_input_source(stores, campaign):

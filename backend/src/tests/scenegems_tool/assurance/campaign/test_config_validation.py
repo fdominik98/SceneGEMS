@@ -12,7 +12,7 @@ from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistr
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
 EXIT_CAMPAIGN = Path(__file__).parent / "data" / "exit_campaign.yaml"
-CLASS = "2vessel_0obstacle_scenarios/functional_model0"
+CLASS = "2vessel_0obstacle_scenarios/fec0"
 
 
 def _config(scope=None, **sections):
@@ -32,7 +32,7 @@ def test_the_exit_campaign_has_70_classes_and_1050_cases():
     assert {spec.vessel_count for spec in validated.classes} == {2, 3}
     catalog = ClassCatalog.default()
     assert all(spec.content_hash == catalog.get(spec.class_id).content_hash for spec in validated.classes)
-    assert [spec.class_id for spec in validated.classes[:2]] == ["2vessel_0obstacle_scenarios/functional_model0", "2vessel_0obstacle_scenarios/functional_model1"]
+    assert [spec.class_id for spec in validated.classes[:2]] == ["2vessel_0obstacle_scenarios/fec0", "2vessel_0obstacle_scenarios/fec1"]
     (run,) = validated.runs
     assert run.vessels[OWN_SHIP].asv_software == AsvSoftwareId.USV_NAVIGATION and run.vessels[TARGET_SHIP].asv_software == AsvSoftwareId.REPLAY
     assert (run.repeatability_tier, run.environment, run.warnings) == ("exact", {"wind_vector": None, "waves": None}, ())
@@ -51,20 +51,20 @@ def test_an_unlimited_failure_budget_reaches_the_store_as_none():
 
 def test_a_class_named_twice_in_one_entry_counts_once():
     validated = validate_campaign_config(_config([{"classes": [CLASS], "patterns": ["2vessel_0obstacle_scenarios"], "quota": 1}]))
-    assert [spec.class_id for spec in validated.classes] == [f"2vessel_0obstacle_scenarios/functional_model{index}" for index in range(7)]
+    assert [spec.class_id for spec in validated.classes] == [f"2vessel_0obstacle_scenarios/fec{index}" for index in range(7)]
 
 
 def test_unknown_classes_and_empty_patterns_are_rejected_together():
     reasons = _rejection(
         _config(
             [
-                {"classes": [CLASS, "2vessel_0obstacle_scenarios/functional_model99"], "quota": 1},
+                {"classes": [CLASS, "2vessel_0obstacle_scenarios/fec99"], "quota": 1},
                 {"patterns": ["9vessel_*"], "quota": 1},
                 {"patterns": ["2vessel_0obstacle_scenarios"], "quota": 3},
             ]
         )
     )
-    assert "scope.0: no FEC '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
+    assert "scope.0: no FEC '2vessel_0obstacle_scenarios/fec99' in the catalog" in reasons
     assert "scope.1: the pattern '9vessel_*' matches no FEC" in reasons
     assert f"scope.2: FEC '{CLASS}' is in scope.0 already" in reasons
 
@@ -224,10 +224,10 @@ def test_input_that_does_not_match_the_first_step_is_rejected(steps, sections, r
 
 def test_every_input_problem_is_reported_together():
     reasons = _partial_rejection(
-        _partial(["trajectory_generation"], scope=[{"classes": ["2vessel_0obstacle_scenarios/functional_model99"], "quota": 1}], input={"items": [_item(MISSING_SHA), _item(pointer="/x")]})
+        _partial(["trajectory_generation"], scope=[{"classes": ["2vessel_0obstacle_scenarios/fec99"], "quota": 1}], input={"items": [_item(MISSING_SHA), _item(pointer="/x")]})
     )
     assert "scope: a campaign that starts with trajectory_generation takes input.items" in reasons
-    assert "no FEC '2vessel_0obstacle_scenarios/functional_model99' in the catalog" in reasons
+    assert "no FEC '2vessel_0obstacle_scenarios/fec99' in the catalog" in reasons
     assert "input.items.0 (an item): no artifact" in reasons and "input.items.1 (an item): the pointer /x" in reasons
 
 

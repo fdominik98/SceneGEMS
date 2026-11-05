@@ -106,7 +106,7 @@ export function MetricTimeSeriesChart({
   yDomain,
   yDecimals = 1,
   valueDecimals = 1,
-  accentColor = "#38bdf8",
+  accentColor = "var(--accent)",
 }: MetricTimeSeriesChartProps) {
   const gradientId = useId();
   const actorNames = useActorNames();
@@ -405,7 +405,7 @@ export function MetricTimeSeriesChart({
             cy={chart.lastY}
             r={4}
             fill={accentColor}
-            stroke="#0f172a"
+            stroke="var(--chart-point-ring)"
             strokeWidth={1.5}
             className="metrics-chart-endpoint"
           />
@@ -456,7 +456,7 @@ export function MetricTimeSeriesChart({
                 r={5}
                 className="metrics-chart-hover-point"
                 fill={accentColor}
-                stroke="#f8fafc"
+                stroke="var(--chart-hover-ring)"
                 strokeWidth={1.5}
               />
             </>

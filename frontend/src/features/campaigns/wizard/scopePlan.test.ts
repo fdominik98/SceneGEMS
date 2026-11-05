@@ -14,8 +14,8 @@ describe("globToRegExp", () => {
   it("matches shell wildcards over the whole text", () => {
     expect(globToRegExp("2vessel_*_scenarios").test("2vessel_0obstacle_scenarios")).toBe(true);
     expect(globToRegExp("2vessel_*_scenarios").test("12vessel_0obstacle_scenarios")).toBe(false);
-    expect(globToRegExp("functional_model?").test("functional_model5")).toBe(true);
-    expect(globToRegExp("functional_model?").test("functional_model10")).toBe(false);
+    expect(globToRegExp("fec?").test("fec5")).toBe(true);
+    expect(globToRegExp("fec?").test("fec10")).toBe(false);
     expect(globToRegExp("[23]vessel*").test("3vessel_x")).toBe(true);
     expect(globToRegExp("[!2]vessel*").test("2vessel_x")).toBe(false);
   });
@@ -31,12 +31,12 @@ describe("globToRegExp", () => {
 describe("expandPattern", () => {
   it("matches folders without a slash and class ids with one, in catalog order", () => {
     expect(expandPattern("2vessel_*_scenarios", catalog).map((entry) => entry.fec_id)).toEqual([
-      "2vessel_0obstacle_scenarios/functional_model1",
-      "2vessel_0obstacle_scenarios/functional_model2",
-      "2vessel_0obstacle_scenarios/functional_model10",
-      "2vessel_1obstacle_scenarios/functional_model1",
+      "2vessel_0obstacle_scenarios/fec1",
+      "2vessel_0obstacle_scenarios/fec2",
+      "2vessel_0obstacle_scenarios/fec10",
+      "2vessel_1obstacle_scenarios/fec1",
     ]);
-    expect(expandPattern("*/functional_model1", catalog)).toHaveLength(4);
+    expect(expandPattern("*/fec1", catalog)).toHaveLength(4);
     expect(expandPattern("no_such_folder", catalog)).toEqual([]);
   });
 });
@@ -46,7 +46,7 @@ describe("planScope", () => {
     const plan = planScope(
       [
         entry({ patterns: ["2vessel_0obstacle_scenarios"], quota: 15 }),
-        entry({ classes: ["3vessel_0obstacle_scenarios/functional_model5"], quota: 4 }),
+        entry({ classes: ["3vessel_0obstacle_scenarios/fec5"], quota: 4 }),
       ],
       catalog
     );
@@ -57,17 +57,17 @@ describe("planScope", () => {
 
   it("counts a class once, for the first entry that names it, and reports the repeats", () => {
     const plan = planScope(
-      [entry({ patterns: ["3vessel_*_scenarios"], quota: 2 }), entry({ classes: ["3vessel_0obstacle_scenarios/functional_model1", "4vessel_0obstacle_scenarios/functional_model1"], quota: 5 })],
+      [entry({ patterns: ["3vessel_*_scenarios"], quota: 2 }), entry({ classes: ["3vessel_0obstacle_scenarios/fec1", "4vessel_0obstacle_scenarios/fec1"], quota: 5 })],
       catalog
     );
     expect(plan.entries[0].classes).toHaveLength(2);
-    expect(plan.entries[1].classes.map((item) => item.fec_id)).toEqual(["4vessel_0obstacle_scenarios/functional_model1"]);
-    expect(plan.entries[1].duplicates).toEqual(["3vessel_0obstacle_scenarios/functional_model1"]);
+    expect(plan.entries[1].classes.map((item) => item.fec_id)).toEqual(["4vessel_0obstacle_scenarios/fec1"]);
+    expect(plan.entries[1].duplicates).toEqual(["3vessel_0obstacle_scenarios/fec1"]);
     expect(plan.casesPlanned).toBe(4 + 5);
   });
 
   it("does not count a class twice inside one entry", () => {
-    const plan = planScope([entry({ classes: ["3vessel_0obstacle_scenarios/functional_model1"], patterns: ["3vessel_*_scenarios"], quota: 1 })], catalog);
+    const plan = planScope([entry({ classes: ["3vessel_0obstacle_scenarios/fec1"], patterns: ["3vessel_*_scenarios"], quota: 1 })], catalog);
     expect(plan.classes).toBe(2);
     expect(plan.entries[0].duplicates).toEqual([]);
   });

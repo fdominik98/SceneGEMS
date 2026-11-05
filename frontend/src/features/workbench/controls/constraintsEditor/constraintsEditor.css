@@ -42,8 +42,8 @@
   margin-left: var(--space-3);
   padding: 0 5px;
   border-radius: 8px;
-  background: #b45309;
-  color: #fff7ed;
+  background: var(--warn-solid);
+  color: var(--on-warn-solid);
   font-size: var(--font-size-xs);
 }
 
@@ -157,7 +157,7 @@
 }
 
 .ce-flagged {
-  border-color: #f87171;
+  border-color: var(--danger-bright);
 }
 
 .ce-unit {
@@ -199,18 +199,18 @@
 }
 
 .ce-issue-warning {
-  color: #fbbf24;
+  color: var(--warn-bright-text);
 }
 
 .ce-issue-error {
-  color: #f87171;
+  color: var(--danger-bright-text);
 }
 
 .ce-summary {
   padding: var(--space-3) var(--space-4);
-  border: 1px solid #854d0e;
+  border: 1px solid var(--warn-line-dim);
   border-radius: var(--radius);
-  background: rgba(251, 191, 36, 0.08);
+  background: rgb(var(--warn-bright-rgb) / 0.08);
 }
 
 .ce-group {
@@ -261,7 +261,7 @@
 }
 
 .ce-parse-error {
-  color: #fca5a5;
+  color: var(--danger-text);
   align-items: flex-start;
 }
 
@@ -372,7 +372,7 @@
 }
 
 .ce-missing {
-  color: #fbbf24;
+  color: var(--warn-bright-text);
   font-size: var(--font-size-xs);
 }
 

@@ -20,7 +20,7 @@ def _quiet(message, progress=None):
 
 def test_the_result_summarizes_the_rules(make_job, head_on_trajectories):
     result = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": head_on_trajectories.to_dict()}), _quiet)
-    assert set(result) == {"scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "encounters", "passed"}
+    assert set(result) == {"scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "encounters", "encounter_roles", "passed"}
     assert (result["scenes"], result["monitored_scenes"], result["time_step"]) == (121, 121, 1)
     assert not result["passed"]
     assert {(item["rule"], item["first_failed_at"]) for item in result["failed_rules"]} == {
@@ -30,6 +30,7 @@ def test_the_result_summarizes_the_rules(make_job, head_on_trajectories):
     for item in result["failed_rules"]:
         assert result["rules"][item["relation"]][item["rule"]]["failed"] == item["first_failed_at"]
     assert result["encounters"] == {"OS_0 - TS_1": ["HEAD_ON"]}  # keyed like rules
+    assert result["encounter_roles"] == {"OS_0 - TS_1": {"HEAD_ON": {"give_way": ["OS_0", "TS_1"], "stand_on": []}}}
 
 
 def test_frames_are_added_on_request(make_job, head_on_trajectories):
@@ -53,11 +54,12 @@ def test_a_scene_is_judged_as_a_one_scene_log(make_job, head_on_trajectories, do
     scene = _scene(head_on_trajectories)
     payload = {"scene": {"best_scene": scene, "random_seed": 3} if document == "evaluation_data" else (scene if document == "scene" else {"initial_scene": scene})}
     result = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, payload), _quiet)
-    assert set(result) == {"scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "encounters", "passed"}
+    assert set(result) == {"scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "encounters", "encounter_roles", "passed"}
     assert (result["scenes"], result["monitored_scenes"], result["time_step"]) == (1, 1, 1)
     # the pair is 3 km apart: the rules on the motion stay unknown and SafeDistance holds, so nothing fails
     assert result["passed"] and result["failed_rules"] == [] and isinstance(result["rules"], dict)
     assert result["encounters"] == {"OS_0 - TS_1": ["HEAD_ON"]}  # the scene's type per pair
+    assert result["encounter_roles"] == {"OS_0 - TS_1": {"HEAD_ON": {"give_way": ["OS_0", "TS_1"], "stand_on": []}}}  # known without any decided rule
 
 
 def _scene_at(distance):
@@ -71,6 +73,15 @@ def test_a_scene_starting_inside_the_safe_distance_fails_at_0(make_job):
     assert not result["passed"]
     assert result["failed_rules"] == [{"relation": "OS_0 - TS_1", "rule": "Rule 8: Passing at a Safe Distance (OS_0 - TS_1)", "first_failed_at": 0}]
     assert result["encounters"] == {"OS_0 - TS_1": ["OTHER"]}  # inside its encounter's own domain a pair is OTHER
+    assert result["encounter_roles"] == {}
+
+
+def test_the_roles_come_from_the_encounter_not_from_the_order_of_the_relation(make_job):
+    """The target ship has the own ship on its starboard bow, so it gives way, though the relation names the own ship first."""
+    scene = ConcreteScene({make_vessel(0, True): ActorState(0.0, 0.0, 8.0, 0.0), make_vessel(1, False): ActorState(1500.0, 1500.0, 8.0, -math.pi / 2)}).to_dict()
+    result = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"scene": scene}), _quiet)
+    assert result["encounters"] == {"OS_0 - TS_1": ["CROSSING_FROM_PORT"]}
+    assert result["encounter_roles"] == {"OS_0 - TS_1": {"CROSSING_FROM_PORT": {"give_way": ["TS_1"], "stand_on": ["OS_0"]}}}
 
 
 def test_a_scene_inside_the_head_on_domain_but_outside_the_circle_passes(make_job):

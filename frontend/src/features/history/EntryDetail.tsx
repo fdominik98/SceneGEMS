@@ -4,7 +4,7 @@ import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import type { CampaignDetail as CampaignDetailView, CampaignStep } from "../../domain/cluster/schemas";
 import { showCampaignResults } from "../results/showResults";
 import { formatDateTime, plural, runDuration } from "../campaigns/campaignFormat";
-import { baseSeed, campaignProgress, isFinalState, runNames } from "./campaignModel";
+import { baseSeed, campaignProgress, isFinalState, runNames, stepMonitored } from "./campaignModel";
 import { EmptyState, ProgressBar, StateBadge, Tile, ToneBadge } from "./campaignParts";
 import { ConfigPanel } from "./ConfigPanel";
 import { ControlsBar } from "./ControlsBar";
@@ -46,7 +46,7 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
           </span>
         </div>
         <Tile
-          label="Verdicts"
+          label="Monitor summaries"
           value={Object.values(verdicts).reduce((sum, count) => sum + count, 0)}
           detail={`${verdicts.passed ?? 0} passed, ${failed} failed`}
           tone={failed > 0 ? "warn" : undefined}
@@ -63,7 +63,7 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
             detail={`${totals.fecs_open} open, ${totals.fecs_complete} complete, ${totals.fecs_abandoned} abandoned`}
             tone={totals.fecs_abandoned > 0 ? "bad" : undefined}
           />
-          <Tile label="Unmonitored verdicts" value={verdicts.unmonitored ?? 0} detail="runs without a monitor result" />
+          <Tile label="Unmonitored runs" value={verdicts.unmonitored ?? 0} detail="runs without a monitor summary" />
         </div>
       </Disclosure>
     </>
@@ -240,7 +240,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           </dl>
         </Disclosure>
         <div className="camp-results-link">
-          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, verdicts, cases and recorded runs are in the Results section">
+          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor summaries, cases and recorded runs are in the Results section">
             Open the results
           </button>
           {final && <DeleteEntry entry={detail} onDeleted={onBack} />}
@@ -255,7 +255,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           <h4 className="history-step-title">
             {STEP_LABELS[step]}: {STEP_OUTPUT_NOUNS[step].many}
           </h4>
-          <StepOutputs key={step} campaignId={campaignId} step={step} running={!final} onOpenEntry={onOpenEntry} />
+          <StepOutputs key={step} campaignId={campaignId} step={step} running={!final} monitored={stepMonitored(config.data, step)} onOpenEntry={onOpenEntry} />
         </div>
       </section>
       {isCampaign && <CoverageTable classes={detail.fecs} runNames={names} />}

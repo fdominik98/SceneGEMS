@@ -112,7 +112,7 @@
 
 .cap-graph .react-flow {
   --xy-background-color: var(--bg-panel);
-  --xy-background-pattern-color: #1b2740;
+  --xy-background-pattern-color: var(--graph-dots);
   --xy-controls-button-background-color: var(--bg-control);
   --xy-controls-button-background-color-hover: var(--bg-control-hover);
   --xy-controls-button-color: var(--text);
@@ -145,7 +145,7 @@
   z-index: 6;
   min-height: 32px;
   padding: 0 var(--space-3);
-  background: rgba(30, 41, 59, 0.92);
+  background: rgb(var(--control-rgb) / 0.92);
   border-color: var(--border);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
@@ -160,7 +160,7 @@
 .cap-lane {
   width: 100%;
   height: 100%;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgb(var(--panel-rgb) / 0.55);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   pointer-events: none;
@@ -212,7 +212,7 @@
   border: 1px solid var(--border-strong);
   border-left: 4px solid var(--accent);
   border-radius: var(--radius-md);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.4);
   cursor: grab;
   overflow: hidden;
   transition:
@@ -223,7 +223,7 @@
 
 .react-flow__node.dragging .cap-node {
   cursor: grabbing;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 10px 24px rgb(var(--shadow-rgb) / 0.55);
 }
 
 .cap-node:hover {
@@ -231,7 +231,7 @@
 }
 
 .cap-node--planned {
-  border-left-color: #fbbf24;
+  border-left-color: var(--warn-bright);
   border-style: dashed;
   border-left-style: solid;
 }
@@ -253,7 +253,7 @@
   border-color: var(--focus-ring);
   box-shadow:
     0 0 0 2px var(--focus-ring),
-    0 6px 18px rgba(56, 189, 248, 0.25);
+    0 6px 18px rgb(var(--accent-rgb) / 0.25);
 }
 
 .cap-node.is-dimmed {
@@ -334,28 +334,28 @@
 }
 
 .cap-tag--planned {
-  color: #fcd34d;
-  border-color: rgba(245, 158, 11, 0.5);
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--warn-text);
+  border-color: rgb(var(--warn-rgb) / 0.5);
+  background: rgb(var(--warn-rgb) / 0.1);
 }
 
 .cap-tag--measured {
   color: var(--accent);
-  border-color: rgba(56, 189, 248, 0.45);
-  background: rgba(56, 189, 248, 0.08);
+  border-color: rgb(var(--accent-rgb) / 0.45);
+  background: rgb(var(--accent-rgb) / 0.08);
 }
 
 .cap-tag--kind {
   color: var(--accent-strong);
-  border-color: rgba(96, 165, 250, 0.45);
+  border-color: rgb(var(--accent-strong-rgb) / 0.45);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .cap-tag--bad {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-text);
+  border-color: rgb(var(--danger-rgb) / 0.45);
+  background: rgb(var(--danger-rgb) / 0.1);
 }
 
 .cap-chip {
@@ -386,30 +386,30 @@
 }
 
 .cap-chip--ok {
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(34, 197, 94, 0.1);
+  border-color: rgb(var(--ok-rgb) / 0.45);
+  background: rgb(var(--ok-rgb) / 0.1);
 }
 
 .cap-chip--ok .cap-chip-value {
-  color: #4ade80;
+  color: var(--ok-text);
 }
 
 .cap-chip--warn {
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.1);
+  border-color: rgb(var(--warn-rgb) / 0.45);
+  background: rgb(var(--warn-rgb) / 0.1);
 }
 
 .cap-chip--warn .cap-chip-value {
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .cap-chip--bad {
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
+  border-color: rgb(var(--danger-rgb) / 0.45);
+  background: rgb(var(--danger-rgb) / 0.1);
 }
 
 .cap-chip--bad .cap-chip-value {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .cap-chip-measured {
@@ -418,7 +418,7 @@
   height: 7px;
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25);
+  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.25);
 }
 
 /* Edges */
@@ -432,26 +432,26 @@
 
 .cap-edge--available,
 .cap-edge--link {
-  stroke: #38bdf8;
+  stroke: var(--accent);
 }
 
 .cap-edge--link {
-  stroke: #60a5fa;
+  stroke: var(--accent-strong);
   stroke-width: 2;
 }
 
 .cap-edge--alternative {
-  stroke: #38bdf8;
+  stroke: var(--accent);
   stroke-dasharray: 8 6;
 }
 
 .cap-edge--planned {
-  stroke: #fbbf24;
+  stroke: var(--warn-bright);
   stroke-dasharray: 3 6;
 }
 
 .cap-edge--ruled-out {
-  stroke: #f87171;
+  stroke: var(--danger-bright);
   stroke-dasharray: 2 7;
   stroke-width: 1.75;
 }
@@ -462,7 +462,7 @@
 
 .cap-edge.is-selected {
   stroke-width: 3.5;
-  filter: drop-shadow(0 0 4px rgba(125, 211, 252, 0.8));
+  filter: drop-shadow(0 0 4px rgb(var(--focus-ring-rgb) / 0.8));
 }
 
 .cap-edge-label {
@@ -487,19 +487,19 @@
 }
 
 .cap-edge-label--planned {
-  border-color: #fbbf24;
+  border-color: var(--warn-bright);
   border-style: dashed;
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .cap-edge-label--link {
-  border-color: #60a5fa;
+  border-color: var(--accent-strong);
 }
 
 .cap-edge-label--ruled-out {
-  border-color: #f87171;
+  border-color: var(--danger-bright);
   border-style: dashed;
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .cap-edge-label.is-dimmed {
@@ -537,7 +537,7 @@
 .cap-legend-line {
   width: 28px;
   height: 0;
-  border-top: 2.5px solid #38bdf8;
+  border-top: 2.5px solid var(--accent);
 }
 
 .cap-legend-line--alternative {
@@ -545,17 +545,17 @@
 }
 
 .cap-legend-line--planned {
-  border-top-color: #fbbf24;
+  border-top-color: var(--warn-bright);
   border-top-style: dotted;
 }
 
 .cap-legend-line--ruled-out {
-  border-top-color: #f87171;
+  border-top-color: var(--danger-bright);
   border-top-style: dotted;
 }
 
 .cap-legend-line--link {
-  border-top-color: #60a5fa;
+  border-top-color: var(--accent-strong);
 }
 
 .cap-legend-edit {
@@ -701,15 +701,15 @@
 }
 
 .cap-fact-value--ok {
-  color: #4ade80;
+  color: var(--ok-text);
 }
 
 .cap-fact-value--warn {
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .cap-fact-value--bad {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .cap-fact-source {
@@ -844,16 +844,16 @@
 }
 
 .cap-matrix-cell--on {
-  background: rgba(34, 197, 94, 0.07);
+  background: rgb(var(--ok-rgb) / 0.07);
 }
 
 .cap-matrix-cell--off {
-  background: rgba(239, 68, 68, 0.06);
+  background: rgb(var(--danger-rgb) / 0.06);
   color: var(--text-faint);
 }
 
 .cap-matrix-cell--planned {
-  background: rgba(245, 158, 11, 0.08);
+  background: rgb(var(--warn-rgb) / 0.08);
 }
 
 .cap-matrix-status {
@@ -865,15 +865,15 @@
 }
 
 .cap-matrix-cell--on .cap-matrix-status {
-  color: #4ade80;
+  color: var(--ok-text);
 }
 
 .cap-matrix-cell--off .cap-matrix-status {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 .cap-matrix-cell--planned .cap-matrix-status {
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .cap-matrix-facts {

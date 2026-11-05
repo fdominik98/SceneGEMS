@@ -92,10 +92,10 @@ describe("draftFromConfig", () => {
   });
 
   it("reads a preset saved in format 2, whose entries list their FECs under classes, and writes it as format 3", () => {
-    const draft = draftFromConfig({ ...USV_PRESET, format: 2, scope: [{ classes: ["2vessel_0obstacle_scenarios/functional_model1"], quota: 2 }] }, catalog);
-    expect(draft.scope.map((entry) => entry.classes)).toEqual([["2vessel_0obstacle_scenarios/functional_model1"]]);
+    const draft = draftFromConfig({ ...USV_PRESET, format: 2, scope: [{ classes: ["2vessel_0obstacle_scenarios/fec1"], quota: 2 }] }, catalog);
+    expect(draft.scope.map((entry) => entry.classes)).toEqual([["2vessel_0obstacle_scenarios/fec1"]]);
     const config = buildCampaignConfig(draft, catalog);
-    expect([config.format, config.scope]).toEqual([3, [{ fecs: ["2vessel_0obstacle_scenarios/functional_model1"], quota: 2, failure_budget: 0 }]]);
+    expect([config.format, config.scope]).toEqual([3, [{ fecs: ["2vessel_0obstacle_scenarios/fec1"], quota: 2, failure_budget: 0 }]]);
   });
 
   it("leaves a run without a stack the master does not offer", () => {

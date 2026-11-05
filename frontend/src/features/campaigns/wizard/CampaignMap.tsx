@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Handle, MarkerType, Position, ReactFlow, useReactFlow, useViewport, type Edge, type Node, type NodeProps, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTheme } from "../../../app/theme";
 import { drawingOffset, type CampaignMap as CampaignMapModel, type MapCard, type MapFact, type MapFrame, type MapSetting } from "./campaignMapModel";
 import { WIZARD_STEP_LABELS, type WizardStepId } from "./wizardState";
 import "./campaignMap.css";
@@ -161,6 +162,7 @@ export function CampaignMap({ map, current, onOpen }: CampaignMapProps) {
   const currentRight = currentCards.length > 0 ? Math.max(...currentCards.map((card) => card.x + card.width)) : null;
   const x = width > 0 ? drawingOffset(width, drawn, zoom, currentRight, PAD) : PAD;
   const height = Math.ceil(map.height * zoom) + 2 * PAD;
+  const theme = useTheme();
 
   const nodes = useMemo<Array<CardNode | FrameNode>>(
     () => [
@@ -195,7 +197,7 @@ export function CampaignMap({ map, current, onOpen }: CampaignMapProps) {
         source: edge.source,
         target: edge.target,
         className: "cmap-edge",
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#60a5fa", width: 16, height: 16 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "var(--accent-strong)", width: 16, height: 16 },
         focusable: false,
       })),
     [map.edges]
@@ -208,7 +210,7 @@ export function CampaignMap({ map, current, onOpen }: CampaignMapProps) {
           nodes={nodes}
           edges={edges}
           nodeTypes={NODE_TYPES}
-          colorMode="dark"
+          colorMode={theme}
           defaultViewport={{ x, y: PAD, zoom }}
           nodesDraggable={false}
           nodesConnectable={false}

@@ -66,38 +66,38 @@
 
 .step-chip--idle {
   color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.12);
-  border-color: rgba(148, 163, 184, 0.3);
+  background: rgb(var(--neutral-rgb) / 0.12);
+  border-color: rgb(var(--neutral-rgb) / 0.3);
 }
 
 .step-chip--busy {
-  color: #facc15;
-  background: rgba(250, 204, 21, 0.14);
-  border-color: rgba(250, 204, 21, 0.35);
+  color: var(--warn-yellow-text);
+  background: rgb(var(--warn-yellow-rgb) / 0.14);
+  border-color: rgb(var(--warn-yellow-rgb) / 0.35);
 }
 
 .step-chip--live {
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.14);
-  border-color: rgba(34, 197, 94, 0.4);
+  color: var(--ok-text);
+  background: rgb(var(--ok-rgb) / 0.14);
+  border-color: rgb(var(--ok-rgb) / 0.4);
 }
 
 .step-chip--ok {
-  color: #7dd3fc;
-  background: rgba(56, 189, 248, 0.14);
-  border-color: rgba(56, 189, 248, 0.38);
+  color: var(--info-text);
+  background: rgb(var(--accent-rgb) / 0.14);
+  border-color: rgb(var(--accent-rgb) / 0.38);
 }
 
 .step-chip--warn {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.14);
-  border-color: rgba(245, 158, 11, 0.38);
+  color: var(--warn-bright-text);
+  background: rgb(var(--warn-rgb) / 0.14);
+  border-color: rgb(var(--warn-rgb) / 0.38);
 }
 
 .step-chip--error {
-  color: #f87171;
-  background: rgba(239, 68, 68, 0.14);
-  border-color: rgba(239, 68, 68, 0.38);
+  color: var(--danger-bright-text);
+  background: rgb(var(--danger-rgb) / 0.14);
+  border-color: rgb(var(--danger-rgb) / 0.38);
 }
 
 .step-notices {
@@ -107,10 +107,10 @@
   margin: 0;
   padding: var(--space-2) var(--space-3);
   list-style: none;
-  color: #fcd34d;
+  color: var(--warn-text);
   font-size: var(--font-size-sm);
-  background: rgba(245, 158, 11, 0.08);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: rgb(var(--warn-rgb) / 0.08);
+  border: 1px solid rgb(var(--warn-rgb) / 0.3);
   border-radius: var(--radius);
 }
 
@@ -209,11 +209,11 @@
 }
 
 .step-line.warning {
-  color: #fbbf24;
+  color: var(--warn-bright-text);
 }
 
 .step-line.error {
-  color: #f87171;
+  color: var(--danger-bright-text);
 }
 
 /* A setting on one line: its name, then its control. */

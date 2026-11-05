@@ -22,4 +22,4 @@ The status line shows the server connection, the broker connection and, once con
 
 ## Reference geofence map
 
-A Leaflet map for the WGS84 reference area. Drag the handles to resize it. The geofence center is the origin of the scenario's local frame on the nautical map and for the agents' positions.
+A Leaflet map for the WGS84 reference area. Click **Select Geofence**, click the center on the map, then click again to set the radius; Escape cancels and **Reset to default** restores the default area. The geofence center is the origin of the scenario's local frame on the nautical map and for the agents' positions.

@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { useTheme } from "../../../app/theme";
 import type { TrajectoryStream } from "../../../app/uiStore";
 import type { SimulationFrame } from "../../../domain/simulation/types";
 import { getActorPanelDotColor } from "../scene/shipColors";
@@ -42,6 +43,7 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
   const { frame: streamFrame, panelKind } = useMonitorFrameForKind(stream);
   const frame = frameOverride !== undefined ? frameOverride : streamFrame;
   const frameDataKey = monitorSectionKey(stream, "frame-data");
+  const theme = useTheme();
 
   if (!frame) {
     return (
@@ -86,7 +88,7 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
                   <summary className="frame-actor-summary">
                     <span
                       className="actor-color-dot frame-actor-dot"
-                      style={{ backgroundColor: getActorPanelDotColor(actor, panelKind) }}
+                      style={{ backgroundColor: getActorPanelDotColor(actor, panelKind, theme) }}
                     />
                     <span className="frame-actor-name">{renderActorName(actor.name)}</span>
                     <span className="frame-actor-meta meta">

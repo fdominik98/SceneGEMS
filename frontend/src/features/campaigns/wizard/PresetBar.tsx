@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Disclosure } from "../../../components/Disclosure";
+import type { CatalogClass } from "../../../domain/cluster/campaignApi";
 import { describeOperatorError, OperatorApiError } from "../../../domain/cluster/operatorApi";
 import type { CampaignPreset } from "../../../domain/cluster/presetsApi";
+import { CatalogDialog } from "./CatalogDialog";
 import type { BuilderCatalog } from "./configBuilder";
+import { describeSteps, PRESET_CATALOG, presetFacts, scopeTags, type PresetFacts } from "./presetCatalog";
 import { draftFromConfig, draftHasEntries, presetConfigOf } from "./presetDraft";
-import { CAMPAIGN_STEP_LABELS } from "./stepPlan";
 import { useCampaignPresets, useDeleteCampaignPreset, useSaveCampaignPreset } from "./useCampaignPresets";
 import type { WizardDraft } from "./wizardState";
 
@@ -12,11 +14,9 @@ interface PresetBarProps {
   draft: WizardDraft;
   /** The stacks and generators the master offers; null while they load (a preset's runs need them). */
   catalog: BuilderCatalog | null;
+  /** The master's FEC catalog, to say what a preset's scope selects; undefined while it loads. */
+  classes?: readonly CatalogClass[];
   onLoad: (draft: WizardDraft) => void;
-}
-
-function stepsOf(preset: CampaignPreset): string {
-  return preset.steps.map((step) => CAMPAIGN_STEP_LABELS[step]).join(", ");
 }
 
 function failure(error: unknown): string {
@@ -29,35 +29,65 @@ function failure(error: unknown): string {
   return describeOperatorError(error);
 }
 
+function PresetCard({ facts, canLoad, deleting, onLoad, onDelete }: { facts: PresetFacts; canLoad: boolean; deleting: boolean; onLoad: () => void; onDelete: () => void }) {
+  const { preset } = facts;
+  const tags = [...scopeTags(facts), ...facts.stacks.map((stack) => stack.label), describeSteps(preset.steps)];
+  return (
+    <article className="wiz-catalog-item" aria-label={preset.name}>
+      <div className="wiz-catalog-item-head">
+        <strong>{preset.name}</strong>
+        {!preset.builtin && <span className="wiz-catalog-badge">Saved</span>}
+      </div>
+      <p className="wiz-catalog-item-text">{preset.description || "No description."}</p>
+      <div className="wiz-catalog-tags">
+        {tags.map((tag) => (
+          <span key={tag} className="wiz-catalog-tag">
+            {tag}
+          </span>
+        ))}
+      </div>
+      {facts.blocked && <p className="wiz-catalog-warning">A run needs a stack this master cannot run: load it and pick another stack on the Simulation page.</p>}
+      <div className="wiz-catalog-item-actions">
+        <button type="button" className="primary-btn" disabled={!canLoad} onClick={onLoad} title={canLoad ? undefined : "Waiting for the master's stacks"}>
+          Load into the wizard
+        </button>
+        {!preset.builtin && (
+          <button type="button" className="wiz-remove" disabled={deleting} onClick={onDelete}>
+            Delete the preset
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
 /**
  * Campaign presets of the master: start the wizard from one of them (the ones the master image
- * ships for campaign runs that come up again and again, or ones saved on this cluster), or save the
- * current draft as a preset for the next time.
+ * ships for campaign runs that come up again and again, or ones saved on this cluster), found in the
+ * preset catalog, or save the current draft as a preset for the next time.
  */
-export function PresetBar({ draft, catalog, onLoad }: PresetBarProps) {
+export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
   const presets = useCampaignPresets();
   const save = useSaveCampaignPreset();
   const remove = useDeleteCampaignPreset();
-  const [chosenId, setChosenId] = useState("");
+  const [browsing, setBrowsing] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [replace, setReplace] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const all = presets.data ?? [];
-  const shipped = all.filter((preset) => preset.builtin);
-  const saved = all.filter((preset) => !preset.builtin);
-  const chosen = all.find((preset) => preset.preset_id === chosenId) ?? null;
+  const facts = useMemo(() => (presets.data ?? []).map((preset) => presetFacts(preset, catalog, classes)), [presets.data, catalog, classes]);
 
-  const load = () => {
-    if (!chosen || !catalog) {
+  const load = (preset: CampaignPreset) => {
+    if (!catalog) {
       return;
     }
-    if (draftHasEntries(draft) && !window.confirm(`Replace the current draft with the preset "${chosen.name}"?`)) {
+    if (draftHasEntries(draft) && !window.confirm(`Replace the current draft with the preset "${preset.name}"?`)) {
       return;
     }
-    onLoad(draftFromConfig(chosen.config, catalog));
-    setNotice(`Started from the preset "${chosen.name}". Adjust it, then create the campaign.`);
+    onLoad(draftFromConfig(preset.config, catalog));
+    setBrowsing(false);
+    setNotice(`Started from the preset "${preset.name}". Adjust it, then create the campaign.`);
   };
 
   const saveDraft = () => {
@@ -70,21 +100,19 @@ export function PresetBar({ draft, catalog, onLoad }: PresetBarProps) {
       { name: presetName, description: description.trim() || draft.description.trim(), config: presetConfigOf(draft, catalog), replace },
       {
         onSuccess: (preset) => {
-          setChosenId(preset.preset_id);
           setNotice(`Saved the preset "${preset.name}" on the master.`);
         },
       }
     );
   };
 
-  const deleteChosen = () => {
-    if (!chosen || chosen.builtin || !window.confirm(`Delete the preset "${chosen.name}" from the master?`)) {
+  const deletePreset = (preset: CampaignPreset) => {
+    if (preset.builtin || !window.confirm(`Delete the preset "${preset.name}" from the master?`)) {
       return;
     }
-    remove.mutate(chosen.preset_id, {
+    remove.mutate(preset.preset_id, {
       onSuccess: () => {
-        setChosenId("");
-        setNotice(`Deleted the preset "${chosen.name}".`);
+        setNotice(`Deleted the preset "${preset.name}".`);
       },
     });
   };
@@ -92,45 +120,23 @@ export function PresetBar({ draft, catalog, onLoad }: PresetBarProps) {
   return (
     <section className="wiz-presets" aria-label="Campaign presets">
       <div className="wiz-presets-row">
-        <label className="wiz-presets-pick">
-          <span className="wiz-presets-label">Start from a preset</span>
-          <select value={chosenId} onChange={(event) => setChosenId(event.target.value)} disabled={presets.isLoading || all.length === 0} aria-label="Campaign preset">
-            <option value="">{presets.isLoading ? "Reading the master's presets..." : all.length === 0 ? "The master offers no presets" : "Choose a preset..."}</option>
-            {shipped.length > 0 && (
-              <optgroup label="Shipped with the master">
-                {shipped.map((preset) => (
-                  <option key={preset.preset_id} value={preset.preset_id}>
-                    {preset.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-            {saved.length > 0 && (
-              <optgroup label="Saved on this cluster">
-                {saved.map((preset) => (
-                  <option key={preset.preset_id} value={preset.preset_id}>
-                    {preset.name}
-                  </option>
-                ))}
-              </optgroup>
-            )}
-          </select>
-        </label>
-        <button type="button" className="primary-btn" disabled={!chosen || !catalog} onClick={load} title={catalog ? undefined : "Waiting for the master's stacks"}>
-          Load into the wizard
+        <span className="wiz-presets-label">Start from a preset</span>
+        <button type="button" aria-haspopup="dialog" disabled={presets.isLoading || facts.length === 0} onClick={() => setBrowsing(true)}>
+          {presets.isLoading ? "Reading the master's presets..." : facts.length === 0 ? "The master offers no presets" : `Browse ${facts.length} presets`}
         </button>
-        {chosen && !chosen.builtin && (
-          <button type="button" className="wiz-remove" disabled={remove.isPending} onClick={deleteChosen}>
-            Delete the preset
-          </button>
-        )}
       </div>
-      {chosen && (
-        <p className="meta wiz-presets-description">
-          {chosen.description || "No description."} <span className="wiz-presets-steps">Steps: {stepsOf(chosen)}.</span>
-        </p>
-      )}
       {presets.isError && <p className="error">The presets could not be read: {describeOperatorError(presets.error)}</p>}
+      {browsing && (
+        <CatalogDialog
+          title="Campaign presets"
+          noun="preset"
+          storageKey="presets"
+          items={facts}
+          model={PRESET_CATALOG}
+          onClose={() => setBrowsing(false)}
+          renderItem={(item) => <PresetCard facts={item} canLoad={catalog !== null} deleting={remove.isPending} onLoad={() => load(item.preset)} onDelete={() => deletePreset(item.preset)} />}
+        />
+      )}
       <Disclosure id="wizard:save-preset" variant="link" headingLevel={null} title="Save this draft as a preset" openTitle="Hide saving as a preset">
         <div className="wiz-presets-save">
           <label>

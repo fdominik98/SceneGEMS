@@ -42,7 +42,7 @@
 
 .cmap-canvas .react-flow {
   --xy-background-color: transparent;
-  --xy-edge-stroke: #60a5fa;
+  --xy-edge-stroke: var(--accent-strong);
   --xy-edge-stroke-width: 2;
 }
 
@@ -57,14 +57,14 @@
 }
 
 .cmap-edge .react-flow__edge-path {
-  stroke: #60a5fa;
+  stroke: var(--accent-strong);
   stroke-width: 2;
 }
 
 .cmap-frame {
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius-md);
-  background: rgba(15, 23, 42, 0.6);
+  background: rgb(var(--panel-rgb) / 0.6);
   pointer-events: none;
 }
 
@@ -106,11 +106,11 @@
 }
 
 .cmap-card--input .cmap-card-button {
-  border-left-color: #a78bfa;
+  border-left-color: var(--violet);
 }
 
 .cmap-card--review .cmap-card-button {
-  border-left-color: #34d399;
+  border-left-color: var(--ok-mint);
 }
 
 .cmap-card--skipped .cmap-card-button {
@@ -134,13 +134,13 @@
 .cmap-card.is-current .cmap-card-button,
 .cmap-setting.is-current {
   border-color: var(--accent-strong);
-  background: #1e3a8a;
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.35);
+  background: var(--accent-solid);
+  box-shadow: 0 0 0 2px rgb(var(--accent-strong-rgb) / 0.35);
 }
 
 .cmap-card.has-problems:not(.is-current) .cmap-card-button,
 .cmap-setting.has-problems:not(.is-current) {
-  border-color: rgba(239, 68, 68, 0.7);
+  border-color: rgb(var(--danger-rgb) / 0.7);
 }
 
 .cmap-card-head {
@@ -165,8 +165,8 @@
   min-width: 20px;
   padding: 0 6px;
   border-radius: 999px;
-  background: #b91c1c;
-  color: #fff;
+  background: var(--danger-solid);
+  color: var(--on-solid);
   font-size: var(--font-size-xs);
   font-weight: 700;
   line-height: 20px;
@@ -190,15 +190,15 @@
 }
 
 .cmap-fact--ok {
-  color: #6ee7b7;
+  color: var(--ok-mint-text);
 }
 
 .cmap-fact--warn {
-  color: #fcd34d;
+  color: var(--warn-text);
 }
 
 .cmap-fact--bad {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 
 /* The settings of the whole campaign: one row of buttons under the chain. */

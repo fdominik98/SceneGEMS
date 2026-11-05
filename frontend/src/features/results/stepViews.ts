@@ -212,7 +212,7 @@ export function describeFindings(findings: Findings): FindingsView {
     partial: !monitored,
     statement: monitored
       ? `A monitor judged the ${STEP_OUTPUT[findings.step]} of this step: ${findings.verdicts.passed} passed and ${findings.verdicts.failed} failed.`
-      : `No monitor judged this step. These are partial findings: statistics about the ${STEP_OUTPUT[findings.step]} of ${label.toLowerCase()}, without verdicts.`,
+      : `No monitor judged this step. These are partial findings: statistics about the ${STEP_OUTPUT[findings.step]} of ${label.toLowerCase()}, without monitor summaries.`,
     cases: caseStateCounts(findings.cases),
     totalCases: totalCases(findings.cases),
     outputs: findings.outputs,
@@ -283,7 +283,7 @@ export function caseStepRows(detail: CaseDetail, executed: readonly CampaignStep
   });
 }
 
-/** The verdict column of a case step row: "passed", "failed (2 of 3 runs)" or why there is none. */
+/** The monitor summary column of a case step row: "passed", "failed (2 of 3 runs)" or why there is none. */
 export function describeStepVerdict(row: CaseStepRow): string {
   if (!row.executed) {
     return "step not executed";
@@ -291,7 +291,7 @@ export function describeStepVerdict(row: CaseStepRow): string {
   const { passed, failed, unmonitored } = row.verdicts;
   const judged = passed + failed;
   if (judged === 0) {
-    return unmonitored > 0 ? "not monitored" : "no verdict";
+    return unmonitored > 0 ? "not monitored" : "no monitor summary";
   }
   if (judged === 1) {
     return failed === 1 ? "failed" : "passed";

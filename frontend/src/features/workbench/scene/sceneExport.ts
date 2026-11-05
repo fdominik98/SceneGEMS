@@ -71,11 +71,17 @@ export function captureCanvasScreenshot(canvas: HTMLCanvasElement, fileNamePrefi
   }, "image/png");
 }
 
-/** Rasterizes the encounter canvas's SVG (it carries its own colors) and downloads it as PNG. */
+/** Replaces each reference to a theme token with its value: an SVG rendered as an image has no stylesheet to read them from. */
+export function inlineCssVariables(markup: string, valueOf: (token: string) => string): string {
+  return markup.replace(/var\((--[\w-]+)\)/g, (_, token: string) => valueOf(token).trim());
+}
+
+/** Rasterizes the encounter canvas's SVG, with the colors of the current theme, and downloads it as PNG. */
 export function captureSvgScreenshot(svg: SVGSVGElement, fileNamePrefix: string) {
   const width = svg.width.baseVal.value;
   const height = svg.height.baseVal.value;
-  const markup = new XMLSerializer().serializeToString(svg);
+  const style = getComputedStyle(svg);
+  const markup = inlineCssVariables(new XMLSerializer().serializeToString(svg), (token) => style.getPropertyValue(token));
   const url = URL.createObjectURL(new Blob([markup], { type: "image/svg+xml;charset=utf-8" }));
   const image = new Image();
   image.onload = () => {

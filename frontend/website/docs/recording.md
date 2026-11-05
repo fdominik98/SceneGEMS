@@ -1,17 +1,29 @@
 ---
 sidebar_position: 12
-title: Recording & replay
+title: Recording & export
 ---
 
-# Recording & replay
+# Recording & export
 
-Found under the **Animation** tab in the control panel. Recording captures incoming preview and simulation frames independently.
+There is nothing to start or stop: every run is recorded as an entry of [Campaign History](./campaign-history).
 
-| Control | Description |
-|---------|-------------|
-| Start recording / Stop recording | Begin or end frame capture for both streams |
-| Export recording | Download recorded frames as JSON |
-| Clear | Discard recorded frames |
-| Import replay | Load a previously exported recording for offline playback |
+- **A run on the cluster** is saved as a workbench entry, with its outputs.
+- **A live session** is recorded as a workbench entry too. The Result row of the [control panel](./control-panel) says whether it is recording, saved (with **Open the recorded run**), failed, or not recorded on this gateway.
 
-Frame counts for preview and simulation streams are shown while recording is idle.
+## Replay
+
+**Open in workbench** in Campaign History loads an output on the page of its step; a simulated run loads as a replay of its frames with the monitor. A page can also take a file as its input with **File...**. See [Workbench pages and entries](./workbench-pages).
+
+## Export
+
+| What | Where | Format |
+|------|-------|--------|
+| A FEC specification | Scene Generation, **Files and editor tools**, **Export** | `.problem` |
+| The shown scene | Scene Generation, Result row | JSON |
+| The valid scenes of a batch | Scene Generation, Batch tab, **Export all valid** | ZIP of JSON files |
+| The planned trajectory | Trajectory Generation, Result row | JSON |
+| The frames of the shown stream | Monitoring panel, the export button beside the stream | JSON |
+| The canvas | Canvas toolbar, **Export**, **Screenshot (image)** | PNG, in the colors of the current mode |
+| The frames as a table | Canvas toolbar, **Export**, **Table (CSV)** | CSV |
+| The frames as map data | Canvas toolbar, **Export**, **Map data (GeoJSON)** | GeoJSON |
+| The monitor summaries of an entry | [Results](./results), the table's download | CSV |

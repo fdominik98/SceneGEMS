@@ -143,6 +143,25 @@ export function sampleSimulationOutput(overrides: Record<string, unknown> = {}):
   };
 }
 
+/** A verdict as a master sends it with its monitor summary: a crossing that failed, a head-on, a pair without an encounter and a vessel's own failed rule. */
+export function sampleMonitorVerdict(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    state: "failed",
+    failed_rules: ["OS_0 - TS_1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (TS_1)", "OS_0 - OS_0: Rule 8: Readily Apparent Course Change (OS_0)"],
+    first_failure_time_s: 61,
+    encounters: {
+      "OS_0 - TS_10": ["OTHER"],
+      "OS_0 - TS_2": ["OTHER", "HEAD_ON"],
+      "OS_0 - TS_1": ["CROSSING_FROM_PORT", "OTHER"],
+    },
+    encounter_roles: {
+      "OS_0 - TS_1": { CROSSING_FROM_PORT: { give_way: ["TS_1"], stand_on: ["OS_0"] } },
+      "OS_0 - TS_2": { HEAD_ON: { give_way: ["OS_0", "TS_2"], stand_on: [] } },
+    },
+    ...overrides,
+  };
+}
+
 /** A case a step dropped (an invalid scene): no output. */
 export function sampleDroppedOutput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return sampleSceneOutput({ case_id: 8, case_index: 3, state: "dropped", reason: "scene is not valid", artifact: null, valid: false, verdict: null, ...overrides });

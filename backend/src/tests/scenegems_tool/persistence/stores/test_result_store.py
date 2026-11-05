@@ -179,6 +179,15 @@ def test_encounters_are_stored_with_the_verdict_and_null_when_absent(stores, cam
     assert [verdict.encounters for verdict in stores.results.list_verdicts(campaign.campaign_id)] == [encounters, None]
 
 
+def test_vessel_roles_are_stored_with_the_verdict_and_null_when_absent(stores, campaign):
+    a0, a1 = _cases(stores, campaign, CLASS_A, 2)
+    roles = {"OS_0 - TS_1": {"CROSSING_FROM_PORT": {"give_way": ["TS_1"], "stand_on": ["OS_0"]}}}
+    with_roles = stores.results.add_verdict(_verdict(a0, encounter_roles=roles))
+    without = stores.results.add_verdict(_verdict(a1))
+    assert with_roles.encounter_roles == roles and without.encounter_roles is None
+    assert [verdict.encounter_roles for verdict in stores.results.list_verdicts(campaign.campaign_id)] == [roles, None]
+
+
 def test_count_verdicts_takes_the_filters_of_list_verdicts(stores, campaign):
     a0, a1, a2 = _cases(stores, campaign, CLASS_A, 3)
     (b0,) = _cases(stores, campaign, CLASS_B, 1)

@@ -49,6 +49,21 @@ def test_a_result_without_encounters_gives_a_verdict_without_them():
     assert new_verdict(7, 0, pending_unmonitored(), None, sensitive=False).encounters is None
 
 
+def test_the_vessel_roles_travel_from_the_monitor_result_to_the_verdict():
+    roles = {"OS_0 - TS_1": {"CROSSING_FROM_PORT": {"give_way": ["TS_1"], "stand_on": ["OS_0"]}}}
+    verdict = new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounter_roles": roles, "passed": True}), None, sensitive=False)
+    assert verdict.encounter_roles == roles
+    live = new_verdict(7, 1, pending_from_live({"monitor": {"rules": {}, "failed_rules": [], "encounter_roles": roles, "passed": True, "stopped_early_at": None}}), None, sensitive=False)
+    assert live.encounter_roles == roles
+
+
+def test_a_result_without_vessel_roles_gives_a_verdict_without_them():
+    """A result of an older node, a run without an encounter and an unmonitored step all have none (stored as null)."""
+    assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=False).encounter_roles is None
+    assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounter_roles": {}, "passed": True}), None, sensitive=False).encounter_roles is None
+    assert new_verdict(7, 0, pending_unmonitored(), None, sensitive=False).encounter_roles is None
+
+
 def test_a_passed_run_has_no_failure_time():
     verdict = new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=True)
     assert verdict.state == VerdictState.PASSED and verdict.first_failure_time_s is None and verdict.sensitive

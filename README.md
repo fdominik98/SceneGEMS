@@ -12,7 +12,7 @@ SceneGEMS runs on a cluster: one master and any number of nodes, deployed by Mac
 | Path | Content |
 |------|---------|
 | [`backend/`](backend/) | Python package roots under `backend/src/`: `scenegems_tool` (workbench gateway, subsystems, vessel stacks, the cluster's master and node, the assurance pipeline, persistence), `functional_level`, `logical_level`, `concrete_level`, `evaluation`, `visualization`, `scripts`, `utils`, `tests`. Domain configuration, the 828 functional scenario classes and runtime assets are in `backend/assets/` |
-| [`frontend/`](frontend/) | React and Vite web console with the sections Workbench, Cluster, Capabilities, Campaigns, Campaign History and Results; in-app documentation in `frontend/website/` |
+| [`frontend/`](frontend/) | React and Vite web console with the sections Workbench, Cluster, Domain Configuration, Capabilities, Campaigns, Campaign History and Results; in-app documentation in `frontend/website/` |
 | [`deploy/images/`](deploy/images/) | One folder per Docker image: `master_api`, `node`, `mqtt_broker`, the subsystems `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, and the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images |
 | [`deploy/master/`](deploy/master/), [`deploy/node/`](deploy/node/) | The compose file and `.env.example` of each cluster role |
 | [`deploy/scripts/`](deploy/scripts/) | `build.sh` and its fingerprint and build helpers `docker-common.sh`; `./build.sh` in the repository root calls it |
@@ -46,7 +46,7 @@ In the web console, under Workbench:
 
 1. **Scene Generation**: load a functional scenario (one of the master's, or a `.problem` file) and generate a scene.
 2. **Trajectory Generation**: monitor-driven RRT, or straight trajectories over a time span.
-3. **Simulation**: run the scenario and play it back in the encounter view (nautical canvas, a card per vessel pair, rule timeline) with the COLREGS monitor's outcomes; record, replay and export.
+3. **Simulation**: run the scenario and play it back in the encounter view (nautical canvas, a card per vessel pair, rule timeline) with the COLREGS monitor's outcomes. Every run is kept in Campaign History, which can replay it, and its frames can be exported.
 4. **Connections**: the MQTT broker of live simulation sessions (the master's own by default).
 
 Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and obstacle types of the cluster, edited in a form generated from the YAML or as raw YAML and saved on the master; every workbench run and campaign uses them. Every preset comes from the master and ships in its image from `backend/assets/`: the domain presets (`domain_config/`), the functional scenarios (`generated_functional_models/all/`) and the campaign presets the wizard starts from (`campaign_presets/`).
@@ -153,7 +153,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
    ```
 
    `--api` (or `SCENEGEMS_OPERATOR_URL`) chooses another master; the default is `http://127.0.0.1:5174`. An example config is `backend/src/tests/scenegems_tool/assurance/campaign/data/exit_campaign.yaml`.
-10. **Follow and inspect.** **Campaign History** lists campaigns and workbench entries; an entry shows the outputs of each step (open one in the workbench, or watch a running job live), and a campaign its coverage per class, events and controls (start, pause, drain, resume, stop). **Cluster** shows each node's pools (scene generation samples, trajectory search previews) and running jobs live, a simulation at a chosen speed. **Results** summarizes the monitor findings of an entry per executed step and lists the verdicts with filters, totals and CSV export, and a case's steps, run records and recorded run with the monitor's frames.
+10. **Follow and inspect.** **Campaign History** lists campaigns and workbench entries; an entry shows the outputs of each step (open one in the workbench, or watch a running job live), and a campaign its coverage per class, events and controls (start, pause, drain, resume, stop). **Cluster** shows each node's pools (scene generation samples, trajectory search previews) and running jobs live, a simulation at a chosen speed. **Results** summarizes the monitor findings of an entry per executed step and lists the monitor summaries with filters, totals and CSV export, and a case's steps, run records and recorded run with the monitor's frames.
 
 ### Updating and removing a cluster
 

@@ -1,16 +1,39 @@
 import type { ActorStaticInfo } from "../../../domain/simulation/types";
+import type { Theme } from "../../../app/theme";
 import type { TrajectoryStream } from "../../../app/uiStore";
 
-const SHIP_COLOR_MAP: Record<string, string> = {
-  os: "#06b6d4", // color interpretation: blue
-  ts1: "#f97316", // color interpretation: orange
-  ts2: "#22c55e", // color interpretation: green
-  ts3: "#a855f7", // color interpretation: purple
-  ts4: "#eab308", // color interpretation: yellow
-  ts5: "#ef4444", // color interpretation: red
-  ts6: "#3b82f6", // color interpretation: blue
-  ts7: "#14b8a6", // color interpretation: teal
-  ts8: "#f43f5e", // color interpretation: pink
+/**
+ * A vessel keeps its hue in both modes; light mode takes a darker shade of it to stand out on the pale sea.
+ * These are literals because the simulation stream's darker twin is computed from them.
+ */
+const SHIP_COLOR_MAPS: Record<Theme, Record<string, string>> = {
+  dark: {
+    os: "#06b6d4", // color interpretation: blue
+    ts1: "#f97316", // color interpretation: orange
+    ts2: "#22c55e", // color interpretation: green
+    ts3: "#a855f7", // color interpretation: purple
+    ts4: "#eab308", // color interpretation: yellow
+    ts5: "#ef4444", // color interpretation: red
+    ts6: "#3b82f6", // color interpretation: blue
+    ts7: "#14b8a6", // color interpretation: teal
+    ts8: "#f43f5e", // color interpretation: pink
+  },
+  light: {
+    os: "#0891b2",
+    ts1: "#ea580c",
+    ts2: "#16a34a",
+    ts3: "#9333ea",
+    ts4: "#ca8a04",
+    ts5: "#dc2626",
+    ts6: "#2563eb",
+    ts7: "#0d9488",
+    ts8: "#e11d48",
+  },
+};
+
+const FALLBACK_PALETTES: Record<Theme, string[]> = {
+  dark: ["#22d3ee", "#f59e0b", "#a78bfa", "#34d399", "#f87171", "#60a5fa"],
+  light: ["#0891b2", "#d97706", "#7c3aed", "#059669", "#dc2626", "#2563eb"],
 };
 
 function normalizeShipKey(name: string): string {
@@ -25,8 +48,8 @@ function normalizeShipKey(name: string): string {
   return lower;
 }
 
-function fallbackColor(id: string): string {
-  const palette = ["#22d3ee", "#f59e0b", "#a78bfa", "#34d399", "#f87171", "#60a5fa"];
+function fallbackColor(id: string, theme: Theme): string {
+  const palette = FALLBACK_PALETTES[theme];
   let hash = 0;
   for (let i = 0; i < id.length; i += 1) {
     hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
@@ -34,46 +57,48 @@ function fallbackColor(id: string): string {
   return palette[hash % palette.length];
 }
 
-export function getShipColor(actor: ActorStaticInfo): string {
+export function getShipColor(actor: ActorStaticInfo, theme: Theme = "dark"): string {
+  const shipColors = SHIP_COLOR_MAPS[theme];
   if (actor.isOwnShip) {
-    return SHIP_COLOR_MAP.os;
+    return shipColors.os;
   }
   const key = normalizeShipKey(actor.name);
-  return SHIP_COLOR_MAP[key] ?? fallbackColor(actor.id);
+  return shipColors[key] ?? fallbackColor(actor.id, theme);
 }
 
 /**
  * Scene-generation coloring: own ship is always OS; targets use TS1..TSn in actor order
  * (matches generated scenes even when loaded files use vessel-type names).
  */
-export function buildShipColorsByActorId(actors: ActorStaticInfo[]): Record<string, string> {
+export function buildShipColorsByActorId(actors: ActorStaticInfo[], theme: Theme = "dark"): Record<string, string> {
+  const shipColors = SHIP_COLOR_MAPS[theme];
   const colors: Record<string, string> = {};
   let targetNumber = 0;
 
   for (const actor of actors) {
     if (!actor.isVessel) {
-      colors[actor.id] = fallbackColor(actor.id);
+      colors[actor.id] = fallbackColor(actor.id, theme);
       continue;
     }
 
     if (actor.isOwnShip) {
-      colors[actor.id] = SHIP_COLOR_MAP.os;
+      colors[actor.id] = shipColors.os;
       continue;
     }
 
     const nameKey = normalizeShipKey(actor.name);
-    if (nameKey.startsWith("ts") && SHIP_COLOR_MAP[nameKey]) {
-      colors[actor.id] = SHIP_COLOR_MAP[nameKey];
+    if (nameKey.startsWith("ts") && shipColors[nameKey]) {
+      colors[actor.id] = shipColors[nameKey];
       continue;
     }
 
     targetNumber += 1;
-    colors[actor.id] = SHIP_COLOR_MAP[`ts${targetNumber}`] ?? fallbackColor(actor.id);
+    colors[actor.id] = shipColors[`ts${targetNumber}`] ?? fallbackColor(actor.id, theme);
   }
 
   for (const actor of actors) {
     if (!(actor.id in colors)) {
-      colors[actor.id] = fallbackColor(actor.id);
+      colors[actor.id] = fallbackColor(actor.id, theme);
     }
   }
 
@@ -154,8 +179,8 @@ const SIM_SATURATION_BOOST = 1.06;
 /**
  * Simulation-stream visuals: same family as `getShipColor`, but clearly darker (HSL lightness).
  */
-export function getSimulationStreamColor(actor: ActorStaticInfo): string {
-  const { r, g, b } = hexToRgb(getShipColor(actor));
+export function getSimulationStreamColor(actor: ActorStaticInfo, theme: Theme = "dark"): string {
+  const { r, g, b } = hexToRgb(getShipColor(actor, theme));
   const hsl = rgbToHsl(r, g, b);
   const l = Math.max(0.08, hsl.l * SIM_LIGHTNESS_SCALE);
   const s = hsl.s === 0 ? 0 : Math.min(1, hsl.s * SIM_SATURATION_BOOST);
@@ -164,6 +189,6 @@ export function getSimulationStreamColor(actor: ActorStaticInfo): string {
 }
 
 /** Right-panel dots: animation = ship colors; simulation = darker same-hue. */
-export function getActorPanelDotColor(actor: ActorStaticInfo, panelKind: TrajectoryStream): string {
-  return panelKind === "simulation" ? getSimulationStreamColor(actor) : getShipColor(actor);
+export function getActorPanelDotColor(actor: ActorStaticInfo, panelKind: TrajectoryStream, theme: Theme = "dark"): string {
+  return panelKind === "simulation" ? getSimulationStreamColor(actor, theme) : getShipColor(actor, theme);
 }

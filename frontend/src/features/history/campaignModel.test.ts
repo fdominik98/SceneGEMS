@@ -25,6 +25,7 @@ import {
   runIndexes,
   runNames,
   runVerdicts,
+  stepMonitored,
 } from "./campaignModel";
 
 const summary = (overrides: Record<string, unknown> = {}) => campaignSummarySchema.parse({ ...sampleCampaignSummary, ...overrides });
@@ -225,6 +226,31 @@ describe("coverage rows", () => {
     expect(baseSeed(config)).toBe(20261029);
     expect(baseSeed(campaignConfigSchema.parse({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-26T09:00:00+00:00", config: {} }] }))).toBeNull();
     expect(baseSeed(null)).toBeNull();
+  });
+
+  describe("which steps the config monitors", () => {
+    const configWith = (config: Record<string, unknown>) =>
+      campaignConfigSchema.parse({ current_version: 2, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-26T09:00:00+00:00", config: {} }, { version: 2, config_hash: "b", created_at: "2026-10-26T10:00:00+00:00", config }] });
+
+    it("reads the monitor of a generation step, off when the config stores none", () => {
+      const config = configWith({ scene_generation: { monitor: "post_hoc" }, trajectories: { monitor: "empty" } });
+      expect(stepMonitored(config, "scene_generation")).toBe(true);
+      expect(stepMonitored(config, "trajectory_generation")).toBe(false);
+      expect(stepMonitored(configWith({}), "scene_generation")).toBe(false);
+      expect(stepMonitored(configWith({}), "trajectory_generation")).toBe(false);
+    });
+
+    it("monitors the simulation when any run does, a run without a monitor post hoc", () => {
+      expect(stepMonitored(configWith({ execution: { runs: [{ monitor: "empty" }, { monitor: "live" }] } }), "simulation")).toBe(true);
+      expect(stepMonitored(configWith({ execution: { runs: [{}] } }), "simulation")).toBe(true);
+      expect(stepMonitored(configWith({ execution: { runs: [{ monitor: "empty" }] } }), "simulation")).toBe(false);
+      expect(stepMonitored(configWith({}), "simulation")).toBe(false);
+    });
+
+    it("does not know without a config", () => {
+      expect(stepMonitored(null, "simulation")).toBeNull();
+      expect(stepMonitored(undefined, "scene_generation")).toBeNull();
+    });
   });
 });
 

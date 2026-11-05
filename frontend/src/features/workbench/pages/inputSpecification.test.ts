@@ -58,12 +58,12 @@ describe("sceneInputSpecification", () => {
   });
 
   it("reads a catalog class's functional scenario from the master's catalog", async () => {
-    const { client, fetch, paths } = operator(caseView("3vessel_0obstacle_scenarios/functional_model5", null));
+    const { client, fetch, paths } = operator(caseView("3vessel_0obstacle_scenarios/fec5", null));
     expect(await sceneInputSpecification(client, { campaignId: "wb1", caseId: 3 }, { fetch })).toEqual({
-      label: "3vessel_0obstacle_scenarios/functional_model5",
+      label: "3vessel_0obstacle_scenarios/fec5",
       text: "OS(os1).\nTS(ts1).\nTS(ts2).\n",
     });
-    expect(paths[1]).toBe("/cluster/catalog/fecs/3vessel_0obstacle_scenarios/functional_model5");
+    expect(paths[1]).toBe("/cluster/catalog/fecs/3vessel_0obstacle_scenarios/fec5");
   });
 
   it("has none for an item class or a master that does not name the input", async () => {

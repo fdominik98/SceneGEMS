@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTheme } from "../../app/theme";
 import type { OverlayVisibility } from "../../app/uiStore";
 import { usePersistedState } from "../../app/usePersistedState";
 import type { SimulationFrame } from "../../domain/simulation/types";
@@ -62,9 +63,10 @@ export function EncounterView({
 
   const actors = frame?.actors;
   const actorKey = actors?.map((actor) => `${actor.id}:${actor.name}`).join("|") ?? "";
+  const theme = useTheme();
   // Colors and names change only when the cast changes, not with every frame.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const colorByActorId = useMemo(() => buildShipColorsByActorId(actors ?? []), [actorKey]);
+  const colorByActorId = useMemo(() => buildShipColorsByActorId(actors ?? [], theme), [actorKey, theme]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const names = useMemo(() => buildActorNameMap(actors), [actorKey]);
 

@@ -60,7 +60,7 @@ export function runDuration(startedAt: string | null, finishedAt: string | null,
   return formatDuration((end - start) / 1000);
 }
 
-/** The last path segment of a class id, with the folder kept when it is short: `3vessel_0obstacle_scenarios/functional_model5`. */
+/** The last path segment of a class id, with the folder kept when it is short: `3vessel_0obstacle_scenarios/fec5`. */
 export function splitClassId(classId: string): { folder: string; name: string } {
   const slash = classId.lastIndexOf("/");
   return slash === -1 ? { folder: "", name: classId } : { folder: classId.slice(0, slash), name: classId.slice(slash + 1) };

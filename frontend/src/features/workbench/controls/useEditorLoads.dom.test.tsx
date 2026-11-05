@@ -24,10 +24,10 @@ describe("useEditorLoads", () => {
   it("names the pick while it loads, then applies it", async () => {
     const { apply, hook } = setup();
     const first = deferred();
-    act(() => hook.result.current.load("1vessel_0obstacle_scenarios/functional_model0", () => first.promise, "failed"));
-    expect(hook.result.current.pending).toEqual({ label: "1vessel_0obstacle_scenarios/functional_model0" });
-    await act(async () => first.resolve({ label: "1vessel_0obstacle_scenarios/functional_model0", text: "OS(os1).\n" }));
-    expect(apply).toHaveBeenCalledWith({ label: "1vessel_0obstacle_scenarios/functional_model0", text: "OS(os1).\n" });
+    act(() => hook.result.current.load("1vessel_0obstacle_scenarios/fec0", () => first.promise, "failed"));
+    expect(hook.result.current.pending).toEqual({ label: "1vessel_0obstacle_scenarios/fec0" });
+    await act(async () => first.resolve({ label: "1vessel_0obstacle_scenarios/fec0", text: "OS(os1).\n" }));
+    expect(apply).toHaveBeenCalledWith({ label: "1vessel_0obstacle_scenarios/fec0", text: "OS(os1).\n" });
     expect(hook.result.current.pending).toBeNull();
   });
 

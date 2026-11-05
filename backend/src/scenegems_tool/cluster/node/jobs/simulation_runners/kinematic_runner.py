@@ -19,7 +19,7 @@ import threading
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional, Tuple
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
 from scenegems_tool.cluster.node.job_report import JobReport, JobResultData
@@ -55,14 +55,26 @@ def vessel_stacks(mode: KinematicMode) -> Tuple[StackTriple, ...]:
 
 
 class UsvNavigationPayload(ProtocolModel):
-    """UsvNavigationParameters in full; leave it out for the SceneGEMS defaults (from_reference)."""
+    """UsvNavigationParameters in full; leave it out for the SceneGEMS defaults (from_reference).
+
+    horizon is left out of the JSON while it is absent, so a config written before it existed
+    keeps its JSON and its hash.
+    """
 
     goal: Tuple[float, float]
     speed: float = Field(gt=0.0)
     safety_radius: float = Field(gt=0.0)
     control_horizon: float = Field(gt=0.0)
     prescribed_time: float = Field(default=DEFAULT_PRESCRIBED_TIME_S, gt=0.0)
+    horizon: Optional[float] = Field(default=None, gt=0.0)
     runtime_options: Dict[str, float] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _without_absent_horizon(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        data = handler(self)
+        if self.horizon is None:
+            data.pop("horizon", None)
+        return data
 
     def to_parameters(self) -> UsvNavigationParameters:
         return UsvNavigationParameters(
@@ -71,6 +83,7 @@ class UsvNavigationPayload(ProtocolModel):
             safety_radius=self.safety_radius,
             control_horizon=self.control_horizon,
             prescribed_time=self.prescribed_time,
+            horizon=self.horizon,
             runtime_options=tuple(sorted(self.runtime_options.items())),
         )
 

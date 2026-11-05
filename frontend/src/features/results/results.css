@@ -136,7 +136,7 @@
   padding: var(--control-pad-y) var(--control-pad-x);
   border: 1px solid var(--accent-strong);
   border-radius: var(--radius);
-  background: #1e3a8a;
+  background: var(--accent-solid);
   color: var(--text);
   font-size: var(--font-size-sm);
   font-weight: 600;
@@ -144,7 +144,7 @@
 }
 
 .results-csv:hover {
-  background: #1d4ed8;
+  background: var(--accent-solid-hover);
 }
 
 /* Summary */
@@ -175,11 +175,11 @@
 }
 
 .results-tile--passed {
-  border-left-color: #22c55e;
+  border-left-color: var(--ok);
 }
 
 .results-tile--failed {
-  border-left-color: #ef4444;
+  border-left-color: var(--danger);
 }
 
 .results-tile--unmonitored {
@@ -225,11 +225,11 @@
 }
 
 .results-bar-fill--failed {
-  background: #ef4444;
+  background: var(--danger);
 }
 
 .results-count-failed {
-  color: #fca5a5;
+  color: var(--danger-text);
   font-weight: 600;
 }
 
@@ -323,11 +323,11 @@
 }
 
 .results-row--failed td:first-child {
-  box-shadow: inset 3px 0 0 #ef4444;
+  box-shadow: inset 3px 0 0 var(--danger);
 }
 
 .results-row--passed td:first-child {
-  box-shadow: inset 3px 0 0 #22c55e;
+  box-shadow: inset 3px 0 0 var(--ok);
 }
 
 .results-row--unmonitored td:first-child {
@@ -335,7 +335,7 @@
 }
 
 .results-row-failed td {
-  background: rgba(239, 68, 68, 0.07);
+  background: rgb(var(--danger-rgb) / 0.07);
 }
 
 .results-row-detail td {
@@ -349,7 +349,7 @@
 }
 
 .results-error-cell {
-  color: #fca5a5;
+  color: var(--danger-text);
   max-width: 320px;
 }
 
@@ -397,9 +397,9 @@
   white-space: nowrap;
   padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
-  color: #fca5a5;
+  border: 1px solid rgb(var(--danger-rgb) / 0.45);
+  background: rgb(var(--danger-rgb) / 0.1);
+  color: var(--danger-text);
   font-size: var(--font-size-xs);
 }
 
@@ -434,17 +434,17 @@
 .results-chip--passed,
 .results-chip--succeeded,
 .results-chip--complete {
-  color: #4ade80;
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--ok-text);
+  border-color: rgb(var(--ok-rgb) / 0.45);
+  background: rgb(var(--ok-rgb) / 0.1);
 }
 
 .results-chip--failed,
 .results-chip--cancelled,
 .results-chip--dropped {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.45);
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--danger-text);
+  border-color: rgb(var(--danger-rgb) / 0.45);
+  background: rgb(var(--danger-rgb) / 0.1);
 }
 
 .results-chip--running,
@@ -452,9 +452,9 @@
 .results-chip--queued,
 .results-chip--active,
 .results-chip--undecided {
-  color: #fcd34d;
-  border-color: rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.1);
+  color: var(--warn-text);
+  border-color: rgb(var(--warn-rgb) / 0.45);
+  background: rgb(var(--warn-rgb) / 0.1);
 }
 
 .run-tag {
@@ -489,13 +489,13 @@
 }
 
 .results-notice--warn {
-  border-color: rgba(245, 158, 11, 0.55);
-  background: rgba(245, 158, 11, 0.08);
+  border-color: rgb(var(--warn-rgb) / 0.55);
+  background: rgb(var(--warn-rgb) / 0.08);
 }
 
 .results-notice--bad {
-  border-color: rgba(239, 68, 68, 0.55);
-  background: rgba(239, 68, 68, 0.08);
+  border-color: rgb(var(--danger-rgb) / 0.55);
+  background: rgb(var(--danger-rgb) / 0.08);
 }
 
 .results-reason {
@@ -506,8 +506,8 @@
 }
 
 .results-reason--bad {
-  border-left-color: #ef4444;
-  color: #fca5a5;
+  border-left-color: var(--danger);
+  color: var(--danger-text);
 }
 
 /* Case page */
@@ -589,11 +589,11 @@
 }
 
 .verdict-card--failed {
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid var(--danger);
 }
 
 .verdict-card--passed {
-  border-left: 3px solid #22c55e;
+  border-left: 3px solid var(--ok);
 }
 
 .run-artifacts {
@@ -686,15 +686,15 @@
 }
 
 .run-chip--failed {
-  color: #fca5a5;
-  border-color: rgba(239, 68, 68, 0.55);
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--danger-text);
+  border-color: rgb(var(--danger-rgb) / 0.55);
+  background: rgb(var(--danger-rgb) / 0.12);
 }
 
 .run-chip--passed {
-  color: #4ade80;
-  border-color: rgba(34, 197, 94, 0.45);
-  background: rgba(34, 197, 94, 0.1);
+  color: var(--ok-text);
+  border-color: rgb(var(--ok-rgb) / 0.45);
+  background: rgb(var(--ok-rgb) / 0.1);
 }
 
 .run-controls {
@@ -736,7 +736,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #ef4444;
+  background: var(--danger);
   opacity: 0.85;
 }
 
@@ -819,7 +819,7 @@
 }
 
 .run-relation--failed {
-  border-color: rgba(239, 68, 68, 0.55);
+  border-color: rgb(var(--danger-rgb) / 0.55);
 }
 
 .run-relation > header {
@@ -858,13 +858,13 @@
 }
 
 .run-rule--failed .run-result {
-  background: rgba(239, 68, 68, 0.18);
-  color: #fca5a5;
+  background: rgb(var(--danger-rgb) / 0.18);
+  color: var(--danger-text);
 }
 
 .run-rule--passed .run-result {
-  background: rgba(34, 197, 94, 0.14);
-  color: #4ade80;
+  background: rgb(var(--ok-rgb) / 0.14);
+  color: var(--ok-text);
 }
 
 .run-artifacts a,

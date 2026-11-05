@@ -13,15 +13,15 @@ Domain Configuration defines the maritime domain model that scene generation and
 - **Vessel types**: the vessel type definitions.
 - **Static obstacle types**: the static obstacle type definitions.
 
-Each text has its own tab, so its form or YAML editor takes the full width of the page.
+Each text has its own tab, so its editor takes the full width of the page. The editor has two views of the same text: **Form**, generated from the YAML, and **YAML text**. **Show technical names** adds the YAML's identifiers to the form.
 
 ## Per-text tools
 
 | Action | Description |
 |--------|-------------|
 | Load a preset of the master | The presets the master ships (`backend/assets/domain_config/`); the default one is marked. The select shows which preset a text is, or "Edited" when it is none of them |
-| Load from computer | Import a local `.yaml` / `.yml` file |
-| Export as YAML file | Download the text |
+| Load from computer | Under **Files: load or export**: import a local `.yaml` / `.yml` file |
+| Export as YAML file | Under **Files: load or export**: download the text |
 
 ## Saving
 

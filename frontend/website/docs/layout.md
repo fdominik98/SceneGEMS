@@ -8,16 +8,21 @@ title: Application layout
 The interface is organized into persistent regions:
 
 **Left pane**
-: Collapsible navigation menu with the SceneGEMS brand, hamburger toggle, and links to the four main views plus documentation.
+: The navigation menu with the SceneGEMS brand, the hamburger toggle, the sections and their hints, the active cluster, the light or dark mode switch and the link to this documentation. Collapsed, it is a rail of icons with the names as tooltips. See [Left navigation menu](./navigation).
+
+**Main area**
+: The section chosen in the menu. A section of the Cluster group fills it with one page under a header. The workbench's Connections page does too, and its Scene Generation, Trajectory Generation and Simulation pages divide it into the panes below.
 
 **Center pane**
-: Primary workspace: domain editors, scene canvas, MQTT broker connection form, or simulation view depending on the active menu item.
+: On the three workbench pages: the [scene canvas](./scene-canvas), with the playback bar and the rule timeline under it on the trajectory and simulation pages.
 
 **Right pane**
-: Contextual sidebar shown in **Simulation** (monitoring panel) and **Scene Generation** (functional spec editor and preset catalog). Can be hidden and restored via the Monitor button or panel controls.
+: On Scene Generation: the FEC specification editor and catalog, or the monitor preview. On Trajectory Generation and Simulation: the [monitoring panel](./monitoring), which a button in its toolbar hides and a button in the canvas toolbar shows again.
 
-**Bottom toolbar**
-: In Simulation and Scene Generation views, a resizable bottom panel hosts playback controls or scene-generation actions.
+**Bottom panel**
+: On the three workbench pages, under the canvas: the step, its status, where the run happens and its run button, then the rows **Input**, **Setup** and **Result**. It takes the height it needs, at most half the page, until you [drag its resizer](./resizing).
 
 **Global error bar**
-: A dismissible footer alert appears when scene generation or backend errors occur. Click anywhere on the bar to dismiss.
+: A dismissible alert at the bottom of the screen when scene generation or the workbench gateway reports an error. Click anywhere on the bar to dismiss.
+
+Below 1100 px wide, the workbench's panes stack and scroll as one page. Below 800 px, the left pane becomes a bar at the top.

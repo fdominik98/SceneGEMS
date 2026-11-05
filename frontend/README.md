@@ -2,7 +2,7 @@
 
 A Scenario Generation and Execution Framework for Simulation-Based Assurance of Maritime Autonomous Surface Vehicles.
 
-Browser-based console for exploring autonomous surface vehicle (ASV) maritime assurance scenarios: functional scenario specs (`.problem`), domain YAML configuration, trajectory playback, COLREGS monitoring, and jobs on a SceneGEMS cluster.
+Browser-based console for exploring autonomous surface vehicle (ASV) maritime assurance scenarios: functional scenario specs (`.problem`), domain YAML configuration, trajectory playback, COLREGS monitoring, and jobs on a SceneGEMS cluster, in dark or light mode.
 
 ## Prerequisites
 
@@ -22,9 +22,9 @@ Open http://localhost:5173. The console has no backend of its own: the workbench
 
 1. Run `npm run dev` and select a deployed cluster in the left pane.
 2. Optional: open **Domain Configuration** in the Cluster group to review the cluster's COLREGS constants, vessel types and obstacle types (the master's default presets apply until one is saved).
-3. Open **Scene Generation**: pick one of the master's functional scenarios (use **Find a preset** to search and filter), then click **Generate scene**.
-4. Click **Next: Trajectory Generation**, generate trajectories, then **Load for Simulation** to open **Simulation** for dual-stream playback, metrics, and exports.
-5. Optional: **Record and replay** under Simulation controls, and the **Batch** tab in Scene Generation to run several functional scenarios.
+3. Open **Scene Generation**: pick one of the master's FECs (use **Find a FEC** to search and filter), then click **Generate scene**.
+4. Click **Next: Trajectory Generation**, generate trajectories, then **Next: Simulation** to open **Simulation** for dual-stream playback, metrics, and exports.
+5. Optional: the **Batch** tab in Scene Generation to run several FECs, and **Campaigns** to run them at scale. Every run is kept in **Campaign History**, which replays it in the workbench.
 
 ## Documentation
 

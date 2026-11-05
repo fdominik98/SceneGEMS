@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { outputRowSchema } from "../../domain/cluster/historyApi";
+import { outputRowSchema, outputVerdictSchema } from "../../domain/cluster/historyApi";
 import { campaignsReducer } from "../../domain/cluster/liveTopics";
 import { OperatorApiError } from "../../domain/cluster/operatorApi";
 import { campaignRowSchema } from "../../domain/cluster/schemas";
 import {
   sampleCampaignRow,
   sampleDroppedOutput,
+  sampleMonitorVerdict,
   sampleRunningWorkbenchRow,
   sampleSceneOutput,
   sampleSimulationOutput,
@@ -27,17 +28,112 @@ import {
   madeByLabel,
   matchesListView,
   mergeLiveRows,
+  monitorSummary,
   originLabel,
   outputCaseLabel,
   outputFlags,
   outputTarget,
   rowTotalsSummary,
   runLabel,
+  showsMonitorSummary,
   stepsLabel,
 } from "./historyModel";
 
 const row = (raw: Record<string, unknown>) => campaignRowSchema.parse(raw);
 const output = (raw: Record<string, unknown>) => outputRowSchema.parse(raw);
+const summaryOf = (overrides: Record<string, unknown> = {}) => monitorSummary(outputVerdictSchema.parse(sampleMonitorVerdict(overrides)));
+
+describe("the monitor summary", () => {
+  it("says who gives way per encounter, with the failed rules under their pair", () => {
+    const summary = summaryOf();
+    expect(summary.state).toBe("failed");
+    expect(summary.headline).toBe("2 rules failed, first at 1 min 1 s");
+    expect(summary.pairs).toEqual([
+      {
+        relation: "OS_0 - TS_1",
+        encounters: [
+          {
+            type: "CROSSING_FROM_PORT",
+            label: "Crossing from Port",
+            roles: [
+              { vessel: "TS_1", role: "give-way" },
+              { vessel: "OS_0", role: "stand-on" },
+            ],
+          },
+        ],
+        failedRules: ["Rule 16: Give-Way Vessel Takes Early and Substantial Action (TS_1)"],
+      },
+      {
+        relation: "OS_0 - TS_2",
+        encounters: [
+          {
+            type: "HEAD_ON",
+            label: "Head-On",
+            roles: [
+              { vessel: "OS_0", role: "give-way" },
+              { vessel: "TS_2", role: "give-way" },
+            ],
+          },
+        ],
+        failedRules: [],
+      },
+    ]);
+  });
+
+  it("only counts a pair that never met in an encounter and failed nothing", () => {
+    expect(summaryOf().quietPairs).toBe(1);
+    expect(summaryOf({ failed_rules: [], encounters: { "OS_0 - TS_1": ["OTHER"], "OS_0 - TS_2": ["OTHER"] }, encounter_roles: null }).pairs).toEqual([]);
+    expect(summaryOf({ failed_rules: [], encounters: { "OS_0 - TS_1": ["OTHER"], "OS_0 - TS_2": ["OTHER"] }, encounter_roles: null }).quietPairs).toBe(2);
+  });
+
+  it("keeps a pair without an encounter when a rule failed for it", () => {
+    const summary = summaryOf({ failed_rules: ["OS_0 - TS_1: Rule 8: Passing at a Safe Distance (OS_0 - TS_1)"], encounters: { "OS_0 - TS_1": ["OTHER"] }, encounter_roles: null });
+    expect(summary.pairs).toEqual([{ relation: "OS_0 - TS_1", encounters: [], failedRules: ["Rule 8: Passing at a Safe Distance (OS_0 - TS_1)"] }]);
+    expect(summary.quietPairs).toBe(0);
+  });
+
+  it("orders the pairs by name, numbers inside names in order", () => {
+    const summary = summaryOf({ failed_rules: [], encounters: { "OS_0 - TS_10": ["HEAD_ON"], "OS_0 - TS_2": ["HEAD_ON"] }, encounter_roles: null });
+    expect(summary.pairs.map((pair) => pair.relation)).toEqual(["OS_0 - TS_2", "OS_0 - TS_10"]);
+  });
+
+  it("names a vessel's own failed rule without the relation of the vessel with itself", () => {
+    expect(summaryOf().otherFailedRules).toEqual(["Rule 8: Readily Apparent Course Change (OS_0)"]);
+  });
+
+  it("marks the roles as not recorded for a verdict stored before them", () => {
+    const summary = summaryOf({ encounter_roles: null });
+    expect(summary.pairs[0].encounters[0]).toEqual({ type: "CROSSING_FROM_PORT", label: "Crossing from Port", roles: null });
+  });
+
+  it("reads a verdict of an older master: the state and the failed rules, with their relation kept", () => {
+    const summary = monitorSummary(outputVerdictSchema.parse({ state: "failed", failed_rules: ["OS_0 - TS_1: rule_13", "rule_15"] }));
+    expect(summary.headline).toBe("2 rules failed");
+    expect(summary.pairs).toEqual([]);
+    expect(summary.quietPairs).toBe(0);
+    expect(summary.otherFailedRules).toEqual(["OS_0 - TS_1: rule_13", "rule_15"]);
+  });
+
+  it("says when no rule failed, and has nothing to say without a monitor", () => {
+    expect(summaryOf({ state: "passed", failed_rules: [], first_failure_time_s: null }).headline).toBe("no rule failed");
+    expect(summaryOf({ state: "unmonitored", failed_rules: [], first_failure_time_s: null, encounters: null, encounter_roles: null }).headline).toBeNull();
+  });
+
+  it("gives a rule that failed at the very start its time", () => {
+    expect(summaryOf({ failed_rules: ["rule_15"], first_failure_time_s: 0 }).headline).toBe("1 rule failed, first at 0 s");
+  });
+
+  it("is shown for a monitored step, and otherwise only when a row says a monitor judged it", () => {
+    const judged = output(sampleSceneOutput());
+    const unjudged = output(sampleSceneOutput({ verdict: null }));
+    const unmonitored = output(sampleSceneOutput({ verdict: { state: "unmonitored", failed_rules: [] } }));
+    expect(showsMonitorSummary(true, [unjudged])).toBe(true);
+    expect(showsMonitorSummary(false, [unjudged, unmonitored])).toBe(false);
+    expect(showsMonitorSummary(null, [unjudged])).toBe(false);
+    expect(showsMonitorSummary(null, [unjudged, judged])).toBe(true);
+    expect(showsMonitorSummary(false, [judged])).toBe(true);
+  });
+});
 
 describe("entries", () => {
   it("reads kind, origin and steps, with the pre Phase 6 defaults", () => {

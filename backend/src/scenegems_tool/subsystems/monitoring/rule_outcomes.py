@@ -7,6 +7,9 @@ simulation step by step; both add every monitored scene in order. The summary:
     failed_rules  [{relation, rule, first_failed_at}], by first failure time, then relation and rule
     encounters    per relation (keyed like rules), the situation types (COLREGSType names) of the pair
                   in order of first appearance; a scene judged alone has its one type per pair
+    encounter_roles  per relation and situation type (OTHER has no roles), the vessel names by role
+                  ("give_way", "stand_on") when the type first appeared. The relation key orders
+                  the vessels by id, so it cannot say who gives way
     passed        no rule failed
 
 How rule results evolve (concrete_level/colregs_monitoring): while a rule is active, its
@@ -21,15 +24,25 @@ from typing import Any, Dict, List, Optional
 
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import COLREGSRuleResult, COLREGSRuleResultMapSet
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults
+from concrete_level.colregs_monitoring.situation_context import COLREGSType, SituationContext
 
 FirstOutcomes = Dict[str, Dict[str, Dict[str, int]]]  # relation, rule, outcome: first timestamp
 Encounters = Dict[str, List[str]]  # relation: situation types (COLREGSType names) in order of first appearance
+EncounterRoles = Dict[str, Dict[str, Dict[str, List[str]]]]  # relation, situation type, role: vessel names
+
+
+def _roles_of(context: SituationContext) -> Dict[str, List[str]]:
+    return {
+        "give_way": [actor.name for actor in context.actors if context.is_give_way_actor(actor)],
+        "stand_on": [actor.name for actor in context.actors if context.is_stand_on_actor(actor)],
+    }
 
 
 class RuleOutcomes:
     def __init__(self) -> None:
         self.first_outcomes: FirstOutcomes = {}
         self.encounters: Encounters = {}
+        self.encounter_roles: EncounterRoles = {}
         self.monitored_scenes = 0
         self._latest: Optional[COLREGSRuleResultMapSet] = None
 
@@ -40,6 +53,8 @@ class RuleOutcomes:
             types = self.encounters.setdefault(str(relation), [])
             if context.situation_type.name not in types:
                 types.append(context.situation_type.name)
+                if context.situation_type != COLREGSType.OTHER:
+                    self.encounter_roles.setdefault(str(relation), {})[context.situation_type.name] = _roles_of(context)
         for relation, result_map in monitored_scene.monitor_result_map_set.items():
             rules = self.first_outcomes.setdefault(str(relation), {})
             for rule, outcome in result_map.items():
@@ -70,4 +85,4 @@ class RuleOutcomes:
 
     def summary(self) -> Dict[str, Any]:
         failed = self.failed_rules()
-        return {"rules": self.first_outcomes, "failed_rules": failed, "encounters": self.encounters, "passed": not failed}
+        return {"rules": self.first_outcomes, "failed_rules": failed, "encounters": self.encounters, "encounter_roles": self.encounter_roles, "passed": not failed}

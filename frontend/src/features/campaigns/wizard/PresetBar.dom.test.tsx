@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { catalogStacksSchema } from "../../../domain/cluster/campaignApi";
-import { sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
+import { catalogClassSchema, catalogStacksSchema } from "../../../domain/cluster/campaignApi";
+import { sampleCatalogClasses, sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
 import type { BuilderCatalog } from "./configBuilder";
 import { PresetBar } from "./PresetBar";
 import { WithQueries } from "./wizardTestHarness";
@@ -13,6 +13,7 @@ import type { WizardDraft } from "./wizardState";
 
 const parsed = catalogStacksSchema.parse(sampleCatalogStacks);
 const catalog: BuilderCatalog = { stacks: parsed.stacks, generators: parsed.trajectory_generators };
+const classes = sampleCatalogClasses.map((entry) => catalogClassSchema.parse(entry));
 
 const SHIPPED = {
   preset_id: "01_smoke_test",
@@ -31,6 +32,22 @@ const SHIPPED = {
   updated_at: null,
 };
 const SAVED = { ...SHIPPED, preset_id: "p-1", name: "nightly", builtin: false, description: "", created_at: "2026-10-29T09:30:00+00:00", updated_at: "2026-10-29T09:30:00+00:00" };
+const SITL_PRESET = {
+  ...SHIPPED,
+  preset_id: "06_sitl",
+  name: "SITL replay",
+  config: {
+    ...SHIPPED.config,
+    scope: [{ patterns: ["2vessel_0obstacle_scenarios"], quota: 2, failure_budget: 2 }],
+    execution: { runs: [{ stack: { simulation_layer: "ardupilot_sim", mode: "replay" }, monitor: "post_hoc" }] },
+  },
+};
+const THREE_VESSELS = {
+  ...SHIPPED,
+  preset_id: "03_three",
+  name: "Three-vessel encounters",
+  config: { ...SHIPPED.config, scope: [{ patterns: ["3vessel_*_scenarios"], quota: 3, failure_budget: 3 }] },
+};
 
 let presets: Record<string, unknown>[];
 let requests: { method: string; path: string; body: unknown }[];
@@ -66,10 +83,26 @@ function setup(draft: WizardDraft = draftOf()) {
   const loaded: WizardDraft[] = [];
   render(
     <WithQueries>
-      <PresetBar draft={draft} catalog={catalog} onLoad={(next) => loaded.push(next)} />
+      <PresetBar draft={draft} catalog={catalog} classes={classes} onLoad={(next) => loaded.push(next)} />
     </WithQueries>
   );
   return { loaded, user: userEvent.setup() };
+}
+
+/** Opens the preset catalog once the presets are read. */
+async function openCatalog(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+  await user.click(await screen.findByRole("button", { name: /^Browse \d+ presets$/ }));
+  return screen.getByRole("dialog", { name: "Campaign presets" });
+}
+
+function presetCard(dialog: HTMLElement, name: string): HTMLElement {
+  return within(dialog).getByRole("article", { name });
+}
+
+function presetNames(dialog: HTMLElement): (string | null)[] {
+  return within(dialog)
+    .queryAllByRole("article")
+    .map((card) => card.getAttribute("aria-label"));
 }
 
 /** Opens the save form; the disclosure remembers its state per browser, so it may be open already. */
@@ -94,28 +127,76 @@ afterEach(() => {
 describe("the preset bar", () => {
   it("lists the shipped and the saved presets apart and loads one into the wizard", async () => {
     const { loaded, user } = setup();
-    const select = screen.getByRole("combobox", { name: "Campaign preset" });
-    await waitFor(() => expect(select).not.toBeDisabled());
-    expect(screen.getByRole("group", { name: "Shipped with the master" })).toBeInTheDocument();
-    expect(screen.getByRole("group", { name: "Saved on this cluster" })).toBeInTheDocument();
-    await user.selectOptions(select, "01_smoke_test");
-    expect(screen.getByText(/Checks that every step works on the cluster/)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Load into the wizard" }));
+    const dialog = await openCatalog(user);
+    expect(within(dialog).getByRole("region", { name: "Shipped with the master" })).toBeVisible();
+    expect(within(dialog).getByRole("region", { name: "Saved on this cluster" })).toBeVisible();
+    const card = presetCard(dialog, SHIPPED.name);
+    expect(within(card).getByText(/Checks that every step works on the cluster/)).toBeVisible();
+    await user.click(within(card).getByRole("button", { name: "Load into the wizard" }));
     expect(loaded).toHaveLength(1);
     expect(loaded[0].name).toBe("Smoke test: one case per two-vessel class");
     expect(loaded[0].scope[0].patterns).toEqual(["2vessel_0obstacle_scenarios"]);
     expect(loaded[0].runs[0].stackId).toBe("kinematic.replay");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(`Started from the preset "${SHIPPED.name}"`);
+  });
+
+  it("filters the presets by the vessels of their scope and by their stack", async () => {
+    presets = [SHIPPED, SITL_PRESET, THREE_VESSELS, SAVED];
+    const { user } = setup();
+    const dialog = await openCatalog(user);
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /3 vessels/ }));
+    expect(presetNames(dialog)).toEqual([THREE_VESSELS.name]);
+
+    await user.click(within(dialog).getByRole("checkbox", { name: /3 vessels/ }));
+    await user.click(within(dialog).getByRole("checkbox", { name: /Replay on ArduPilot SITL/ }));
+    expect(presetNames(dialog)).toEqual([SITL_PRESET.name]);
+    expect(within(dialog).getByRole("status")).toHaveTextContent("1 of 4 presets");
+  });
+
+  it("states what a preset selects and runs on its card", async () => {
+    presets = [SITL_PRESET];
+    const { user } = setup();
+    const dialog = await openCatalog(user);
+    const card = presetCard(dialog, SITL_PRESET.name);
+    expect(within(card).getByText("2 vessels, no obstacles")).toBeVisible();
+    expect(within(card).getByText("3 FECs, 6 cases")).toBeVisible();
+    expect(within(card).getByText("Replay on ArduPilot SITL")).toBeVisible();
+    expect(within(card).getByText("Whole chain")).toBeVisible();
+  });
+
+  it("warns on the card of a preset whose stack the master cannot run", async () => {
+    presets = [{ ...SHIPPED, config: { ...SHIPPED.config, execution: { runs: [{ stack: { simulation_layer: "somewhere", mode: "replay" } }] } } }];
+    const { user } = setup();
+    const dialog = await openCatalog(user);
+    expect(within(dialog).getByText(/A run needs a stack this master cannot run/)).toBeVisible();
   });
 
   it("asks before replacing a draft that has entries", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
     const { loaded, user } = setup(draftOf((draft) => void (draft.name = "mine")));
-    const select = screen.getByRole("combobox", { name: "Campaign preset" });
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await user.selectOptions(select, "01_smoke_test");
-    await user.click(screen.getByRole("button", { name: "Load into the wizard" }));
+    const dialog = await openCatalog(user);
+    await user.click(within(presetCard(dialog, SHIPPED.name)).getByRole("button", { name: "Load into the wizard" }));
     expect(confirm).toHaveBeenCalled();
     expect(loaded).toHaveLength(0);
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("waits for the master's stacks before loading", async () => {
+    render(
+      <WithQueries>
+        <PresetBar draft={draftOf()} catalog={null} onLoad={() => undefined} />
+      </WithQueries>
+    );
+    const dialog = await openCatalog(userEvent.setup());
+    expect(within(presetCard(dialog, SHIPPED.name)).getByRole("button", { name: "Load into the wizard" })).toBeDisabled();
+  });
+
+  it("says so when the master offers no presets", async () => {
+    presets = [];
+    setup();
+    expect(await screen.findByRole("button", { name: "The master offers no presets" })).toBeDisabled();
   });
 
   it("saves the draft as a preset without its input", async () => {
@@ -143,13 +224,11 @@ describe("the preset bar", () => {
   it("deletes a saved preset but offers no delete for a shipped one", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const { user } = setup();
-    const select = screen.getByRole("combobox", { name: "Campaign preset" });
-    await waitFor(() => expect(select).not.toBeDisabled());
-    await user.selectOptions(select, "01_smoke_test");
-    expect(screen.queryByRole("button", { name: "Delete the preset" })).not.toBeInTheDocument();
-    await user.selectOptions(select, "p-1");
-    await user.click(screen.getByRole("button", { name: "Delete the preset" }));
+    const dialog = await openCatalog(user);
+    expect(within(presetCard(dialog, SHIPPED.name)).queryByRole("button", { name: "Delete the preset" })).not.toBeInTheDocument();
+    await user.click(within(presetCard(dialog, "nightly")).getByRole("button", { name: "Delete the preset" }));
     expect(await screen.findByText('Deleted the preset "nightly".')).toBeVisible();
     expect(requests.some((request) => request.method === "DELETE" && request.path === "/cluster/campaign-presets/p-1")).toBe(true);
+    await waitFor(() => expect(presetNames(dialog)).toEqual([SHIPPED.name]));
   });
 });

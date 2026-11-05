@@ -7,7 +7,7 @@ from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConf
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 
-CLASS = "2vessel_0obstacle_scenarios/functional_model0"
+CLASS = "2vessel_0obstacle_scenarios/fec0"
 WAVES = {"amplitude": 0.5, "period": 5.0, "steepness": 0.0, "direction": [1.0, 0.0]}
 CUSTOM = {"simulation_layer": "gazebo", "control_layer": "custom"}
 

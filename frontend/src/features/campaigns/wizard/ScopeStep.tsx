@@ -72,7 +72,7 @@ function EntryCard({
         <Field label="Quota" htmlFor={`quota-${entry.id}`} hint="Complete cases each FEC needs." issues={byField.get("quota")}>
           <NumberField id={`quota-${entry.id}`} integer min={1} value={entry.quota} invalid={byField.has("quota")} onChange={(value) => onChange((item) => void (item.quota = value))} />
         </Field>
-        <Field label="Failure budget" htmlFor={`budget-${entry.id}`} hint="Dropped or failed cases an FEC may use up before it is abandoned." issues={byField.get("failure_budget")}>
+        <Field label="Failure budget" htmlFor={`budget-${entry.id}`} hint="Dropped or failed cases a FEC may use up before it is abandoned." issues={byField.get("failure_budget")}>
           <FailureBudgetField id={`budget-${entry.id}`} value={entry.failureBudget} invalid={byField.has("failure_budget")} onChange={(value) => onChange((item) => void (item.failureBudget = value))} />
         </Field>
       </div>
@@ -151,7 +151,7 @@ function CatalogBrowser({ catalog, onPickPattern, onPickClasses, picked }: { cat
         ))}
       </div>
       <div className="wiz-class-bar">
-        <input type="search" placeholder="Find an FEC" aria-label="Find an FEC" value={search} onChange={(event) => setSearch(event.target.value)} />
+        <input type="search" placeholder="Find a FEC" aria-label="Find a FEC" value={search} onChange={(event) => setSearch(event.target.value)} />
         <span className="meta">
           {folder === "" ? "All folders" : folder}: {plural(inFolder.length, "FEC")}
         </span>

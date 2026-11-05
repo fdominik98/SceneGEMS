@@ -110,7 +110,7 @@ describe("the chain of the map", () => {
 describe("what the cards say", () => {
   it("counts the catalog's FECs and the cases of the quotas, or what was named while the catalog is not loaded", () => {
     const draft = draftOf((next) => {
-      next.scope = [{ id: "s", classes: ["4vessel_0obstacle_scenarios/functional_model1"], patterns: ["2vessel_0obstacle_*"], quota: 2, failureBudget: 0 }];
+      next.scope = [{ id: "s", classes: ["4vessel_0obstacle_scenarios/fec1"], patterns: ["2vessel_0obstacle_*"], quota: 2, failureBudget: 0 }];
     });
     const input = (map: ReturnType<typeof buildCampaignMap>) => map.cards.find((card) => card.id === "input");
     expect(texts(input(buildCampaignMap(draft, context()))?.facts ?? [])).toEqual(["4 FECs of the catalog", "8 cases to complete"]);
@@ -172,7 +172,7 @@ describe("what the cards say", () => {
 
   it("states the master's check and the work planned on the review card", () => {
     const draft = draftOf((next) => {
-      next.scope = [{ id: "s", classes: ["3vessel_0obstacle_scenarios/functional_model1"], patterns: [], quota: 3, failureBudget: 0 }];
+      next.scope = [{ id: "s", classes: ["3vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 3, failureBudget: 0 }];
       next.runs = [
         { ...emptyRun("kinematic.replay"), id: "r1" },
         { ...emptyRun("kinematic.replay"), id: "r2", repeats: 2 },

@@ -78,7 +78,7 @@ export function ScenarioFiles({ draft, update, reasons, client, now }: StepProps
     <section className="wiz-subsection wiz-subsection--first" aria-label="Functional scenario files">
       <h4 className="wiz-subhead">Functional scenario files</h4>
       <p className="meta wiz-explain">
-        Optional. A scenario file is a functional scenario you wrote yourself (a <code>.problem</code> file). Each one becomes an FEC of its own and is generated like an FEC of the catalog. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
+        Optional. A scenario file is a functional scenario you wrote yourself (a <code>.problem</code> file). Each one becomes a FEC of its own and is generated like a FEC of the catalog. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
       </p>
       <UploadControl client={client} kind="functional_scenario" label="Add scenario files" accept=".problem,.txt,text/plain" onUploaded={onUploaded} />
       <FieldIssues reasons={own} />

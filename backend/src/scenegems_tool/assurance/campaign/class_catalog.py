@@ -3,7 +3,7 @@
 The catalog is backend/assets/generated_functional_models/all/, found the way
 utils/file_system_utils finds the assets, so it is the same in a checkout and in the
 backend image the master runs. A class is one .problem file; its id is its path relative
-to all/ without the extension (`3vessel_0obstacle_scenarios/functional_model5`). Each class
+to all/ without the extension (`3vessel_0obstacle_scenarios/fec5`). Each class
 carries the sha256 of its content with LF line endings (equal in a Windows and a Linux
 checkout) and its vessel and obstacle counts, read from the instances it declares.
 """
@@ -32,7 +32,7 @@ class UnknownClassId(LookupError):
 
 
 def natural_key(text: str) -> Tuple:
-    """Sorts functional_model2 before functional_model10; every part is an (int, str) pair, so any two ids compare."""
+    """Sorts fec2 before fec10; every part is an (int, str) pair, so any two ids compare."""
     return tuple((int(part), "") if part.isdigit() else (-1, part) for part in _DIGITS.split(text))
 
 

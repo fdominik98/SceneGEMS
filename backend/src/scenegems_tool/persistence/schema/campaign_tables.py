@@ -382,6 +382,9 @@ class VerdictRow(Base):
     encounters: Mapped[Optional[Dict[str, List[str]]]] = mapped_column(
         JSONB(none_as_null=True)
     )  # per relation, as in rule_outcomes, the COLREGSType names in order of first appearance; NULL before 0010
+    encounter_roles: Mapped[Optional[Dict[str, Dict[str, Dict[str, List[str]]]]]] = mapped_column(
+        JSONB(none_as_null=True)
+    )  # per relation and COLREGSType name, the vessels by role (give_way, stand_on) when the type first appeared; NULL before 0011
     created_at: Mapped[datetime] = mapped_column(utc_timestamp())
 
 

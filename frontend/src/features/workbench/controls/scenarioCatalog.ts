@@ -3,7 +3,7 @@ import type { CatalogClass } from "../../../domain/cluster/campaignApi";
 /**
  * The functional scenarios the scene page offers: the master's class catalog
  * (`backend/assets/generated_functional_models/all/`), found by text and by vessel and obstacle counts.
- * A class id (`3vessel_0obstacle_scenarios/functional_model5`) is also the scenario's label.
+ * A class id (`3vessel_0obstacle_scenarios/fec5`) is also the scenario's label.
  */
 
 export const ANY_COUNT = "any";

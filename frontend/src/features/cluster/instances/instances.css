@@ -87,7 +87,7 @@
 }
 .instances-item--selected {
   border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.1);
+  background: rgb(var(--accent-rgb) / 0.1);
 }
 /* Chips and flags */
 
@@ -100,31 +100,31 @@
   font-weight: 600;
   white-space: nowrap;
   color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.12);
+  background: rgb(var(--neutral-rgb) / 0.12);
 }
 .instances-chip--kind {
   color: var(--accent);
-  background: rgba(56, 189, 248, 0.12);
+  background: rgb(var(--accent-rgb) / 0.12);
 }
 .instances-chip--ok,
 .instances-flag--ok {
-  color: #4ade80;
-  background: rgba(34, 197, 94, 0.14);
+  color: var(--ok-text);
+  background: rgb(var(--ok-rgb) / 0.14);
 }
 .instances-chip--run,
 .instances-flag--run {
-  color: #7dd3fc;
-  background: rgba(56, 189, 248, 0.14);
+  color: var(--info-text);
+  background: rgb(var(--accent-rgb) / 0.14);
 }
 .instances-chip--warn,
 .instances-flag--warn {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.14);
+  color: var(--warn-bright-text);
+  background: rgb(var(--warn-rgb) / 0.14);
 }
 .instances-chip--bad,
 .instances-flag--bad {
-  color: #fca5a5;
-  background: rgba(239, 68, 68, 0.16);
+  color: var(--danger-text);
+  background: rgb(var(--danger-rgb) / 0.16);
 }
 .instances-flag {
   font-size: var(--font-size-sm);
@@ -191,11 +191,11 @@
   background: var(--text-faint);
 }
 .instances-live-dot--on {
-  color: #4ade80;
+  color: var(--ok-text);
 }
 .instances-live-dot--on::before {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgb(var(--ok-rgb) / 0.18);
 }
 .instances-card {
   display: flex;
@@ -231,19 +231,19 @@
   padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--border-strong);
   border-radius: var(--radius);
-  background: rgba(148, 163, 184, 0.08);
+  background: rgb(var(--neutral-rgb) / 0.08);
   color: var(--text-muted);
   font-size: var(--font-size-sm);
 }
 .instances-notice--warn {
-  border-left-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
-  color: #fde68a;
+  border-left-color: var(--warn);
+  background: rgb(var(--warn-rgb) / 0.1);
+  color: var(--warn-text-soft);
 }
 .instances-notice--bad {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  border-left-color: var(--danger);
+  background: rgb(var(--danger-rgb) / 0.1);
+  color: var(--danger-text-soft);
 }
 .instances-facts {
   display: grid;
@@ -331,7 +331,7 @@
   white-space: pre-wrap;
 }
 .instances-log-line--err .instances-log-text {
-  color: #fca5a5;
+  color: var(--danger-text);
 }
 /* Speed control */
 
@@ -367,6 +367,6 @@
 }
 .instances-speed-choice--active {
   border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.16);
+  background: rgb(var(--accent-rgb) / 0.16);
   color: var(--accent);
 }

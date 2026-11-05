@@ -27,15 +27,15 @@
 }
 
 .stat-tile--ok {
-  border-left-color: #22c55e;
+  border-left-color: var(--ok);
 }
 
 .stat-tile--warn {
-  border-left-color: #f59e0b;
+  border-left-color: var(--warn);
 }
 
 .stat-tile--bad {
-  border-left-color: #ef4444;
+  border-left-color: var(--danger);
 }
 
 .stat-tile-label {
@@ -110,13 +110,13 @@
   padding: var(--space-4) var(--space-5);
   background: var(--bg-panel);
   border: 1px solid var(--border);
-  border-top: 3px solid #22c55e;
+  border-top: 3px solid var(--ok);
   border-radius: var(--radius-md);
   min-width: 0;
 }
 
 .node-card--draining {
-  border-top-color: #f59e0b;
+  border-top-color: var(--warn);
 }
 
 .node-card--offline {
@@ -125,7 +125,7 @@
 }
 
 .node-card--stale {
-  border-color: rgba(239, 68, 68, 0.55);
+  border-color: rgb(var(--danger-rgb) / 0.55);
 }
 
 .node-card-head {
@@ -143,8 +143,8 @@
 }
 
 .node-dot--connected {
-  background: #22c55e;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgb(var(--ok-rgb) / 0.18);
 }
 
 .node-card-title {
@@ -176,18 +176,18 @@
 }
 
 .node-status--online {
-  color: #22c55e;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--ok-vivid-text);
+  background: rgb(var(--ok-rgb) / 0.12);
 }
 
 .node-status--draining {
-  color: #fbbf24;
-  background: rgba(245, 158, 11, 0.14);
+  color: var(--warn-bright-text);
+  background: rgb(var(--warn-rgb) / 0.14);
 }
 
 .node-status--offline {
   color: var(--text-muted);
-  background: rgba(148, 163, 184, 0.12);
+  background: rgb(var(--neutral-rgb) / 0.12);
 }
 
 .node-card-action {
@@ -195,8 +195,8 @@
 }
 
 .node-card-action--danger {
-  border-color: #ef4444;
-  color: #fecaca;
+  border-color: var(--danger);
+  color: var(--danger-text-soft);
 }
 
 .node-card-error {
@@ -205,10 +205,10 @@
 
 .node-stale {
   padding: var(--space-3) var(--space-4);
-  border-left: 3px solid #ef4444;
+  border-left: 3px solid var(--danger);
   border-radius: var(--radius);
-  background: rgba(239, 68, 68, 0.1);
-  color: #fecaca;
+  background: rgb(var(--danger-rgb) / 0.1);
+  color: var(--danger-text-soft);
   font-size: var(--font-size-sm);
 }
 
@@ -283,11 +283,11 @@
 }
 
 .node-meter--high .node-meter-fill {
-  background: #f59e0b;
+  background: var(--warn);
 }
 
 .node-meter--full .node-meter-fill {
-  background: #ef4444;
+  background: var(--danger);
 }
 
 .node-facts {
@@ -392,7 +392,7 @@
 
 .cluster-row--selected {
   border-color: var(--accent-strong);
-  background: rgba(30, 58, 138, 0.35);
+  background: rgb(var(--accent-solid-rgb) / 0.35);
 }
 
 .cluster-row-select {
@@ -490,9 +490,9 @@
 }
 
 .node-chip--warn {
-  color: #fcd34d;
-  background: rgba(245, 158, 11, 0.12);
-  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: var(--warn-text);
+  background: rgb(var(--warn-rgb) / 0.12);
+  border: 1px solid rgb(var(--warn-rgb) / 0.45);
 }
 
 /* Opens the node's instances below the cards */
@@ -523,9 +523,9 @@
 }
 
 .node-component--stale {
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #fecaca;
-  background: rgba(239, 68, 68, 0.1);
+  border-color: rgb(var(--danger-rgb) / 0.6);
+  color: var(--danger-text-soft);
+  background: rgb(var(--danger-rgb) / 0.1);
 }
 
 .node-component-state {

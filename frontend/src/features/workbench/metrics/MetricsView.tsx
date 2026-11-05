@@ -121,14 +121,14 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
           unit="m"
           points={dcpa}
           relationId={activeRelation}
-          accentColor="#22d3ee"
+          accentColor="var(--chart-series-1)"
         />
         <MetricTimeSeriesChart
           title="TCPA"
           unit="s"
           points={tcpa}
           relationId={activeRelation}
-          accentColor="#a78bfa"
+          accentColor="var(--chart-series-2)"
         />
         <MetricTimeSeriesChart
           title="DS index"
@@ -138,7 +138,7 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
           yDomain={[0, 1]}
           yDecimals={2}
           valueDecimals={3}
-          accentColor="#fbbf24"
+          accentColor="var(--chart-series-3)"
         />
       </div>
       </ActorNamesProvider>

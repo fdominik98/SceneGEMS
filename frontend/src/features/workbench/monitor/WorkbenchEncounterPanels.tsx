@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTheme } from "../../../app/theme";
 import type { TrajectoryStream } from "../../../app/uiStore";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { IconButton } from "../../../components/IconButton";
@@ -44,15 +45,16 @@ export function WorkbenchPairCards({ stream }: { stream: TrajectoryStream }) {
   const timeline = useMemo(() => timelineFor(frames), [frames]);
   const pairs = useMemo(() => buildPairModels(frame, timeline), [frame, timeline]);
   const actors = frame?.actors;
+  const theme = useTheme();
   const colorByActorId = useMemo(
     () =>
       Object.fromEntries(
         (actors ?? []).map((actor) => [
           actor.id,
-          stream === "animation" ? getShipColor(actor) : getSimulationStreamColor(actor),
+          stream === "animation" ? getShipColor(actor, theme) : getSimulationStreamColor(actor, theme),
         ])
       ) as Record<string, string>,
-    [actors, stream]
+    [actors, stream, theme]
   );
   return (
     <section className="panel enc-column-pairs" aria-label="Vessel pairs">

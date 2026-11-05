@@ -109,7 +109,7 @@ def test_a_domain_that_is_not_valid_is_refused(client, body, reason):
 @pytest.mark.postgres
 def test_a_campaign_without_domain_content_gets_the_clusters(client):
     client.post(DOMAIN_PATH, json=DOMAIN)
-    config = {"format": 2, "name": "lab", "steps": ["scene_generation"], "scope": [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 1}]}
+    config = {"format": 2, "name": "lab", "steps": ["scene_generation"], "scope": [{"classes": ["2vessel_0obstacle_scenarios/fec0"], "quota": 1}]}
     config["domain"] = {"vessel_types": "Tug:\n  max_speed: 6\n"}
     response = client.post(CAMPAIGNS_PATH, json={"config": config})
     assert response.status_code == 201, response.text

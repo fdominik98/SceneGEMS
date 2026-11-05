@@ -140,10 +140,10 @@ def _generation_step_monitor(monitor: MonitorImplementation) -> MonitorImplement
 
 
 class ScopeEntry(ConfigModel):
-    """FECs by id (`3vessel_0obstacle_scenarios/functional_model5`) or pattern, with their quota and failure budget.
+    """FECs by id (`3vessel_0obstacle_scenarios/fec5`) or pattern, with their quota and failure budget.
 
     A pattern without a slash matches catalog folders (`3vessel_*_scenarios`), one with a
-    slash matches FEC ids (`2vessel_*/functional_model1`), both with shell wildcards. Formats 1
+    slash matches FEC ids (`2vessel_*/fec1`), both with shell wildcards. Formats 1
     and 2 call the list classes; CampaignConfig reads and writes that name for them.
     """
 

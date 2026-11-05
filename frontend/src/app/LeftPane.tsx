@@ -1,6 +1,7 @@
 import type { ReactElement, SVGProps } from "react";
 import { Disclosure } from "../components/Disclosure";
 import { useClusterStore } from "../domain/cluster/clusterStore";
+import { useTheme, useThemeStore } from "./theme";
 import type { AppSection, WorkbenchView } from "./uiStore";
 
 const APP_TITLE = "SceneGEMS";
@@ -135,6 +136,23 @@ function DocumentationIcon(props: IconProps) {
   );
 }
 
+function SunIcon(props: IconProps) {
+  return (
+    <svg {...iconBaseProps(props)}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+    </svg>
+  );
+}
+
+function MoonIcon(props: IconProps) {
+  return (
+    <svg {...iconBaseProps(props)}>
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" />
+    </svg>
+  );
+}
+
 function MenuIcon(props: IconProps) {
   return (
     <svg {...iconBaseProps(props)}>
@@ -189,6 +207,22 @@ function ClusterSelect() {
         ))}
       </select>
     </label>
+  );
+}
+
+/** Names the mode a click switches to, as a row of the footer (an icon with a tooltip on the rail). */
+function ThemeToggle() {
+  const theme = useTheme();
+  const toggleTheme = useThemeStore((s) => s.toggleTheme);
+  const label = theme === "dark" ? "Light mode" : "Dark mode";
+  const Icon = theme === "dark" ? SunIcon : MoonIcon;
+  return (
+    <button type="button" className="left-nav-item left-nav-link" onClick={toggleTheme} title={label} aria-label={label}>
+      <Icon />
+      <span className="left-nav-text">
+        <span className="left-nav-label">{label}</span>
+      </span>
+    </button>
   );
 }
 
@@ -299,6 +333,7 @@ export function LeftPane({
       </nav>
       <div className="left-pane-footer">
         {!isCollapsed && <ClusterSelect />}
+        <ThemeToggle />
         <a href="/docs/" className="left-nav-item left-nav-link" title="Documentation" aria-label="Documentation">
           <DocumentationIcon />
           <span className="left-nav-text">

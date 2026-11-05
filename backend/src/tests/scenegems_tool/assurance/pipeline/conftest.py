@@ -25,9 +25,9 @@ from scenegems_tool.persistence.stores import AssuranceStores, CampaignRecord, J
 from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED, FakeExecutor
 from tests.scenegems_tool.persistence.stores.builders import ManualClock
 
-CLASS_A = "2vessel_0obstacle_scenarios/functional_model0"
-CLASS_B = "2vessel_0obstacle_scenarios/functional_model1"
-CLASS_C = "3vessel_0obstacle_scenarios/functional_model0"
+CLASS_A = "2vessel_0obstacle_scenarios/fec0"
+CLASS_B = "2vessel_0obstacle_scenarios/fec1"
+CLASS_C = "3vessel_0obstacle_scenarios/fec0"
 
 
 def config_dict(classes=(CLASS_A,), quota: int = 2, failure_budget: Union[int, str] = 2, runs: Optional[List[Dict[str, Any]]] = None, **sections: Any) -> Dict[str, Any]:

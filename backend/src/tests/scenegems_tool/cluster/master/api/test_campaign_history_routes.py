@@ -79,6 +79,9 @@ def upload(client, document: dict, kind: str = "scene") -> dict:
     return response.json()
 
 
+OVERTAKING_ROLES = {"OS_0 - TS_1": {"OVERTAKING_TO_PORT": {"give_way": ["TS_1"], "stand_on": ["OS_0"]}}}
+
+
 def seed_outputs(stores, campaign_id):
     """Class A: case 0 completed every step (scene, trajectories and the run 0 verdicts, runs 0 and 1), case 1 dropped with an invalid scene. Class B: case 0 still generating."""
     a0, a1 = stores.cases.create_cases(campaign_id, [NewCase(CLASS_A, 0, 100), NewCase(CLASS_A, 1, 101)])
@@ -115,6 +118,7 @@ def seed_outputs(stores, campaign_id):
             first_failure_time_s=4.0,
             run_record_id=runs[0].run_record_id,
             encounters={"OS_0 - TS_1": ["OVERTAKING_TO_PORT"]},
+            encounter_roles=OVERTAKING_ROLES,
         )
     )
     stores.results.add_verdict(NewVerdict(a0.case_id, 1, VerdictState.PASSED, post_hoc, run_record_id=runs[1].run_record_id))
@@ -342,7 +346,14 @@ def test_outputs_list_the_cases_of_a_step_with_the_verdict_and_the_artifact(clie
     first, dropped, running = scenes.json()
     assert first["case_id"] == a0.case_id and first["fec_id"] == CLASS_A and first["case_index"] == 0 and first["state"] == "complete"
     assert first["artifact"] == {"sha256": SCENE_0, "size_bytes": 100, "kind": "scene", "media_type": "application/json", "pointer": None}
-    assert first["valid"] is True and first["complete"] is None and first["verdict"] == {"state": "passed", "failed_rules": []}
+    assert first["valid"] is True and first["complete"] is None
+    assert first["verdict"] == {
+        "state": "passed",
+        "failed_rules": [],
+        "first_failure_time_s": None,
+        "encounters": {"OS_0 - TS_1": ["HEAD_ON", "OTHER"], "OS_0 - TS_2": ["OTHER"]},
+        "encounter_roles": None,
+    }
     assert (first["run_index"], first["repeat_index"], first["run_record_id"], first["input_source"]) == (None, None, None, None)
     assert dropped["case_id"] == a1.case_id and dropped["valid"] is False and dropped["reason"] == "the scene generation found no valid scene"
     assert dropped["artifact"] is None  # the invalid scene has no artifact record
@@ -350,7 +361,8 @@ def test_outputs_list_the_cases_of_a_step_with_the_verdict_and_the_artifact(clie
 
     (trajectories,) = client.get(path, params={"step": "trajectory_generation"}).json()[:1]
     assert trajectories["artifact"]["kind"] == "trajectory_data" and trajectories["artifact"]["pointer"] == "/trajectories"
-    assert trajectories["complete"] is True and trajectories["verdict"] == {"state": "failed", "failed_rules": ["OS_0 - TS_1: rule_13"]}
+    assert trajectories["complete"] is True
+    assert trajectories["verdict"] == {"state": "failed", "failed_rules": ["OS_0 - TS_1: rule_13"], "first_failure_time_s": 12.0, "encounters": None, "encounter_roles": None}
 
 
 def test_simulation_outputs_are_one_row_per_run_with_its_record_and_verdict(client, stores):
@@ -361,7 +373,21 @@ def test_simulation_outputs_are_one_row_per_run_with_its_record_and_verdict(clie
     first, second = response.json()
     assert [(row["run_index"], row["repeat_index"], row["run_record_id"]) for row in (first, second)] == [(0, 0, runs[0].run_record_id), (1, 0, runs[1].run_record_id)]
     assert first["artifact"]["sha256"] == STATE_LOG_0 and first["artifact"]["kind"] == "trajectories" and first["artifact"]["pointer"] is None
-    assert first["verdict"] == {"state": "failed", "failed_rules": ["OS_0 - TS_1: rule_8"]} and second["verdict"] == {"state": "passed", "failed_rules": []}
+    assert first["verdict"] == {
+        "state": "failed",
+        "failed_rules": ["OS_0 - TS_1: rule_8"],
+        "first_failure_time_s": 4.0,
+        "encounters": {"OS_0 - TS_1": ["OVERTAKING_TO_PORT"]},
+        "encounter_roles": OVERTAKING_ROLES,
+    }
+    assert second["verdict"] == {"state": "passed", "failed_rules": [], "first_failure_time_s": None, "encounters": None, "encounter_roles": None}
+
+
+def test_the_verdict_route_carries_the_vessel_roles(client, stores):
+    campaign_id = create(client).json()["campaign_id"]
+    seed_outputs(stores, campaign_id)
+    verdicts = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts", params={"step": "simulation"}).json()
+    assert [verdict["encounter_roles"] for verdict in verdicts] == [OVERTAKING_ROLES, None]
 
 
 def test_outputs_are_filtered_by_state_and_paged(client, stores):

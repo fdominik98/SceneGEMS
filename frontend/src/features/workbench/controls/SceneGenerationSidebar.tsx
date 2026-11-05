@@ -4,6 +4,7 @@ import { oneDarkTheme } from "@codemirror/theme-one-dark";
 import { classHighlighter } from "@lezer/highlight";
 import { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTheme, type Theme } from "../../../app/theme";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { useUiStore } from "../../../app/uiStore";
 import problemLanguageSupport from "../../../language/refineryProblem/problemLanguageSupport";
@@ -12,6 +13,7 @@ import { ANY_COUNT, countOptions, filterCatalogClasses, listedValue } from "./sc
 import { Disclosure } from "../../../components/Disclosure";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { BatchPresetRunner } from "./BatchPresetRunner";
+import { editorSurface } from "./editorTheme";
 import { SceneGenerationPaneViewSelect } from "./SceneGenerationPaneViewSelect";
 import type { EvaluationData, SimulationFrame } from "../../../domain/simulation/types";
 
@@ -23,21 +25,21 @@ const refineryLikeContentAttributes = EditorView.contentAttributes.of({
   writingsuggestions: "false",
 });
 
-const functionalSpecProblemExtensions = [
-  problemLanguageSupport(),
-  syntaxHighlighting(classHighlighter),
-  oneDarkTheme,
-  refineryLikeContentAttributes,
-  EditorView.theme(
-    {
-      "&": { backgroundColor: "#020617" },
-      ".cm-gutters": { backgroundColor: "#020617", borderColor: "#334155", color: "#64748b" },
-      ".cm-activeLineGutter": { backgroundColor: "transparent" },
-      ".cm-content": { tabSize: 4 },
-    },
-    { dark: true }
-  ),
-];
+function problemExtensionsFor(theme: Theme) {
+  return [
+    problemLanguageSupport(),
+    syntaxHighlighting(classHighlighter),
+    ...(theme === "dark" ? [oneDarkTheme] : []),
+    refineryLikeContentAttributes,
+    editorSurface(theme),
+  ];
+}
+
+/** One list per theme, so the editor reconfigures only when the theme changes. */
+const functionalSpecProblemExtensions: Record<Theme, ReturnType<typeof problemExtensionsFor>> = {
+  dark: problemExtensionsFor("dark"),
+  light: problemExtensionsFor("light"),
+};
 
 function primaryModifierLabel(): string {
   if (typeof navigator === "undefined") {
@@ -90,7 +92,7 @@ export function SceneGenerationSidebar({
   const catalog = useCatalogClasses();
   const allPresets = useMemo(() => catalog.data?.items ?? [], [catalog.data]);
   const manifestLoading = catalog.isLoading;
-  const manifestError = catalog.isError ? `The master's functional scenarios could not be read: ${catalog.error instanceof Error ? catalog.error.message : String(catalog.error)}` : null;
+  const manifestError = catalog.isError ? `The master's FEC catalog could not be read: ${catalog.error instanceof Error ? catalog.error.message : String(catalog.error)}` : null;
   const [searchQuery, setSearchQuery] = usePersistedState(
     "scene-generation-preset-search",
     ""
@@ -105,6 +107,7 @@ export function SceneGenerationSidebar({
   );
   const [page, setPage] = useState(0);
   const mod = primaryModifierLabel();
+  const theme = useTheme();
 
   const filteredPresets = useMemo(
     () => filterCatalogClasses(allPresets, searchQuery, vesselFilter, obstacleFilter),
@@ -174,29 +177,30 @@ export function SceneGenerationSidebar({
     <aside className="right-pane scene-generation-sidebar">
       <SceneGenerationPaneViewSelect />
       <div className="scene-editor-panel">
-        {manifestLoading && <LoadingSpinner label="Loading the master's functional scenarios…" size="sm" />}
+        <p className="meta">Each functional scenario specification is one functional equivalence class (FEC).</p>
+        {manifestLoading && <LoadingSpinner label="Loading the master's FEC catalog…" size="sm" />}
         {manifestError && <p className="error">{manifestError}</p>}
         <Disclosure
           id="scene-gen:find-preset"
           variant="plain"
           headingLevel={4}
-          title="Find a preset"
+          title="Find a FEC"
           hint={
             searchQuery || vesselFilter !== ANY_COUNT || obstacleFilter !== ANY_COUNT
               ? `${filteredPresets.length} of ${allPresets.length} match`
-              : `${allPresets.length} presets`
+              : `${allPresets.length} FECs`
           }
         >
           <div className="preset-filters toolbar-row">
             <input
               type="search"
-              placeholder="Search presets…"
+              placeholder="Search FECs…"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setPage(0);
               }}
-              aria-label="Search functional presets"
+              aria-label="Search FECs"
             />
             <select
               value={vesselFilter}
@@ -230,7 +234,7 @@ export function SceneGenerationSidebar({
             </select>
           </div>
           <p className="meta">
-            {filteredPresets.length} preset(s)
+            {filteredPresets.length} FEC(s)
             {tab === "single" && filteredPresets.length > PRESETS_PAGE_SIZE
               ? ` · page ${shownPage + 1} / ${pageCount}`
               : ""}
@@ -255,7 +259,7 @@ export function SceneGenerationSidebar({
             onClick={() => setTab("batch")}
             disabled={!batchEnabled}
           >
-            Batch (several presets)
+            Batch (several FECs)
           </button>
         </div>
 
@@ -263,7 +267,7 @@ export function SceneGenerationSidebar({
           <>
             <div className="toolbar-row">
               <select
-                aria-label="Load a functional scenario of the master"
+                aria-label="Load a FEC of the master's catalog"
                 value={listedValue(pagePresets, functionalSpecLabel)}
                 onChange={(event) => {
                   const classId = event.target.value;
@@ -273,7 +277,7 @@ export function SceneGenerationSidebar({
                 }}
               >
                 <option value="" disabled>
-                  Load preset…
+                  Load FEC…
                 </option>
                 {pagePresets.map((preset) => (
                   <option key={preset.fec_id} value={preset.fec_id}>
@@ -352,7 +356,7 @@ export function SceneGenerationSidebar({
             {refineryPasteHintOpen && (
               <div className="refinery-paste-hint" role="status">
                 <p>
-                  Refinery opened in a new tab. Your spec is on the clipboard. There: click inside
+                  Refinery opened in a new tab. The FEC specification is on the clipboard. There: click inside
                   the text editor area, clear it (<kbd>{mod}</kbd>+<kbd>A</kbd>), then paste (
                   <kbd>{mod}</kbd>+<kbd>V</kbd>).&nbsp;&nbsp;
                   <button
@@ -370,7 +374,7 @@ export function SceneGenerationSidebar({
               value={functionalSpecText}
               height="100%"
               theme="none"
-              extensions={functionalSpecProblemExtensions}
+              extensions={functionalSpecProblemExtensions[theme]}
               onChange={onFunctionalSpecTextChange}
             />
           </>
@@ -379,7 +383,7 @@ export function SceneGenerationSidebar({
             {refineryPasteHintOpen && (
               <div className="refinery-paste-hint" role="status">
                 <p>
-                  Refinery opened in a new tab. The preset spec is on the clipboard. There: click
+                  Refinery opened in a new tab. The FEC specification is on the clipboard. There: click
                   inside the text editor area, clear it (<kbd>{mod}</kbd>+<kbd>A</kbd>), then paste (
                   <kbd>{mod}</kbd>+<kbd>V</kbd>).&nbsp;&nbsp;
                   <button

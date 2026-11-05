@@ -18,7 +18,7 @@ from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLa
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
-CLASS = "2vessel_0obstacle_scenarios/functional_model0"
+CLASS = "2vessel_0obstacle_scenarios/fec0"
 WAVES = {"amplitude": 0.5, "period": 4.0, "steepness": 0.1, "direction": [1.0, 0.0]}
 USV_NAVIGATION = {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}
 
@@ -79,7 +79,8 @@ def test_the_stack_values_and_a_geofence_are_kept_and_round_trip_through_the_sto
     assert campaign_config_from_dict(config.to_json()) == config and campaign_config_from_dict(config.to_json()).config_hash() == config.config_hash()
 
 
-# Configs stored before USV Navigation on ArduPilot existed, and their hashes then
+# Configs stored before USV Navigation on ArduPilot existed, with the FEC id they were stored with, and their hashes then
+STORED_SCOPE = [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 1}]
 STORED_ARDUPILOT_HASHES = {
     "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "a0cfa9556b4fe7df370d136abb190b68e1e7f5a2466f04bc41345ff1588278e9"),
     "sitl": (
@@ -94,10 +95,10 @@ def test_an_ardupilot_config_from_before_the_mode_keeps_its_json_hash_and_stack_
     from scenegems_tool.assurance.pipeline.payload_builder import stack_key
 
     run, stored_hash = STORED_ARDUPILOT_HASHES[name]
-    config = _config(run)
+    config = _config(run, scope=STORED_SCOPE)
     assert config.config_hash() == stored_hash
     assert "usv_navigation" not in config.to_json()["execution"]["runs"][0]["stack"] and "usv_navigation" not in stack_key(config, 0)
-    named = _config({**run, "stack": {**run["stack"], "control_layer": "ardupilot"}})
+    named = _config({**run, "stack": {**run["stack"], "control_layer": "ardupilot"}}, scope=STORED_SCOPE)
     assert named.config_hash() == stored_hash, "the implied control layer adds nothing"
 
 

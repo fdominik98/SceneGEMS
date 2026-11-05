@@ -4,7 +4,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  background: #0a1628;
+  background: var(--canvas-sea);
   border-radius: var(--radius);
 }
 
@@ -55,13 +55,13 @@
 }
 
 .enc-canvas-toolbar .icon-btn {
-  background: rgba(15, 23, 42, 0.86);
+  background: rgb(var(--panel-rgb) / 0.86);
 }
 
 .enc-canvas-toolbar .icon-btn.is-active,
 .enc-canvas-toolbar .icon-btn[aria-pressed="true"],
 .enc-canvas-toolbar .icon-btn[aria-expanded="true"] {
-  background: rgba(12, 46, 72, 0.94);
+  background: rgb(var(--tooltip-rgb) / 0.94);
 }
 
 .enc-canvas-toolbar .popover-menu {
@@ -97,7 +97,7 @@
   font-family: var(--font-mono);
   color: var(--text-muted);
   pointer-events: none;
-  text-shadow: 0 0 3px #020617;
+  text-shadow: 0 0 3px var(--canvas-halo);
 }
 
 /* Layer menu: a row per vessel layer with a switch per stream, then the chart's marks. */
@@ -210,7 +210,7 @@ label.layer-menu-row:hover,
 .layer-chip.is-active {
   color: var(--text);
   border-color: var(--accent);
-  background: rgba(56, 189, 248, 0.16);
+  background: rgb(var(--accent-rgb) / 0.16);
 }
 
 .layer-menu-select {
@@ -231,17 +231,16 @@ label.layer-menu-row:hover,
   height: 100%;
   z-index: 0;
   isolation: isolate;
-  background: #0a1628;
+  background: var(--canvas-sea);
   font-family: inherit;
 }
 
-/* The chart darkened to the canvas's sea, so the canvas colors read the same on it. */
 .nautical-map-tiles .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55);
+  filter: var(--map-tile-filter);
 }
 
 .nautical-map-tiles .leaflet-control-attribution {
-  background: rgba(2, 6, 23, 0.72);
+  background: rgb(var(--well-rgb) / 0.72);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   line-height: 1.5;
@@ -261,7 +260,7 @@ label.layer-menu-row:hover,
 
 .nautical-map-empty {
   z-index: 1;
-  text-shadow: 0 0 4px #020617;
+  text-shadow: 0 0 4px var(--canvas-halo);
 }
 
 .nautical-map-readout {

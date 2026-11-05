@@ -28,6 +28,14 @@ interface IconProps {
   size?: number;
 }
 
+export function CloseIcon({ size }: IconProps) {
+  return (
+    <Icon size={size}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </Icon>
+  );
+}
+
 export function FitViewIcon({ size }: IconProps) {
   return (
     <Icon size={size}>

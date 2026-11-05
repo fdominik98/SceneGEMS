@@ -1,0 +1,350 @@
+/*
+ * Every color of the console, one token per role. `:root` is dark mode, the default;
+ * `data-theme="light"` on the root element (app/theme.ts) overrides all of them. Stylesheets
+ * and components use the tokens and hold no colors of their own (app/themeTokens.test.ts).
+ *
+ * The *-rgb tokens are channels, for a tint that keeps its alpha at the place of use:
+ * `rgb(var(--danger-rgb) / 0.1)`.
+ */
+
+:root {
+  /* Surfaces, from the page up. */
+  --bg: #020617;
+  --bg-pane: #0b1325;
+  --bg-panel: #0f172a;
+  --bg-control: #1e293b;
+  --bg-control-hover: #273548;
+  --bg-inset: #020617;
+  --bg-sunken: #0b1220;
+  --bg-chip: #1e293b;
+  --bg-chip-strong: #334155;
+  --bg-mid: #475569;
+  --bg-bright: #f8fafc;
+
+  /* Text, from the most prominent down. */
+  --text-bright: #f8fafc;
+  --text: #e2e8f0;
+  --text-soft: #cbd5e1;
+  --text-muted: #a8b5c8;
+  --text-label: #94a3b8;
+  --text-faint: #8493a8;
+  --text-dim: #64748b;
+  --text-off: #475569;
+  /* On a colored fill that is the same in both modes. */
+  --on-bright: #0b1220;
+  --on-solid: #fff;
+
+  /* Lines. */
+  --border: #334155;
+  --border-strong: #52627a;
+  --border-subtle: #1e293b;
+  --border-faint: #131c2e;
+  --border-mid: #475569;
+  --border-dim: #64748b;
+  --border-accent: #1e3a5f;
+
+  /* Accent and the primary action. */
+  --accent: #38bdf8;
+  --accent-strong: #60a5fa;
+  --focus-ring: #7dd3fc;
+  --accent-solid: #1e3a8a;
+  --accent-solid-hover: #1d4ed8;
+  --accent-bg: #172554;
+
+  /* Tones: *-text on a surface, *-text-soft and *-on-bg on the tone's own background. */
+  --info-text: #7dd3fc;
+  --info-text-alt: #93c5fd;
+  --info-text-soft: #bae6fd;
+  --info-bg: #0c2a3f;
+  --info-bg-strong: #0c4a6e;
+  --info-line: #1e40af;
+
+  --danger: #ef4444;
+  --danger-vivid-text: #ef4444;
+  --danger-bright: #f87171;
+  --danger-bright-text: #f87171;
+  --danger-text: #fca5a5;
+  --danger-text-soft: #fecaca;
+  --danger-on-bg: #fee2e2;
+  --danger-rose-text: #fb7185;
+  --danger-line: #b91c1c;
+  --danger-line-dim: #7f1d1d;
+  --danger-bg: #7f1d1d;
+  --danger-bg-hover: #991b1b;
+  --danger-tint: #2a1113;
+  --danger-tint-soft: #1a0f14;
+  --danger-solid: #b91c1c;
+  --danger-pill: #dc2626;
+
+  --warn: #f59e0b;
+  --warn-vivid-text: #f59e0b;
+  --warn-bright: #fbbf24;
+  --warn-bright-text: #fbbf24;
+  --warn-text: #fcd34d;
+  --warn-text-soft: #fde68a;
+  --warn-yellow-text: #facc15;
+  --warn-orange-text: #fb923c;
+  --warn-line: #b45309;
+  --warn-line-dim: #854d0e;
+  --warn-bg: #422006;
+  --warn-solid: #b45309;
+  --on-warn-solid: #fff7ed;
+
+  --ok: #22c55e;
+  --ok-vivid-text: #22c55e;
+  --ok-text: #4ade80;
+  --ok-text-alt: #86efac;
+  --ok-text-soft: #bbf7d0;
+  --ok-on-bg: #dcfce7;
+  --ok-mint: #34d399;
+  --ok-mint-text: #6ee7b7;
+  --ok-line: #166534;
+  --ok-bg: #14532d;
+  --ok-solid: #166534;
+  --ok-on-solid: #f0fdf4;
+
+  --violet: #a78bfa;
+
+  /* Channels. */
+  --danger-rgb: 239 68 68;
+  --danger-deep-rgb: 127 29 29;
+  --rose-rgb: 244 63 94;
+  --warn-rgb: 245 158 11;
+  --warn-yellow-rgb: 250 204 21;
+  --warn-bright-rgb: 251 191 36;
+  --ok-rgb: 34 197 94;
+  --accent-rgb: 56 189 248;
+  --accent-strong-rgb: 96 165 250;
+  --accent-solid-rgb: 30 58 138;
+  --focus-ring-rgb: 125 211 252;
+  --neutral-rgb: 148 163 184;
+  --neutral-dim-rgb: 100 116 139;
+  --panel-rgb: 15 23 42;
+  --well-rgb: 2 6 23;
+  --control-rgb: 30 41 59;
+  --text-rgb: 226 232 240;
+  --shadow-rgb: 0 0 0;
+  --tooltip-rgb: 12 46 72;
+
+  /* Overlay scrollbars (app/overlayScrollbars). */
+  --scrollbar-thumb: rgba(148, 163, 184, 0.38);
+  --scrollbar-thumb-hover: rgba(168, 181, 200, 0.7);
+  --scrollbar-thumb-active: rgba(56, 189, 248, 0.85);
+
+  /* Charts and graphs. */
+  --chart-grid-faint: #172033;
+  --chart-series-1: #22d3ee;
+  --chart-series-2: #a78bfa;
+  --chart-series-3: #fbbf24;
+  --chart-point-ring: #0f172a;
+  --chart-hover-ring: #f8fafc;
+  --graph-dots: #1b2740;
+  --graph-minimap-lane: #1e293b;
+
+  /* The problem editor's syntax colors, aligned with Refinery's editor. */
+  --syntax-comment: #7d8799;
+  --syntax-number: #d19a66;
+  --syntax-string: #98c379;
+  --syntax-keyword: #c678dd;
+  --syntax-type: #e5c07b;
+  --syntax-operator: #56b6c2;
+  --syntax-invalid: #e06c75;
+
+  /* The encounter canvas and the map (features/workbench/scene/encounterPalette.ts). */
+  --canvas-sea: #0a1628;
+  --canvas-ring: rgba(148, 163, 184, 0.32);
+  --canvas-ring-label: #8fa3bf;
+  --canvas-bearing-tick: rgba(148, 163, 184, 0.55);
+  --canvas-bearing-label: #9fb1c9;
+  --canvas-hull-stroke: #e2e8f0;
+  --canvas-label-text: #e2e8f0;
+  --canvas-label-muted: #9fb1c9;
+  --canvas-label-bg: rgba(2, 6, 23, 0.72);
+  --canvas-selection: #f8fafc;
+  --canvas-cpa-neutral: #cbd5e1;
+  --canvas-cpa-warn: #fbbf24;
+  --canvas-cpa-danger: #f87171;
+  --canvas-legend-bg: rgba(2, 6, 23, 0.8);
+  --canvas-legend-border: rgba(148, 163, 184, 0.35);
+  --canvas-fallback: #94a3b8;
+  --canvas-kite: #f5d76e;
+  --canvas-halo: #020617;
+  /* The chart darkened to the canvas's sea, so the canvas colors read the same on it. */
+  --map-tile-filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.88) saturate(0.55);
+
+  --result-failed: #ef4444;
+  --result-unknown: #475569;
+  --result-passed: #22c55e;
+  --encounter-head-on: #c084fc;
+  --encounter-two-way: #f472b6;
+  --encounter-crossing: #38bdf8;
+  --encounter-overtaking: #2dd4bf;
+  --encounter-none: #1e293b;
+}
+
+:root[data-theme="light"] {
+  --bg: #e8edf3;
+  --bg-pane: #f3f5f8;
+  --bg-panel: #ffffff;
+  --bg-control: #ffffff;
+  --bg-control-hover: #eef2f6;
+  --bg-inset: #f3f6f9;
+  --bg-sunken: #f7f9fb;
+  --bg-chip: #e8edf3;
+  --bg-chip-strong: #d5dce6;
+  --bg-mid: #94a3b8;
+  --bg-bright: #0f172a;
+
+  --text-bright: #020617;
+  --text: #0f172a;
+  --text-soft: #334155;
+  --text-muted: #475569;
+  --text-label: #526077;
+  --text-faint: #5b6a80;
+  --text-dim: #5a6a80;
+  --text-off: #7b8aa0;
+  --on-bright: #0b1220;
+  --on-solid: #fff;
+
+  --border: #d5dce6;
+  --border-strong: #8a99ad;
+  --border-subtle: #e2e8f0;
+  --border-faint: #eef2f6;
+  --border-mid: #a3b1c2;
+  --border-dim: #8a99ad;
+  --border-accent: #bfdbfe;
+
+  --accent: #03649a;
+  --accent-strong: #2563eb;
+  --focus-ring: #0284c7;
+  --accent-solid: #dbeafe;
+  --accent-solid-hover: #bfdbfe;
+  --accent-bg: #dbeafe;
+
+  --info-text: #03649a;
+  --info-text-alt: #1d4ed8;
+  --info-text-soft: #075985;
+  --info-bg: #e0f2fe;
+  --info-bg-strong: #bae6fd;
+  --info-line: #93c5fd;
+
+  --danger: #dc2626;
+  --danger-vivid-text: #a61b1b;
+  --danger-bright: #dc2626;
+  --danger-bright-text: #a61b1b;
+  --danger-text: #a61b1b;
+  --danger-text-soft: #991b1b;
+  --danger-on-bg: #7f1d1d;
+  --danger-rose-text: #a80f35;
+  --danger-line: #dc2626;
+  --danger-line-dim: #fca5a5;
+  --danger-bg: #fee2e2;
+  --danger-bg-hover: #fecaca;
+  --danger-tint: #fef2f2;
+  --danger-tint-soft: #fff5f5;
+  --danger-solid: #b91c1c;
+  --danger-pill: #dc2626;
+
+  --warn: #d97706;
+  --warn-vivid-text: #9a4a08;
+  --warn-bright: #d97706;
+  --warn-bright-text: #9a4a08;
+  --warn-text: #92400e;
+  --warn-text-soft: #854d0e;
+  --warn-yellow-text: #854d0e;
+  --warn-orange-text: #b83d0b;
+  --warn-line: #d97706;
+  --warn-line-dim: #fcd34d;
+  --warn-bg: #fef3c7;
+  --warn-solid: #b45309;
+  --on-warn-solid: #fff7ed;
+
+  --ok: #16a34a;
+  --ok-vivid-text: #146c36;
+  --ok-text: #146c36;
+  --ok-text-alt: #146c36;
+  --ok-text-soft: #166534;
+  --ok-on-bg: #14532d;
+  --ok-mint: #059669;
+  --ok-mint-text: #047857;
+  --ok-line: #4ade80;
+  --ok-bg: #dcfce7;
+  --ok-solid: #bbf7d0;
+  --ok-on-solid: #14532d;
+
+  --violet: #7c3aed;
+
+  --danger-rgb: 220 38 38;
+  --danger-deep-rgb: 220 38 38;
+  --rose-rgb: 225 29 72;
+  --warn-rgb: 217 119 6;
+  --warn-yellow-rgb: 202 138 4;
+  --warn-bright-rgb: 217 119 6;
+  --ok-rgb: 22 163 74;
+  --accent-rgb: 2 132 199;
+  --accent-strong-rgb: 37 99 235;
+  --accent-solid-rgb: 147 197 253;
+  --focus-ring-rgb: 2 132 199;
+  --neutral-rgb: 100 116 139;
+  --neutral-dim-rgb: 100 116 139;
+  --panel-rgb: 255 255 255;
+  --well-rgb: 241 245 249;
+  --control-rgb: 238 242 246;
+  --text-rgb: 15 23 42;
+  --shadow-rgb: 51 65 85;
+  --tooltip-rgb: 224 242 254;
+
+  --scrollbar-thumb: rgba(71, 85, 105, 0.38);
+  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.7);
+  --scrollbar-thumb-active: rgba(2, 132, 199, 0.85);
+
+  --chart-grid-faint: #eef2f6;
+  --chart-series-1: #0891b2;
+  --chart-series-2: #7c3aed;
+  --chart-series-3: #d97706;
+  --chart-point-ring: #ffffff;
+  --chart-hover-ring: #0f172a;
+  --graph-dots: #d5dce6;
+  --graph-minimap-lane: #d5dce6;
+
+  /* One Light, the counterpart of the dark palette above, deepened where it is too faint to read. */
+  --syntax-comment: #616877;
+  --syntax-number: #8f6200;
+  --syntax-string: #2f7a2e;
+  --syntax-keyword: #a626a4;
+  --syntax-type: #875c00;
+  --syntax-operator: #0170a3;
+  --syntax-invalid: #c9341f;
+
+  /* A day chart: pale water, dark marks. */
+  --canvas-sea: #dcebf5;
+  --canvas-ring: rgba(51, 65, 85, 0.28);
+  --canvas-ring-label: #475569;
+  --canvas-bearing-tick: rgba(51, 65, 85, 0.55);
+  --canvas-bearing-label: #475569;
+  --canvas-hull-stroke: #0f172a;
+  --canvas-label-text: #0f172a;
+  --canvas-label-muted: #475569;
+  --canvas-label-bg: rgba(255, 255, 255, 0.82);
+  --canvas-selection: #020617;
+  --canvas-cpa-neutral: #475569;
+  --canvas-cpa-warn: #b45309;
+  --canvas-cpa-danger: #dc2626;
+  --canvas-legend-bg: rgba(255, 255, 255, 0.88);
+  --canvas-legend-border: rgba(51, 65, 85, 0.35);
+  --canvas-fallback: #64748b;
+  --canvas-kite: #b7791f;
+  --canvas-halo: #ffffff;
+  /* The chart as published. */
+  --map-tile-filter: none;
+
+  --result-failed: #dc2626;
+  --result-unknown: #7b8aa0;
+  --result-passed: #16a34a;
+  /* Bright fills in both modes: the timeline writes dark labels on them. */
+  --encounter-head-on: #c084fc;
+  --encounter-two-way: #f472b6;
+  --encounter-crossing: #38bdf8;
+  --encounter-overtaking: #2dd4bf;
+  --encounter-none: #e2e8f0;
+}

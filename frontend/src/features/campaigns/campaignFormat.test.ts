@@ -23,7 +23,7 @@ describe("campaign formatting", () => {
   });
 
   it("splits a class id into folder and name", () => {
-    expect(splitClassId("3vessel_0obstacle_scenarios/functional_model5")).toEqual({ folder: "3vessel_0obstacle_scenarios", name: "functional_model5" });
+    expect(splitClassId("3vessel_0obstacle_scenarios/fec5")).toEqual({ folder: "3vessel_0obstacle_scenarios", name: "fec5" });
     expect(splitClassId("plain")).toEqual({ folder: "", name: "plain" });
   });
 

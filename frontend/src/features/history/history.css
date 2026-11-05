@@ -77,7 +77,7 @@
 }
 
 .history-delete-error {
-  color: #fca5a5;
+  color: var(--danger-text);
   font-size: var(--font-size-sm);
   white-space: normal;
 }
@@ -127,9 +127,64 @@
   display: block;
 }
 
-.history-failed-rules {
-  display: block;
+.history-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 300px;
+}
+
+.history-monitor-head,
+.history-monitor-roles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* The pair's name, then each encounter's type and roles, on one line when the cell is wide enough; the failed rules below them. */
+.history-monitor-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border-strong);
+}
+
+.history-monitor-encounter {
+  display: contents;
+}
+
+.history-monitor-pair--failed {
+  border-left-color: rgb(var(--danger-rgb) / 0.6);
+}
+
+.history-monitor-relation {
   color: var(--text-muted);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
+.history-monitor-type {
+  font-weight: 600;
+}
+
+.history-monitor-rules {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
   overflow-wrap: anywhere;
+}
+
+.history-monitor-rules li:not(.history-monitor-more)::before {
+  content: "\2715\00a0";
+  color: var(--danger-text);
+}
+
+.history-monitor-more {
+  color: var(--text-faint);
 }

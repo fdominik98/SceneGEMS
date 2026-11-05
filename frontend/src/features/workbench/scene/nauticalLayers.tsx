@@ -222,7 +222,7 @@ export function DomainLayer({
               cy={disc.center[1]}
               r={disc.radius}
               fill="none"
-              stroke={colorByActorId[actorId] ?? "#94a3b8"}
+              stroke={colorByActorId[actorId] ?? CANVAS_COLORS.fallback}
               strokeWidth={1}
               strokeDasharray="1 4"
               strokeLinecap="round"
@@ -234,7 +234,7 @@ export function DomainLayer({
         ? collectSafetyDomains(frame.situationContexts).map(({ key, actorId, domain }) => {
             const [cx, cy] = domain.center;
             const deg = (domain.heading * 180) / Math.PI;
-            const color = colorByActorId[actorId] ?? "#94a3b8";
+            const color = colorByActorId[actorId] ?? CANVAS_COLORS.fallback;
             const common = {
               fill: color,
               fillOpacity: 0.06,
@@ -307,7 +307,7 @@ export function SafetyRadiusLayer({
             cy={state.y}
             r={actor.safetyRadius}
             fill="none"
-            stroke={colorByActorId[actor.id] ?? "#94a3b8"}
+            stroke={colorByActorId[actor.id] ?? CANVAS_COLORS.fallback}
             strokeOpacity={0.35}
             strokeWidth={1}
             vectorEffect={NON_SCALING}
@@ -337,7 +337,7 @@ export function TrackLayer({
   return (
     <g>
       {tracks.map((track) => {
-        const color = colorByActorId[track.actorId] ?? "#94a3b8";
+        const color = colorByActorId[track.actorId] ?? CANVAS_COLORS.fallback;
         return (
           <g key={track.actorId}>
             {track.ahead.length > 1 ? (
@@ -401,7 +401,7 @@ export function HullLayer({
         if (!state) {
           return null;
         }
-        const color = colorByActorId[actor.id] ?? "#94a3b8";
+        const color = colorByActorId[actor.id] ?? CANVAS_COLORS.fallback;
         const deg = (state.heading * 180) / Math.PI;
         return (
           <polygon
@@ -458,7 +458,7 @@ export function VesselOverlay({
   return (
     <g>
       {vessels.map(({ actor, state, screen }) => {
-        const color = colorByActorId[actor.id] ?? "#94a3b8";
+        const color = colorByActorId[actor.id] ?? CANVAS_COLORS.fallback;
         const dir = screenDirectionOfBearing(view, courseDeg(state.heading));
         const normal = { x: -dir.y, y: dir.x };
         const hullPx = actor.length * view.scale;

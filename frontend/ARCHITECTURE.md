@@ -5,13 +5,14 @@
 ```
 src/
   app/           AppShell (frame: left pane and the shown section), WorkbenchSection
-                 (the workbench views and their state), UI-only Zustand (uiStore)
+                 (the workbench views and their state), UI-only Zustand (uiStore, theme)
   components/    Shared UI pieces: Disclosure (+ disclosureStore), PopoverMenu, EmptyState, PageHeader,
                  SectionFrame, LoadingSpinner
   domain/        Simulation protocol, WebSocket client, playback store; cluster/ has the
                  cluster list, the operator API client, the live channel client and stores
-  features/      React UI by section: workbench/ (connection, controls, metrics, monitor,
-                 scene), cluster/ (with instances/), capabilities/, campaigns/, history/, results/
+  features/      React UI by section: workbench/ (cluster, connection, controls, metrics, monitor,
+                 pages, scene), encounter/ (the encounter view of a recorded or live run), domain/,
+                 cluster/ (with instances/), capabilities/, campaigns/, history/, results/
   language/      Lezer grammar for .problem files
 ```
 
@@ -23,6 +24,17 @@ Sizes are tokens in `index.css` (`:root`): body 16px (`--font-size`), captions 1
 than their own sizes. One focus ring (`--focus-ring`) covers all keyboard focus. Scrollbars are overlays
 (`app/overlayScrollbars.ts`, installed in `main.tsx`): the native ones are hidden and take no room, and
 any element with `overflow: auto` gets a thin thumb while it scrolls or the pointer moves over it.
+
+Colors are tokens too, in `theme.css`: one per role, `:root` is dark mode and `data-theme="light"` on the
+root element overrides every one of them. Stylesheets and components hold no colors of their own
+(`app/themeTokens.test.ts` fails on a literal color in a stylesheet, on a token one mode lacks and on a light
+text token that cannot be read on its surface). A tint keeps its alpha where it is used:
+`rgb(var(--danger-rgb) / 0.1)`. `app/theme.ts` keeps the mode per browser (`scenegems:theme`, dark by default)
+and the left pane's footer switches it; an inline script in `index.html` sets it before the first paint. Most
+things follow a token by themselves, also in SVG attributes and in React Flow's markers. `useTheme()` is for
+the few that cannot: React Flow's `colorMode`, CodeMirror's themes (`controls/editorTheme.ts`, one extension
+list per mode) and the ship colors, which are literals in both modes because the simulation stream's darker
+twin is computed from them.
 
 Each screen shows what its main task needs and hides the rest behind progressive disclosure:
 `Disclosure` (a button with `aria-expanded`, optionally remembered per browser through its `id`, kept
@@ -45,8 +57,12 @@ switch per stream (the workbench's preview and simulation side by side, each of 
 then the chart's marks (range rings, CPA, labels, legend) and the vector length (`canvasSettings.ts`,
 kept per browser and shared by the canvas and the map). The monitor panels hold no layer switches.
 
-The map is Leaflet with the OpenStreetMap tiles and the OpenSeaMap seamarks, darkened by a CSS filter to
-the canvas's sea. The layers are an SVG over it, drawn with a canvas view transform that
+The canvas colors are theme tokens (`encounterPalette.ts`): a night chart in dark mode, a day chart in light
+mode. A screenshot rasterizes the SVG on its own, so `sceneExport.inlineCssVariables` writes the tokens' values
+into it first.
+
+The map is Leaflet with the OpenStreetMap tiles and the OpenSeaMap seamarks, in dark mode darkened by a CSS
+filter (`--map-tile-filter`) to the canvas's sea and in light mode as published. The layers are an SVG over it, drawn with a canvas view transform that
 `geoTransform.mapViewTransform` takes from the map at each move (linearized at its center: the frames'
 local meters are UTM easting and northing from the reference geofence, as the backend's `Geofence` has
 them). Clicks pass through the drawing to the map; a click near a vessel selects its pair.
@@ -117,6 +133,14 @@ functional scenario too (the case's `input_artifact`, or the catalog class). The
 `PresetBar` starts a draft from a campaign preset (`presetDraft.ts`: `draftFromConfig`, the inverse
 of `configBuilder.ts`) and saves the draft as one without its input (`presetConfigOf`).
 
+The wizard picks presets and a run's stack from catalogs: `CatalogDialog.tsx` draws search, filters
+and groups over any items, `catalogModel.ts` holds their rules (values of one filter are alternatives
+unless the filter says all, different filters narrow together, a filter that cannot narrow is left
+out), and `stackCatalog.ts` and `presetCatalog.ts` say what each catalog's items have. Nothing is
+tagged by hand: a stack's values are the fields the master reports, a preset's are read from its config
+(`presetFacts`) against the stacks and the FEC catalog, so saved presets sort like shipped ones. The
+filters and the grouping are kept per browser and per catalog.
+
 The wizard has a page per step the campaign runs (Scene generation, Trajectory generation, Simulation), each
 with that step's monitor. Above the pages, the campaign map (`wizard/CampaignMap.tsx`, React Flow) draws the
 draft: the chain from the input to the review with a box per simulation run in a frame, the steps not run as
@@ -173,7 +197,7 @@ flowchart LR
   WS[BackendWsClient]
   Protocol[protocol.ts Zod]
   Playback[playbackStore]
-  Scene[SceneCanvas R3F]
+  Scene[SceneCanvas SVG]
   Backend --> WS --> Protocol --> Playback --> Scene
 ```
 

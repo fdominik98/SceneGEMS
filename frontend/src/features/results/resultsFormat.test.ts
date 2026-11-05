@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { describeStack, formatBytes, formatSeconds, runLabel, shortClassId, shortHash, sortedArtifacts } from "./resultsFormat";
+import { describeStack, formatBytes, formatSeconds, runLabel, shortClassId, shortHash, sortedArtifacts, stageLabel } from "./resultsFormat";
 
 describe("results formatting", () => {
+  it("names the stages, the last one as the monitor summary", () => {
+    expect(stageLabel("generate_scene")).toBe("generate scene");
+    expect(stageLabel("verdict")).toBe("monitor summary");
+  });
+
   it("formats seconds", () => {
     expect(formatSeconds(null)).toBe("-");
     expect(formatSeconds(12.5)).toBe("12.5 s");

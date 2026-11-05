@@ -5,7 +5,7 @@ import type { CampaignStep, CaseDetail, RunRecord } from "../../domain/cluster/s
 import { CaseJobsTable, RunRecordCard, StateChip, VerdictCard } from "./CaseParts";
 import { caseStepRows, describeStepVerdict } from "./stepViews";
 import { RecordedRun } from "./RecordedRun";
-import { formatTime, shortClassId } from "./resultsFormat";
+import { formatTime, shortClassId, stageLabel } from "./resultsFormat";
 import { useCaseDetail } from "./useResultsData";
 
 interface CasePageProps {
@@ -27,12 +27,12 @@ function CaseSteps({ detail, steps }: { detail: CaseDetail; steps: readonly Camp
         <span className="meta">{steps.length} of 3 executed</span>
       </header>
       <div className="results-table-wrap">
-        <table className="results-table results-table--plain" aria-label="Verdict of each step">
+        <table className="results-table results-table--plain" aria-label="Monitor summary of each step">
           <thead>
             <tr>
               <th>Step</th>
               <th>Output</th>
-              <th>Verdict</th>
+              <th>Monitor summary</th>
               <th>Failed rules</th>
             </tr>
           </thead>
@@ -64,7 +64,7 @@ function CaseSummary({ detail }: { detail: CaseDetail }) {
         <h3 title={detail.fec_id}>{shortClassId(detail.fec_id, 64)}</h3>
         <span className="meta">case {detail.case_index}</span>
         <StateChip state={detail.state} />
-        <span className="run-tag">stage {detail.stage.replace("_", " ")}</span>
+        <span className="run-tag">stage {stageLabel(detail.stage)}</span>
       </header>
       <Disclosure id="results:case-details" variant="link" headingLevel={null} title="Case details" openTitle="Hide case details" hint={`seed ${detail.seed}`}>
       <dl className="results-facts">
@@ -115,7 +115,7 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
 
   const back = (
     <button type="button" onClick={onBack} className="results-back">
-      Back to the verdicts
+      Back to the monitor summaries
     </button>
   );
   if (query.isPending) {
@@ -151,13 +151,13 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
       <CaseSummary detail={detail} />
       <CaseSteps detail={detail} steps={steps} />
 
-      <section className="results-panel" aria-label="Verdicts of the case">
+      <section className="results-panel" aria-label="Monitor summaries of the case">
         <header className="results-panel-head">
-          <h3>Verdicts of the steps</h3>
+          <h3>Monitor summaries of the steps</h3>
           <span className="meta">{detail.verdicts.length}</span>
         </header>
         {detail.verdicts.length === 0 ? (
-          <p className="meta">The case has no verdict yet.</p>
+          <p className="meta">The case has no monitor summary yet.</p>
         ) : (
           <div className="results-stack">
             {detail.verdicts.map((verdict) => (

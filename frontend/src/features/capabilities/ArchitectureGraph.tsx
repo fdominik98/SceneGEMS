@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Background, BaseEdge, Controls, EdgeLabelRenderer, MarkerType, MiniMap, ReactFlow, type Edge, type EdgeProps, type EdgeTypes, type NodeChange, type NodeTypes } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTheme } from "../../app/theme";
 import { usePersistedState } from "../../app/usePersistedState";
 import type { ArchitectureDocument } from "../../domain/cluster/architectureApi";
 import { highlightFor, parallelIndex, shortId, words, type GraphView } from "./capabilitiesModel";
@@ -140,6 +141,7 @@ export function ArchitectureGraph({ document, view, selection, onSelect, showRul
   };
   const lit = useMemo(() => highlightFor(concrete ? document.edges : document.metamodel_edges, selection), [concrete, document, selection]);
 
+  const theme = useTheme();
   const { nodes, edges } = useMemo(() => {
     const laneNodes: LaneFlowNode[] = layout.bands.map((band) => ({
       id: `lane:${band.lane}`,
@@ -191,7 +193,7 @@ export function ArchitectureGraph({ document, view, selection, onSelect, showRul
         edges={edges}
         nodeTypes={NODE_TYPES}
         edgeTypes={EDGE_TYPES}
-        colorMode="dark"
+        colorMode={theme}
         fitView
         fitViewOptions={{ padding: 0.08 }}
         minZoom={0.2}
@@ -213,7 +215,7 @@ export function ArchitectureGraph({ document, view, selection, onSelect, showRul
       >
         <Background gap={24} size={1} />
         <Controls showInteractive={false} position="bottom-left" />
-        <MiniMap pannable zoomable className="cap-minimap" style={{ background: "#0b1325", width: 150, height: 96 }} nodeStrokeWidth={2} nodeColor={(node) => (node.type === "lane" ? "#1e293b" : "#38bdf8")} maskColor="rgba(2, 6, 23, 0.7)" />
+        <MiniMap pannable zoomable className="cap-minimap" style={{ background: "var(--bg-pane)", width: 150, height: 96 }} nodeStrokeWidth={2} nodeColor={(node) => (node.type === "lane" ? "var(--graph-minimap-lane)" : "var(--accent)")} maskColor="rgb(var(--well-rgb) / 0.7)" />
       </ReactFlow>
       {/* Outside the canvas, so it keeps the keyboard focus when the canvas mounts anew. */}
       <FullscreenButton fullscreen={fullscreen !== "off"} onToggle={onToggleFullscreen} />
@@ -238,7 +240,7 @@ function buildEdges(
       type: "adapter",
       source: edge.source,
       target: edge.target,
-      markerEnd: arrow("#60a5fa"),
+      markerEnd: arrow("var(--accent-strong)"),
       data: {
         label: edge.label,
         tone: "link",
@@ -257,7 +259,7 @@ function buildEdges(
       type: "adapter",
       source: edge.source,
       target: edge.target,
-      markerEnd: arrow(tone === "planned" ? "#fbbf24" : "#38bdf8"),
+      markerEnd: arrow(tone === "planned" ? "var(--warn-bright)" : "var(--accent)"),
       data: {
         label: edge.label,
         tone,
@@ -276,7 +278,7 @@ function buildEdges(
         type: "adapter",
         source: link.source,
         target: link.target,
-        markerEnd: arrow("#f87171"),
+        markerEnd: arrow("var(--danger-bright)"),
         data: { label: `no: ${shortId(link.target)}`, tone: "ruled-out", offset: 0, dimmed: lit !== null, selected: selection?.kind === "edge" && selection.id === id, onSelect: () => onSelect({ kind: "edge", id }) },
       });
     });

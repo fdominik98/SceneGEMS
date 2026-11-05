@@ -102,7 +102,7 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
             className="primary-btn accent"
             type="button"
             disabled={!canGenerate}
-            title={hasInput ? undefined : batch ? "Select the presets of the batch in the specification pane first" : "Choose a preset or write a functional scenario in the specification pane first"}
+            title={hasInput ? undefined : batch ? "Select the FECs of the batch in the specification pane first" : "Choose a FEC or write one in the specification pane first"}
             onClick={onGenerate}
           >
             {batch ? (batchCount === 1 ? "Generate 1 scene" : `Generate ${batchCount} scenes`) : "Generate scene"}
@@ -112,12 +112,12 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
     >
       <StepRow label="Input">
         <span className="step-value" role="status">
-          <span className="step-value-name">{batch ? "Batch" : "Scenario"}</span>{" "}
+          <span className="step-value-name">{batch ? "Batch" : "FEC"}</span>{" "}
           <span className={`step-value-text${(batch ? batchCount > 0 : hasScenario || loadingLabel !== null) ? "" : " is-empty"}`} title={scenarioLabel ?? undefined}>
             {batch
               ? batchCount === 0
-                ? "no presets selected"
-                : `${batchCount} preset${batchCount === 1 ? "" : "s"} selected`
+                ? "no FECs selected"
+                : `${batchCount} FEC${batchCount === 1 ? "" : "s"} selected`
               : loadingLabel !== null
                 ? `loading ${loadingLabel}...`
                 : (scenarioLabel ?? (hasScenario ? "written in the editor" : "none chosen"))}

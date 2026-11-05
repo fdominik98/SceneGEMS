@@ -113,7 +113,7 @@ class TestStarboardIsClockwise:
         _, _, heading = own_track(runs["head_on"])
         avoid_at = int(runs["head_on"].run_record["usv_navigation"]["transitions"][0][0])
         assert heading[avoid_at + 30] - heading[avoid_at] < 0
-        assert math.degrees(float(np.min(heading - heading[0]))) == pytest.approx(-2.6, abs=0.1)
+        assert math.degrees(float(np.min(heading - heading[0]))) == pytest.approx(-5.5, abs=0.1)
 
     def test_head_on_passes_with_the_target_on_the_port_side(self, runs):
         result = runs["head_on"]
@@ -122,16 +122,16 @@ class TestStarboardIsClockwise:
         assert own_y[closest] < 0.0, "the own ship passes to the south of the line, which is to starboard when heading east"
 
     def test_head_on_clearance_matches_the_recorded_integration_result(self, runs):
-        assert float(separation(runs["head_on"]).min()) == pytest.approx(69.8, abs=0.5)
+        assert float(separation(runs["head_on"]).min()) == pytest.approx(146.3, abs=0.5)
 
     def test_crossing_from_starboard_gives_way_by_turning_clockwise(self, runs):
         low, high = heading_change_degrees(runs["crossing_from_starboard"])
         assert low == pytest.approx(-53.0, abs=0.2)
-        assert high == pytest.approx(25.8, abs=0.2)
+        assert high == pytest.approx(25.6, abs=0.2)
 
     def test_crossing_from_starboard_passes_behind_the_target(self, runs):
         result = runs["crossing_from_starboard"]
-        assert float(separation(result).min()) == pytest.approx(944.5, abs=0.5)
+        assert float(separation(result).min()) == pytest.approx(945.1, abs=0.5)
 
     def test_crossing_from_port_is_the_exact_mirror_of_crossing_from_starboard(self, runs):
         starboard_x, starboard_y, starboard_heading = own_track(runs["crossing_from_starboard"])
@@ -146,4 +146,4 @@ class TestStarboardIsClockwise:
         _, own_y, _ = own_track(result)
         closest = int(np.argmin(separation(result)))
         assert own_y[closest] < 0.0
-        assert float(separation(result).min()) == pytest.approx(173.4, abs=0.5)
+        assert float(separation(result).min()) == pytest.approx(165.4, abs=0.5)

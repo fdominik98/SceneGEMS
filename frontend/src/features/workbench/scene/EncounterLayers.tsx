@@ -12,6 +12,7 @@ import {
   type Point,
   type ViewTransform,
 } from "./encounterGeometry";
+import { CANVAS_COLORS } from "./encounterPalette";
 import { actorTracksFor, cpaMarks, splitTrack, type ActorTrack } from "./encounterScene";
 import {
   BearingScale,
@@ -141,7 +142,7 @@ export function EncounterLayers({
           .map((actor) => ({
             key: actor.id,
             bearing: trueBearingDeg(own.state, frame.statesByActorId[actor.id]!),
-            color: primary?.colorByActorId[actor.id] ?? "#94a3b8",
+            color: primary?.colorByActorId[actor.id] ?? CANVAS_COLORS.fallback,
           }))
       : [];
 
@@ -229,7 +230,7 @@ export function EncounterLayers({
           streams={streams.map((stream) => ({
             key: stream.key,
             label: stream.label,
-            color: own ? (stream.colorByActorId[own.actor.id] ?? "#94a3b8") : "#94a3b8",
+            color: own ? (stream.colorByActorId[own.actor.id] ?? CANVAS_COLORS.fallback) : CANVAS_COLORS.fallback,
             secondary: Boolean(stream.secondary),
           }))}
         />

@@ -34,7 +34,7 @@ from scenegems_tool.persistence.schema import MonitorImplementation, PipelineSta
 
 DATA = Path(__file__).parent / "data"
 EXIT_CAMPAIGN = DATA / "exit_campaign.yaml"
-MINIMAL = {"name": "lab", "scope": [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 2}]}
+MINIMAL = {"name": "lab", "scope": [{"classes": ["2vessel_0obstacle_scenarios/fec0"], "quota": 2}]}
 
 
 def _with(**sections) -> dict:
@@ -98,6 +98,20 @@ def test_live_monitor_with_early_stop_and_usv_navigation_parameters():
     )
     (run,) = config.execution.runs
     assert (run.monitor, run.early_stop, run.repeats, run.stack.usv_navigation.safety_radius) == (MonitorImplementation.LIVE, True, 3, 120.0)
+
+
+def test_an_absent_usv_navigation_horizon_leaves_the_stored_config_unchanged():
+    usv_navigation = {"goal": [100.0, 0.0], "speed": 5.0, "safety_radius": 120.0, "control_horizon": 60.0}
+
+    def config_with(parameters):
+        return campaign_config_from_dict(_with(execution={"runs": [{"stack": {"mode": "usv_navigation", "usv_navigation": parameters}, "monitor": "post_hoc"}]}))
+
+    def stored_parameters(config):
+        return config.to_json()["execution"]["runs"][0]["stack"]["usv_navigation"]
+
+    assert "horizon" not in stored_parameters(config_with(usv_navigation)), "a config written before the horizon existed keeps its JSON and its hash"
+    assert stored_parameters(config_with({**usv_navigation, "horizon": 5000.0}))["horizon"] == 5000.0
+    assert config_with(usv_navigation).config_hash() != config_with({**usv_navigation, "horizon": 5000.0}).config_hash()
 
 
 # Rejections
@@ -200,7 +214,7 @@ def test_the_hash_does_not_depend_on_line_endings():
 def test_the_hash_follows_every_value():
     base = campaign_config_from_dict(MINIMAL)
     changed = [
-        _with(scope=[{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 3}]),
+        _with(scope=[{"classes": ["2vessel_0obstacle_scenarios/fec0"], "quota": 3}]),
         _with(policy={"seed": 1}),
         _with(domain={"enforce_low_tcpa": True}),
         _with(execution={"runs": [{"monitor": "empty"}]}),
@@ -222,8 +236,8 @@ def test_the_hash_is_the_same_in_another_process():
 
 
 def test_case_seeds_count_up_from_the_campaign_seed():
-    assert [case_seed(20261025, "3vessel_0obstacle_scenarios/functional_model5", index) for index in range(3)] == [20261025, 20261026, 20261027]
-    assert case_seed(20261025, "2vessel_0obstacle_scenarios/functional_model1", 0) == 20261025  # every class starts at the campaign seed
+    assert [case_seed(20261025, "3vessel_0obstacle_scenarios/fec5", index) for index in range(3)] == [20261025, 20261026, 20261027]
+    assert case_seed(20261025, "2vessel_0obstacle_scenarios/fec1", 0) == 20261025  # every class starts at the campaign seed
     assert case_seed(MAX_SEED, "a/b", 2) == 1  # 31 bits, wrapping around
 
 
@@ -234,7 +248,7 @@ def test_an_item_counts_from_its_item_number():
 
 def test_seeds_are_deterministic():
     config = load_campaign_config(EXIT_CAMPAIGN)
-    assert config.case_seed("2vessel_0obstacle_scenarios/functional_model1", 3) == case_seed(20261025, "2vessel_0obstacle_scenarios/functional_model1", 3) == 20261028
+    assert config.case_seed("2vessel_0obstacle_scenarios/fec1", 3) == case_seed(20261025, "2vessel_0obstacle_scenarios/fec1", 3) == 20261028
 
 
 def test_a_run_takes_the_case_seed_unless_it_fixes_one():
@@ -257,6 +271,7 @@ def test_the_model_is_immutable():
 # Format 2: steps, input, step monitors
 
 EXIT_CAMPAIGN_HASH = "663cec9bbe4fd64ec99d6c57dff036d8538c038c6ebb6be20dd2a0786a8822c5"  # as stored by campaigns created before format 2
+STORED_MINIMAL = {"name": "lab", "scope": [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 2}]}  # with the FEC id it was stored with
 MINIMAL_HASH = "a56ef19560d6b58abe2cee6ab125e276f315e76dd3677e742da62967a5a6d7df"
 SHA = "ab" * 32
 SCENARIO_REF = {"sha256": SHA, "size_bytes": 120, "kind": "functional_scenario", "media_type": "text/plain; charset=utf-8"}
@@ -271,7 +286,7 @@ def test_format_1_hashes_stay_what_they_were():
     """Existing campaigns keep their stored hashes: a format 1 config hashes without the format 2 fields."""
     exit_campaign = load_campaign_config(EXIT_CAMPAIGN)
     assert exit_campaign.config_hash() == EXIT_CAMPAIGN_HASH
-    assert campaign_config_from_dict(MINIMAL).config_hash() == MINIMAL_HASH
+    assert campaign_config_from_dict(STORED_MINIMAL).config_hash() == MINIMAL_HASH
     stored = exit_campaign.to_json()
     assert not {"steps", "input", "scene_generation"} & set(stored) and "monitor" not in stored["trajectories"]
     assert campaign_config_from_dict(stored).config_hash() == EXIT_CAMPAIGN_HASH
@@ -320,22 +335,22 @@ def test_format_2_defaults():
 
 
 def test_format_3_lists_a_scope_entry_s_fecs_under_fecs():
-    entry = {"fecs": ["2vessel_0obstacle_scenarios/functional_model0"], "patterns": ["3vessel_*"], "quota": 2}
+    entry = {"fecs": ["2vessel_0obstacle_scenarios/fec0"], "patterns": ["3vessel_*"], "quota": 2}
     config = campaign_config_from_dict(_format2(format=3, scope=[entry]))
-    assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+    assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/fec0",)
     stored = config.to_json()
-    assert stored["format"] == 3 and stored["scope"][0]["fecs"] == ["2vessel_0obstacle_scenarios/functional_model0"] and "classes" not in stored["scope"][0]
+    assert stored["format"] == 3 and stored["scope"][0]["fecs"] == ["2vessel_0obstacle_scenarios/fec0"] and "classes" not in stored["scope"][0]
     assert campaign_config_from_dict(stored) == config and campaign_config_from_dict(stored).config_hash() == config.config_hash()
-    yaml_text = "format: 3\nname: lab\nscope:\n  - fecs: [2vessel_0obstacle_scenarios/functional_model0]\n    quota: 1\n"
-    assert parse_campaign_config(yaml_text).scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+    yaml_text = "format: 3\nname: lab\nscope:\n  - fecs: [2vessel_0obstacle_scenarios/fec0]\n    quota: 1\n"
+    assert parse_campaign_config(yaml_text).scope[0].fecs == ("2vessel_0obstacle_scenarios/fec0",)
 
 
 def test_formats_1_and_2_keep_the_name_classes():
     for config_format in (1, 2):
         config = campaign_config_from_dict(dict(MINIMAL, format=config_format))
-        assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/functional_model0",)
+        assert config.scope[0].fecs == ("2vessel_0obstacle_scenarios/fec0",)
         stored = config.to_json()
-        assert stored["scope"][0]["classes"] == ["2vessel_0obstacle_scenarios/functional_model0"] and "fecs" not in stored["scope"][0]
+        assert stored["scope"][0]["classes"] == ["2vessel_0obstacle_scenarios/fec0"] and "fecs" not in stored["scope"][0]
         assert campaign_config_from_dict(stored).config_hash() == config.config_hash()
 
 

@@ -50,7 +50,7 @@ export function VerdictBrowser({ operatorUrl, campaignId, step, stepFilter }: Ve
       {byRun && summary.isError && <p className="error">The summary could not be loaded: {describeOperatorError(summary.error)}</p>}
       {verdicts.isError ? (
         <div className="results-notice results-notice--bad" role="alert">
-          <strong>The verdicts cannot be loaded.</strong>
+          <strong>The monitor summaries cannot be loaded.</strong>
           <span>{describeOperatorError(verdicts.error)}</span>
         </div>
       ) : (

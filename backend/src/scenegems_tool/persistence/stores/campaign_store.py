@@ -91,7 +91,7 @@ class CampaignStore:
             raise ValueError("a campaign needs at least one FEC")
         class_ids = [spec.class_id for spec in classes]
         if len(set(class_ids)) != len(class_ids):
-            raise ValueError(f"an FEC may appear once per campaign: {sorted({class_id for class_id in class_ids if class_ids.count(class_id) > 1})}")
+            raise ValueError(f"a FEC may appear once per campaign: {sorted({class_id for class_id in class_ids if class_ids.count(class_id) > 1})}")
         for spec in classes:
             require_sha256_hex(spec.content_hash)
         if desired_state == CampaignDesiredState.STOPPED:

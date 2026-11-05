@@ -30,7 +30,7 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
     DELETE <id>                            deletes a final campaign with its rows and references: 204, 404, or 409 until it is
                                            stopped or completed
     GET  <id>                              the campaign with its FECs (fecs: counts, state, verdicts per run and state) and totals
-                                           (fecs, fecs_open, ...); an FEC's failure_budget and failure_budget_left are null when its
+                                           (fecs, fecs_open, ...); a FEC's failure_budget and failure_budget_left are null when its
                                            failure budget is unlimited
     GET  <id>/fecs                         the FECs alone
     GET  <id>/cases?fec_id=&state=&stage=&limit=&offset=      cases by FEC and index
@@ -531,7 +531,7 @@ def _result_routes(stores: AssuranceStores) -> APIRouter:
         if format == "json":
             verdicts = await _run(partial(stores.results.list_verdicts, campaign_id, *filters, _page(100 if limit is None else limit), max(0, offset), step=step, sort=sort, descending=descending))
             return [verdict_view(verdict) for verdict in verdicts]
-        headers = {"Content-Disposition": f'attachment; filename="verdicts-{campaign_id}.csv"', TOTAL_COUNT_HEADER: str(total)}
+        headers = {"Content-Disposition": f'attachment; filename="monitor-summaries-{campaign_id}.csv"', TOTAL_COUNT_HEADER: str(total)}
         return StreamingResponse(csv_rows(campaign_id, filters, step, limit, max(0, offset), sort, descending), media_type="text/csv", headers=headers)
 
     @router.get(CAMPAIGNS_PATH + "/{campaign_id}/run-records")

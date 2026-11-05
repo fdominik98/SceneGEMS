@@ -296,6 +296,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
         <PresetBar
           draft={draft}
           catalog={stacks.data ? builderCatalog : null}
+          classes={classes.data?.items}
           onLoad={(next) => {
             replaceDraft(next);
             resetValidation();

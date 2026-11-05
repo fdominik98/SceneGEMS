@@ -24,8 +24,8 @@ from tests.scenegems_tool.persistence.stores.builders import ManualClock
 pytestmark = pytest.mark.postgres
 
 EXIT_CAMPAIGN = Path(__file__).resolve().parents[3] / "assurance" / "campaign" / "data" / "exit_campaign.yaml"
-CLASS_A = "2vessel_0obstacle_scenarios/functional_model0"
-CLASS_B = "2vessel_0obstacle_scenarios/functional_model1"
+CLASS_A = "2vessel_0obstacle_scenarios/fec0"
+CLASS_B = "2vessel_0obstacle_scenarios/fec1"
 JSON = {"Content-Type": "application/json"}
 YAML = {"Content-Type": "application/yaml"}
 
@@ -145,7 +145,7 @@ def test_a_config_that_does_not_load_answers_422_with_the_reasons(client, stores
 
 def test_a_config_the_catalog_refuses_answers_422_with_every_reason(client):
     config = yaml.safe_load(small_config())
-    config["scope"] = [{"classes": ["9vessel_9obstacle_scenarios/functional_model0"], "quota": 1}, {"patterns": ["8vessel_*_scenarios"], "quota": 1}]
+    config["scope"] = [{"classes": ["9vessel_9obstacle_scenarios/fec0"], "quota": 1}, {"patterns": ["8vessel_*_scenarios"], "quota": 1}]
     response = create(client, yaml.safe_dump(config))
     reasons = response.json()["detail"]["reasons"]
     assert response.status_code == 422 and len(reasons) == 2
@@ -307,7 +307,7 @@ def test_verdicts_stream_as_csv(client, stores):
     seed_cases(stores, campaign_id)
     response = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/verdicts", params={"format": "csv"})
     assert response.status_code == 200 and response.headers["content-type"].startswith("text/csv")
-    assert response.headers["content-disposition"] == f'attachment; filename="verdicts-{campaign_id}.csv"'
+    assert response.headers["content-disposition"] == f'attachment; filename="monitor-summaries-{campaign_id}.csv"'
     rows = list(csv.DictReader(io.StringIO(response.text)))
     assert [row["state"] for row in rows] == ["passed", "failed"]
     failed = rows[1]
@@ -457,7 +457,7 @@ def test_validating_answers_the_422_create_answers(client, text):
 
 def test_validating_reports_every_reason_of_the_catalog_and_the_resolver(client):
     config = yaml.safe_load(small_config())
-    config["scope"] = [{"classes": ["9vessel_9obstacle_scenarios/functional_model0"], "quota": 1}, {"patterns": ["8vessel_*_scenarios"], "quota": 1}]
+    config["scope"] = [{"classes": ["9vessel_9obstacle_scenarios/fec0"], "quota": 1}, {"patterns": ["8vessel_*_scenarios"], "quota": 1}]
     config["execution"]["runs"][0]["stack"] = {"simulation_layer": "gazebo", "mode": "replay"}
     text = yaml.safe_dump(config)
     validated = client.post(f"{CAMPAIGNS_PATH}/validate", content=text, headers=YAML)

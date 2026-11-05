@@ -380,6 +380,9 @@ class CaseStore:
                 ArtifactRow.media_type.label("media_type"),
                 VerdictRow.state.label("verdict_state"),
                 VerdictRow.failed_rules.label("failed_rules"),
+                VerdictRow.first_failure_time_s.label("first_failure_time_s"),
+                VerdictRow.encounters.label("encounters"),
+                VerdictRow.encounter_roles.label("encounter_roles"),
             ]
             order = [ScenarioCaseRow.class_id, ScenarioCaseRow.case_index]
             if step == StepKind.SIMULATION:
@@ -432,6 +435,9 @@ class CaseStore:
             verdict_state=values.verdict_state,
             failed_rules=tuple(values.failed_rules or ()),
             input_source=None if case.input_source is None else dict(case.input_source),
+            first_failure_time_s=values.first_failure_time_s,
+            encounters=values.encounters,
+            encounter_roles=values.encounter_roles,
         )
 
     @staticmethod

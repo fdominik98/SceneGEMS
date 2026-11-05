@@ -10,7 +10,7 @@ from utils.file_system_utils import FUNCTIONAL_MODELS_FOLDER
 
 @lru_cache(maxsize=1)
 def _functional_scenario() -> str:
-    with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/functional_model0.problem", encoding="utf-8") as file:
+    with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/fec0.problem", encoding="utf-8") as file:
         return file.read()
 
 

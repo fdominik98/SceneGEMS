@@ -8,9 +8,14 @@ from concrete_level.models.actor_state import ActorState
 from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import (
     DEFAULT_CONTROL_HORIZON_STEPS,
     DEFAULT_PRESCRIBED_TIME_S,
+    UPSTREAM_DCPA_BETA1_M,
+    UPSTREAM_DCPA_BETA2_M,
     UsvNavigationParameters,
 )
 from tests.scenegems_tool.vessel_stack.scenarios import SPEED, encounter_trajectories, make_vessel
+from utils.global_constants import VISIBILITY_DIST_5, VISIBILITY_DIST_6
+
+STATES = [ActorState(0.0, 0.0, SPEED, 0.0), ActorState(8.0, 0.0, SPEED, 0.0)]
 
 
 @pytest.fixture
@@ -86,13 +91,46 @@ def test_prescribed_time_is_the_upstream_default(head_on):
     assert parameters.prescribed_time == DEFAULT_PRESCRIBED_TIME_S == 3.0
 
 
+def test_horizon_is_the_visibility_between_the_vessel_and_the_other_actor():
+    own = make_vessel(0, True, length=30.0)
+    other = make_vessel(1, False, length=100.0)
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, other], 1.0).horizon == VISIBILITY_DIST_5, "the smaller vessel limits the pair"
+
+
+def test_horizon_is_the_largest_visibility_of_several_actors():
+    own = make_vessel(0, True, length=100.0)
+    near_sighted = make_vessel(1, False, length=30.0)
+    far_sighted = make_vessel(2, False, length=100.0)
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, near_sighted, far_sighted], 1.0).horizon == VISIBILITY_DIST_6
+
+
+def test_a_vessel_alone_has_no_horizon():
+    own = make_vessel(0, True)
+    parameters = UsvNavigationParameters.from_reference(own, STATES, [own], 1.0)
+    assert parameters.horizon is None
+    assert "horizon" not in parameters.as_dict()
+
+
+def test_dcpa_bounds_stay_upstream_for_a_small_safety_radius():
+    own = make_vessel(0, True, length=30.0)
+    parameters = UsvNavigationParameters.from_reference(own, STATES, [own], 1.0)
+    assert dict(parameters.runtime_options) == {"dcpa_beta1": UPSTREAM_DCPA_BETA1_M, "dcpa_beta2": UPSTREAM_DCPA_BETA2_M}
+
+
+def test_dcpa_bounds_grow_with_a_large_safety_radius():
+    own = make_vessel(0, True, length=300.0)
+    parameters = UsvNavigationParameters.from_reference(own, STATES, [own], 1.0)
+    assert parameters.safety_radius == 1200.0
+    assert dict(parameters.runtime_options) == {"dcpa_beta1": 1500.0, "dcpa_beta2": 3000.0}
+
+
 def test_runtime_kwargs_and_as_dict(head_on):
     trajectories, own = head_on
     parameters = UsvNavigationParameters.from_reference(own, trajectories.state_list(own), trajectories.initial_scene.actors, 1.0)
     kwargs = parameters.runtime_kwargs()
-    assert set(kwargs) == {"Cs", "v", "tp", "tp_control"}
+    assert set(kwargs) == {"Cs", "v", "tp", "tp_control", "dcpa_beta1", "dcpa_beta2"}, "the horizon is no argument of the runtime"
     assert kwargs["Cs"] == 120.0
-    assert parameters.as_dict() == {"goal": list(parameters.goal), **kwargs}
+    assert parameters.as_dict() == {"goal": list(parameters.goal), **kwargs, "horizon": VISIBILITY_DIST_5}
 
 
 def test_runtime_options_extend_the_kwargs():

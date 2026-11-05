@@ -13,6 +13,7 @@ import {
   getCurrentSimulationFrame,
 } from "../../../domain/playback/playbackStore";
 import { useShownPlayback } from "../../../domain/playback/playbackContext";
+import { useTheme } from "../../../app/theme";
 import { useUiStore } from "../../../app/uiStore";
 import { useEncounterSelectionStore } from "../monitor/encounterSelectionStore";
 import { buildShipColorsByActorId, getShipColor, getSimulationStreamColor } from "./shipColors";
@@ -77,20 +78,21 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const actors = useMemo(() => previewFrame?.actors ?? [], [previewFrame]);
   const simActors = useMemo(() => simulationFrame?.actors ?? [], [simulationFrame]);
 
+  const theme = useTheme();
   const colorByActorId = useMemo(
     () =>
       isGeneratedMode
-        ? buildShipColorsByActorId(actors)
-        : (Object.fromEntries(actors.map((actor) => [actor.id, getShipColor(actor)])) as Record<string, string>),
-    [actors, isGeneratedMode]
+        ? buildShipColorsByActorId(actors, theme)
+        : (Object.fromEntries(actors.map((actor) => [actor.id, getShipColor(actor, theme)])) as Record<string, string>),
+    [actors, isGeneratedMode, theme]
   );
   const simulationStreamColorByActorId = useMemo(
     () =>
-      Object.fromEntries(simActors.map((actor) => [actor.id, getSimulationStreamColor(actor)])) as Record<
+      Object.fromEntries(simActors.map((actor) => [actor.id, getSimulationStreamColor(actor, theme)])) as Record<
         string,
         string
       >,
-    [simActors]
+    [simActors, theme]
   );
 
   const streams = useMemo<EncounterCanvasStream[]>(() => {

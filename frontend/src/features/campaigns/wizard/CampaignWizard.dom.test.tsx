@@ -149,7 +149,7 @@ describe("creating the campaign", () => {
     draft.name = "scenes only";
     draft.steps = ["scene_generation"];
     draft.sceneMonitor = "post_hoc";
-    draft.scope = [{ id: "s", classes: ["2vessel_0obstacle_scenarios/functional_model1"], patterns: [], quota: 2, failureBudget: 0 }];
+    draft.scope = [{ id: "s", classes: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 2, failureBudget: 0 }];
     useWizardStore.setState({ step: "review", draft });
     const { onCreated, user } = renderWizard();
 

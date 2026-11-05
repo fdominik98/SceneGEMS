@@ -21,7 +21,7 @@ function renderControls(overrides: Partial<Parameters<typeof SceneGenerationCont
     busy: false,
     batch: false,
     batchCount: 0,
-    scenarioLabel: "2vessel/functional_model2",
+    scenarioLabel: "2vessel/fec2",
     hasScenario: true,
     loadingLabel: null,
     domainProblem: null,
@@ -52,7 +52,7 @@ describe("SceneGenerationControls", () => {
   it("generates the scenario of the specification and says where it runs", async () => {
     const user = userEvent.setup();
     const props = renderControls();
-    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Scenario 2vessel/functional_model2");
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("FEC 2vessel/fec2");
     expect(screen.getByText(/Generates as a job on the cluster: 4 slots on 2 machines, 3 free/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Generate scene" }));
     expect(props.onGenerate).toHaveBeenCalledTimes(1);
@@ -74,29 +74,29 @@ describe("SceneGenerationControls", () => {
     expect(screen.getByRole("button", { name: "Generate scene" })).toBeDisabled();
   });
 
-  it("says in the Input row that the scenario is missing, and the run button says why it waits", async () => {
+  it("says in the Input row that the FEC is missing, and the run button says why it waits", async () => {
     const user = userEvent.setup();
     const props = renderControls({ hasScenario: false, scenarioLabel: null, specificationHidden: true });
     expect(screen.queryByRole("list", { name: "Before it can run" })).not.toBeInTheDocument();
     const input = screen.getByRole("group", { name: "Input" });
-    expect(input).toHaveTextContent("Scenario none chosen");
+    expect(input).toHaveTextContent("FEC none chosen");
     const generate = screen.getByRole("button", { name: "Generate scene" });
     expect(generate).toBeDisabled();
-    expect(generate).toHaveAttribute("title", "Choose a preset or write a functional scenario in the specification pane first");
+    expect(generate).toHaveAttribute("title", "Choose a FEC or write one in the specification pane first");
     await user.click(within(input).getByRole("button", { name: "Show the specification" }));
     expect(props.onShowSpecification).toHaveBeenCalledTimes(1);
   });
 
-  it("waits for the presets of a batch", () => {
+  it("waits for the FECs of a batch", () => {
     renderControls({ batch: true, batchCount: 0 });
     expect(screen.getByRole("button", { name: "Generate 0 scenes" })).toBeDisabled();
-    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch no presets selected");
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch no FECs selected");
   });
 
-  it("counts the presets of a batch", () => {
+  it("counts the FECs of a batch", () => {
     renderControls({ batch: true, batchCount: 3 });
     expect(screen.getByRole("button", { name: "Generate 3 scenes" })).toBeEnabled();
-    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch 3 presets selected");
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch 3 FECs selected");
   });
 
   it("has the generation settings on one row", async () => {

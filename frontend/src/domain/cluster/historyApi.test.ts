@@ -5,6 +5,7 @@ import {
   sampleDroppedOutput,
   sampleFindings,
   sampleHistoryRows,
+  sampleMonitorVerdict,
   samplePreSixCampaignRow,
   sampleOutputRows,
   sampleSimulationOutput,
@@ -118,6 +119,15 @@ describe("outputs", () => {
     expect(run.run_record_id).toBe(11);
     expect(run.input_source?.file).toBe("head_on.json");
     expect(outputRowSchema.parse(sampleDroppedOutput()).artifact).toBeNull();
+  });
+
+  it("parses a verdict's monitor summary, which null and an older master's leave out", () => {
+    const verdict = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })).verdict;
+    expect(verdict?.first_failure_time_s).toBe(61);
+    expect(verdict?.encounters?.["OS_0 - TS_1"]).toEqual(["CROSSING_FROM_PORT", "OTHER"]);
+    expect(verdict?.encounter_roles?.["OS_0 - TS_1"].CROSSING_FROM_PORT).toEqual({ give_way: ["TS_1"], stand_on: ["OS_0"] });
+    const stored = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict({ first_failure_time_s: null, encounters: null, encounter_roles: null }) })).verdict;
+    expect([stored?.first_failure_time_s, stored?.encounters, stored?.encounter_roles]).toEqual([null, null, null]);
   });
 
   it("pages with the step and filters and reads the total", async () => {

@@ -35,8 +35,8 @@
 }
 
 .enc-playback-live.is-active {
-  border-color: #ef4444;
-  color: #fecaca;
+  border-color: var(--danger);
+  color: var(--danger-text-soft);
 }
 
 .enc-playback-live.is-active::before {
@@ -46,7 +46,7 @@
   height: 6px;
   margin-right: 5px;
   border-radius: 50%;
-  background: #ef4444;
+  background: var(--danger);
   vertical-align: 1px;
 }
 
@@ -93,8 +93,8 @@
 .enc-view-live {
   padding: 0 6px;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.2);
-  color: #fecaca;
+  background: rgb(var(--danger-rgb) / 0.2);
+  color: var(--danger-text-soft);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   font-size: var(--font-size-xs);

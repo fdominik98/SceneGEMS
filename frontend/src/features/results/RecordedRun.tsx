@@ -118,7 +118,7 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
           <strong>This run cannot be shown.</strong>
           <span>{phase.message}</span>
           <span className="meta">
-            The state log of a run is kept only while the campaign&apos;s retention keeps it; without it the master cannot compute frames. The verdict and the
+            The state log of a run is kept only while the campaign&apos;s retention keeps it; without it the master cannot compute frames. The monitor summary and the
             rule outcomes stay available.
           </span>
         </div>

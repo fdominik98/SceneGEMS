@@ -28,8 +28,8 @@ def stores(session_factory, clock) -> AssuranceStores:
     return AssuranceStores.create(session_factory, clock)
 
 
-CLASS_A = "2vessel_0obstacle_scenarios/functional_model0"
-CLASS_B = "3vessel_1obstacle_scenarios/functional_model5"
+CLASS_A = "2vessel_0obstacle_scenarios/fec0"
+CLASS_B = "3vessel_1obstacle_scenarios/fec5"
 
 
 @pytest.fixture

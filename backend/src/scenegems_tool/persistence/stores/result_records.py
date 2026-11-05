@@ -109,6 +109,7 @@ class NewVerdict:
     run_record_id: Optional[int] = None
     step: StepKind = StepKind.SIMULATION  # the scene and trajectory steps have run index 0
     encounters: Optional[Dict[str, List[str]]] = None  # per relation, the COLREGSType names in order of first appearance; None when the monitor did not say
+    encounter_roles: Optional[Dict[str, Dict[str, Dict[str, List[str]]]]] = None  # per relation and COLREGSType name, the vessels by role (give_way, stand_on); None when the monitor did not say
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ class VerdictRecord:
     case_index: Optional[int] = None  # the case's index in its class, joined in by the store
     step: StepKind = StepKind.SIMULATION
     encounters: Optional[Dict[str, List[str]]] = None
+    encounter_roles: Optional[Dict[str, Dict[str, Dict[str, List[str]]]]] = None
 
     @classmethod
     def from_row(cls, row: VerdictRow, case_index: Optional[int] = None) -> "VerdictRecord":
@@ -153,6 +155,7 @@ class VerdictRecord:
             case_index=case_index,
             step=row.step,
             encounters=None if row.encounters is None else {relation: list(types) for relation, types in row.encounters.items()},
+            encounter_roles=None if row.encounter_roles is None else dict(row.encounter_roles),
         )
 
 

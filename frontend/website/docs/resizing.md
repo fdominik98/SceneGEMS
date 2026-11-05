@@ -5,10 +5,12 @@ title: Resizable panels
 
 # Resizable panels
 
-Several drag handles let you customize layout proportions:
+Several controls let you customize the layout of the workbench pages:
 
-- **Right pane width**: Vertical resizer between center and right panels (Simulation and Scene Generation views)
-- **Bottom panel height**: Horizontal resizer between canvas and bottom toolbar
-- **Preview / Simulation split**: Vertical resizer inside the monitoring sidebar when both columns are visible
-- **Domain config dual columns**: Horizontal resizer between vessel types and obstacle types editors
-- **Left menu**: Collapse/expand via hamburger toggle (56px vs 240px)
+- **Right pane width**: Vertical resizer between the center and right panes (Scene Generation, Trajectory Generation and Simulation)
+- **Bottom panel height**: Horizontal resizer between the canvas and the bottom panel. Until you drag it, the panel takes the height it needs, at most half the page
+- **Monitoring panel**: **Hide monitoring panel** in its toolbar, and **Show monitoring panel** in the canvas toolbar to bring it back (Trajectory Generation and Simulation)
+- **Rule timeline**: The button at the end of the playback bar hides or shows it
+- **Left menu**: Collapse or expand with the hamburger toggle (a 72 px rail of icons or 280 px)
+
+The resizers reset on a reload. Below 1100 px wide the panes stack and scroll as one page, without resizers.

@@ -20,7 +20,7 @@ const CLASS_STATE_LABEL: Record<ClassView["state"], string> = { open: "Open", co
 const COLUMNS: { key: CoverageSortKey; label: string; title: string }[] = [
   { key: "class", label: "FEC", title: "Catalog order" },
   { key: "state", label: "State", title: "Open, complete or abandoned" },
-  { key: "progress", label: "Complete of quota", title: "Cases with a verdict for every run, against the quota" },
+  { key: "progress", label: "Complete of quota", title: "Cases with a monitor summary for every run, against the quota" },
   { key: "dropped", label: "Dropped", title: "Cases that could not be completed and count against the failure budget" },
   { key: "budget", label: "Budget left", title: "Failure budget left before the FEC is abandoned" },
 ];
@@ -72,7 +72,7 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
               {key === "all" ? "All" : CLASS_STATE_LABEL[key]} {counts[key]}
             </button>
           ))}
-          <input type="search" className="camp-search" placeholder="Find an FEC" aria-label="Find an FEC" value={search} onChange={(event) => setSearch(event.target.value)} />
+          <input type="search" className="camp-search" placeholder="Find a FEC" aria-label="Find a FEC" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
       </div>
       {classes.length === 0 ? (
@@ -94,7 +94,7 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                 ))}
                 <th title="Cases that were submitted and are not finished">In flight</th>
                 {runs.map((run) => (
-                  <th key={run} title="Verdicts of this run by state">
+                  <th key={run} title="Monitor summaries of this run by state">
                     {runNames[run] ?? `Run ${run}`}
                   </th>
                 ))}

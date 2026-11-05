@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "../../app/uiStore";
 import { resetLiveChannels } from "../../domain/cluster/liveChannels";
 import { sampleCampaignDetail } from "../../test/fixtures/clusterViews";
-import { sampleCampaignRow, sampleHistoryRows, sampleRunningWorkbenchRow, sampleTrajectoryOutput, sampleWorkbenchRow } from "../../test/fixtures/historyViews";
+import { sampleCampaignRow, sampleHistoryRows, sampleMonitorVerdict, sampleRunningWorkbenchRow, sampleTrajectoryOutput, sampleWorkbenchRow } from "../../test/fixtures/historyViews";
 import { MockWebSocket } from "../../test/mockWebSocket";
 import { useWorkbenchTargetStore } from "../workbench/pages/workbenchTarget";
 import { HistorySection } from "./HistorySection";
@@ -21,6 +21,9 @@ interface Call {
 
 let calls: Call[] = [];
 let deleteStatus = 204;
+let outputs: Record<string, unknown>[] = [];
+/** What the config route answers; null answers 404. */
+let entryConfig: Record<string, unknown> | null = null;
 
 function json(body: unknown, total?: number, status = 200): Response {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -51,7 +54,10 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     return row ? json(detailOf(row)) : json({ detail: "no such campaign" }, undefined, 404);
   }
   if (parts[3] === "outputs") {
-    return json([sampleTrajectoryOutput()], 1);
+    return json(outputs, outputs.length);
+  }
+  if (parts[3] === "config" && entryConfig !== null) {
+    return json({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-28T10:00:00+00:00", config: entryConfig }] });
   }
   if (parts[3] === "events" || url.pathname === "/cluster/nodes") {
     return json([], 0);
@@ -81,6 +87,8 @@ async function goLive(): Promise<MockWebSocket> {
 beforeEach(() => {
   calls = [];
   deleteStatus = 204;
+  outputs = [sampleTrajectoryOutput()];
+  entryConfig = null;
   MockWebSocket.reset();
   resetLiveChannels({ createSocket: MockWebSocket.factory });
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
@@ -152,6 +160,68 @@ describe("Campaign History in the DOM", () => {
     await user.click(within(output).getByRole("button", { name: "Open in workbench" }));
     expect(useWorkbenchTargetStore.getState().pending.trajectoryGeneration).toEqual({ page: "trajectoryGeneration", campaignId: "wb1", caseId: 6, step: "trajectory_generation" });
     expect(useUiStore.getState().section).toBe("workbench");
+  });
+
+  it("shows the monitor summary: passed or failed, scenario types, roles of the vessels and failed rules", async () => {
+    const user = userEvent.setup();
+    outputs = [sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })];
+    entryConfig = { trajectories: { monitor: "post_hoc" } };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    expect(await screen.findByRole("columnheader", { name: "Monitor summary" })).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: /verdict/i })).not.toBeInTheDocument();
+    const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
+    expect(within(output).getByText("failed")).toBeInTheDocument();
+    expect(within(output).getByText("2 rules failed, first at 1 min 1 s")).toBeInTheDocument();
+
+    const crossing = within(output).getByText("OS_0 - TS_1").parentElement as HTMLElement;
+    expect(within(crossing).getByText("Crossing from Port")).toBeInTheDocument();
+    expect(within(crossing).getByText("TS_1 give-way")).toHaveAttribute("title", "TS_1 is the give-way vessel");
+    expect(within(crossing).getByText("OS_0 stand-on")).toBeInTheDocument();
+    expect(within(crossing).getByText("Rule 16: Give-Way Vessel Takes Early and Substantial Action (TS_1)")).toBeInTheDocument();
+
+    const headOn = within(output).getByText("OS_0 - TS_2").parentElement as HTMLElement;
+    expect(within(headOn).getByText("Head-On")).toBeInTheDocument();
+    expect(within(headOn).getByText("OS_0 give-way")).toBeInTheDocument();
+    expect(within(headOn).getByText("TS_2 give-way")).toBeInTheDocument();
+
+    expect(within(output).getByText("Rule 8: Readily Apparent Course Change (OS_0)")).toBeInTheDocument();
+    expect(within(output).getByText("1 pair without an encounter")).toBeInTheDocument();
+    expect(within(output).queryByText("OS_0 - TS_10")).not.toBeInTheDocument();
+  });
+
+  it("cuts a long list of failed rules short, and says when the roles were not recorded", async () => {
+    const user = userEvent.setup();
+    const rules = ["a", "b", "c", "d", "e"].map((name) => `OS_0 - TS_1: Rule ${name}`);
+    outputs = [sampleTrajectoryOutput({ verdict: sampleMonitorVerdict({ failed_rules: rules, encounter_roles: null }) })];
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
+    expect(within(output).getByText("Rule c")).toBeInTheDocument();
+    expect(within(output).queryByText("Rule d")).not.toBeInTheDocument();
+    expect(within(output).getByText("and 2 more")).toHaveAttribute("title", "Rule d\nRule e");
+    expect(within(output).getAllByText("roles not recorded")).toHaveLength(2);
+  });
+
+  it("leaves the monitor summary out of a step without a monitor", async () => {
+    const user = userEvent.setup();
+    outputs = [sampleTrajectoryOutput({ verdict: null })];
+    entryConfig = { trajectories: { monitor: "empty" } };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    await waitFor(() => expect(calls.some((call) => call.path === "/cluster/campaigns/wb1/config")).toBe(true));
+    expect(await screen.findByText("partial")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Monitor summary" })).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Input from" })).toBeInTheDocument();
+  });
+
+  it("says a case of a monitored step has no monitor summary yet", async () => {
+    const user = userEvent.setup();
+    outputs = [sampleTrajectoryOutput({ state: "active", verdict: null })];
+    entryConfig = { trajectories: { monitor: "post_hoc" } };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    expect(await screen.findByText("no monitor summary yet")).toBeInTheDocument();
   });
 
   it("deletes a final entry after a confirmation, and says to stop one the master refuses", async () => {

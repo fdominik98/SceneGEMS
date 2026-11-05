@@ -47,13 +47,13 @@ export function BatchPresetRunner({
       <div className="batch-preset-runner-body">
         {presets.length === 0 ? (
           <p className="meta">
-            The master offers no functional scenarios that match the filters.
+            No FEC of the master's catalog matches the filters.
             {selected.size > 0 ? ` ${selected.size} selected earlier still run.` : ""}
           </p>
         ) : (
           <>
             <p className="meta">
-              Select the functional scenarios to run, then generate their scenes below. Only valid
+              Select the FECs to run, then generate their scenes below. Only valid
               scenes are kept. {selected.size} selected
               {hidden > 0 ? `, ${hidden} of them not shown by the filters (they run too)` : ""}.
             </p>

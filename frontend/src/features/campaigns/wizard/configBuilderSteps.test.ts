@@ -17,7 +17,7 @@ const SHA_C = "c".repeat(64);
 function baseDraft(): WizardDraft {
   const draft = emptyDraft();
   draft.name = "partial";
-  draft.scope = [{ id: "s1", classes: ["2vessel_0obstacle_scenarios/functional_model1"], patterns: [], quota: 2, failureBudget: 0 }];
+  draft.scope = [{ id: "s1", classes: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 2, failureBudget: 0 }];
   draft.runs = [{ ...emptyRun("kinematic.usv_navigation", "post_hoc"), id: "r1", name: "usv" }];
   return draft;
 }

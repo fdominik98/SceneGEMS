@@ -3,7 +3,7 @@
 Plain dictionaries with ISO times (UTC, as stored), in the style of views.py. Enum values
 are their wire strings, and a verdict count map is keyed by the run index as a string.
 
-The API calls what the stores call a class an FEC (functional equivalence class): fec_id,
+The API calls what the stores call a class a FEC (functional equivalence class): fec_id,
 fecs, fecs_open and so on, and the event kinds fec_complete and fec_abandoned (stored as
 class_complete and class_abandoned).
 
@@ -277,6 +277,7 @@ def verdict_view(verdict: VerdictRecord) -> Dict[str, Any]:
         "sensitive": verdict.sensitive,
         "early_stop_time_s": verdict.early_stop_time_s,
         "encounters": verdict.encounters,
+        "encounter_roles": verdict.encounter_roles,
         "created_at": iso(verdict.created_at),
     }
 
@@ -300,6 +301,19 @@ def event_view(event: CampaignEventRecord) -> Dict[str, Any]:
     return {"event_id": event.event_id, "at": iso(event.at), "kind": EVENT_KIND_NAMES.get(event.kind.value, event.kind.value), "fec_id": event.class_id, "detail": detail}
 
 
+def output_verdict_view(output: OutputRecord) -> Optional[Dict[str, Any]]:
+    """The step's verdict of an output, in short: enough for the monitor summary of a row, the rule outcomes stay with the verdict route."""
+    if output.verdict_state is None:
+        return None
+    return {
+        "state": output.verdict_state.value,
+        "failed_rules": list(output.failed_rules),
+        "first_failure_time_s": output.first_failure_time_s,
+        "encounters": output.encounters,
+        "encounter_roles": output.encounter_roles,
+    }
+
+
 def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lambda campaign_id: True) -> Dict[str, Any]:
     """An output of a step. The artifact is None while the step has none or once its record is gone; an input source whose campaign was deleted since reads as {}."""
     artifact = output.artifact
@@ -321,7 +335,7 @@ def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lam
         "run_index": output.run_index,
         "repeat_index": output.repeat_index,
         "run_record_id": output.run_record_id,
-        "verdict": None if output.verdict_state is None else {"state": output.verdict_state.value, "failed_rules": list(output.failed_rules)},
+        "verdict": output_verdict_view(output),
         "input_source": source,
     }
 

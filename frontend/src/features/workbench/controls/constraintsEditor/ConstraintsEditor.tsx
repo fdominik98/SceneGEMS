@@ -1,5 +1,6 @@
 import CodeMirror from "@uiw/react-codemirror";
 import { useMemo, useState } from "react";
+import { useTheme } from "../../../../app/theme";
 import { usePersistedState } from "../../../../app/usePersistedState";
 import { yamlEditorExtensions } from "../yamlEditorExtensions";
 import "./constraintsEditor.css";
@@ -28,6 +29,7 @@ export function ConstraintsEditor({ text, onTextChange, initialTab = "form", lab
   const [tab, setTab] = useState<ConstraintsEditorTab>(initialTab);
   const [showKeys, setShowKeys] = usePersistedState("constraints-show-keys", false);
   const failure = useMemo(() => findParseFailure(text), [text]);
+  const theme = useTheme();
 
   return (
     <div className="ce-editor" data-show-keys={showKeys ? "true" : undefined}>
@@ -69,8 +71,8 @@ export function ConstraintsEditor({ text, onTextChange, initialTab = "form", lab
             className="scene-editor-yaml-codemirror"
             value={text}
             height="100%"
-            theme="dark"
-            extensions={yamlEditorExtensions}
+            theme={theme}
+            extensions={yamlEditorExtensions[theme]}
             onChange={onTextChange}
           />
         </div>

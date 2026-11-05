@@ -7,15 +7,14 @@ const sidebars: SidebarsConfig = {
     'navigation',
     {
       type: 'category',
-      label: 'Main views',
+      label: 'Workbench',
       collapsed: false,
       items: [
-        'domain-configuration',
         'workbench-pages',
         'scene-generation',
+        'trajectory-generation',
         'simulation',
         'connections',
-        'campaign-wizard',
       ],
     },
     {
@@ -24,8 +23,12 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'cluster',
+        'domain-configuration',
+        'capabilities',
         'campaigns',
+        'campaign-wizard',
         'campaign-history',
+        'results',
       ],
     },
     {
@@ -38,14 +41,6 @@ const sidebars: SidebarsConfig = {
         'monitoring',
         'metrics',
         'recording',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Cluster pages',
-      collapsed: false,
-      items: [
-        'results',
       ],
     },
     {

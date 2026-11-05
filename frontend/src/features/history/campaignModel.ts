@@ -336,13 +336,16 @@ export function runVerdicts(entry: Pick<ClassView, "verdicts">, runIndex: number
   return { passed: counts.passed ?? 0, failed: counts.failed ?? 0, unmonitored: counts.unmonitored ?? 0 };
 }
 
+function currentVersion(config: CampaignConfig) {
+  return config.versions.find((version) => version.version === config.current_version) ?? config.versions[config.versions.length - 1];
+}
+
 /** The names of a campaign's runs from its current config version (an unnamed run gets "Run <index>"). */
 export function runNames(config: CampaignConfig | null | undefined): string[] {
   if (!config) {
     return [];
   }
-  const current = config.versions.find((version) => version.version === config.current_version) ?? config.versions[config.versions.length - 1];
-  const execution = current?.config.execution as { runs?: { name?: string | null }[] } | undefined;
+  const execution = currentVersion(config)?.config.execution as { runs?: { name?: string | null }[] } | undefined;
   return (execution?.runs ?? []).map((run, index) => (run.name ? run.name : `Run ${index}`));
 }
 
@@ -351,9 +354,32 @@ export function baseSeed(config: CampaignConfig | null | undefined): number | nu
   if (!config) {
     return null;
   }
-  const current = config.versions.find((version) => version.version === config.current_version) ?? config.versions[config.versions.length - 1];
-  const seed = (current?.config.policy as { seed?: unknown } | undefined)?.seed;
+  const seed = (currentVersion(config)?.config.policy as { seed?: unknown } | undefined)?.seed;
   return typeof seed === "number" ? seed : null;
+}
+
+/**
+ * Whether the current config version monitors a step, or null without a config. As the master reads
+ * it: a generation step when its monitor is not empty (a format 1 config stores none), the simulation
+ * when any run's is (a run without one is monitored post hoc).
+ */
+export function stepMonitored(config: CampaignConfig | null | undefined, step: CampaignStep): boolean | null {
+  if (!config) {
+    return null;
+  }
+  const values = (currentVersion(config)?.config ?? {}) as {
+    scene_generation?: { monitor?: string };
+    trajectories?: { monitor?: string };
+    execution?: { runs?: { monitor?: string }[] };
+  };
+  switch (step) {
+    case "scene_generation":
+      return (values.scene_generation?.monitor ?? "empty") !== "empty";
+    case "trajectory_generation":
+      return (values.trajectories?.monitor ?? "empty") !== "empty";
+    case "simulation":
+      return (values.execution?.runs ?? []).some((run) => (run.monitor ?? "post_hoc") !== "empty");
+  }
 }
 
 // The list view

@@ -198,7 +198,8 @@ def _outcomes(script: CaseScript, stage: PipelineStage = PipelineStage.MONITOR) 
     passed = script.monitor_passed.get(stage, script.passed)
     rules = {"OS_0 - TS_1": {"Rule 14": {"passed": 0} if passed else {"failed": FAILED_RULE["first_failed_at"]}}}
     failed = [] if passed else [dict(FAILED_RULE)]
-    return {"rules": rules, "failed_rules": failed, "encounters": {"OS_0 - TS_1": ["HEAD_ON", "OTHER"]}, "passed": passed}
+    roles = {"OS_0 - TS_1": {"HEAD_ON": {"give_way": ["OS_0", "TS_1"], "stand_on": []}}}
+    return {"rules": rules, "failed_rules": failed, "encounters": {"OS_0 - TS_1": ["HEAD_ON", "OTHER"]}, "encounter_roles": roles, "passed": passed}
 
 
 def _simulation(executor: FakeExecutor, script: CaseScript, case, payload) -> Dict[str, Any]:

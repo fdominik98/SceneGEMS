@@ -83,5 +83,5 @@ def sha256_of(text: str) -> str:
 CONFIG_HASH = sha256_of("config")
 
 
-def make_class_spec(class_id: str = "2vessel_0obstacle_scenarios/functional_model0", quota: int = 3, failure_budget: Optional[int] = 2, vessels: int = 2, obstacles: int = 0) -> ClassSpec:
+def make_class_spec(class_id: str = "2vessel_0obstacle_scenarios/fec0", quota: int = 3, failure_budget: Optional[int] = 2, vessels: int = 2, obstacles: int = 0) -> ClassSpec:
     return ClassSpec(class_id=class_id, content_hash=sha256_of(class_id), vessel_count=vessels, obstacle_count=obstacles, quota=quota, failure_budget=failure_budget)

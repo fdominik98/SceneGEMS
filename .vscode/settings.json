@@ -27,5 +27,6 @@
         "timespan",
         "WARAPS"
     ],
-    "makefile.configureOnOpen": false
+    "makefile.configureOnOpen": false,
+    "compilets.autoStart": true
 }

@@ -108,7 +108,7 @@ export const RUN_GAP = 10;
 const RETENTION_LABELS: Record<RetentionPolicy, string> = {
   all: "Keep everything",
   failures: "Keep failures",
-  verdicts_only: "Verdicts only",
+  verdicts_only: "Monitor summaries only",
 };
 
 const REVIEW_FACTS: Record<ReviewStatus, MapFact> = {

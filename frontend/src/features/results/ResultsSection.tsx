@@ -166,9 +166,9 @@ export function ResultsSection() {
         <div className="results-stack" id="results-step-panel" role={legacy ? undefined : "tabpanel"} aria-labelledby={legacy ? undefined : `results-step-${step}`}>
           {!legacy && <FindingsPanel findings={findings.data} loading={findings.isFetching} error={findings.error} />}
           {awaitingFindings ? null : unmonitored ? (
-            <section className="results-panel" aria-label="Verdicts">
+            <section className="results-panel" aria-label="Monitor summaries">
               <p className="meta">
-                No monitor judged {STEP_LABEL[step].toLowerCase()} in this entry, so there are no verdicts to list. The outputs of the step are in Campaign History.
+                No monitor judged {STEP_LABEL[step].toLowerCase()} in this entry, so there are no monitor summaries to list. The outputs of the step are in Campaign History.
               </p>
               <button type="button" className="results-back" onClick={() => useUiStore.getState().setSection("history")}>
                 Open Campaign History

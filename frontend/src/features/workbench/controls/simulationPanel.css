@@ -90,5 +90,5 @@
 }
 
 .sim-model-status.is-loaded {
-  color: #86efac;
+  color: var(--ok-text-alt);
 }

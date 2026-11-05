@@ -6,7 +6,7 @@ import {
   formatKnots,
   formatNm,
 } from "../scene/encounterGeometry";
-import { RESULT_COLORS, RESULT_LABELS, ROLE_CODES, ROLE_COLORS } from "../scene/encounterPalette";
+import { CANVAS_COLORS, RESULT_COLORS, RESULT_LABELS, ROLE_CODES, ROLE_COLORS } from "../scene/encounterPalette";
 import { renderActorName } from "./actorNames";
 import type { PairModel, PairRule, PairVessel } from "./encounterPairs";
 import { directionWord, humanizeEnum } from "./monitorFormat";
@@ -25,7 +25,7 @@ const RESULT_GLYPH: Record<RuleResult, string> = { FAILED: "✕", PASSED: "✓",
 function VesselName({ vessel, color }: { vessel: PairVessel; color: string | undefined }) {
   return (
     <span className="enc-vessel-name">
-      <span className="enc-dot" style={{ backgroundColor: color ?? "#94a3b8" }} aria-hidden />
+      <span className="enc-dot" style={{ backgroundColor: color ?? CANVAS_COLORS.fallback }} aria-hidden />
       {renderActorName(vessel.name)}
     </span>
   );

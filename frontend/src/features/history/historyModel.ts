@@ -1,6 +1,7 @@
-import type { InputSource, OutputRow } from "../../domain/cluster/historyApi";
+import type { InputSource, OutputRow, OutputVerdict } from "../../domain/cluster/historyApi";
 import type { CampaignsTopicState, CampaignsUpdate } from "../../domain/cluster/liveTopics";
 import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
+import { splitFailedRule } from "../../domain/cluster/resultsApi";
 import {
   CAMPAIGN_STEPS,
   type CampaignKind,
@@ -9,15 +10,19 @@ import {
   type CampaignRowTotals,
   type CampaignStep,
   type CampaignSummary,
+  type VerdictState,
   type VerdictStep,
 } from "../../domain/cluster/schemas";
+import { encounterTypeLabel } from "../../domain/simulation/encounterTypes";
+import { formatDuration, plural } from "../campaigns/campaignFormat";
+import { isEncounter, type VesselRole } from "../workbench/monitor/encounterPairs";
 import { WORKBENCH_PAGE_OF_STEP, type WorkbenchTarget } from "../workbench/pages/workbenchTarget";
 import { isFinalState, newerSummary, type ListViewState, type Tone } from "./campaignModel";
 
 /**
  * What Campaign History shows, as pure functions: entry kinds, origins and steps, the row totals,
- * the filters the list route cannot apply, the live list updates, the outputs of a step and the
- * workbench target of an output.
+ * the filters the list route cannot apply, the live list updates, the outputs of a step with their
+ * monitor summary and the workbench target of an output.
  */
 
 export const KIND_LABELS: Record<CampaignKind, string> = {
@@ -277,6 +282,93 @@ export function inputSourceLabel(source: InputSource | null): SourceLabel | null
     return { kind: "entry", campaignId: source.campaign_id, text: `${caseText}${step}` };
   }
   return { kind: "text", text: "a deleted entry" };
+}
+
+// The monitor summary of an output (the API calls it the output's verdict)
+
+export interface MonitorEncounter {
+  type: string;
+  label: string;
+  /** Each vessel with its role, give-way first; null when the verdict did not record them. */
+  roles: { vessel: string; role: VesselRole }[] | null;
+}
+
+export interface MonitorPair {
+  relation: string;
+  /** What the pair met in, in order of first appearance; empty when it never met in an encounter. */
+  encounters: MonitorEncounter[];
+  /** The rules that failed for the pair, without the pair's name. */
+  failedRules: string[];
+}
+
+export interface MonitorSummary {
+  state: VerdictState;
+  /** "no rule failed" or "2 rules failed, first at 1 min 1 s"; null when no monitor judged the output. */
+  headline: string | null;
+  /** The pairs worth a line: those in an encounter or with a failed rule, by name. */
+  pairs: MonitorPair[];
+  /** How many pairs were left out: they never met in an encounter and failed nothing. */
+  quietPairs: number;
+  /** Failed rules of no listed pair: a vessel's own, or of a pair the verdict has no encounters for. */
+  otherFailedRules: string[];
+}
+
+/** A vessel's own rules are kept under the relation of the vessel with itself (`OS_0 - OS_0`). */
+function isOwnRelation(relation: string): boolean {
+  const [first, second] = relation.split(" - ");
+  return first === second;
+}
+
+function monitorEncounter(type: string, roles: { give_way: string[]; stand_on: string[] } | undefined): MonitorEncounter {
+  return {
+    type,
+    label: encounterTypeLabel(type),
+    roles: roles
+      ? [...roles.give_way.map((vessel) => ({ vessel, role: "give-way" as const })), ...roles.stand_on.map((vessel) => ({ vessel, role: "stand-on" as const }))]
+      : null,
+  };
+}
+
+function monitorHeadline(verdict: OutputVerdict): string | null {
+  if (verdict.state === "unmonitored") {
+    return null;
+  }
+  if (verdict.failed_rules.length === 0) {
+    return "no rule failed";
+  }
+  const first = verdict.first_failure_time_s;
+  return `${plural(verdict.failed_rules.length, "rule")} failed${first === null || first === undefined ? "" : `, first at ${formatDuration(first)}`}`;
+}
+
+/** A verdict as its row shows it: the state, each vessel pair's encounter types with the vessels' roles, and the failed rules under their pair. */
+export function monitorSummary(verdict: OutputVerdict): MonitorSummary {
+  const pairs = new Map<string, MonitorPair>();
+  for (const [relation, types] of Object.entries(verdict.encounters ?? {})) {
+    pairs.set(relation, {
+      relation,
+      encounters: types.filter((type) => isEncounter(type)).map((type) => monitorEncounter(type, verdict.encounter_roles?.[relation]?.[type])),
+      failedRules: [],
+    });
+  }
+  const otherFailedRules: string[] = [];
+  for (const text of verdict.failed_rules) {
+    const { relation, rule } = splitFailedRule(text);
+    const pair = relation === null ? undefined : pairs.get(relation);
+    if (pair) {
+      pair.failedRules.push(rule);
+    } else {
+      otherFailedRules.push(relation !== null && isOwnRelation(relation) ? rule : text);
+    }
+  }
+  const listed = [...pairs.values()]
+    .filter((pair) => pair.encounters.length > 0 || pair.failedRules.length > 0)
+    .sort((a, b) => a.relation.localeCompare(b.relation, undefined, { numeric: true }));
+  return { state: verdict.state, headline: monitorHeadline(verdict), pairs: listed, quietPairs: pairs.size - listed.length, otherFailedRules };
+}
+
+/** Whether the outputs show the summary: the step has a monitor configured, or (the config not read yet, or changed since) a row says a monitor judged it. */
+export function showsMonitorSummary(monitored: boolean | null, rows: readonly OutputRow[]): boolean {
+  return monitored === true || rows.some((row) => row.verdict !== null && row.verdict.state !== "unmonitored");
 }
 
 /** The tab a detail opens on: the remembered step when the entry runs it, else the last executed step. */

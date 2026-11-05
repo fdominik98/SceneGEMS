@@ -4,6 +4,7 @@ import type { CatalogStack, CatalogStacks } from "../../../domain/cluster/campai
 import { findStack, supportsEnvironment } from "./configBuilder";
 import { Field, FieldIssues, NumberField, ParameterInput } from "./fields";
 import { reasonsOfEntry, splitByField, type Reason } from "./reasons";
+import { StackPicker } from "./StackPicker";
 import type { CatalogState, StepProps } from "./stepTypes";
 import { emptyRun, newEntryId, type RunDraft } from "./wizardState";
 
@@ -77,7 +78,6 @@ function RunCard({
   ];
   const { byField, rest } = splitByField(reasons, shown);
   const underGroup = (key: string) => byField.get(`stack.${key}`) ?? [];
-  const availableStacks = stacks.filter((entry) => entry.available);
   const runParameter = (key: string) => catalog.run_parameters.find((parameter) => parameter.key === key);
   const seedParameter = runParameter("seed");
   const repeatsParameter = runParameter("repeats");
@@ -108,13 +108,14 @@ function RunCard({
         <Field label="Name" htmlFor={`run-name-${run.id}`} hint="Labels the run in the results. Optional." issues={byField.get("name")}>
           <input id={`run-name-${run.id}`} type="text" value={run.name} onChange={(event) => onChange((item) => void (item.name = event.target.value))} />
         </Field>
-        <Field label="Stack" htmlFor={`run-stack-${run.id}`} hint={stack ? <>{stack.description} Repeatability: {stack.repeatability_tier ?? "unknown"}.</> : "Only the stacks the master can run unattended are listed."} issues={byField.get("stack")}>
-          <select
+        <Field label="Stack" htmlFor={`run-stack-${run.id}`} hint={stack ? <>{stack.description} Repeatability: {stack.repeatability_tier ?? "unknown"}.</> : "Browse the stacks the master offers, by layer, software and what they support."} issues={byField.get("stack")}>
+          <StackPicker
             id={`run-stack-${run.id}`}
-            value={run.stackId}
-            onChange={(event) =>
+            stacks={stacks}
+            stackId={run.stackId}
+            onPick={(stackId) =>
               onChange((item) => {
-                item.stackId = event.target.value;
+                item.stackId = stackId;
                 if (catalog.stacks.find((entry) => entry.id === item.stackId)?.supports_early_stop === false) {
                   item.earlyStop = false;
                 }
@@ -124,15 +125,7 @@ function RunCard({
                 item.waves = null;
               })
             }
-          >
-            {run.stackId === "" && <option value="">Choose a stack</option>}
-            {run.stackId !== "" && !availableStacks.some((entry) => entry.id === run.stackId) && <option value={run.stackId}>{run.stackId} (not available)</option>}
-            {availableStacks.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.label}
-              </option>
-            ))}
-          </select>
+          />
         </Field>
       </div>
       <div className="wiz-row">

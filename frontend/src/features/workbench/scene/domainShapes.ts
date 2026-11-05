@@ -6,7 +6,7 @@ import type {
 } from "../../../domain/simulation/types";
 
 /** Gold of the give-way corridor (A-B-C-D kite), on the canvas and the nautical map. */
-export const MANEUVERING_DOMAIN_KITE_COLOR = "#f5d76e";
+export const MANEUVERING_DOMAIN_KITE_COLOR = "var(--canvas-kite)";
 
 export interface ManeuveringDomainDrawing {
   key: string;

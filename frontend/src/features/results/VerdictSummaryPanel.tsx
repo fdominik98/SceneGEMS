@@ -23,9 +23,9 @@ function Tile({ label, count, whole, tone }: { label: string; count: number; who
 export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSummaryPanelProps) {
   if (!summary) {
     return (
-      <section className="results-panel" aria-label="Summary of the verdicts">
+      <section className="results-panel" aria-label="Counts of the monitor summaries">
         <p className="meta" role="status">
-          {loading ? "Summarizing the verdicts." : "No summary."}
+          {loading ? "Counting the monitor summaries." : "No counts."}
         </p>
       </section>
     );
@@ -33,18 +33,18 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
   const whole = summary.analyzed;
   const mostFailures = Math.max(1, ...summary.failedRules.map((rule) => rule.verdicts));
   return (
-    <section className="results-panel" aria-label="Summary of the verdicts">
+    <section className="results-panel" aria-label="Counts of the monitor summaries">
       <header className="results-panel-head">
         <h3>Runs</h3>
         <span className="meta">
-          {filtered ? "of the filtered verdicts" : "of all verdicts"}
+          {filtered ? "of the filtered monitor summaries" : "of all monitor summaries"}
           {summary.partial ? `: the first ${summary.analyzed} of ${summary.total}` : `: ${summary.analyzed}`}
           {summary.sensitive > 0 ? `, ${summary.sensitive} sensitive` : ""}
         </span>
         {loading && <span className="meta" role="status">updating</span>}
       </header>
       {summary.partial && (
-        <p className="meta warning">The ranking and the counts below read the first {summary.analyzed} verdicts only; narrow the filters for an exact picture.</p>
+        <p className="meta warning">The ranking and the counts below read the first {summary.analyzed} monitor summaries only; narrow the filters for an exact picture.</p>
       )}
       <div className="results-summary-grid">
         <div className="results-tiles">
@@ -61,9 +61,9 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
           headingLevel={4}
         >
           {summary.byRun.length === 0 ? (
-            <p className="meta">No verdicts match.</p>
+            <p className="meta">No monitor summary matches.</p>
           ) : (
-            <table className="results-table results-table--plain results-table--compact" aria-label="Verdict counts per run and state">
+            <table className="results-table results-table--plain results-table--compact" aria-label="Monitor summary counts per run and state">
               <thead>
                 <tr>
                   <th>Run</th>
@@ -103,7 +103,7 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
           headingLevel={4}
         >
           {summary.failedRules.length === 0 ? (
-            <p className="meta">No rule failed in these verdicts.</p>
+            <p className="meta">No rule failed in these monitor summaries.</p>
           ) : (
             <ol className="results-rules-rank">
               {summary.failedRules.slice(0, 8).map((rule) => (

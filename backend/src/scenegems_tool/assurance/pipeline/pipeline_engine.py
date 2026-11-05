@@ -532,7 +532,7 @@ class PipelineEngine:
             logger.exception("Case %s could not be completed; it is quarantined", case.case_id)
             machine.outbox.restore(saved)
             with session.begin_nested():
-                machine.end(context, self.stores.cases.get_case(case.case_id, session=session), CaseState.FAILED, f"its verdicts could not be written: {type(error).__name__}: {error}")
+                machine.end(context, self.stores.cases.get_case(case.case_id, session=session), CaseState.FAILED, f"its monitor summaries could not be written: {type(error).__name__}: {error}")
             return False
 
     def _check_stall(self, session: Session, context: CampaignContext, campaign: CampaignRecord, queued, nodes: Sequence[NodeAvailability], now: datetime) -> CampaignRecord:
@@ -583,7 +583,7 @@ class PipelineEngine:
             return f"{stop.max_cases} cases started (max_cases)"
         # failed verdicts of every monitored step count, scenes and trajectory sets too
         if stop.max_failed_verdicts is not None and self.stores.results.count_verdicts(campaign_id, VerdictState.FAILED, session=session) >= stop.max_failed_verdicts:
-            return f"{stop.max_failed_verdicts} failed verdicts (max_failed_verdicts)"
+            return f"{stop.max_failed_verdicts} failed monitor summaries (max_failed_verdicts)"
         started = context.campaign.started_at
         if stop.max_duration_s is not None and started is not None and (now - started).total_seconds() >= stop.max_duration_s:
             return f"running for {stop.max_duration_s:.0f} s (max_duration_s)"

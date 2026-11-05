@@ -105,7 +105,7 @@ def verdicts(session: Session, arguments: Namespace) -> int:
         return 0
     found = session.api.get(path, limit=arguments.limit, offset=arguments.offset, **filters)
     if not found:
-        session.say("no verdicts")
+        session.say("no monitor summaries")
         return 0
     rows = [[v["fec_id"], v["case_id"], v["run_index"], v["state"], ";".join(v["failed_rules"]), v["first_failure_time_s"], v["sensitive"]] for v in found]
     session.say(table(["FEC", "case", "run", "state", "failed rules", "first failure s", "sensitive"], rows))

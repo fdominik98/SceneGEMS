@@ -1,7 +1,7 @@
 import { useUiStore, type SceneGenerationPaneView } from "../../../app/uiStore";
 
 const VIEWS: { id: SceneGenerationPaneView; label: string }[] = [
-  { id: "specification", label: "Specification" },
+  { id: "specification", label: "FEC specification" },
   { id: "monitor", label: "Monitor preview" },
 ];
 

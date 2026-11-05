@@ -38,10 +38,10 @@ def operator(memory_plane):
 def small_catalog(tmp_path, monkeypatch):
     """Four classes in two folders, in a folder of their own."""
     problems = {
-        "2vessel_0obstacle_scenarios/functional_model1": "OS(os1).\nTS(ts1).\n",
-        "2vessel_0obstacle_scenarios/functional_model2": "OS(os1).\nTS(ts1).\n\nr(os1, ts1).\n",
-        "2vessel_0obstacle_scenarios/functional_model10": "OS(os1).\nTS(ts1).\n",
-        "3vessel_1obstacle_scenarios/functional_model1": "OS(os1).\nTS(ts1).\nTS(ts2).\nStaticObstacle(o1).\n",
+        "2vessel_0obstacle_scenarios/fec1": "OS(os1).\nTS(ts1).\n",
+        "2vessel_0obstacle_scenarios/fec2": "OS(os1).\nTS(ts1).\n\nr(os1, ts1).\n",
+        "2vessel_0obstacle_scenarios/fec10": "OS(os1).\nTS(ts1).\n",
+        "3vessel_1obstacle_scenarios/fec1": "OS(os1).\nTS(ts1).\nTS(ts2).\nStaticObstacle(o1).\n",
     }
     for class_id, content in problems.items():
         path = tmp_path / f"{class_id}.problem"
@@ -57,14 +57,14 @@ def test_the_classes_are_the_catalogs_with_their_counts_and_hashes(operator, sma
     assert response.status_code == 200 and response.headers["x-total-count"] == "4"
     classes = response.json()
     assert [entry["fec_id"] for entry in classes] == [
-        "2vessel_0obstacle_scenarios/functional_model1",
-        "2vessel_0obstacle_scenarios/functional_model2",
-        "2vessel_0obstacle_scenarios/functional_model10",  # numbers in numeric order
-        "3vessel_1obstacle_scenarios/functional_model1",
+        "2vessel_0obstacle_scenarios/fec1",
+        "2vessel_0obstacle_scenarios/fec2",
+        "2vessel_0obstacle_scenarios/fec10",  # numbers in numeric order
+        "3vessel_1obstacle_scenarios/fec1",
     ]
     last = classes[-1]
     assert last == {
-        "fec_id": "3vessel_1obstacle_scenarios/functional_model1",
+        "fec_id": "3vessel_1obstacle_scenarios/fec1",
         "folder": "3vessel_1obstacle_scenarios",
         "vessel_count": 3,
         "obstacle_count": 1,
@@ -78,18 +78,18 @@ def test_the_classes_can_be_filtered_by_folder_and_pattern(operator, small_catal
         response = operator.get(CLASSES, params=params)
         return [entry["fec_id"] for entry in response.json()], int(response.headers["x-total-count"])
 
-    assert ids(folder="3vessel_1obstacle_scenarios") == (["3vessel_1obstacle_scenarios/functional_model1"], 1)
+    assert ids(folder="3vessel_1obstacle_scenarios") == (["3vessel_1obstacle_scenarios/fec1"], 1)
     assert ids(folder="nothing")[1] == 0
     assert ids(pattern="3vessel_*")[1] == 1  # a pattern without a slash matches folders
-    assert ids(pattern="*/functional_model1")[0] == ["2vessel_0obstacle_scenarios/functional_model1", "3vessel_1obstacle_scenarios/functional_model1"]  # one with a slash, class ids
-    assert ids(pattern="2vessel_*/functional_model1*")[1] == 2
-    assert ids(pattern="*/functional_model1", folder="2vessel_0obstacle_scenarios") == (["2vessel_0obstacle_scenarios/functional_model1"], 1)  # both narrow
+    assert ids(pattern="*/fec1")[0] == ["2vessel_0obstacle_scenarios/fec1", "3vessel_1obstacle_scenarios/fec1"]  # one with a slash, class ids
+    assert ids(pattern="2vessel_*/fec1*")[1] == 2
+    assert ids(pattern="*/fec1", folder="2vessel_0obstacle_scenarios") == (["2vessel_0obstacle_scenarios/fec1"], 1)  # both narrow
     assert ids(pattern="9vessel_*")[1] == 0
 
 
 def test_the_classes_are_paged_and_the_total_stays(operator, small_catalog):
     second = operator.get(CLASSES, params={"limit": 2, "offset": 1})
-    assert [entry["fec_id"] for entry in second.json()] == ["2vessel_0obstacle_scenarios/functional_model2", "2vessel_0obstacle_scenarios/functional_model10"]
+    assert [entry["fec_id"] for entry in second.json()] == ["2vessel_0obstacle_scenarios/fec2", "2vessel_0obstacle_scenarios/fec10"]
     assert second.headers["x-total-count"] == "4"
     assert operator.get(CLASSES, params={"offset": 10}).json() == []
     assert len(operator.get(CLASSES, params={"limit": 0}).json()) == 1  # at least one, like the other lists
@@ -219,6 +219,8 @@ def test_usv_navigation_has_its_parameters_with_their_defaults(stacks):
     assert parameters["runtime_options"]["default"] == {}
     assert {key for key, parameter in parameters.items() if parameter["required"]} == {"goal", "speed", "safety_radius", "control_horizon"}
     assert parameters["speed"]["unit"] == "m/s" and parameters["speed"]["exclusive_minimum"] == 0.0 and parameters["goal"]["type"] == "number_pair"
+    assert (parameters["horizon"]["default"], parameters["horizon"]["unit"], parameters["horizon"]["exclusive_minimum"]) == (None, "m", 0.0)
+    assert "visibility" in group["derived_when_absent"]
 
 
 def test_the_monitors_are_the_ones_a_run_names(stacks):
@@ -290,7 +292,7 @@ def test_the_stacks_view_is_plain_json(stacks):
 def test_every_offered_stack_is_a_config_the_validation_accepts(stacks):
     for option in stacks["stacks"]:
         section = ", ".join(f"{key}: {value}" for key, value in option["stack_section"].items())
-        text = f"name: probe\nscope:\n  - classes: [2vessel_0obstacle_scenarios/functional_model0]\n    quota: 1\nexecution:\n  runs:\n    - stack: {{{section}}}\n"
+        text = f"name: probe\nscope:\n  - classes: [2vessel_0obstacle_scenarios/fec0]\n    quota: 1\nexecution:\n  runs:\n    - stack: {{{section}}}\n"
         validated = validate_campaign_config(parse_campaign_config(text))
         assert validated.runs[0].repeatability_tier == option["repeatability_tier"]
         (run,) = validated.config.execution.runs
@@ -326,16 +328,16 @@ def test_the_architecture_is_served_from_the_files_written_at_startup(operator, 
 
 
 def test_a_class_answers_its_functional_scenario_as_text(operator, small_catalog):
-    response = operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/functional_model1")
+    response = operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/fec1")
     assert response.status_code == 200 and response.headers["content-type"].startswith("text/plain")
     assert response.text == "OS(os1).\nTS(ts1).\nTS(ts2).\nStaticObstacle(o1).\n"  # LF line endings from a Windows checkout
-    assert operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/functional_model99").status_code == 404
+    assert operator.get(f"{CLASSES}/3vessel_1obstacle_scenarios/fec99").status_code == 404
 
 
 def test_a_class_content_needs_the_catalog_folder(operator, tmp_path, monkeypatch):
     missing = ClassCatalog(tmp_path / "missing")
     monkeypatch.setattr(ClassCatalog, "default", classmethod(lambda cls: missing))
-    assert operator.get(f"{CLASSES}/2vessel_0obstacle_scenarios/functional_model1").status_code == 503
+    assert operator.get(f"{CLASSES}/2vessel_0obstacle_scenarios/fec1").status_code == 503
 
 
 def test_the_domain_presets_are_the_masters_files(operator):

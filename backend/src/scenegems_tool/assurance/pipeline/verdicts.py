@@ -81,6 +81,7 @@ def _pending(monitor: MonitorImplementation, outcomes: Mapping[str, Any], early_
         "first_failure_time_s": None if passed or not times else min(times),
         "early_stop_time_s": early_stop_time_s,
         "encounters": {relation: list(types) for relation, types in outcomes["encounters"].items()} if outcomes.get("encounters") else None,  # a result of an older node has none
+        "encounter_roles": dict(outcomes["encounter_roles"]) if outcomes.get("encounter_roles") else None,  # as encounters; empty when no pair met in an encounter
     }
 
 
@@ -105,6 +106,7 @@ def pending_unmonitored() -> Dict[str, Any]:
         "first_failure_time_s": None,
         "early_stop_time_s": None,
         "encounters": None,
+        "encounter_roles": None,
     }
 
 
@@ -122,6 +124,7 @@ def new_verdict(case_id: int, run_index: int, pending: Mapping[str, Any], run_re
         early_stop_time_s=pending.get("early_stop_time_s"),
         run_record_id=run_record_id,
         encounters=pending.get("encounters"),
+        encounter_roles=pending.get("encounter_roles"),
     )
 
 
