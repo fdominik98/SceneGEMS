@@ -10,7 +10,7 @@ import numpy as np
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredTrajectory
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
-from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch
+from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from concrete_level.trajectory_generation.trajectory_data import MONITOR_FRAMES_KEY, TrajectoryData
 from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP as DEFAULT_TIME_STEP
@@ -91,38 +91,34 @@ def _trajectory_payload(trajectory_data: TrajectoryData, monitored: Optional[Mon
     return payload
 
 
-def _build_rrt(
+def _build_planner(
     task: MqttTrajectoryGenerationTask,
     initial_scene: ConcreteScene,
     other_trajectories: Trajectories,
     colregs_constants: COLREGSConstraints,
     observer: Callable[[Trajectories, MonitoredTrajectory, int], None],
     termination_signal: Callable[[], bool],
-) -> MonitorDrivenRRTSearch:
+) -> MonitorGuidedPlanner:
     params = task.params
-    return MonitorDrivenRRTSearch(
+    return MonitorGuidedPlanner(
         start_scene=initial_scene,
         other_trajectories=other_trajectories,
         colregs_constants=colregs_constants,
         observer=observer,
         termination_signal=termination_signal,
         max_iterations=params.max_iterations,
-        goal_sample_rate=params.goal_sample_rate,
-        best_leaf_sample_rate=params.best_leaf_sample_rate,
-        max_leafs=params.max_leafs,
         anim_update_interval=params.preview_interval,
         direction_threshold=params.direction_threshold,
         best_random_nodes_k=params.best_random_nodes_k,
         verbose=False,
-        show_animation=False,
     )
 
 
-def _current_monitored_trajectory(rrt: MonitorDrivenRRTSearch, include_monitor_results: bool) -> Optional[MonitoredTrajectory]:
+def _current_monitored_trajectory(planner: MonitorGuidedPlanner, include_monitor_results: bool) -> Optional[MonitoredTrajectory]:
     if not include_monitor_results:
         return None
     try:
-        return rrt.current_best_monitored_trajectory()
+        return planner.current_best_monitored_trajectory()
     except Exception:
         return None
 
@@ -130,14 +126,14 @@ def _current_monitored_trajectory(rrt: MonitorDrivenRRTSearch, include_monitor_r
 def _emit_result(
     result_queue,
     task: MqttTrajectoryGenerationTask,
-    rrt: MonitorDrivenRRTSearch,
+    planner: MonitorGuidedPlanner,
     factory: TrajectoryDataFactory,
 ) -> None:
     include_monitor_results = task.params.monitor_results_enabled
     try:
-        trajectories, iter_number = rrt.plan_trajectory()
+        trajectories, iter_number = planner.plan_trajectory()
         valid = trajectories is not None and len(trajectories) > 1
-        payload = _trajectory_payload(factory(trajectories, iter_number), _current_monitored_trajectory(rrt, include_monitor_results))
+        payload = _trajectory_payload(factory(trajectories, iter_number), _current_monitored_trajectory(planner, include_monitor_results))
         result_queue.put((task, payload, valid, valid, None))
         return
     except Exception as exc:
@@ -146,11 +142,11 @@ def _emit_result(
     # Per spec: return the best partial path when the search ends without a complete one. It
     # stays valid for the workbench, and complete false tells the two apart.
     try:
-        partial = rrt.current_best_trajectories()
+        partial = planner.current_best_trajectories()
     except Exception:
         partial = None
     if partial is not None and len(partial) > 1:
-        payload = _trajectory_payload(factory(partial, rrt.iteration_count), _current_monitored_trajectory(rrt, include_monitor_results))
+        payload = _trajectory_payload(factory(partial, planner.iteration_count), _current_monitored_trajectory(planner, include_monitor_results))
         result_queue.put((task, payload, True, False, None))
     else:
         result_queue.put((task, None, False, False, f"No trajectory could be planned: {error}"))
@@ -202,5 +198,5 @@ def run_trajectory_generation_worker(
         last_preview_mono = now
         preview_queue.put((task, _trajectory_payload(factory(trajectories, iteration), monitored if include_monitor_results else None)))
 
-    rrt = _build_rrt(task, initial_scene, other_trajectories, colregs_constants, _observer, _termination_signal)
-    _emit_result(result_queue, task, rrt, factory)
+    planner = _build_planner(task, initial_scene, other_trajectories, colregs_constants, _observer, _termination_signal)
+    _emit_result(result_queue, task, planner, factory)

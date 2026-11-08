@@ -195,14 +195,14 @@ export const sampleCatalogStacks = {
   trajectory_generators: [
     {
       id: "monitor_driven_rrt",
-      label: "Monitor driven RRT",
-      description: "A random tree search that plans the own ship against the other vessels.",
+      label: "Monitor-guided planner",
+      description: "Follows a maneuvering corridor for every give-way vessel and repairs each step the COLREGS monitor fails.",
       params_field: "params",
       parameters: [
         parameter("timeStep", "integer", "time step of the generated trajectories", { default: 1, unit: "s", minimum: 1 }),
         parameter("timeout", "number", "wall-clock limit of the search", { unit: "s", exclusive_minimum: 0 }),
-        parameter("maxIterations", "integer", "iteration limit of the search", { minimum: 1 }),
-        parameter("goalSampleRate", "integer", "percent of samples drawn at the goal", { default: 20, minimum: 0, maximum: 100 }),
+        parameter("maxIterations", "integer", "seed steps the planner may take", { minimum: 1 }),
+        parameter("bestRandomNodesK", "integer", "cheapest leaves expanded per repair round", { default: 20, minimum: 1 }),
         parameter("includeMonitorResults", "boolean", "whether previews and results carry the monitor output", { default: true }),
       ],
       common_parameters: [parameter("timeout_s", "number", "how long a trajectory generation job may take", { default: 1800, unit: "s", exclusive_minimum: 0 })],

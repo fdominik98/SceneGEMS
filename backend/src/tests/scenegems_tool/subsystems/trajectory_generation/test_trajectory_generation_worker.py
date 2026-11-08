@@ -73,7 +73,7 @@ class _Path(list):
 
 
 class _Search:
-    """Stands in for MonitorDrivenRRTSearch at the end of a search."""
+    """Stands in for MonitorGuidedPlanner at the end of a search."""
 
     def __init__(self, plan=None, partial=None):
         self.plan, self.partial, self.iteration_count = plan, partial, 7

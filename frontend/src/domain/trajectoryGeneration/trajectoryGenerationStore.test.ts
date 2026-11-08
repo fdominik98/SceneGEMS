@@ -23,14 +23,14 @@ describe("trajectory generator selection", () => {
     });
   });
 
-  it("offers the monitor-driven RRT first and the straight generator", () => {
+  it("offers the monitor-guided planner first and the straight generator", () => {
     expect(TRAJECTORY_GENERATORS).toEqual([
-      { id: "monitor_driven_rrt", label: "Monitor-driven RRT" },
+      { id: "monitor_driven_rrt", label: "Monitor-guided planner" },
       { id: "straight", label: "Straight" },
     ]);
   });
 
-  it("defaults to the RRT search and a one hour timespan", () => {
+  it("defaults to the planner and a one hour timespan", () => {
     const state = useTrajectoryGenerationStore.getState();
     expect(state.generator).toBe("monitor_driven_rrt");
     expect(state.timespan).toBe(3600);
@@ -45,7 +45,7 @@ describe("trajectory generator selection", () => {
     expect(state.timespan).toBe(600);
   });
 
-  it("leaves the RRT parameters alone when the generator changes or the parameters reset", () => {
+  it("leaves the planner parameters alone when the generator changes or the parameters reset", () => {
     const { setGenerator, setParam, resetParams } = useTrajectoryGenerationStore.getState();
     setParam("timeout", 42);
     setGenerator("straight");
@@ -78,15 +78,12 @@ describe("trajectory generator selection", () => {
 describe("toParamsWire", () => {
   const params = { ...TRAJECTORY_GENERATION_PARAM_DEFAULTS, timeStep: 10 };
 
-  it("sends the RRT search with every tuning value by default", () => {
+  it("sends the planner with every tuning value by default", () => {
     expect(toParamsWire(params)).toEqual({
       generator: "monitor_driven_rrt",
       timeStep: 10,
       timeout: 300,
       maxIterations: 2000,
-      goalSampleRate: 50,
-      bestLeafSampleRate: 90,
-      maxLeafs: 500,
       directionThreshold: 1,
       bestRandomNodesK: 20,
       previewInterval: 1,
@@ -94,11 +91,11 @@ describe("toParamsWire", () => {
     });
   });
 
-  it("carries the monitor results switch for the RRT search", () => {
+  it("carries the monitor results switch for the planner", () => {
     expect(toParamsWire(params, false, "monitor_driven_rrt").includeMonitorResults).toBe(false);
   });
 
-  it("sends no timespan with the RRT search", () => {
+  it("sends no timespan with the planner", () => {
     expect("timespan" in toParamsWire(params, true, "monitor_driven_rrt", 600)).toBe(false);
   });
 

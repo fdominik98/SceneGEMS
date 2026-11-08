@@ -39,17 +39,14 @@ interface TrajectoryGenerationControlsProps {
 const PARAM_FIELDS: { key: keyof TrajectoryGenerationParams; label: string; unit?: string; integer?: boolean }[] = [
   { key: "timeStep", label: "Time step", unit: "s" },
   { key: "timeout", label: "Timeout", unit: "s", integer: true },
-  { key: "maxIterations", label: "Max iterations", integer: true },
-  { key: "goalSampleRate", label: "Goal sample rate" },
-  { key: "bestLeafSampleRate", label: "Best-leaf sample rate" },
-  { key: "maxLeafs", label: "Max leafs", integer: true },
-  { key: "directionThreshold", label: "Direction threshold", unit: "m" },
-  { key: "bestRandomNodesK", label: "Best random nodes K", integer: true },
-  { key: "previewInterval", label: "Preview every", unit: "iterations", integer: true },
+  { key: "maxIterations", label: "Max seed steps", integer: true },
+  { key: "directionThreshold", label: "Rejoin tolerance", unit: "m" },
+  { key: "bestRandomNodesK", label: "Leaves expanded per round", integer: true },
+  { key: "previewInterval", label: "Preview every", unit: "seed steps", integer: true },
 ];
 
 const GENERATOR_HINTS: Record<TrajectoryGeneratorWire, string> = {
-  monitor_driven_rrt: "Searches for compliant manoeuvres, guided by the COLREGS monitor. It stops on Stop, the timeout or the iteration cap.",
+  monitor_driven_rrt: "Follows a maneuvering corridor for every give-way vessel and repairs each step the COLREGS monitor fails with a short tree search. It stops on Stop, the timeout or the seed step cap.",
   straight: "Every vessel goes straight on from its initial state for the timespan: nothing is searched, so it is ready at once and always complete.",
 };
 
@@ -204,7 +201,7 @@ export function TrajectoryGenerationControls({
   }, [resultScenarioJson]);
 
   const panelStatus: StepStatus = running
-    ? { label: straight ? "Generating" : `Planning, iteration ${iteration}`, tone: "busy" }
+    ? { label: straight ? "Generating" : `Planning, seed step ${iteration}`, tone: "busy" }
     : status === "done"
       ? resultValid
         ? partialPlan || runWarning
@@ -344,7 +341,7 @@ export function TrajectoryGenerationControls({
             {running
               ? straight
                 ? "being generated"
-                : `best so far, iteration ${iteration}`
+                : `best so far, seed step ${iteration}`
               : runSummary
                 ? partialPlan
                   ? "partial plan"

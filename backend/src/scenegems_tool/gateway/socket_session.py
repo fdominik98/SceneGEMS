@@ -21,7 +21,7 @@ from scenegems_tool.workbench.live_subsystem_integration_session import LiveSubs
 from scenegems_tool.workbench.scenario_session import ScenarioSession
 from scenegems_tool.workbench.subsystem_integration_session import SubsystemIntegrationSession
 
-NO_TRAJECTORIES_MESSAGE = "Cannot simulate without trajectories: generate trajectories first (monitor-driven RRT or straight). The simulation never invents trajectories."
+NO_TRAJECTORIES_MESSAGE = "Cannot simulate without trajectories: generate trajectories first (monitor-guided planner or straight). The simulation never invents trajectories."
 NO_MASTER_BROKER_MESSAGE = "This server has no master broker (SCENEGEMS_BROKER_HOST is not set): choose another MQTT broker."
 DEFAULT_BROKER_PORT = 1883
 

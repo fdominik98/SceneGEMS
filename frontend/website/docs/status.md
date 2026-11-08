@@ -12,7 +12,7 @@ The bottom panel of each workbench page shows the state of its step in a chip be
 | Page | States |
 |------|--------|
 | Scene Generation | Idle, Generating, Generating the batch, Valid scene, No valid scene |
-| Trajectory Generation | Idle, Ready to plan, Planning (with the iteration) or Generating, Trajectory ready, Partial trajectory, No usable trajectory, Failed |
+| Trajectory Generation | Idle, Ready to plan, Planning (with the seed step) or Generating, Trajectory ready, Partial trajectory, No usable trajectory, Failed |
 | Simulation, on the cluster | Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
 | Simulation, live session | Not initialized, Initializing, Agents are preparing, Agents are ready, Starting, Running, No simulator connected |
 

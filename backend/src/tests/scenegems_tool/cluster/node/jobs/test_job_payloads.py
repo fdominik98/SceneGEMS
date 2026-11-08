@@ -133,6 +133,15 @@ def test_trajectory_generation_params_are_checked():
         TrajectoryGenerationPayload.model_validate({**base, "params": {"maxIterations": "many"}})
 
 
+def test_trajectory_generation_drops_the_retired_search_keys():
+    base = {"scenario_content": "{}", "colregs_constraints_content": ""}
+    retired = {"goalSampleRate": 50, "bestLeafSampleRate": 90, "maxLeafs": 500}
+    payload = TrajectoryGenerationPayload.model_validate({**base, "params": {"maxIterations": 100, **retired}})
+    assert payload.params == {"maxIterations": 100}
+    with pytest.raises(ValueError):
+        TrajectoryGenerationPayload.model_validate({**base, "params": {**retired, "goalSampleRates": 5}})
+
+
 def test_scene_generation_payload_parses_the_functional_scenario():
     with open(f"{FUNCTIONAL_MODELS_FOLDER}/all/2vessel_0obstacle_scenarios/fec0.problem", encoding="utf-8") as file:
         problem = file.read()

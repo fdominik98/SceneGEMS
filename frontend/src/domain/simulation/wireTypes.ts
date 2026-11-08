@@ -100,8 +100,8 @@ export type TrajectoryGeneratorWire = "monitor_driven_rrt" | "straight";
 
 /**
  * Trajectory generation values sent with `generate_trajectories`. All optional.
- * `generator` picks the generator (the RRT search when absent); the tuning values
- * are the RRT search's, except `timeStep`, which sets the straight generator's step too.
+ * `generator` picks the generator (the monitor-guided planner when absent); the tuning
+ * values are the planner's, except `timeStep`, which sets the straight generator's step too.
  */
 export interface TrajectoryGenerationParamsWire {
   generator?: TrajectoryGeneratorWire;
@@ -110,9 +110,6 @@ export interface TrajectoryGenerationParamsWire {
   timeStep?: number;
   timeout?: number;
   maxIterations?: number;
-  goalSampleRate?: number;
-  bestLeafSampleRate?: number;
-  maxLeafs?: number;
   directionThreshold?: number;
   bestRandomNodesK?: number;
   previewInterval?: number;

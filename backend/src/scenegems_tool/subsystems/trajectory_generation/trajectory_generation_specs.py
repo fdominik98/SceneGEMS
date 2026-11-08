@@ -68,8 +68,8 @@ class GeneratorSpec:
     parameters: Tuple[Fact, ...] = ()
 
 
-def _rrt_parameters() -> Tuple[Fact, ...]:
-    from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch as Search
+def _planner_parameters() -> Tuple[Fact, ...]:
+    from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner as Search
     from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP
 
     def parameter(key: str, label: str, value, unit: Optional[str] = None) -> Fact:
@@ -77,11 +77,7 @@ def _rrt_parameters() -> Tuple[Fact, ...]:
 
     return (
         parameter("timeStep", "Time step", TIME_STEP, "s"),
-        parameter("goalSampleRate", "Goal sample rate", Search.GOAL_SAMPLE_RATE, "%"),
-        parameter("bestLeafSampleRate", "Best leaf sample rate", Search.BEST_LEAF_SAMPLE_RATE, "%"),
-        parameter("maxLeafs", "Leaves kept", Search.MAX_LEAFS),
-        parameter("bestRandomNodesK", "Random nodes compared", Search.BEST_RANDOM_NODES_K),
-        parameter("smoothingRounds", "Smoothing rounds", Search.SMOOTHING_ROUNDS),
+        parameter("bestRandomNodesK", "Leaves expanded per round", Search.BEST_RANDOM_NODES_K),
     )
 
 
@@ -89,12 +85,12 @@ def generator_specs() -> Tuple[GeneratorSpec, ...]:
     return (
         GeneratorSpec(
             TrajectoryGeneratorId.MONITOR_DRIVEN_RRT,
-            "Monitor driven RRT",
-            "A random tree search that plans the own ship against the other vessels. Every expansion is judged by the COLREGS monitor in process, so the path it returns keeps the rules satisfied.",
-            f"{_CONCRETE}/monitor_driven_rrt_search.py",
+            "Monitor-guided planner",
+            "Follows a maneuvering corridor for every give-way vessel and repairs each step the COLREGS monitor fails with a short tree search over sampled heading changes. The monitor judges every step in process, so the path it returns keeps the rules satisfied.",
+            f"{_CONCRETE}/monitor_guided_planner.py",
             ("colregs_monitor", "trajectory_builder", "trajectory_tree", "seed_trajectory", "maneuvering_domain"),
             "seeded (random, numpy)",
-            _rrt_parameters(),
+            _planner_parameters(),
         ),
         GeneratorSpec(
             TrajectoryGeneratorId.STRAIGHT,

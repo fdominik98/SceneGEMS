@@ -1,7 +1,7 @@
 """The straight trajectory generator: every vessel goes straight on from the initial scene up to a timespan.
 
-One of the two trajectory generators a pipeline chooses from (the other is the monitor
-driven RRT search). It searches nothing and draws no random numbers, so it returns at once
+One of the two trajectory generators a pipeline chooses from (the other is the
+monitor-guided planner). It searches nothing and draws no random numbers, so it returns at once
 and its plan is always complete.
 """
 

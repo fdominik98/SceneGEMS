@@ -91,6 +91,15 @@ def test_the_straight_generator_and_search_parameters():
     assert tuned.trajectories.params == {"maxIterations": 5000, "directionThreshold": 0.5, "includeMonitorResults": False}
 
 
+def test_a_stored_config_with_the_retired_search_keys_loads_without_them():
+    retired = {"goalSampleRate": 50, "bestLeafSampleRate": 90, "maxLeafs": 500}
+    config = campaign_config_from_dict(_with(trajectories={"params": {"maxIterations": 5000, **retired}}))
+    assert config.trajectories.params == {"maxIterations": 5000}
+    assert "goalSampleRate" not in config.to_json()["trajectories"]["params"]
+    straight = campaign_config_from_dict(_with(trajectories={"generator": "straight", "timespan_s": 60, "params": retired}))
+    assert straight.trajectories.params == {}
+
+
 def test_live_monitor_with_early_stop_and_usv_navigation_parameters():
     usv_navigation = {"goal": [100.0, 0.0], "speed": 5.0, "safety_radius": 120.0, "control_horizon": 60.0}
     config = campaign_config_from_dict(

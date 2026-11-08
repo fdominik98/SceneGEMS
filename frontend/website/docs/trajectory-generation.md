@@ -23,14 +23,14 @@ The canvas shows the input scene until there are trajectories to show.
 
 | Control | Description |
 |---------|-------------|
-| Generator | **Monitor-driven RRT** searches for compliant maneuvers, guided by the COLREGS monitor; it stops on Stop, the timeout or the iteration cap. **Straight** sends every vessel straight on from its initial state: nothing is searched, so it is ready at once and always complete. |
+| Generator | **Monitor-guided planner** follows a maneuvering corridor for every give-way vessel and repairs each step the COLREGS monitor fails with a short tree search over sampled heading changes; it stops on Stop, the timeout or the seed step cap. **Straight** sends every vessel straight on from its initial state: nothing is searched, so it is ready at once and always complete. |
 | Timespan | Straight only: how long the vessels go on, in seconds |
 | Seed | The base seed of the entry; empty for a random one (see [Every run is an entry](./workbench-pages#every-run-is-an-entry)) |
-| Search settings | Time step, timeout, max iterations, goal sample rate, best-leaf sample rate, max leafs, direction threshold, best random nodes K and how often a preview is sent. **Monitor results in previews** sends the monitor's output with each preview, so the side panel fills and the domains are drawn while planning; off keeps previews small on long runs. **Reset to the defaults** restores them. For Straight, this link holds the time step only. |
+| Search settings | Time step, timeout, max seed steps, rejoin tolerance (how close a repaired stretch must come to the seed path), leaves expanded per repair round and how often a preview is sent. **Monitor results in previews** sends the monitor's output with each preview, so the side panel fills and the domains are drawn while planning; off keeps previews small on long runs. **Reset to the defaults** restores them. For Straight, this link holds the time step only. |
 
 ## Result
 
-While the search runs, the canvas shows the best path so far and the status counts the iterations. The result is one of:
+While the search runs, the canvas shows the best path so far and the status counts the seed steps. The result is one of:
 
 - **Trajectory ready**: a complete plan.
 - **Partial trajectory**: the search ended without a complete trajectory, so this is the best path it found. It can still be simulated and exported.

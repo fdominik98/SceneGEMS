@@ -235,13 +235,15 @@ def test_the_monitors_are_the_ones_a_run_names(stacks):
 def test_the_trajectory_generators_list_their_parameters_by_wire_key_with_the_search_defaults(stacks):
     generators = by_id(stacks["trajectory_generators"])
     assert set(generators) == {generator.value for generator in TrajectoryGeneratorImplementation}
-    rrt = generators["monitor_driven_rrt"]
-    parameters = by_id(rrt["parameters"], "key")
-    assert set(parameters) == set(SEARCH_PARAM_KEYS) and rrt["params_field"] == "params"
-    from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch
+    planner = generators["monitor_driven_rrt"]
+    parameters = by_id(planner["parameters"], "key")
+    assert set(parameters) == set(SEARCH_PARAM_KEYS) and planner["params_field"] == "params"
+    assert planner["label"] == "Monitor-guided planner"
+    from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner
 
-    assert parameters["goalSampleRate"]["default"] == MonitorDrivenRRTSearch.GOAL_SAMPLE_RATE == 50
-    assert parameters["maxLeafs"]["default"] == MonitorDrivenRRTSearch.MAX_LEAFS
+    assert parameters["bestRandomNodesK"]["default"] == MonitorGuidedPlanner.BEST_RANDOM_NODES_K == 20
+    assert parameters["directionThreshold"]["default"] == MonitorGuidedPlanner.DIRECTION_THRESHOLD
+    assert not {"goalSampleRate", "bestLeafSampleRate", "maxLeafs"} & set(parameters)  # the old search's keys the planner never read
     assert parameters["timeStep"]["default"] == 15 and parameters["includeMonitorResults"]["default"] is True
     assert parameters["timeout"]["default"] is None and parameters["maxIterations"]["default"] is None
     straight = generators["straight"]

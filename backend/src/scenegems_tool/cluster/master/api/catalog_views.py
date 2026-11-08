@@ -340,21 +340,18 @@ def monitors_view() -> List[Dict[str, Any]]:
 
 
 def _search_parameters() -> List[Dict[str, Any]]:
-    from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch
+    from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner
     from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP
     from scenegems_tool.assurance.campaign.campaign_config import SEARCH_PARAM_KEYS
 
-    search = MonitorDrivenRRTSearch
+    search = MonitorGuidedPlanner
     described = [
         parameter("timeStep", "integer", "time step of the generated trajectories", TIME_STEP, unit="s", minimum=1),
         parameter("timeout", "number", "wall-clock limit of the search; the best path so far is returned when it ends. No limit when absent", unit="s", exclusive_minimum=0.0),
-        parameter("maxIterations", "integer", "iteration limit of the search. No limit when absent", minimum=1),
-        parameter("goalSampleRate", "integer", "percent of samples drawn at the goal", search.GOAL_SAMPLE_RATE, minimum=0, maximum=100),
-        parameter("bestLeafSampleRate", "integer", "percent of expansions that start from the best leaf", search.BEST_LEAF_SAMPLE_RATE, minimum=0, maximum=100),
-        parameter("maxLeafs", "integer", "leaves kept in the tree", search.MAX_LEAFS, minimum=1),
-        parameter("directionThreshold", "number", "direction change that counts as a new branch", search.DIRECTION_THRESHOLD, unit="m", exclusive_minimum=0.0),
-        parameter("bestRandomNodesK", "integer", "random nodes the best is picked from", search.BEST_RANDOM_NODES_K, minimum=1),
-        parameter("previewInterval", "integer", "iterations between two previews of the search", search.ANIM_UPDATE_INTERVAL, minimum=1),
+        parameter("maxIterations", "integer", "seed steps the planner may take; the plan ends there. No limit when absent", minimum=1),
+        parameter("directionThreshold", "number", "distance at which a repaired stretch counts as back on the seed path", search.DIRECTION_THRESHOLD, unit="m", exclusive_minimum=0.0),
+        parameter("bestRandomNodesK", "integer", "cheapest leaves expanded per repair round", search.BEST_RANDOM_NODES_K, minimum=1),
+        parameter("previewInterval", "integer", "seed steps between two previews of the plan", search.ANIM_UPDATE_INTERVAL, minimum=1),
         parameter("includeMonitorResults", "boolean", "whether previews and results carry the monitor output of the search", True),
     ]
     if {entry["key"] for entry in described} != set(SEARCH_PARAM_KEYS):
@@ -370,8 +367,8 @@ def trajectory_generators_view() -> List[Dict[str, Any]]:
     return [
         {
             "id": "monitor_driven_rrt",
-            "label": "Monitor driven RRT",
-            "description": "A random tree search that plans the own ship against the other vessels and keeps the COLREGS monitor satisfied. Parameters go under trajectories.params by these keys.",
+            "label": "Monitor-guided planner",
+            "description": "Follows a maneuvering corridor for every give-way vessel and repairs each step the COLREGS monitor fails with a short tree search over sampled heading changes. Parameters go under trajectories.params by these keys.",
             "params_field": "params",
             "parameters": _search_parameters(),
             "common_parameters": common,

@@ -99,11 +99,11 @@ describe("buildCampaignConfig", () => {
 
   it("writes the search parameters under params by their wire keys, and the straight timespan as a field", () => {
     const draft = exitDraft();
-    draft.trajectories.parameters = { maxIterations: 4000, includeMonitorResults: false, goalSampleRate: 0, timeout: null };
+    draft.trajectories.parameters = { maxIterations: 4000, includeMonitorResults: false, bestRandomNodesK: 5, timeout: null };
     let trajectories = buildCampaignConfig(draft, catalog).trajectories as Record<string, unknown>;
     expect(trajectories).toEqual({
       generator: "monitor_driven_rrt",
-      params: { goalSampleRate: 0, maxIterations: 4000, includeMonitorResults: false },
+      params: { bestRandomNodesK: 5, maxIterations: 4000, includeMonitorResults: false },
       timeout_s: 1800,
     });
     draft.trajectories.generator = "straight";

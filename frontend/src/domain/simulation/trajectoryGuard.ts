@@ -4,7 +4,7 @@
  * workflow's side of the backend's refusal, so the user is told before anything is sent.
  */
 export const NO_TRAJECTORIES_MESSAGE =
-  "Cannot simulate without trajectories: generate trajectories first (monitor-driven RRT or straight) on the Trajectory Generation page, then load the result for simulation.";
+  "Cannot simulate without trajectories: generate trajectories first (monitor-guided planner or straight) on the Trajectory Generation page, then load the result for simulation.";
 
 /**
  * The reason a simulation cannot start on the loaded scenario, or null when it can.
