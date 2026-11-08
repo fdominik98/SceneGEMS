@@ -1,14 +1,11 @@
 # pyright: reportMissingImports=false
 from typing import Callable, Dict, List, Optional, Tuple
 
-import numpy as np
-
 from concrete_level.colregs_monitoring.colregs_monitor import COLREGSMonitor
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredTrajectory
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
-from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from concrete_level.trajectory_generation.seed_trajectory import (
     build_seed_nodes,
     clone_as_root,
@@ -22,26 +19,22 @@ from concrete_level.trajectory_generation.seed_trajectory import (
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from concrete_level.trajectory_generation.trajectory_tree_builder import SceneNode, TrajectoryObjectiveSet, TrajectoryTreeBuilder, WindowRepairSpec
 from utils.colregs_approximations import COLREGSConstraints
-from utils.global_constants import EPSILON
-from utils.math_utils import calculate_heading, heading_diff, magnitude, rotate_heading
 
 
-class MonitorDrivenRRTSearch:
-    GOAL_SAMPLE_RATE: int = 50
-    BEST_LEAF_SAMPLE_RATE: int = 90
-    MAX_LEAFS: int = 500
-    ANIM_UPDATE_INTERVAL: int = 1
+class MonitorGuidedPlanner:
+    """Plans the vessels' trajectories over the whole horizon at once, offline.
+
+    The seed follows each give-way vessel's maneuvering corridor step by step. Where the
+    COLREGS monitor fails a seed step, a best-first tree search over a short window
+    around it expands the cheapest leaves with sampled heading changes, keeps only the
+    children the monitor accepts and splices the stretch back in once it rejoins the
+    seed. It samples no random states and does no rewiring, so it is not an RRT.
+    """
+
+    ANIM_UPDATE_INTERVAL: int = 1  # seed steps between two observer previews
     VERBOSE: bool = True
-    SHOW_ANIMATION: bool = True
-    DIRECTION_THRESHOLD = 1.0  # meter
-    BEST_RANDOM_NODES_K: int = 20
-    # Shortcut-and-re-simulate passes over the finished path. Each round applies at most
-    # one accepted shortcut, so a few rounds straighten the worst corners without the
-    # cost of a full rewiring search.
-    SMOOTHING_ROUNDS: int = 6
-    # Shortcut candidates tried per round, and the longest stretch one may replace.
-    SMOOTHING_ATTEMPTS: int = 24
-    MAX_SHORTCUT_SPAN: int = 8
+    DIRECTION_THRESHOLD = 1.0  # meter: how close a repaired stretch must come to the seed to rejoin it
+    BEST_RANDOM_NODES_K: int = 20  # cheapest leaves expanded per window search round
     WINDOW_MAX_ITERATIONS: int = 24
     MAX_REPAIR_ROUNDS: int = 6
 
@@ -54,14 +47,10 @@ class MonitorDrivenRRTSearch:
         observer: Optional[Callable[[Trajectories, MonitoredTrajectory, int], None]] = None,
         termination_signal: Optional[Callable[[], bool]] = None,
         max_iterations: Optional[int] = None,
-        goal_sample_rate: Optional[int] = None,
-        best_leaf_sample_rate: Optional[int] = None,
-        max_leafs: Optional[int] = None,
         anim_update_interval: Optional[int] = None,
         direction_threshold: Optional[float] = None,
         best_random_nodes_k: Optional[int] = None,
         verbose: Optional[bool] = None,
-        show_animation: Optional[bool] = None,
     ) -> None:
         self.start_scene = start_scene
         self.other_trajectories = other_trajectories
@@ -73,13 +62,7 @@ class MonitorDrivenRRTSearch:
 
         # Optional per-instance overrides for the class-level tuning constants. When a
         # value is left as ``None`` the class attribute is used unchanged (headless
-        # subsystem callers pass explicit values; the matplotlib script path does not).
-        if goal_sample_rate is not None:
-            self.GOAL_SAMPLE_RATE = goal_sample_rate
-        if best_leaf_sample_rate is not None:
-            self.BEST_LEAF_SAMPLE_RATE = best_leaf_sample_rate
-        if max_leafs is not None:
-            self.MAX_LEAFS = max_leafs
+        # subsystem callers pass explicit values; the research script path does not).
         if anim_update_interval is not None:
             self.ANIM_UPDATE_INTERVAL = max(1, anim_update_interval)
         if direction_threshold is not None:
@@ -88,8 +71,6 @@ class MonitorDrivenRRTSearch:
             self.BEST_RANDOM_NODES_K = best_random_nodes_k
         if verbose is not None:
             self.VERBOSE = verbose
-        if show_animation is not None:
-            self.SHOW_ANIMATION = show_animation
 
         self._observer = observer
         self._termination_signal = termination_signal
@@ -100,32 +81,15 @@ class MonitorDrivenRRTSearch:
         self.stop = False
         self._best_leaf: Optional[SceneNode] = None
 
-        # # Calculate X and Y distances
-        # shifted_points_x = [line.shifted_point[0] for line in bounding_lines]
-        # shifted_points_y = [line.shifted_point[1] for line in bounding_lines]
-
-        # X_DIST = (min(shifted_points_x), max(shifted_points_x))
-        # Y_DIST = (min(shifted_points_y), max(shifted_points_y))
-        # self.sample_area = [X_DIST, Y_DIST]
-
         # other_trajectories is the constant-course baseline for the whole scene, so its
         # timespan is the horizon the planner is expected to cover, and that is what
         # sets how far ahead each vessel's goal sits.
         self.trajectory_objective_set = TrajectoryObjectiveSet(
             self.trajectory_tree_builder.root,
             self.time_step,
-            self.GOAL_SAMPLE_RATE,
             self.VERBOSE,
             goal_horizon=float(self.other_trajectories.timespan),
         )
-
-        if self.SHOW_ANIMATION:
-            from visualization.trajectory_visualizer import RRTStarVisualizer
-
-            self.trajectory_visualizer = RRTStarVisualizer(
-                trajectory_tree_builder=self.trajectory_tree_builder,
-                trajectory_objective_set=self.trajectory_objective_set,
-            )
 
     @property
     def iteration_count(self) -> int:
@@ -293,7 +257,6 @@ class MonitorDrivenRRTSearch:
         objectives = TrajectoryObjectiveSet(
             tree.root,
             self.time_step,
-            self.GOAL_SAMPLE_RATE,
             False,
             goal_horizon=float(self.other_trajectories.timespan),
         )
@@ -331,7 +294,6 @@ class MonitorDrivenRRTSearch:
         objectives = TrajectoryObjectiveSet(
             tree.root,
             self.time_step,
-            self.GOAL_SAMPLE_RATE,
             self.VERBOSE,
             goal_horizon=float(self.other_trajectories.timespan),
         )
@@ -344,9 +306,6 @@ class MonitorDrivenRRTSearch:
         self.trajectory_tree_builder = tree
         self.trajectory_objective_set = objectives
         self._best_leaf = current
-        if self.SHOW_ANIMATION:
-            self.trajectory_visualizer.trajectory_tree_builder = tree
-            self.trajectory_visualizer.trajectory_objective_set = objectives
 
     def _trajectories_from_nodes(self, nodes: List[SceneNode]) -> Trajectories:
         return TrajectoryBuilder(scene_list=[node.scene for node in nodes], time_step=self.time_step).build()
@@ -405,72 +364,6 @@ class MonitorDrivenRRTSearch:
         for rel, rules in new_node.monitor_result_map_set.get_failed_rules().items():
             print(f"Failed in {rel} context: {rules}")
 
-    def _try_shortcut(self, node_path: List[SceneNode], start_index: int, end_index: int) -> Optional[List[SceneNode]]:
-        """Re-steer directly from node_path[start_index] toward node_path[end_index].
-
-        Returns the rebuilt path if every re-simulated scene still passes the monitor,
-        otherwise None. The tail beyond end_index is re-simulated too, since its monitor
-        state depends on everything before it.
-        """
-        start_node = node_path[start_index]
-        target_scene = node_path[end_index].scene
-        steps = end_index - start_index
-
-        rebuilt: List[SceneNode] = list(node_path[: start_index + 1])
-        current = start_node
-        for step in range(steps):
-            remaining = steps - step
-            next_scene_builder = SceneBuilder(current.scene)
-            heading_steps: Dict[ConcreteActor, float] = {}
-            for actor in current.scene.vessels:
-                state = current.scene[actor]
-                # Aim straight at where this actor has to be at the end of the shortcut,
-                # spreading the remaining correction over the remaining steps.
-                to_target = target_scene[actor].p - state.p
-                heading_ref = calculate_heading(to_target) if magnitude(to_target) > EPSILON else state.heading
-                max_step = actor.get_max_heading_step(self.time_step)
-                desired = heading_diff(heading_ref, state.heading) / remaining
-                heading_step = float(np.clip(desired, -max_step, max_step))
-                heading_steps[actor] = heading_step
-                next_scene_builder.set_state(actor, actor.simulate(state, (rotate_heading(state.heading, heading_step), state.speed), self.time_step))
-
-            monitored = self.monitor.step(current.monitored_scene_with_results, next_scene_builder.build(), self.time_step)
-            if monitored.monitor_result_map_set.is_failed():
-                return None
-
-            candidate_node = SceneNode(monitored_scene_with_results=monitored)
-            candidate_node.heading_steps = heading_steps
-            candidate_node.inherit_running_extremes(current)
-            self.trajectory_objective_set.update_path_state(current, candidate_node)
-            candidate_node.path_cost = current.path_cost + self.trajectory_objective_set.calculate_step_cost(current, candidate_node)
-            rebuilt.append(candidate_node)
-            current = candidate_node
-
-        # Re-simulate the untouched tail so its monitor state matches the new prefix.
-        for tail_node in node_path[end_index + 1 :]:
-            next_scene_builder = SceneBuilder(current.scene)
-            heading_steps = {}
-            for actor in current.scene.vessels:
-                state = current.scene[actor]
-                heading_step = heading_diff(tail_node.scene[actor].heading, state.heading)
-                max_step = actor.get_max_heading_step(self.time_step)
-                heading_step = float(np.clip(heading_step, -max_step, max_step))
-                heading_steps[actor] = heading_step
-                next_scene_builder.set_state(actor, actor.simulate(state, (rotate_heading(state.heading, heading_step), state.speed), self.time_step))
-
-            monitored = self.monitor.step(current.monitored_scene_with_results, next_scene_builder.build(), self.time_step)
-            if monitored.monitor_result_map_set.is_failed():
-                return None
-            candidate_node = SceneNode(monitored_scene_with_results=monitored)
-            candidate_node.heading_steps = heading_steps
-            candidate_node.inherit_running_extremes(current)
-            self.trajectory_objective_set.update_path_state(current, candidate_node)
-            candidate_node.path_cost = current.path_cost + self.trajectory_objective_set.calculate_step_cost(current, candidate_node)
-            rebuilt.append(candidate_node)
-            current = candidate_node
-
-        return rebuilt
-
     def print_maneuver_states(self, node: SceneNode) -> None:
         for relation, maneuver_state in node.maneuver_state_set.items():
             print("------------------------------------------------------------------------------------------------")
@@ -497,16 +390,10 @@ class MonitorDrivenRRTSearch:
         if best is not None:
             self._observer(best, monitored, self._iteration_count)
 
-    def update_anim(self) -> None:
-        if self._iteration_count % self.ANIM_UPDATE_INTERVAL == 0:
-            self.trajectory_visualizer.update(self._iteration_count)
-        if self.trajectory_visualizer.handle_user_input():
-            self.stop = True
-
     def plan_trajectory(self) -> Tuple[Trajectories, int]:
-        """Plan a trajectory and return the path from start to goal.
+        """Plan the trajectories over the whole horizon.
 
-        Returns the path as a list of `RRTNode` from start to goal.
+        Returns the planned trajectories and the number of seed steps taken.
         Raises an exception if no path can be found.
         """
         path = self.do_plan()

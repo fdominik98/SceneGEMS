@@ -7,8 +7,8 @@ import type {
 } from "../simulation/wireTypes";
 
 /**
- * Advanced RRT parameter defaults. These mirror the class-level constants in
- * `backend/src/concrete_level/trajectory_generation/monitor_driven_rrt_search.py`
+ * Advanced planner parameter defaults. These mirror the class-level constants in
+ * `backend/src/concrete_level/trajectory_generation/monitor_guided_planner.py`
  * and `trajectory_generator.py` (TIME_STEP). Leaving a field at its default still
  * sends the value so the run is reproducible from the UI alone.
  */
@@ -16,9 +16,6 @@ export const TRAJECTORY_GENERATION_PARAM_DEFAULTS = {
   timeStep: 15,
   timeout: 300,
   maxIterations: 2000,
-  goalSampleRate: 50,
-  bestLeafSampleRate: 90,
-  maxLeafs: 500,
   directionThreshold: 1,
   bestRandomNodesK: 20,
   previewInterval: 1,
@@ -30,7 +27,7 @@ export type TrajectoryGenerationParams = {
 
 /** The trajectory generator choices, in the order the control lists them. */
 export const TRAJECTORY_GENERATORS: { id: TrajectoryGeneratorWire; label: string }[] = [
-  { id: "monitor_driven_rrt", label: "Monitor-driven RRT" },
+  { id: "monitor_driven_rrt", label: "Monitor-guided planner" },
   { id: "straight", label: "Straight" },
 ];
 
@@ -71,7 +68,7 @@ interface TrajectoryGenerationState {
    * result. Kept apart from `params` because those are all numeric form fields.
    */
   includeMonitorResults: boolean;
-  /** Which generator runs: the RRT search with `params`, or the straight one. */
+  /** Which generator runs: the monitor-guided planner with `params`, or the straight one. */
   generator: TrajectoryGeneratorWire;
   /** Seconds of straight trajectory (the straight generator only). */
   timespan: number;
@@ -170,7 +167,7 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
     }),
     {
       name: "scenegems:trajectory-generation",
-      version: 2,
+      version: 3,
       // Persist the advanced-parameter form, the handoff scene and
       // the last generated trajectory so the page restores on reload. A run that was
       // still in flight is downgraded to "idle" (there is no live request to resume).
@@ -188,15 +185,27 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
         resultComplete: state.resultComplete,
         errorMessage: state.status === "running" ? null : state.errorMessage,
       }),
-      // Identity: a version bump must keep the saved form. Older blobs may omit
-      // fields added later; rehydration merges them over the current defaults.
-      migrate: (persisted): TrajectoryGenerationPersisted => persisted as TrajectoryGenerationPersisted,
+      // A version bump must keep the saved form. Older blobs may omit fields added
+      // later; rehydration merges them over the current defaults. Version 3 drops the
+      // old search's parameters the planner never read.
+      migrate: (persisted): TrajectoryGenerationPersisted => withoutRetiredParams(persisted as TrajectoryGenerationPersisted),
     }
   )
 );
 
+/** Keys of the old RRT search that the planner never read; saved forms may still hold them. */
+const RETIRED_PARAM_KEYS = ["goalSampleRate", "bestLeafSampleRate", "maxLeafs"];
+
+function withoutRetiredParams(persisted: TrajectoryGenerationPersisted): TrajectoryGenerationPersisted {
+  if (!persisted?.params) return persisted;
+  const params = Object.fromEntries(
+    Object.entries(persisted.params).filter(([key]) => !RETIRED_PARAM_KEYS.includes(key))
+  ) as TrajectoryGenerationParams;
+  return { ...persisted, params };
+}
+
 /**
- * The params of a `generate_trajectories` message. The RRT search sends all its tuning
+ * The params of a `generate_trajectories` message. The planner sends all its tuning
  * values; the straight generator needs only the step and the timespan, so nothing else
  * of the search's form leaks into its request.
  */
@@ -214,9 +223,6 @@ export function toParamsWire(
     timeStep: params.timeStep,
     timeout: params.timeout,
     maxIterations: params.maxIterations,
-    goalSampleRate: params.goalSampleRate,
-    bestLeafSampleRate: params.bestLeafSampleRate,
-    maxLeafs: params.maxLeafs,
     directionThreshold: params.directionThreshold,
     bestRandomNodesK: params.bestRandomNodesK,
     previewInterval: params.previewInterval,

@@ -25,7 +25,7 @@ class LiveScenarioSession(ScenarioSession):
             trajectory_builder = trajectory_builder.simulate_acceleration_from_zero().shift_positions_to_zero()
         else:
             # A bare scene is a scenario of its initial scene only. The trajectories come from a
-            # trajectory generator (monitor driven RRT or straight); the workbench never appends any.
+            # trajectory generator (monitor-guided planner or straight); the workbench never appends any.
             eval_data: EvaluationData = EvaluationData.from_dict(raw_data)
             trajectory_builder = TrajectoryBuilder(ONE_SECOND, [eval_data.best_scene]).shift_positions_to_zero()
 

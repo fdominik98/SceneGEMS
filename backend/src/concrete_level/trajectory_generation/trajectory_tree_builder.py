@@ -234,18 +234,14 @@ class TrajectoryObjectiveSet(Dict[ConcreteActor, TrajectoryObjective]):
         self,
         root: SceneNode,
         time_step: int,
-        goal_sample_rate: int,
         verbose: bool = False,
         samples_per_interval: Optional[int] = None,
-        max_turn_rate_change: Optional[float] = None,
         max_children_per_expansion: Optional[int] = None,
         goal_horizon: float = 0.0,
     ):
-        del max_turn_rate_change
         super().__init__({actor: TrajectoryObjective(actor, root, time_step, verbose, goal_horizon) for actor in root.scene.vessels})
         for actor, trajectory_objective in self.items():
             root.goal_distances[actor] = trajectory_objective.start_goal_distance
-        self.goal_sample_rate = goal_sample_rate
         self.time_step = time_step
         self.samples_per_interval = self.SAMPLES_PER_INTERVAL if samples_per_interval is None else samples_per_interval
         self.max_children_per_expansion = self.MAX_CHILDREN_PER_EXPANSION if max_children_per_expansion is None else max_children_per_expansion
@@ -563,18 +559,6 @@ class TrajectoryTreeBuilder:
             children.extend(self.get_all_children_recursively(self.node(child)))
         return children
 
-    @property
-    def random_node(self) -> SceneNode:
-        return random.choice(self.nodes)
-
-    def random_node_on_path(self, node: SceneNode) -> SceneNode:
-        path = self.get_path(node)
-        return random.choice(path)
-
-    @property
-    def random_leaf(self) -> SceneNode:
-        return random.choice(self.leaves)
-
     def remove_branch_until_parent_with_multiple_children(self, node: SceneNode) -> None:
         iter_node = node
         branch_to_remove = None
@@ -588,47 +572,47 @@ class TrajectoryTreeBuilder:
         if branch_to_remove is not None:
             self.remove_branch(branch_to_remove)
 
-    def steer_actors(self, nearest_node: SceneNode, trajectory_objective_set: TrajectoryObjectiveSet) -> List[SceneNode]:
-        suggested_headings = trajectory_objective_set.get_suggested_headings(nearest_node)
+    def steer_actors(self, parent: SceneNode, trajectory_objective_set: TrajectoryObjectiveSet) -> List[SceneNode]:
+        suggested_headings = trajectory_objective_set.get_suggested_headings(parent)
         if not suggested_headings:
             suggested_headings = [({}, {})]
-        return [self._steer_one(nearest_node, trajectory_objective_set, headings, heading_changes) for headings, heading_changes in suggested_headings]
+        return [self._steer_one(parent, trajectory_objective_set, headings, heading_changes) for headings, heading_changes in suggested_headings]
 
     def _steer_one(
         self,
-        nearest_node: SceneNode,
+        parent: SceneNode,
         trajectory_objective_set: TrajectoryObjectiveSet,
         headings: Dict[ConcreteActor, float],
         heading_changes: Dict[ConcreteActor, float],
     ) -> SceneNode:
         spec = trajectory_objective_set.window_spec
-        next_scene = SceneBuilder(nearest_node.scene)
+        next_scene = SceneBuilder(parent.scene)
         changes = dict(heading_changes)
-        for actor in nearest_node.scene.vessels:
-            change, next_state = self._next_actor_motion(nearest_node, actor, headings, spec)
+        for actor in parent.scene.vessels:
+            change, next_state = self._next_actor_motion(parent, actor, headings, spec)
             next_scene.set_state(actor, next_state)
             changes[actor] = change
-        monitored = self.monitor.step(nearest_node.monitored_scene_with_results, next_scene.build(), self.time_step)
+        monitored = self.monitor.step(parent.monitored_scene_with_results, next_scene.build(), self.time_step)
         next_node = SceneNode(monitored_scene_with_results=monitored)
         next_node.heading_steps = changes
-        next_node.window_depth = nearest_node.window_depth + 1
+        next_node.window_depth = parent.window_depth + 1
         if spec is not None and next_node.window_depth >= spec.length:
             next_node.is_dead_end = True
-        next_node.inherit_running_extremes(nearest_node)
-        trajectory_objective_set.update_path_state(nearest_node, next_node)
-        next_node.path_cost = nearest_node.path_cost + trajectory_objective_set.calculate_step_cost(nearest_node, next_node)
+        next_node.inherit_running_extremes(parent)
+        trajectory_objective_set.update_path_state(parent, next_node)
+        next_node.path_cost = parent.path_cost + trajectory_objective_set.calculate_step_cost(parent, next_node)
         return next_node
 
     def _next_actor_motion(
         self,
-        nearest_node: SceneNode,
+        parent: SceneNode,
         actor: ConcreteActor,
         headings: Dict[ConcreteActor, float],
         spec: Optional[WindowRepairSpec],
     ) -> Tuple[float, ActorState]:
         if spec is not None and actor not in spec.free_actors:
-            return spec.locked_heading_change(nearest_node.window_depth, actor), spec.locked_state(nearest_node.window_depth, actor)
-        actor_state = nearest_node.scene[actor]
+            return spec.locked_heading_change(parent.window_depth, actor), spec.locked_state(parent.window_depth, actor)
+        actor_state = parent.scene[actor]
         heading = headings[actor]
         next_state = actor.simulate(actor_state, (heading, actor_state.speed), self.time_step)
         return heading_diff(heading, actor_state.heading), next_state
@@ -640,10 +624,6 @@ class TrajectoryTreeBuilder:
 
     def get_best_node(self, trajectory_objective: TrajectoryObjective) -> SceneNode:
         return self.get_best_nodes(trajectory_objective, 1)[0]
-
-    def get_best_random_node(self, trajectory_objective: TrajectoryObjective, k: int) -> SceneNode:
-        nodes = self.get_best_nodes(trajectory_objective, k)
-        return random.choice(nodes)
 
     def prune_worst_leaves_global(self, trajectory_objective_set: TrajectoryObjectiveSet, k: int) -> None:
         for node in self.get_worst_leafs_global(trajectory_objective_set, k):

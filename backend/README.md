@@ -34,7 +34,6 @@ The following tree provides an overview of the project structure:
 │   │   │   │   ├── concrete_actors.py
 │   │   │   │   ├── concrete_scene.py
 │   │   │   │   ├── multi_level_scenario.py
-│   │   │   │   ├── rrt_models.py
 │   │   │   │   ├── trajectories.py
 │   │   │   │   ├── trajectory_manager.py
 │   │   │   │   ├── vessel_order_graph.py
@@ -117,7 +116,6 @@ The following tree provides an overview of the project structure:
 │   │   │   ├── evaluation_plots/
 │   │   │   ├── dash_thread.py
 │   │   │   ├── plotting_utils.py
-│   │   │   ├── trajectory_visualizer.py
 │   │   ├── global_config.py
 │   ├── requirements.txt
 │   ├── requirements_exclude_from_ubuntu.txt

@@ -103,6 +103,13 @@ function monitorOf(config: Record<string, unknown>, section: string): unknown {
   return (config[section] as { monitor?: unknown } | undefined)?.monitor;
 }
 
+/** How a reason names a trajectory generator; the stored id `monitor_driven_rrt` predates the planner's name. */
+const GENERATOR_NAMES: Record<string, string> = { monitor_driven_rrt: "monitor-guided planner" };
+
+function generatorName(generator: string): string {
+  return GENERATOR_NAMES[generator] ?? generator.replace(/_/g, " ");
+}
+
 function subsystemNeed(stage: string, reason: string): RequiredCapability {
   const jobType = STAGE_JOB_TYPES[stage];
   return { jobType, components: [JOB_TYPE_COMPONENTS[jobType]], stage, reason };
@@ -119,7 +126,7 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
   }
   if (steps.includes("trajectory_generation")) {
     required.push(
-      subsystemNeed("generate_trajectories", typeof generator === "string" ? `Every case plans its trajectories (${generator.replace(/_/g, " ")}).` : "Every case plans its trajectories.")
+      subsystemNeed("generate_trajectories", typeof generator === "string" ? `Every case plans its trajectories (${generatorName(generator)}).` : "Every case plans its trajectories.")
     );
   }
   const runComponents = runs.map((run) => runStackComponents(run.stack));

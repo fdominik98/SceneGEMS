@@ -31,7 +31,6 @@ dependencies = [
     "pandas",
     "pygad",
     "pymoo",
-    "pygame",
     "pyswarms",
     "pyyaml",
     "scipy",

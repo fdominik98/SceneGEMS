@@ -22,9 +22,6 @@ describe("trajectory generation persistence", () => {
         timeStep: 15,
         timeout: 300,
         maxIterations: 2000,
-        goalSampleRate: 50,
-        bestLeafSampleRate: 90,
-        maxLeafs: 500,
         directionThreshold: 1,
         bestRandomNodesK: 20,
         previewInterval: 1,
@@ -42,5 +39,25 @@ describe("trajectory generation persistence", () => {
       errorMessage: null,
     };
     expect(migrate?.(saved, 1)).toEqual(saved);
+  });
+
+  it("drops the old search's parameters from a version 2 form and keeps the rest", () => {
+    const migrate = trajectory.useTrajectoryGenerationStore.persist.getOptions().migrate;
+    const params = { timeStep: 15, timeout: 300, maxIterations: 2000, directionThreshold: 1, bestRandomNodesK: 7, previewInterval: 1 };
+    const saved = {
+      params: { ...params, goalSampleRate: 50, bestLeafSampleRate: 90, maxLeafs: 500 },
+      includeMonitorResults: true,
+      generator: "monitor_driven_rrt" as const,
+      timespan: 3600,
+      handoffScene: null,
+      handoffSourceName: null,
+      status: "idle" as const,
+      iteration: 0,
+      resultScenarioJson: null,
+      resultValid: false,
+      resultComplete: null,
+      errorMessage: null,
+    };
+    expect(migrate?.(saved, 2)).toEqual({ ...saved, params });
   });
 });

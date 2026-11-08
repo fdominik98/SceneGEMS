@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-# Deliberately one worker in the workbench: RRT trajectory generation is a single long run
+# Deliberately one worker in the workbench: planning trajectories is a single long run
 # and the subsystem is scoped to one request at a time (see project spec). A node sizes
 # its pool by its slots. Kept apart from the service module, which imports the search.
 MAX_TRAJECTORY_GENERATION_WORKERS = 1
@@ -11,7 +11,7 @@ TRAJECTORY_GENERATION_SERVICE_TOPIC = f"waraps/service/virtual/real/{TRAJECTORY_
 
 
 class TrajectoryGeneratorId(str, Enum):
-    MONITOR_DRIVEN_RRT = "monitor_driven_rrt"  # the monitor driven RRT search (MonitorDrivenRRTSearch)
+    MONITOR_DRIVEN_RRT = "monitor_driven_rrt"  # the monitor-guided planner (MonitorGuidedPlanner); the id predates the name and is stored, so it stays
     STRAIGHT = "straight"  # every vessel straight on from the initial scene up to the timespan
 
 
@@ -19,15 +19,12 @@ class TrajectoryGeneratorId(str, Enum):
 class TrajectoryGenerationParams:
     """Tuning values forwarded from the frontend advanced-parameters panel.
 
-    ``None`` means "use the MonitorDrivenRRTSearch / TrajectoryGenerator default".
+    ``None`` means "use the MonitorGuidedPlanner / TrajectoryGenerator default".
     """
 
     time_step: Optional[int] = None
     timeout: Optional[float] = None
     max_iterations: Optional[int] = None
-    goal_sample_rate: Optional[int] = None
-    best_leaf_sample_rate: Optional[int] = None
-    max_leafs: Optional[int] = None
     direction_threshold: Optional[float] = None
     best_random_nodes_k: Optional[int] = None
     preview_interval: Optional[int] = None
@@ -72,9 +69,6 @@ class TrajectoryGenerationParams:
             time_step=_int("timeStep"),
             timeout=_float("timeout"),
             max_iterations=_int("maxIterations"),
-            goal_sample_rate=_int("goalSampleRate"),
-            best_leaf_sample_rate=_int("bestLeafSampleRate"),
-            max_leafs=_int("maxLeafs"),
             direction_threshold=_float("directionThreshold"),
             best_random_nodes_k=_int("bestRandomNodesK"),
             preview_interval=_int("previewInterval"),
@@ -88,9 +82,6 @@ class TrajectoryGenerationParams:
             "time-step": self.time_step,
             "timeout": self.timeout,
             "max-iterations": self.max_iterations,
-            "goal-sample-rate": self.goal_sample_rate,
-            "best-leaf-sample-rate": self.best_leaf_sample_rate,
-            "max-leafs": self.max_leafs,
             "direction-threshold": self.direction_threshold,
             "best-random-nodes-k": self.best_random_nodes_k,
             "preview-interval": self.preview_interval,
@@ -105,9 +96,6 @@ class TrajectoryGenerationParams:
             time_step=params.get("time-step"),
             timeout=params.get("timeout"),
             max_iterations=params.get("max-iterations"),
-            goal_sample_rate=params.get("goal-sample-rate"),
-            best_leaf_sample_rate=params.get("best-leaf-sample-rate"),
-            max_leafs=params.get("max-leafs"),
             direction_threshold=params.get("direction-threshold"),
             best_random_nodes_k=params.get("best-random-nodes-k"),
             preview_interval=params.get("preview-interval"),

@@ -18,7 +18,8 @@ def test_every_generator_id_has_a_node_in_the_generator_lane():
 def test_the_search_shows_its_defaults_from_the_code_and_the_straight_generator_none():
     nodes = {node.id: node for node in trajectory_generation_document().nodes}
     search = {fact.key: fact.value for fact in nodes["trajectory_generation/monitor_driven_rrt"].facts}
-    assert search["goalSampleRate"] == 50 and search["randomness"].startswith("seeded")
+    assert search["bestRandomNodesK"] == 20 and search["randomness"].startswith("seeded")
+    assert not {"goalSampleRate", "bestLeafSampleRate", "maxLeafs", "smoothingRounds"} & set(search)
     assert {fact.key: fact.value for fact in nodes["trajectory_generation/straight"].facts}["randomness"] == "none"
 
 

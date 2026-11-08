@@ -273,7 +273,7 @@ class TestScenarioWithoutTrajectories:
         await settle()
         assert bare.initialized == []
         assert self.errors(websocket) == [NO_TRAJECTORIES_MESSAGE]
-        assert "generate trajectories first" in NO_TRAJECTORIES_MESSAGE and "monitor-driven RRT or straight" in NO_TRAJECTORIES_MESSAGE
+        assert "generate trajectories first" in NO_TRAJECTORIES_MESSAGE and "monitor-guided planner or straight" in NO_TRAJECTORIES_MESSAGE
 
     async def test_the_refusal_comes_before_the_configuration_is_judged(self, session, bare, websocket):
         session.set_simulation_session(stack_instance(SimulationLayerId.GAZEBO, [0], control_layer=ControlLayerId.NONE))

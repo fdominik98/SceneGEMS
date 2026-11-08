@@ -44,7 +44,7 @@ describe("parseReason", () => {
     expect(parseReason("domain.scene_generation_timeout_s: Input should be greater than 0")).toMatchObject({ step: "scenes", field: "scene_generation_timeout_s" });
     expect(parseReason("domain.enforce_low_tcpa: Input should be a valid boolean")).toMatchObject({ step: "scenes", field: "enforce_low_tcpa" });
     expect(parseReason("trajectories: Value error, the straight generator needs timespan_s")).toMatchObject({ step: "trajectories", field: null });
-    expect(parseReason("trajectories.params.maxLeafs: Input should be a valid integer")).toMatchObject({ step: "trajectories", field: "params.maxLeafs" });
+    expect(parseReason("trajectories.params.bestRandomNodesK: Input should be a valid integer")).toMatchObject({ step: "trajectories", field: "params.bestRandomNodesK" });
     expect(parseReason("resources.queue_depth.simulate: Input should be greater than or equal to 1")).toMatchObject({ step: "resources", field: "queue_depth.simulate" });
     expect(parseReason("policy.stop.max_cases: Input should be greater than or equal to 1")).toMatchObject({ step: "policy", field: "stop.max_cases" });
     expect(parseReason("execution.runs: Tuple should have at least 1 item after validation, not 0")).toMatchObject({ step: "runs", entry: null, field: "runs" });

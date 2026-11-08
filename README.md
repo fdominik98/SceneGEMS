@@ -45,7 +45,7 @@ Open http://localhost:5173. The workbench has no backend of its own: it uses the
 In the web console, under Workbench:
 
 1. **Scene Generation**: load a functional scenario (one of the master's, or a `.problem` file) and generate a scene.
-2. **Trajectory Generation**: monitor-driven RRT, or straight trajectories over a time span.
+2. **Trajectory Generation**: the monitor-guided planner (a corridor seed with local repair), or straight trajectories over a time span.
 3. **Simulation**: run the scenario and play it back in the encounter view (nautical canvas, a card per vessel pair, rule timeline) with the COLREGS monitor's outcomes. Every run is kept in Campaign History, which can replay it, and its frames can be exported.
 4. **Connections**: the MQTT broker of live simulation sessions (the master's own by default).
 

@@ -62,7 +62,7 @@ from pydantic import (
 from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
 from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
-from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS
+from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS, without_retired_params
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
@@ -283,13 +283,19 @@ class SceneGenerationConfig(ConfigModel):
 
 class TrajectoriesConfig(ConfigModel):
     generator: TrajectoryGeneratorImplementation = TrajectoryGeneratorImplementation.MONITOR_DRIVEN_RRT
-    # monitor_driven_rrt only: search parameters by their wire keys (timeStep, maxIterations, ...); search defaults when absent
+    # monitor_driven_rrt (the monitor-guided planner) only: its parameters by their wire keys (timeStep, maxIterations, ...); its defaults when absent
     params: Dict[str, Union[bool, int, float]] = Field(default_factory=dict)
     timespan_s: Optional[float] = Field(default=None, gt=0)  # straight only, required there: how far every vessel goes straight on
     timeout_s: float = Field(default=1800.0, gt=0)  # how long a trajectory generation job may take
     monitor: MonitorImplementation = MonitorImplementation.EMPTY  # format 2: post_hoc judges the planned trajectories
 
     _monitor = field_validator("monitor")(_generation_step_monitor)
+
+    @field_validator("params", mode="before")
+    @classmethod
+    def _drop_retired_params(cls, params: Any) -> Any:
+        # Stored campaigns still carry the old search's unused keys; they load without them.
+        return without_retired_params(dict(params)) if isinstance(params, Mapping) else params
 
     @model_validator(mode="after")
     def _parameters_of_the_generator(self) -> "TrajectoriesConfig":

@@ -1,4 +1,4 @@
-"""The trajectory generation pool: the trajectory generation MQTT service with its RRT workers."""
+"""The trajectory generation pool: the trajectory generation MQTT service with its planner workers."""
 
 from typing import Optional
 

@@ -146,7 +146,7 @@ describe("what the cards say", () => {
       context()
     );
     expect(texts(map.cards[1].facts)).toEqual(["Post hoc monitor", "At most 60 s per scene", "Low TCPA enforced"]);
-    expect(texts(map.cards[2].facts)).toEqual(["Monitor driven RRT", "1 parameter changed", "No monitor"]);
+    expect(texts(map.cards[2].facts)).toEqual(["Monitor-guided planner", "1 parameter changed", "No monitor"]);
 
     const unknown = buildCampaignMap(draftOf((draft) => void (draft.trajectories.generator = "unheard_of")), context());
     expect(unknown.cards[2].facts[0]).toEqual({ text: "unheard_of", tone: "bad" });

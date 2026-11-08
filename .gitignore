@@ -4,10 +4,11 @@
 # Real env files hold secrets (master, node); only the .env.example templates are tracked
 .env
 
+# npm installs, at any depth (frontend/, frontend/website/, or a stray one anywhere else)
+node_modules/
+
 # Frontend
 frontend/.env
-frontend/node_modules/
-frontend/website/node_modules/
 frontend/dist/
 frontend/dist-ssr/
 frontend/public/docs/

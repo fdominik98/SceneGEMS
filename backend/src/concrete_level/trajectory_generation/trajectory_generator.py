@@ -4,7 +4,7 @@ from datetime import datetime
 import numpy as np
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from concrete_level.trajectory_generation.monitor_driven_rrt_search import MonitorDrivenRRTSearch
+from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from concrete_level.trajectory_generation.trajectory_data import TrajectoryData
 from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
@@ -24,14 +24,14 @@ class TrajectoryGenerator:
         start_time = datetime.now()
         trajectories = TrajectoryBuilder.default_trajectory_from_scene(initial_scene, TIME_STEP, ONE_HOUR_IN_SEC)
 
-        rrt = MonitorDrivenRRTSearch(
+        planner = MonitorGuidedPlanner(
             start_scene=initial_scene,
             other_trajectories=trajectories,
             colregs_constants=colregs_constants,
         )
 
         # Add the original position to start the path
-        trajectories, iter_number = rrt.plan_trajectory()
+        trajectories, iter_number = planner.plan_trajectory()
 
         overall_eval_time = (datetime.now() - start_time).total_seconds()
         timestamp = datetime.now().isoformat()

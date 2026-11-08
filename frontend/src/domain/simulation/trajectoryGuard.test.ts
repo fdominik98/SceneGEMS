@@ -17,6 +17,6 @@ describe("missingTrajectoriesReason", () => {
 
   it("tells the user to run a generator", () => {
     expect(NO_TRAJECTORIES_MESSAGE).toContain("generate trajectories first");
-    expect(NO_TRAJECTORIES_MESSAGE).toContain("monitor-driven RRT or straight");
+    expect(NO_TRAJECTORIES_MESSAGE).toContain("monitor-guided planner or straight");
   });
 });

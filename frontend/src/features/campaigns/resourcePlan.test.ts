@@ -46,7 +46,7 @@ describe("requiredCapabilities", () => {
       ["simulation", KINEMATIC_COMPONENTS],
       ["monitoring.post_hoc", ["monitoring"]],
     ]);
-    expect(required[1].reason).toBe("Every case plans its trajectories (monitor driven rrt).");
+    expect(required[1].reason).toBe("Every case plans its trajectories (monitor-guided planner).");
     expect(required[2].reason).toBe("The run is simulated on the kinematic layer.");
   });
 

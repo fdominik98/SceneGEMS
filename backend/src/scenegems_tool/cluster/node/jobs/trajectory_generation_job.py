@@ -6,7 +6,7 @@ workers (one per trajectory_generation slot) instead of superseding the running 
 stops waiting without its result (cancelled, lost, released, timed out) cancels its own search by
 request id, so the pool's other searches keep running and the worker is free for the next job.
 
-params.generator picks the generator: monitor_driven_rrt (the search, the default) or
+params.generator picks the generator: monitor_driven_rrt (the monitor-guided planner, the default) or
 straight (every vessel straight on up to params.timespan, at once). The result's complete is
 true for a complete plan; a search that ends with its best partial path reports valid true
 and complete false.
@@ -38,9 +38,6 @@ PARAM_KEYS = frozenset(
         "timeStep",
         "timeout",
         "maxIterations",
-        "goalSampleRate",
-        "bestLeafSampleRate",
-        "maxLeafs",
         "directionThreshold",
         "bestRandomNodesK",
         "previewInterval",
@@ -49,6 +46,9 @@ PARAM_KEYS = frozenset(
         "timespan",
     }
 )
+# Keys of the old RRT search that the planner never read. Stored campaigns and workbench runs still
+# carry them, so they are accepted and dropped instead of rejected as unknown.
+RETIRED_PARAM_KEYS = frozenset({"goalSampleRate", "bestLeafSampleRate", "maxLeafs"})
 MAX_SEED = 2**31 - 1
 CANCEL_FLUSH_TIMEOUT_S = 2.0  # how long the job waits for the broker to take its cancel before it disconnects
 _logger = logging.getLogger(__name__)
@@ -68,6 +68,7 @@ class TrajectoryGenerationPayload(ProtocolModel):
     @field_validator("params")
     @classmethod
     def _known_params(cls, params: Dict[str, Any]) -> Dict[str, Any]:
+        params = without_retired_params(params)
         unknown = sorted(set(params) - PARAM_KEYS)
         if unknown:
             raise ValueError(f"unknown search parameters {unknown}")
@@ -79,6 +80,11 @@ class TrajectoryGenerationPayload(ProtocolModel):
 
 
 PAYLOAD_MODEL = TrajectoryGenerationPayload
+
+
+def without_retired_params(params: Dict[str, Any]) -> Dict[str, Any]:
+    """The search parameters without the RETIRED_PARAM_KEYS."""
+    return {key: value for key, value in params.items() if key not in RETIRED_PARAM_KEYS}
 
 
 def run(job: JobSpec, node: NodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
