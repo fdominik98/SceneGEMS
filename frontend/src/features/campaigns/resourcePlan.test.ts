@@ -7,6 +7,7 @@ import {
   fullUsageQueueDepth,
   needLabel,
   nodeProblems,
+  planKey,
   planOfConfig,
   planResources,
   requiredCapabilities,
@@ -194,6 +195,15 @@ describe("planResources", () => {
 
   it("blocks the start while the nodes are unknown", () => {
     expect(startBlocker(null)).toBe("The cluster's machines are not known yet.");
+  });
+
+  it("keys a plan by what it says, not by the nodes' heartbeats", () => {
+    const plan = planResources(required, nodes, { nodes: null, labels: {} });
+    const beat = nodes.map((entry) => ({ ...entry, last_seen_at: "2030-01-01T00:00:00+00:00" }));
+    expect(planKey(planResources(required, beat, { nodes: null, labels: {} }))).toBe(planKey(plan));
+    expect(planKey(planResources(required, nodes.slice(1), { nodes: null, labels: {} }))).not.toBe(planKey(plan));
+    expect(planKey(planResources(required.slice(0, 2), nodes, { nodes: null, labels: {} }))).not.toBe(planKey(plan));
+    expect(planKey(null)).toBe("");
   });
 });
 

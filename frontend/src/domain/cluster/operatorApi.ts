@@ -83,6 +83,8 @@ export interface RequestOptions {
   rawBody?: Blob | ArrayBuffer | string;
   contentType?: string;
   signal?: AbortSignal;
+  /** This call's timeout instead of the client's (it covers reading the answer too); null waits as long as the answer takes. */
+  timeoutMs?: number | null;
 }
 
 export interface OperatorClientOptions {
@@ -180,6 +182,22 @@ export function describeErrorBody(status: number, statusText: string, body: unkn
   return { message: fallback, reasons: [] };
 }
 
+/** Pages of more rows than this get `LARGE_PAGE_TIMEOUT_MS` (Results reads its summary in pages of 1000 verdicts). */
+const LARGE_PAGE = 100;
+export const LARGE_PAGE_TIMEOUT_MS = 60_000;
+
+/** An answer's text as JSON, or the text itself when it is not JSON (null when empty). */
+function parseBody(text: string): unknown {
+  if (text.length === 0) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
 function readTotal(headers: Headers): number | null {
   const raw = headers.get("X-Total-Count");
   if (raw === null) {
@@ -204,38 +222,45 @@ export class OperatorClient {
     return `${this.baseUrl}${path}${buildQueryString(query)}`;
   }
 
-  /** One call, its answer checked against `schema`. */
-  async request<S extends z.ZodType>(
+  /**
+   * Sends one call and reads its answer with `read`, both under the timeout (the call's, else the
+   * client's) and the caller's signal. Errors of the transport become `OperatorApiError`s; an abort
+   * by the caller is passed on as it is.
+   */
+  private async send<T>(
     method: string,
     path: string,
-    schema: S,
-    options: RequestOptions = {}
-  ): Promise<{ data: z.infer<S>; total: number | null }> {
+    options: RequestOptions,
+    headers: Record<string, string>,
+    read: (response: Response) => Promise<T>
+  ): Promise<{ response: Response; body: T }> {
+    const timeoutMs = options.timeoutMs === undefined ? this.timeoutMs : options.timeoutMs;
     const controller = new AbortController();
     let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, this.timeoutMs);
+    const timer =
+      timeoutMs === null
+        ? undefined
+        : setTimeout(() => {
+            timedOut = true;
+            controller.abort();
+          }, timeoutMs);
     const onAbort = () => controller.abort();
-    options.signal?.addEventListener("abort", onAbort, { once: true });
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (options.rawBody !== undefined) {
-      headers["Content-Type"] = options.contentType ?? "application/octet-stream";
-    } else if (options.body !== undefined) {
-      headers["Content-Type"] = "application/json";
+    if (options.signal?.aborted) {
+      controller.abort();
+    } else {
+      options.signal?.addEventListener("abort", onAbort, { once: true });
     }
-    let response: Response;
     try {
-      response = await this.fetchImpl(this.url(path, options.query), {
+      const response = await this.fetchImpl(this.url(path, options.query), {
         method,
         headers,
         body: options.rawBody !== undefined ? options.rawBody : options.body === undefined ? undefined : JSON.stringify(options.body),
         signal: controller.signal,
       });
+      return { response, body: await read(response) };
     } catch (error) {
       if (timedOut) {
-        throw new OperatorApiError("timeout", `${this.baseUrl} did not answer within ${Math.round(this.timeoutMs / 1000)} s`, path);
+        throw new OperatorApiError("timeout", `${this.baseUrl} did not answer within ${Math.round((timeoutMs ?? 0) / 1000)} s`, path);
       }
       if (options.signal?.aborted) {
         throw error;
@@ -246,15 +271,23 @@ export class OperatorClient {
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
     }
-    const text = await response.text();
-    let body: unknown = null;
-    if (text.length > 0) {
-      try {
-        body = JSON.parse(text);
-      } catch {
-        body = text;
-      }
+  }
+
+  /** One call, its answer checked against `schema`. */
+  async request<S extends z.ZodType>(
+    method: string,
+    path: string,
+    schema: S,
+    options: RequestOptions = {}
+  ): Promise<{ data: z.infer<S>; total: number | null }> {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (options.rawBody !== undefined) {
+      headers["Content-Type"] = options.contentType ?? "application/octet-stream";
+    } else if (options.body !== undefined) {
+      headers["Content-Type"] = "application/json";
     }
+    const { response, body: text } = await this.send(method, path, options, headers, (answer) => answer.text());
+    const body = parseBody(text);
     if (!response.ok) {
       const { message, reasons } = describeErrorBody(response.status, response.statusText, body);
       throw new OperatorApiError("http", message, path, response.status, reasons);
@@ -271,8 +304,8 @@ export class OperatorClient {
     return (await this.request("GET", path, schema, { query, signal })).data;
   }
 
-  private async list<S extends z.ZodType>(path: string, schema: S, query?: Query, signal?: AbortSignal): Promise<ListPage<z.infer<S>>> {
-    const { data, total } = await this.request("GET", path, schema.array(), { query, signal });
+  private async list<S extends z.ZodType>(path: string, schema: S, query?: Query, signal?: AbortSignal, timeoutMs?: number | null): Promise<ListPage<z.infer<S>>> {
+    const { data, total } = await this.request("GET", path, schema.array(), { query, signal, timeoutMs });
     return { items: data as z.infer<S>[], total };
   }
 
@@ -348,7 +381,9 @@ export class OperatorClient {
   }
 
   listVerdicts(campaignId: string, filters: VerdictFilters = {}, signal?: AbortSignal) {
-    return this.list(`${this.campaignPath(campaignId)}/verdicts`, verdictSchema, { ...filters }, signal);
+    // The timeout covers reading the answer too: a page of many verdicts gets the time a large body needs over a tunnel.
+    const large = typeof filters.limit === "number" && filters.limit > LARGE_PAGE;
+    return this.list(`${this.campaignPath(campaignId)}/verdicts`, verdictSchema, { ...filters }, signal, large ? LARGE_PAGE_TIMEOUT_MS : undefined);
   }
 
   /** The verdicts as a CSV download link (the same filters). */
@@ -379,6 +414,23 @@ export class OperatorClient {
   /** Download link of an artifact (GET on the operator API). */
   artifactUrl(sha256: string): string {
     return this.url(`/cluster/artifacts/${encodeURIComponent(sha256)}`);
+  }
+
+  /**
+   * An artifact's content as a blob, to save it as a file: the operator API is another origin than
+   * the console, where a link's `download` is ignored and the link would navigate the console away.
+   * No timeout by default (an artifact can be large); the signal ends it.
+   */
+  async getArtifactBlob(sha256: string, options: { signal?: AbortSignal; timeoutMs?: number | null } = {}): Promise<Blob> {
+    const path = `/cluster/artifacts/${encodeURIComponent(sha256)}`;
+    const { response, body } = await this.send<Blob | string>("GET", path, { signal: options.signal, timeoutMs: options.timeoutMs ?? null }, {}, (answer) =>
+      answer.ok ? answer.blob() : answer.text()
+    );
+    if (!response.ok) {
+      const { message, reasons } = describeErrorBody(response.status, response.statusText, parseBody(body as string));
+      throw new OperatorApiError("http", message, path, response.status, reasons);
+    }
+    return body as Blob;
   }
 
   private campaignPath(campaignId: string): string {

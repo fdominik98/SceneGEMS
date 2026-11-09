@@ -613,6 +613,13 @@
   gap: var(--space-4);
 }
 
+.run-artifact-download {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
 /* Recorded run */
 
 .run-progress {
@@ -867,7 +874,6 @@
   color: var(--ok-text);
 }
 
-.run-artifacts a,
 .results-table a {
   color: var(--accent);
   font-size: var(--font-size-xs);

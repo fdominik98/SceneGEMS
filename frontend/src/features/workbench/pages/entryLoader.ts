@@ -6,6 +6,7 @@ import type { CaseDetail, PipelineStage, RunRecord } from "../../../domain/clust
 import { buildFramesFromTrajectoryData, parseScenarioFile } from "../../../domain/sceneGeneration/parseEvaluationDataFile";
 import type { EvaluationData, SimulationFrame } from "../../../domain/simulation/types";
 import { EntryEndedError, stageJob } from "./entryFollower";
+import { caseLabel } from "./entryLabels";
 import type { PageOutput } from "./pageStore";
 import type { WorkbenchTarget } from "./workbenchTarget";
 
@@ -36,6 +37,8 @@ export interface LoadedScene {
   /** The scene monitor's judgment of the scene, null when the step ran unmonitored. */
   monitorFrame: SimulationFrame | null;
   output: PageOutput;
+  /** The case's index in its class (0-based). */
+  caseIndex: number;
 }
 
 export interface LoadedTrajectories {
@@ -47,6 +50,7 @@ export interface LoadedTrajectories {
   valid: boolean;
   complete: boolean | null;
   output: PageOutput;
+  caseIndex: number;
 }
 
 /** What the simulation page fills its setup from, so the run can run again. */
@@ -70,6 +74,7 @@ export interface LoadedRun {
   setup: LoadedRunSetup;
   /** The run's input trajectories, as the page's input to run it again. */
   input: PageOutput | null;
+  caseIndex: number;
 }
 
 export type LoadedOutput = LoadedScene | LoadedTrajectories | LoadedRun;
@@ -200,7 +205,8 @@ async function loadScene(client: LoaderClient, target: WorkbenchTarget, detail: 
     scenario: document,
     valid: !(detail.state === "dropped" && detail.stage === "generate_scene"),
     monitorFrame: frames[0] ?? null,
-    output: { label: `Scene of case ${target.caseId} of entry ${target.campaignId}`, ref: ref(detail.scene_artifact, sizeBytes, "scene"), source: sourceOf(target) },
+    output: { label: `Scene of ${caseLabel(detail.case_index, target.campaignId)}`, ref: ref(detail.scene_artifact, sizeBytes, "scene"), source: sourceOf(target) },
+    caseIndex: detail.case_index,
   };
 }
 
@@ -222,10 +228,11 @@ async function loadTrajectories(client: LoaderClient, target: WorkbenchTarget, d
     valid: planned.length > 0,
     complete: detail.trajectories_complete,
     output: {
-      label: `Trajectories of case ${target.caseId} of entry ${target.campaignId}`,
+      label: `Trajectories of ${caseLabel(detail.case_index, target.campaignId)}`,
       ref: ref(detail.trajectories_artifact, sizeBytes, "trajectories", scenario === document ? "/trajectories" : null),
       source: sourceOf(target),
     },
+    caseIndex: detail.case_index,
   };
 }
 
@@ -245,7 +252,7 @@ async function loadRun(client: LoaderClient, target: WorkbenchTarget, detail: Ca
       scenario = trajectoryScenarioOf(document);
       if (scenario !== null) {
         input = {
-          label: `Trajectories of the run in case ${target.caseId} of entry ${target.campaignId}`,
+          label: `Trajectories of the run in ${caseLabel(detail.case_index, target.campaignId)}`,
           ref: ref(inputSha, sizeBytes, "trajectories", scenario === document ? "/trajectories" : null),
           source: sourceOf(target),
         };
@@ -257,7 +264,7 @@ async function loadRun(client: LoaderClient, target: WorkbenchTarget, detail: Ca
       }
     }
   }
-  return { step: "simulation", runRecord, scenario, frames, setup: runSetupOf(runRecord), input };
+  return { step: "simulation", runRecord, scenario, frames, setup: runSetupOf(runRecord), input, caseIndex: detail.case_index };
 }
 
 /** Fetches the output a target names. Rejects with `EntryEndedError` (`gone`) when the entry or output was deleted. */

@@ -79,6 +79,8 @@ interface TopicEntry {
   backlogComplete: boolean;
   /** Sent with every `subscribe` of the topic: the first subscriber's, then the latest `configure`. */
   options: SubscribeOptions | undefined;
+  /** Why the server refused the topic (phase failed), told to a later subscriber as well. */
+  error: string | null;
 }
 
 export class LiveChannel {
@@ -162,6 +164,7 @@ export class LiveChannel {
         backlog: [],
         backlogComplete: true,
         options,
+        error: null,
       };
       this.topics.set(topic, entry);
       entry.subscriptions.add(subscription);
@@ -178,6 +181,9 @@ export class LiveChannel {
         } else {
           this.resubscribe(topic, entry);
         }
+      } else if (entry.phase === "failed") {
+        // The server refused it already: tell this subscriber too rather than leave it waiting for a snapshot
+        subscription.listener({ type: "error", topic, message: entry.error ?? `the live channel refused ${topic}` });
       }
     }
     let active = true;
@@ -255,6 +261,7 @@ export class LiveChannel {
 
   private sendSubscribe(topic: string, entry: TopicEntry): void {
     entry.phase = "subscribing";
+    entry.error = null;
     entry.snapshot = undefined;
     entry.lastSeq = null;
     entry.backlog = [];
@@ -422,6 +429,7 @@ export class LiveChannel {
         }
         if (entry.phase === "subscribing") {
           entry.phase = "failed";
+          entry.error = message.message;
         }
         this.emit(topic, entry, { type: "error", topic, message: message.message });
         return;

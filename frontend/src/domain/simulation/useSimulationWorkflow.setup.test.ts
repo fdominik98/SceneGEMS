@@ -10,6 +10,7 @@ function run(setup: Partial<LoadedRun["setup"]>): LoadedRun {
     frames: [],
     setup: { simulationLayer: "kinematic", controlLayer: null, mode: "replay", speedup: null, windVector: [0, 0, 0], waves: null, ...setup },
     input: null,
+    caseIndex: 0,
   };
 }
 

@@ -1,9 +1,10 @@
 import { Fragment, useState } from "react";
-import { createOperatorClient, describeOperatorError } from "../../domain/cluster/operatorApi";
+import { saveBlob } from "../../components/saveBlob";
+import { createOperatorClient, describeOperatorError, type OperatorClient } from "../../domain/cluster/operatorApi";
 import type { CaseJob, RunRecord, Verdict } from "../../domain/cluster/schemas";
 import { ruleOutcomeRows } from "./ruleOutcomes";
 import { VERDICT_STEP_LABEL } from "./stepViews";
-import { describeStack, formatSeconds, formatTime, runLabel, shortHash, sortedArtifacts } from "./resultsFormat";
+import { artifactFileName, describeStack, formatSeconds, formatTime, runLabel, shortHash, sortedArtifacts } from "./resultsFormat";
 import { useJobDetail } from "./useResultsData";
 
 export function StateChip({ state }: { state: string }) {
@@ -98,7 +99,40 @@ export function CaseJobsTable({ operatorUrl, jobs }: { operatorUrl: string; jobs
   );
 }
 
-/** One run record: stack, seed, steps, digest, durations and its artifacts with download links. */
+/**
+ * Downloads an artifact through the operator client and saves it as a file. The operator API is
+ * another origin, where a link's `download` is ignored and the link would navigate the console away.
+ */
+export function ArtifactDownload({ client, role, sha256 }: { client: Pick<OperatorClient, "getArtifactBlob">; role: string; sha256: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const download = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const blob = await client.getArtifactBlob(sha256);
+      saveBlob(blob, artifactFileName(role, sha256, blob.type));
+    } catch (caught) {
+      setError(`Cannot download it: ${describeOperatorError(caught)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="run-artifact-download">
+      {error && (
+        <span className="error" role="alert">
+          {error}
+        </span>
+      )}
+      <button type="button" onClick={() => void download()} disabled={busy} aria-label={`${busy ? "Downloading" : "Download"} ${role.replace(/_/g, " ")}`}>
+        {busy ? "Downloading" : "Download"}
+      </button>
+    </span>
+  );
+}
+
+/** One run record: stack, seed, steps, digest, durations and its artifacts with download buttons. */
 export function RunRecordCard({
   operatorUrl,
   record,
@@ -172,9 +206,7 @@ export function RunRecordCard({
             <li key={role}>
               <span>{role.replace(/_/g, " ")}</span>
               <code title={sha256}>{shortHash(sha256, 10)}</code>
-              <a href={client.artifactUrl(sha256)} download>
-                Download
-              </a>
+              <ArtifactDownload client={client} role={role} sha256={sha256} />
             </li>
           ))}
         </ul>
@@ -207,7 +239,7 @@ export function VerdictCard({ verdict }: { verdict: Verdict }) {
         <p className="meta">{verdict.state === "unmonitored" ? "This run was not monitored." : "The monitor reported no rule outcomes."}</p>
       ) : (
         <div className="results-table-wrap">
-          <table className="results-table results-table--plain" aria-label={`Rule outcomes of run ${verdict.run_index}`}>
+          <table className="results-table results-table--plain" aria-label={`Rule outcomes of ${runLabel(verdict.run_index)}`}>
             <thead>
               <tr>
                 <th>Outcome</th>

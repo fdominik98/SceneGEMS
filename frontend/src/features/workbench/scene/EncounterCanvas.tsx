@@ -40,6 +40,8 @@ export interface EncounterCanvasProps {
   layerColumns: LayerColumn[];
   /** Changing this number fits the view to the vessels (once a frame and a size exist). */
   fitSignal?: number;
+  /** Changing this number fits the view too, unless the user zoomed or panned since the last fit (samples of a scene being generated). */
+  followSignal?: number;
   /** Called after each fit. */
   onFit?: () => void;
   selectedRelationId?: string | null;
@@ -92,6 +94,7 @@ export function EncounterCanvas({
   streams,
   layerColumns,
   fitSignal = 0,
+  followSignal = 0,
   onFit,
   selectedRelationId = null,
   onSelectRelation,
@@ -131,6 +134,13 @@ export function EncounterCanvas({
   if (fitSignal !== seenFitSignal) {
     setSeenFitSignal(fitSignal);
     setPendingFit(true);
+  }
+  const [seenFollowSignal, setSeenFollowSignal] = useState(followSignal);
+  if (followSignal !== seenFollowSignal) {
+    setSeenFollowSignal(followSignal);
+    if (!adjusted) {
+      setPendingFit(true);
+    }
   }
 
   const visibleStreams = drawnStreams(streams);

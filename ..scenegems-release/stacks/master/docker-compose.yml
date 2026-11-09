@@ -1,0 +1,99 @@
+name: scenegems-${SCENEGEMS_MASTER_ID:?set SCENEGEMS_MASTER_ID in .env}
+
+# One master of a SceneGEMS cluster: Postgres, the cluster broker and master-api. The
+# deployment tool installs this file and docker-compose.live-sessions.yml with release.json and
+# .env into one folder per master (scenegems_tool.cluster.release.roles) and runs
+# `docker compose up -d` in that folder; COMPOSE_FILE in .env says which of the two files compose
+# reads (by default both). The images carry the release's tag, SCENEGEMS_IMAGE_TAG.
+# Master and nodes trust the VPN: there are no certificates, tokens or broker accounts, and
+# the node API and the broker are open to every machine that can reach them.
+# The master id scopes the project, container and volume names, and the ports come from .env,
+# so several masters can run on one machine.
+
+services:
+  # Job store and node registry (scenegems_tool.persistence). Without POSTGRES_PASSWORD the
+  # container refuses to start.
+  postgres:
+    image: postgres:16.10-alpine
+    container_name: scenegems-${SCENEGEMS_MASTER_ID}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-scenegems}
+      POSTGRES_USER: ${POSTGRES_USER:-scenegems}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # Cluster broker: plain, anonymous MQTT for every node, the image's own configuration.
+  # Nodes find it on the master's host at SCENEGEMS_BROKER_PORT.
+  cluster-broker:
+    image: scenegems-mqtt-broker:${SCENEGEMS_IMAGE_TAG:-latest}
+    container_name: scenegems-${SCENEGEMS_MASTER_ID}-cluster-broker
+    restart: unless-stopped
+    ports:
+      - "${SCENEGEMS_BROKER_BIND_ADDRESS:-0.0.0.0}:${SCENEGEMS_BROKER_PORT:-1883}:1883"
+    volumes:
+      - broker_data:/data/broker/
+
+  # The master (scenegems_tool.cluster.master): node API over plain HTTP, and the operator API
+  # with the workbench gateway on this machine only. The image's command migrates the database
+  # before it starts; it reads the image fingerprints its nodes must have from release.json. It connects
+  # to cluster-broker to observe pools for the UI. It mounts the artifact volume: the
+  # content-addressed job inputs and results nodes up- and download. The Docker socket for the
+  # workbench's live sessions comes with docker-compose.live-sessions.yml; without that file the
+  # master runs with live sessions off.
+  master-api:
+    image: scenegems-master-api:${SCENEGEMS_IMAGE_TAG:-latest}
+    container_name: scenegems-${SCENEGEMS_MASTER_ID}-master-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cluster-broker:
+        condition: service_started
+    ports:
+      - "${SCENEGEMS_API_BIND_ADDRESS:-0.0.0.0}:${SCENEGEMS_API_PORT:-8443}:8443"
+      - "127.0.0.1:${SCENEGEMS_OPERATOR_PORT:-5174}:5174"
+    environment:
+      PYTHONPATH: /app/src
+      SCENEGEMS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-scenegems}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-scenegems}
+      SCENEGEMS_MASTER_ID: ${SCENEGEMS_MASTER_ID}
+      SCENEGEMS_RELEASE_MANIFEST: /etc/scenegems/release.json
+      SCENEGEMS_API_LISTEN_HOST: 0.0.0.0
+      SCENEGEMS_API_LISTEN_PORT: "8443"
+      SCENEGEMS_OPERATOR_LISTEN_HOST: 0.0.0.0
+      SCENEGEMS_OPERATOR_LISTEN_PORT: "5174"
+      SCENEGEMS_OPERATOR_ALLOWED_ORIGINS: ${SCENEGEMS_OPERATOR_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # On only with docker-compose.live-sessions.yml, which mounts the Docker socket
+      SCENEGEMS_LIVE_SESSIONS: "false"
+      SCENEGEMS_ARTIFACT_DIR: /var/lib/scenegems/artifacts
+      SCENEGEMS_ARTIFACT_MAX_BYTES: ${SCENEGEMS_ARTIFACT_MAX_BYTES:-268435456}
+      SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S: ${SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S:-600}
+      SCENEGEMS_ARTIFACT_SWEEP_GRACE_S: ${SCENEGEMS_ARTIFACT_SWEEP_GRACE_S:-3600}
+      # The cluster broker as the master dials it on the compose network: the live channel observes pools
+      SCENEGEMS_BROKER_HOST: cluster-broker
+      SCENEGEMS_BROKER_PORT: "1883"
+    volumes:
+      - ./release.json:/etc/scenegems/release.json:ro
+      - artifacts:/var/lib/scenegems/artifacts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5174/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  postgres_data:
+  broker_data:
+  # Job inputs and results (scenegems_tool.persistence.artifacts); Postgres records what it holds
+  artifacts:
+    name: scenegems-${SCENEGEMS_MASTER_ID}-artifacts

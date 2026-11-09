@@ -1,13 +1,8 @@
+import { saveBlob } from "../../../components/saveBlob";
 import type { SimulationFrame } from "../../../domain/simulation/types";
 
-export function downloadBlob(blob: Blob, fileName: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
+/** Saves a file (the shared helper: it keeps the URL alive long enough for every browser to start the download). */
+export const downloadBlob = saveBlob;
 
 export function exportFramesAsCsv(frames: SimulationFrame[], fileNamePrefix: string) {
   const sorted = [...frames].sort((a, b) => a.timestamp - b.timestamp);

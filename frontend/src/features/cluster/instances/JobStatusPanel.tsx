@@ -71,7 +71,7 @@ export function JobStatusPanel({ jobId }: { jobId: string | null }) {
               }}
             >
               {data.logs.map((line, index) => (
-                <li key={`${line.timestamp}-${index}`} className={line.stream === "stderr" ? "instances-log-line instances-log-line--err" : "instances-log-line"}>
+                <li key={data.firstLog + index} className={line.stream === "stderr" ? "instances-log-line instances-log-line--err" : "instances-log-line"}>
                   <span className="instances-log-time">{formatClock(line.timestamp)}</span>
                   <span className="instances-log-source">{line.source}</span>
                   <span className="instances-log-text">{line.text}</span>

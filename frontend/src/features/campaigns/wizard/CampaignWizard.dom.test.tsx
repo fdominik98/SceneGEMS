@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { parse } from "yaml";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { OperatorApiError } from "../../../domain/cluster/operatorApi";
 import { CampaignWizard } from "./CampaignWizard";
 import { emptyDraft, useWizardStore, WIZARD_STORAGE_KEY } from "./wizardState";
 import { WithQueries } from "./wizardTestHarness";
@@ -166,6 +167,25 @@ describe("creating the campaign", () => {
     expect(mocks.createCampaign).toHaveBeenCalledWith(mocks.client, sent, { start: false, kind: "campaign", origin: "wizard" });
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-1"));
     expect(useWizardStore.getState().draft.name).toBe("");
+  });
+
+  it("does not say the campaign was not created when the master did not answer in time", async () => {
+    mocks.validateCampaignConfig.mockResolvedValue(VALID);
+    mocks.createCampaign.mockRejectedValue(
+      new OperatorApiError("timeout", "http://master.test did not answer within 60 s; the master may have created it anyway, so check Campaign History before you create it again", "/cluster/campaigns")
+    );
+    const draft = emptyDraft();
+    draft.name = "slow master";
+    draft.steps = ["scene_generation"];
+    draft.scope = [{ id: "s", classes: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 2, failureBudget: 0 }];
+    useWizardStore.setState({ step: "review", draft });
+    const { onCreated, user } = renderWizard();
+    const create = await screen.findByRole("button", { name: "Create paused" });
+    await waitFor(() => expect(create).toBeEnabled());
+    await user.click(create);
+    expect(await screen.findByText(/The master did not confirm the campaign/)).toHaveTextContent("check Campaign History before you create it again");
+    expect(screen.queryByText(/was not created/)).not.toBeInTheDocument();
+    expect(onCreated).not.toHaveBeenCalled();
   });
 
   it("does not check the master while a later start has no input, and says what is missing", async () => {

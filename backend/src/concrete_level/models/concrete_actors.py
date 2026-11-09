@@ -6,6 +6,7 @@ from typing import Any, Dict, Tuple, Type
 import numpy as np
 
 from concrete_level.models.actor_state import ActorState
+from functional_level.models.object_generator import obstacle_name, vessel_name
 from logical_level.mapping.static_obstacle import StaticObstacleType
 from logical_level.mapping.vessel_type import VesselType
 from logical_level.models.actor_variable import ActorVariable, OSVariable, StaticObstacleVariable, TSVariable, VesselVariable
@@ -165,7 +166,7 @@ class ConcreteStaticObstacle(ConcreteActor):
 
     @property
     def name(self) -> str:
-        return f"SO_{self.id}"
+        return obstacle_name(self.id)
 
     @property
     def is_os(self) -> bool:
@@ -245,7 +246,7 @@ class ConcreteVessel(ConcreteActor):
 
     @property
     def name(self) -> str:
-        return f"OS_{self.id}" if self.is_os else f"TS_{self.id}"
+        return vessel_name(self.id, self.is_os)
 
     @property
     def is_os(self) -> bool:

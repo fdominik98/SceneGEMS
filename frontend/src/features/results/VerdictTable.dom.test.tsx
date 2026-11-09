@@ -36,3 +36,20 @@ describe("VerdictTable sorting", () => {
     expect(screen.queryByRole("button", { name: /^First failure/ })).toBeNull();
   });
 });
+
+describe("VerdictTable while it reads again", () => {
+  it("marks the table busy and keeps the word updating out of the announced range", () => {
+    show({ loading: true });
+    expect(screen.getByRole("table")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByText(", updating")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByRole("status")).toContainElement(screen.getByText(", updating"));
+  });
+
+  it("counts the case and the run from 1, as the other screens do", () => {
+    show({});
+    const row = screen.getAllByRole("row")[1]!;
+    const cells = Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent);
+    // case_index 1 and run_index 0 of the fixture
+    expect(cells.slice(1, 3)).toEqual(["2", "1"]);
+  });
+});

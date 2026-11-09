@@ -18,7 +18,8 @@ describe("PageEntryStatus", () => {
 
   it("names the loaded case and links its entry, shortened, to Campaign History", async () => {
     const user = userEvent.setup();
-    useTrajectoryPageStore.setState({ loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 1, step: "trajectory_generation" } });
+    // The master's case id is 7; the case is the first of its class.
+    useTrajectoryPageStore.setState({ loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 7, caseIndex: 0, step: "trajectory_generation" } });
     render(<PageEntryStatus store={useTrajectoryPageStore} />);
     expect(screen.getByText(/Case 1 of/)).toBeInTheDocument();
     const link = screen.getByRole("button", { name: "entry 9fef90f7" });
@@ -32,5 +33,14 @@ describe("PageEntryStatus", () => {
     useTrajectoryPageStore.setState({ status: "failed", message: "The entry is gone." });
     render(<PageEntryStatus store={useTrajectoryPageStore} />);
     expect(screen.getByRole("alert")).toHaveTextContent("The entry is gone.");
+  });
+});
+
+describe("PageEntryStatus of a target stored before case indexes", () => {
+  it("does not show the master's case id as a case number", () => {
+    useTrajectoryPageStore.setState({ status: "shown", message: null, loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 7, step: "trajectory_generation" } });
+    render(<PageEntryStatus store={useTrajectoryPageStore} />);
+    expect(screen.getByText(/A case of/)).toBeInTheDocument();
+    expect(screen.queryByText(/Case 7/)).not.toBeInTheDocument();
   });
 });

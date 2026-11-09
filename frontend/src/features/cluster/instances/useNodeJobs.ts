@@ -18,6 +18,8 @@ export function useNodeJobs(operatorUrl: string | null, node: NodeView | null) {
     queryFn: ({ signal }) => fetchNodeJobs(createOperatorClient(operatorUrl as string), nodeId as string, signal),
     enabled: operatorUrl !== null && nodeId !== null,
     refetchInterval: NODE_JOBS_POLL_MS,
+    // A lease change keeps the node's jobs shown until the new read answers; another node starts empty
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === operatorUrl && previousQuery?.queryKey[2] === nodeId ? previous : undefined),
     retry: (failureCount, error) => !(error instanceof OperatorApiError && error.unreachable) && failureCount < 2,
   });
 }

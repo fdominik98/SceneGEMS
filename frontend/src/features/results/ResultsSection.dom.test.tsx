@@ -26,12 +26,14 @@ function gone(): Response {
 
 const CAMPAIGN = sampleCampaignRow({ actual_state: "completed" });
 const WORKBENCH = sampleWorkbenchRow();
+// Entries that started after the first read, newest first
+let newer: Record<string, unknown>[] = [];
 
 function master(url: URL): Response {
   const path = url.pathname;
   if (path === "/cluster/campaigns") {
     const kind = url.searchParams.get("kind");
-    const rows = [WORKBENCH, CAMPAIGN].filter((row) => kind === null || row.kind === kind);
+    const rows = [...newer, WORKBENCH, CAMPAIGN].filter((row) => kind === null || row.kind === kind);
     return json(rows, { "X-Total-Count": String(rows.length) });
   }
   if (path === "/cluster/campaigns/c1") {
@@ -64,15 +66,17 @@ function master(url: URL): Response {
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <ResultsSection />
     </QueryClientProvider>
   );
+  return { ...view, queryClient: client };
 }
 
 beforeEach(() => {
   requests.length = 0;
+  newer = [];
   useResultsStore.getState().reset();
   vi.stubGlobal(
     "fetch",
@@ -151,6 +155,26 @@ describe("Results section", () => {
     expect(rows[0]).toHaveTextContent("failed");
     expect(rows[1]).toHaveTextContent("passed");
     expect(rows[2]).toHaveTextContent("step not executed");
+  });
+
+  it("keeps showing the newest entry it picked by itself when a newer one starts", async () => {
+    const { queryClient } = renderSection();
+    await screen.findByRole("tablist", { name: "Step of the entry" });
+    expect(screen.getByRole("combobox", { name: "Entry" })).toHaveValue("wb1");
+    newer = [sampleWorkbenchRow({ campaign_id: "wb2", name: "Scene generation" })];
+    await queryClient.refetchQueries({ queryKey: ["results"] });
+    await waitFor(() => expect(within(screen.getByRole("combobox", { name: "Entry" })).getAllByRole("option")).toHaveLength(3));
+    expect(screen.getByRole("combobox", { name: "Entry" })).toHaveValue("wb1");
+  });
+
+  it("does not show an entry opened on another cluster, which a switch made while the section was hidden leaves behind", async () => {
+    useResultsStore.setState({ clusterId: "another-cluster", campaignId: "deleted-entry", caseId: 3 });
+    renderSection();
+    await screen.findByRole("tablist", { name: "Step of the entry" });
+    expect(screen.getByRole("combobox", { name: "Entry" })).toHaveValue("wb1");
+    expect(screen.queryByText("This entry no longer exists")).not.toBeInTheDocument();
+    expect(useResultsStore.getState()).toMatchObject({ campaignId: null, caseId: null });
+    expect(requested("/campaigns/deleted-entry")).toHaveLength(0);
   });
 
   it("tells that an entry is gone when it was deleted", async () => {

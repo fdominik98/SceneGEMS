@@ -263,7 +263,7 @@ describe("parseFrames", () => {
   it("parses frames built like serialize_monitored_frame into the workbench's frame type", () => {
     const [frame] = parseFrames([monitoredFrame({ timestamp: 4, failFrom: 3 })]);
     expect(frame.timestamp).toBe(4);
-    expect(frame.actors.map((actor) => actor.name)).toEqual(["OS_0", "TS_1"]);
+    expect(frame.actors.map((actor) => actor.name)).toEqual(["os", "ts1"]);
     expect(frame.statesByActorId["0"]).toMatchObject({ speed: 6.5, heading: 0 });
     // the backend's `rules`, `failedRuleNames` and `isFailed` become evaluations, failedRules and overallStatus
     const result = frame.ruleResults[0];

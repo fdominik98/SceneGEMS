@@ -21,15 +21,3 @@ export function timestampAtOrBefore(frames: SimulationFrame[], t: number): numbe
   }
   return frames[lo]!.timestamp;
 }
-
-/** Frames with timestamp at or before the playback cursor (requires frames sorted by timestamp). */
-export function framesAtOrBeforeCursor(
-  frames: SimulationFrame[],
-  cursor: number
-): SimulationFrame[] {
-  if (frames.length === 0) {
-    return [];
-  }
-  const cutoff = timestampAtOrBefore(frames, cursor);
-  return frames.filter((frame) => frame.timestamp <= cutoff);
-}

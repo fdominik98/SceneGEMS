@@ -235,4 +235,8 @@ interaction, assert on what the user sees. Reset any Zustand store a test touche
 
 ## Performance
 
-Large trajectory chunks may be merged in a **Web Worker** (`mergeFrames.worker.ts`) before updating the store. Playback uses **requestAnimationFrame** for smooth time advancement.
+Trajectory chunks merge into the store's current frames in one `set` (`playbackStore.mergeSortedUnique`: linear, a chunk that
+continues the stream is appended), so a chunk never lands on a stale copy and no frame is copied out and back. Playback
+uses **requestAnimationFrame** for smooth time advancement, over the preview and the simulation together (`playbackRange`).
+Components that follow the play head subscribe to the frame or the cursor alone (the Charts tab, not the whole monitoring
+panel), so the rest does not re-render every frame.

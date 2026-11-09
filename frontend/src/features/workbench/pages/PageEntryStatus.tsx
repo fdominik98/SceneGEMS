@@ -3,10 +3,7 @@ import type { PageStore } from "./pageStore";
 import { useStore } from "zustand";
 import { showHistoryEntry } from "../../history/showHistory";
 
-/** The first block of an entry id: enough to tell entries apart on the page; the whole id is its tooltip. */
-function shortEntryId(campaignId: string): string {
-  return campaignId.split("-")[0] ?? campaignId;
-}
+import { shortEntryId } from "./entryLabels";
 
 function EntryLink({ campaignId }: { campaignId: string }) {
   return (
@@ -50,7 +47,7 @@ export function PageEntryStatus({ store }: { store: PageStore }) {
   if (loaded !== null) {
     return (
       <p className="step-line page-entry-status">
-        Case {loaded.caseId}
+        {loaded.caseIndex !== undefined ? `Case ${loaded.caseIndex + 1}` : "A case"}
         {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""} of <EntryLink campaignId={loaded.campaignId} />
       </p>
     );

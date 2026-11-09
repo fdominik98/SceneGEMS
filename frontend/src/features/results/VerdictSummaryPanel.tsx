@@ -33,7 +33,7 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
   const whole = summary.analyzed;
   const mostFailures = Math.max(1, ...summary.failedRules.map((rule) => rule.verdicts));
   return (
-    <section className="results-panel" aria-label="Counts of the monitor summaries">
+    <section className="results-panel" aria-label="Counts of the monitor summaries" aria-busy={loading}>
       <header className="results-panel-head">
         <h3>Runs</h3>
         <span className="meta">
@@ -41,7 +41,8 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
           {summary.partial ? `: the first ${summary.analyzed} of ${summary.total}` : `: ${summary.analyzed}`}
           {summary.sensitive > 0 ? `, ${summary.sensitive} sensitive` : ""}
         </span>
-        {loading && <span className="meta" role="status">updating</span>}
+        {/* Not a live region: a poll every few seconds would be announced each time */}
+        {loading && <span className="meta">updating</span>}
       </header>
       {summary.partial && (
         <p className="meta warning">The ranking and the counts below read the first {summary.analyzed} monitor summaries only; narrow the filters for an exact picture.</p>

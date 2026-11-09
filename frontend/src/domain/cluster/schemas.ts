@@ -398,7 +398,7 @@ export const verdictSchema = z.object({
   sensitive: z.boolean(),
   early_stop_time_s: z.number().nullable(),
   /**
-   * Phase 7: per relation (keyed like `rule_outcomes`, for example `OS_0 - TS_1`) the encounter types
+   * Phase 7: per relation (keyed like `rule_outcomes`, for example `os - ts1`) the encounter types
    * in order of first appearance; null for a verdict stored before them. Missing from an older master,
    * which also cannot sort the verdict list (see `fetchVerdictPage`).
    */

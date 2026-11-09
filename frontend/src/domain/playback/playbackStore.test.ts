@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sampleFrames } from "../../test/fixtures/sampleFrames";
-import { createPlaybackStore, getCurrentFrame, usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "./playbackStore";
+import { createPlaybackStore, getCurrentFrame, mergeSortedUnique, playbackRange, usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "./playbackStore";
 
 describe("playbackStore", () => {
   beforeEach(() => {
@@ -259,5 +259,62 @@ describe("a playback store per page", () => {
     const store = createPlaybackStore();
     expect(store.getState().frames).toEqual([]);
     expect(store.getState().latestGeneratedScene).toBeNull();
+  });
+});
+
+describe("playback over both streams", () => {
+  const at = (timestamp: number) => ({ ...sampleFrames[0]!, timestamp });
+
+  it("seeks and plays a run that has only simulation frames", () => {
+    const store = createPlaybackStore();
+    store.getState().ingestSimulationFrames([at(0), at(10), at(20)]);
+    expect(playbackRange(store.getState())).toEqual({ min: 0, max: 20 });
+    store.getState().seek(15);
+    expect(store.getState().playbackCursor).toBe(15);
+    store.getState().advancePlayback(99);
+    expect(store.getState().playbackCursor).toBe(20);
+  });
+
+  it("plays a simulation past the end of its shorter preview", () => {
+    const store = createPlaybackStore();
+    store.getState().setTrajectoryPreviewFrames([at(0), at(15)]);
+    store.getState().ingestSimulationFrames([at(0), at(10), at(20), at(30)]);
+    store.getState().seek(25);
+    expect(store.getState().playbackCursor).toBe(25);
+    // The preview stays on its last frame.
+    expect(getCurrentFrame(store.getState())?.timestamp).toBe(15);
+  });
+
+  it("keeps the preview frame while following a simulation that samples at other times", () => {
+    const store = createPlaybackStore();
+    store.getState().setTrajectoryPreviewFrames([at(0), at(15), at(30)]);
+    store.getState().setFollowLatestPush(true);
+    store.getState().ingestSimulationFrames([at(0), at(12), at(21)]);
+    expect(store.getState().playbackCursor).toBe(21);
+    expect(getCurrentFrame(store.getState())?.timestamp).toBe(15);
+    store.getState().followSimulationLive();
+    expect(getCurrentFrame(store.getState())?.timestamp).toBe(15);
+  });
+});
+
+describe("mergeSortedUnique", () => {
+  const at = (timestamp: number, tag = "") => ({ ...sampleFrames[0]!, timestamp, timeStep: tag.length });
+  const times = (frames: { timestamp: number }[]) => frames.map((frame) => frame.timestamp);
+
+  it("appends a chunk that continues the buffered frames", () => {
+    const existing = [at(0), at(1)];
+    const merged = mergeSortedUnique(existing, [at(3), at(2)]);
+    expect(times(merged)).toEqual([0, 1, 2, 3]);
+    expect(merged[0]).toBe(existing[0]);
+  });
+
+  it("interleaves an overlapping chunk, the incoming frame replacing one at the same time", () => {
+    const merged = mergeSortedUnique([at(0), at(2), at(4)], [at(2, "new"), at(3)]);
+    expect(times(merged)).toEqual([0, 2, 3, 4]);
+    expect(merged[1]!.timeStep).toBe(3);
+  });
+
+  it("keeps one frame per time inside a chunk", () => {
+    expect(times(mergeSortedUnique([], [at(1), at(1), at(0)]))).toEqual([0, 1]);
   });
 });

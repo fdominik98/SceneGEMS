@@ -9,6 +9,7 @@ import {
   fitPoints,
   ownShipOf,
   primaryStream,
+  samePositions,
   vesselClickHandler,
   type EncounterCanvasStream,
 } from "./canvasStreams";
@@ -109,5 +110,21 @@ describe("vesselClickHandler", () => {
     expect(vesselClickHandler(null, null, vi.fn())).toBeUndefined();
     expect(vesselClickHandler(withoutOwnShip(frame), null, vi.fn())).toBeUndefined();
     expect(vesselClickHandler(frame, null, undefined)).toBeUndefined();
+  });
+});
+
+describe("samePositions", () => {
+  const frame = sampleFrames[0]!;
+
+  it("is true for the same vessels at the same places, whatever else changed", () => {
+    expect(samePositions(frame, { ...frame, ruleResults: [], metrics: undefined })).toBe(true);
+  });
+
+  it("is false once a vessel moved or the vessels differ", () => {
+    const moved = { ...frame, statesByActorId: { ...frame.statesByActorId, own_ship: { ...frame.statesByActorId.own_ship!, x: frame.statesByActorId.own_ship!.x + 1 } } };
+    expect(samePositions(frame, moved)).toBe(false);
+    const { own_ship: _gone, ...others } = frame.statesByActorId;
+    void _gone;
+    expect(samePositions(frame, { ...frame, statesByActorId: others })).toBe(false);
   });
 });

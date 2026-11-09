@@ -19,6 +19,7 @@ import {
 } from "../../../domain/trajectoryGeneration/summarizeTrajectoryResult";
 import type { TrajectoryGeneratorWire } from "../../../domain/simulation/wireTypes";
 import { Disclosure } from "../../../components/Disclosure";
+import { saveBlob } from "../../../components/saveBlob";
 import { IconButton } from "../../../components/IconButton";
 import { DownloadIcon } from "../../../components/icons";
 import { TRAJECTORY_GENERATION_JOB } from "../cluster/workbenchJobs";
@@ -51,13 +52,7 @@ const GENERATOR_HINTS: Record<TrajectoryGeneratorWire, string> = {
 };
 
 function downloadJson(text: string, fileName: string) {
-  const blob = new Blob([text], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  saveBlob(new Blob([text], { type: "application/json" }), fileName);
 }
 
 /**
@@ -107,34 +102,29 @@ export function TrajectoryGenerationControls({
   const canGenerate = trajectoryResources.blocker === null && !running && hasInput && (!straight || timespanValid);
   const hasResult = status === "done" && resultValid && !!resultScenarioJson;
 
-  // Restore the last generated trajectory as the on-canvas preview after a reload (the page's
-  // playback store keeps it while the app runs). A live run manages the preview frames itself.
+  // After a reload the page's playback store is empty: draw the last planned trajectory, else the
+  // input scene. From then on runs, loaded entries and new inputs draw for themselves
+  // (`setTrajectoryInput`, `showEntryOutput.ts`), and Stop keeps the best path found so far.
   useEffect(() => {
-    if (running || !resultScenarioJson || useTrajectoryPlaybackStore.getState().frames.length > 0) {
+    const generation = useTrajectoryGenerationStore.getState();
+    if (generation.status === "running" || useTrajectoryPlaybackStore.getState().frames.length > 0) {
       return;
     }
-    try {
-      const frames = buildFramesFromTrajectoryData(JSON.parse(resultScenarioJson));
-      if (frames.length > 0) {
-        setTrajectoryPreviewFrames(frames);
+    if (generation.resultScenarioJson) {
+      try {
+        const frames = buildFramesFromTrajectoryData(JSON.parse(generation.resultScenarioJson));
+        if (frames.length > 0) {
+          setTrajectoryPreviewFrames(frames);
+          return;
+        }
+      } catch {
+        // A malformed stored result: the input scene is drawn instead.
       }
-    } catch {
-      /* ignore malformed persisted result */
     }
-    // Run once on mount; deliberately not reacting to later changes here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Draw the loaded initial scene on the canvas, so loading one is visible rather than
-  // only being announced in the text below. A single scene is a one-frame preview.
-  // Skipped while a run is in flight and whenever there is a generated trajectory to
-  // show, since either of those owns the canvas and is the more informative picture.
-  useEffect(() => {
-    if (running || resultScenarioJson || !handoffScene?.scene) {
-      return;
+    if (generation.handoffScene?.scene) {
+      setTrajectoryPreviewFrames([generation.handoffScene.scene]);
     }
-    setTrajectoryPreviewFrames([handoffScene.scene]);
-  }, [handoffScene, resultScenarioJson, running, setTrajectoryPreviewFrames]);
+  }, [setTrajectoryPreviewFrames]);
 
   // What the finished run actually produced. The backend calls any run of more than one
   // scene valid, so this is what distinguishes a completed plan from one that stopped

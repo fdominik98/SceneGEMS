@@ -1,529 +1,360 @@
-import {
-  useCallback,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type WheelEvent as ReactWheelEvent,
-} from "react";
-import { formatRelationId, useActorNames } from "../monitor/actorNames";
-import { buildNiceScale, formatAxisTick } from "./metricChartScale";
-import {
-  computeBaseDomain,
-  dataDeltaFromPixelDelta,
-  isViewportZoomed,
-  panViewport,
-  pixelToData,
-  zoomViewportAt,
-  type ChartDomain,
-  type MetricSeriesPoint,
-} from "./metricChartViewport";
+import { useEffect, useId, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react";
+import { formatClock } from "../scene/encounterGeometry";
+import { buildNiceScale, buildTimeScale, formatAxisTick, formatCompactTick, tickDecimals } from "./metricChartScale";
+import { clampTimeWindow, valueAtOrBefore, zoomTimeWindow, type MetricSeriesPoint, type TimeWindow } from "./metricChartViewport";
 
 export type { MetricSeriesPoint };
 
 export interface MetricTimeSeriesChartProps {
   title: string;
   unit: string;
+  /** The whole series, sorted by time. */
   points: MetricSeriesPoint[];
-  relationId: string;
+  /** The play head (seconds): the line is solid up to it and faint after it. */
+  cursor: number | null;
+  /** Names the series for assistive technology (the vessel pair). */
+  seriesLabel: string;
   yDomain?: [number, number];
-  yDecimals?: number;
   valueDecimals?: number;
   accentColor?: string;
+  /** A click on the plot moves the play head to that time. */
+  onSeek?: (t: number) => void;
 }
 
-const CHART_WIDTH = 400;
-const CHART_HEIGHT = 200;
-const MARGIN = { top: 14, right: 14, bottom: 36, left: 48 };
-const ZOOM_IN_FACTOR = 0.82;
-const ZOOM_OUT_FACTOR = 1 / ZOOM_IN_FACTOR;
+const HEIGHT = 132;
+const MARGIN = { top: 8, right: 12, bottom: 22, left: 46 };
+const ZOOM_IN_FACTOR = 0.8;
+/** Pixels a press may move and still count as a click (seek) rather than a drag (pan). */
+const CLICK_SLOP = 4;
 
-function scaleLinear(value: number, domainMin: number, domainMax: number, rangeMin: number, rangeMax: number) {
+function scale(value: number, domainMin: number, domainMax: number, rangeMin: number, rangeMax: number) {
   if (domainMax === domainMin) {
     return (rangeMin + rangeMax) / 2;
   }
-  const ratio = (value - domainMin) / (domainMax - domainMin);
-  return rangeMin + ratio * (rangeMax - rangeMin);
+  return rangeMin + ((value - domainMin) / (domainMax - domainMin)) * (rangeMax - rangeMin);
 }
 
-function clientToSvg(svg: SVGSVGElement, clientX: number, clientY: number) {
-  const rect = svg.getBoundingClientRect();
-  return {
-    x: ((clientX - rect.left) / rect.width) * CHART_WIDTH,
-    y: ((clientY - rect.top) / rect.height) * CHART_HEIGHT,
-  };
+/** The container's width in pixels, so the chart draws at its real size with real font sizes. */
+function useWidth(): [RefObject<HTMLDivElement | null>, number] {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) {
+      return;
+    }
+    setWidth(element.clientWidth);
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) {
+        setWidth((previous) => (Math.abs(previous - entry.contentRect.width) < 1 ? previous : entry.contentRect.width));
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return [ref, width];
 }
 
-function buildChartGeometry(domain: ChartDomain, points: MetricSeriesPoint[]) {
-  const plotWidth = CHART_WIDTH - MARGIN.left - MARGIN.right;
-  const plotHeight = CHART_HEIGHT - MARGIN.top - MARGIN.bottom;
-  const plotBottom = MARGIN.top + plotHeight;
-  const plotRight = MARGIN.left + plotWidth;
-
-  const xScale = buildNiceScale(domain.xMin, domain.xMax, 5);
-  const yScale = buildNiceScale(domain.yMin, domain.yMax, 5);
-
-  const xAt = (t: number) => scaleLinear(t, xScale.min, xScale.max, MARGIN.left, plotRight);
-  const yAt = (y: number) => scaleLinear(y, yScale.min, yScale.max, plotBottom, MARGIN.top);
-
-  const linePath = points
-    .map((point, index) => {
-      const x = xAt(point.t);
-      const y = yAt(point.y);
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-
-  const areaPath =
-    points.length > 0
-      ? `${linePath} L ${xAt(points[points.length - 1]!.t).toFixed(2)} ${plotBottom} L ${xAt(points[0]!.t).toFixed(2)} ${plotBottom} Z`
-      : "";
-
-  const lastPoint = points[points.length - 1]!;
-  const lastX = xAt(lastPoint.t);
-  const lastY = yAt(lastPoint.y);
-
-  return {
-    plotWidth,
-    plotHeight,
-    plotBottom,
-    plotRight,
-    xScale,
-    yScale,
-    linePath,
-    areaPath,
-    lastPoint,
-    lastX,
-    lastY,
-  };
-}
-
+/**
+ * A compact chart of one metric over time: the whole series, solid up to the play head and faint
+ * after it, the play head itself and the value there in the header. Ctrl + wheel (or a pinch)
+ * zooms the time axis, a drag pans it while zoomed, a double-click resets it and a click moves
+ * the play head.
+ */
 export function MetricTimeSeriesChart({
   title,
   unit,
   points,
-  relationId,
+  cursor,
+  seriesLabel,
   yDomain,
-  yDecimals = 1,
   valueDecimals = 1,
   accentColor = "var(--accent)",
+  onSeek,
 }: MetricTimeSeriesChartProps) {
-  const gradientId = useId();
-  const actorNames = useActorNames();
+  const clipId = useId();
+  const [hostRef, measuredWidth] = useWidth();
+  const width = Math.max(measuredWidth, 200);
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const panRef = useRef<{ pointerId: number; lastX: number; lastY: number } | null>(null);
+  const pressRef = useRef<{ pointerId: number; startX: number; lastX: number; moved: boolean } | null>(null);
+  const [hover, setHover] = useState<{ px: number; point: MetricSeriesPoint } | null>(null);
 
-  const baseDomain = useMemo(() => computeBaseDomain(points, yDomain), [points, yDomain]);
-  const [viewport, setViewport] = useState<ChartDomain | null>(null);
-  const [hover, setHover] = useState<{ px: number; py: number; t: number; y: number } | null>(null);
-
-  // Reset zoom and hover whenever the inputs change (state adjusted during render, not in an effect).
-  const [seenInputs, setSeenInputs] = useState({ baseDomain, points, yDomain });
-  if (seenInputs.baseDomain !== baseDomain || seenInputs.points !== points || seenInputs.yDomain !== yDomain) {
-    setSeenInputs({ baseDomain, points, yDomain });
-    setViewport(null);
-    setHover(null);
+  const first = points[0];
+  const last = points[points.length - 1];
+  const startT = first?.t;
+  const endT = last?.t;
+  const base = useMemo<TimeWindow | null>(
+    () => (startT !== undefined && endT !== undefined && endT > startT ? { start: startT, end: endT } : null),
+    [endT, startT]
+  );
+  const [zoom, setZoom] = useState<TimeWindow | null>(null);
+  // A zoom belongs to the series it was made on: another pair or run starts unzoomed, frames
+  // arriving at the end of a live run keep it.
+  const seriesKey = `${seriesLabel}@${startT ?? ""}`;
+  const [zoomedSeries, setZoomedSeries] = useState(seriesKey);
+  if (zoomedSeries !== seriesKey) {
+    setZoomedSeries(seriesKey);
+    setZoom(null);
   }
+  const view = useMemo(() => (base ? (zoom ? clampTimeWindow(zoom, base) : base) : null), [base, zoom]);
+  const zoomed = zoom !== null;
 
-  const activeDomain = viewport ?? baseDomain;
-  const chart = useMemo(
-    () => (activeDomain ? buildChartGeometry(activeDomain, points) : null),
-    [activeDomain, points]
-  );
+  const plotLeft = MARGIN.left;
+  const plotRight = width - MARGIN.right;
+  const plotTop = MARGIN.top;
+  const plotBottom = HEIGHT - MARGIN.bottom;
 
-  const zoomed = baseDomain && activeDomain ? isViewportZoomed(activeDomain, baseDomain) : false;
-
-  const resetZoom = useCallback(() => {
-    setViewport(null);
-    setHover(null);
-  }, []);
-
-  const applyZoom = useCallback(
-    (clientX: number, clientY: number, zoomIn: boolean) => {
-      if (!svgRef.current || !baseDomain || !activeDomain || !chart) {
-        return;
-      }
-      const { x: px, y: py } = clientToSvg(svgRef.current, clientX, clientY);
-      if (
-        px < MARGIN.left ||
-        px > chart.plotRight ||
-        py < MARGIN.top ||
-        py > chart.plotBottom
-      ) {
-        return;
-      }
-      const anchor = pixelToData(
-        px,
-        py,
-        activeDomain,
-        MARGIN.left,
-        chart.plotRight,
-        MARGIN.top,
-        chart.plotBottom
-      );
-      const factor = zoomIn ? ZOOM_IN_FACTOR : ZOOM_OUT_FACTOR;
-      setViewport(zoomViewportAt(activeDomain, baseDomain, anchor, factor));
-    },
-    [activeDomain, baseDomain, chart]
-  );
-
-  const onWheel = useCallback(
-    (event: ReactWheelEvent<SVGRectElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      applyZoom(event.clientX, event.clientY, event.deltaY < 0);
-    },
-    [applyZoom]
-  );
-
-  const onPointerDown = useCallback(
-    (event: React.PointerEvent<SVGRectElement>) => {
-      if (!zoomed || !activeDomain || !baseDomain || !chart) {
-        return;
-      }
-      event.currentTarget.setPointerCapture(event.pointerId);
-      panRef.current = { pointerId: event.pointerId, lastX: event.clientX, lastY: event.clientY };
-    },
-    [activeDomain, baseDomain, chart, zoomed]
-  );
-
-  const onPointerMove = useCallback(
-    (event: React.PointerEvent<SVGRectElement>) => {
-      if (!svgRef.current || !activeDomain || !chart) {
-        return;
-      }
-
-      const { x: px, y: py } = clientToSvg(svgRef.current, event.clientX, event.clientY);
-      const inPlot =
-        px >= MARGIN.left &&
-        px <= chart.plotRight &&
-        py >= MARGIN.top &&
-        py <= chart.plotBottom;
-
-      if (inPlot) {
-        const data = pixelToData(
-          px,
-          py,
-          activeDomain,
-          MARGIN.left,
-          chart.plotRight,
-          MARGIN.top,
-          chart.plotBottom
-        );
-        setHover({ px, py, t: data.x, y: data.y });
-      } else {
-        setHover(null);
-      }
-
-      const pan = panRef.current;
-      if (!pan || pan.pointerId !== event.pointerId || !baseDomain) {
-        return;
-      }
-
-      const deltaPxX = event.clientX - pan.lastX;
-      const deltaPxY = event.clientY - pan.lastY;
-      pan.lastX = event.clientX;
-      pan.lastY = event.clientY;
-
-      const { deltaX, deltaY } = dataDeltaFromPixelDelta(
-        deltaPxX,
-        deltaPxY,
-        activeDomain,
-        chart.plotWidth,
-        chart.plotHeight
-      );
-      setViewport(panViewport(activeDomain, baseDomain, deltaX, deltaY));
-    },
-    [activeDomain, baseDomain, chart]
-  );
-
-  const onPointerUp = useCallback((event: React.PointerEvent<SVGRectElement>) => {
-    if (panRef.current?.pointerId === event.pointerId) {
-      panRef.current = null;
-      event.currentTarget.releasePointerCapture(event.pointerId);
+  const yScale = useMemo(() => {
+    if (yDomain) {
+      return buildNiceScale(yDomain[0], yDomain[1], 2);
     }
-  }, []);
+    let min = Infinity;
+    let max = -Infinity;
+    for (const point of points) {
+      min = Math.min(min, point.y);
+      max = Math.max(max, point.y);
+    }
+    return buildNiceScale(min, max, 3);
+  }, [points, yDomain]);
+  const yDecimals = tickDecimals(yScale.ticks);
+  const yAt = (y: number) => scale(y, yScale.min, yScale.max, plotBottom, plotTop);
 
-  if (!chart || !activeDomain) {
-    return (
-      <div className="metrics-chart-panel">
-        <div className="metrics-chart-header">
-          <h3 className="metrics-chart-title">{title}</h3>
-        </div>
-        <p className="meta metrics-chart-empty">No data points</p>
-      </div>
-    );
-  }
+  const xScale = useMemo(
+    () => (view ? buildTimeScale(view.start, view.end, Math.max(2, Math.floor((plotRight - plotLeft) / 80))) : null),
+    [plotLeft, plotRight, view]
+  );
+  const xAt = (t: number) => (view ? scale(t, view.start, view.end, plotLeft, plotRight) : plotLeft);
 
-  const latestValue = chart.lastPoint.y;
-  const yAxisLabel = unit ? `${title} (${unit})` : title;
-  const nearestPoint = hover
-    ? points.reduce<(typeof points)[number] | null>((best, point) => {
-        if (!best) {
-          return point;
-        }
-        return Math.abs(point.t - hover.t) < Math.abs(best.t - hover.t) ? point : best;
-      }, null)
-    : null;
+  // The line is the expensive part; the play head moves every frame, the line does not.
+  const linePath = useMemo(() => {
+    if (!view) {
+      return "";
+    }
+    const parts: string[] = [];
+    for (const point of points) {
+      const x = scale(point.t, view.start, view.end, plotLeft, plotRight);
+      const y = scale(point.y, yScale.min, yScale.max, plotBottom, plotTop);
+      parts.push(`${parts.length === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`);
+    }
+    return parts.join("");
+  }, [plotBottom, plotLeft, plotRight, plotTop, points, view, yScale]);
+
+  const atCursor = cursor === null ? null : valueAtOrBefore(points, cursor);
+  const shownValue = atCursor ?? (cursor === null ? last : null);
+  const cursorX = cursor !== null && view && cursor >= view.start && cursor <= view.end ? xAt(cursor) : null;
+
+  const pointAt = (clientX: number): { px: number; t: number } | null => {
+    const svg = svgRef.current;
+    if (!svg || !view) {
+      return null;
+    }
+    const rect = svg.getBoundingClientRect();
+    const px = Math.min(Math.max(clientX - rect.left, plotLeft), plotRight);
+    return { px, t: scale(px, plotLeft, plotRight, view.start, view.end) };
+  };
+
+  // Ctrl + wheel and pinches zoom; a plain wheel keeps scrolling the panel. A native listener,
+  // because React's wheel listener is passive and cannot keep the page from zooming.
+  // The SVG exists only while there is a plot, so the listener is attached when it appears.
+  const hasPlot = points.length > 0 && view !== null;
+  const zoomRef = useRef({ base, view, pointAt });
+  useEffect(() => {
+    zoomRef.current = { base, view, pointAt };
+  });
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      const { base: currentBase, view: currentView, pointAt: at } = zoomRef.current;
+      if (!(event.ctrlKey || event.metaKey) || !currentBase || !currentView) {
+        return;
+      }
+      event.preventDefault();
+      const anchor = at(event.clientX);
+      if (!anchor) {
+        return;
+      }
+      const next = zoomTimeWindow(currentView, currentBase, anchor.t, event.deltaY < 0 ? ZOOM_IN_FACTOR : 1 / ZOOM_IN_FACTOR);
+      setZoom(next.start === currentBase.start && next.end === currentBase.end ? null : next);
+    };
+    svg.addEventListener("wheel", onWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", onWheel);
+  }, [hasPlot]);
+
+  const onPointerDown = (event: ReactPointerEvent<SVGRectElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+    pressRef.current = { pointerId: event.pointerId, startX: event.clientX, lastX: event.clientX, moved: false };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<SVGRectElement>) => {
+    const at = pointAt(event.clientX);
+    if (at && points.length > 0) {
+      const nearest = points[Math.max(0, nearestIndex(points, at.t))]!;
+      setHover({ px: xAt(nearest.t), point: nearest });
+    }
+    const press = pressRef.current;
+    if (!press || press.pointerId !== event.pointerId) {
+      return;
+    }
+    if (!press.moved && Math.abs(event.clientX - press.startX) < CLICK_SLOP) {
+      return;
+    }
+    if (!press.moved) {
+      press.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    if (zoomed && base && view) {
+      const dt = ((press.lastX - event.clientX) / Math.max(1, plotRight - plotLeft)) * (view.end - view.start);
+      setZoom(clampTimeWindow({ start: view.start + dt, end: view.end + dt }, base));
+    }
+    press.lastX = event.clientX;
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<SVGRectElement>) => {
+    const press = pressRef.current;
+    if (!press || press.pointerId !== event.pointerId) {
+      return;
+    }
+    pressRef.current = null;
+    if (press.moved) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+      return;
+    }
+    const at = pointAt(event.clientX);
+    if (at && onSeek) {
+      onSeek(at.t);
+    }
+  };
+
+  const valueText = shownValue ? `${formatAxisTick(shownValue.y, valueDecimals)}${unit ? ` ${unit}` : ""}` : "-";
+  const heading = unit ? `${title} (${unit})` : title;
 
   return (
     <div className="metrics-chart-panel">
       <div className="metrics-chart-header">
-        <div className="metrics-chart-heading">
-          <h3 className="metrics-chart-title">{title}</h3>
-        </div>
+        <h3 className="metrics-chart-title">{heading}</h3>
         <div className="metrics-chart-header-actions">
           {zoomed ? (
-            <button
-              type="button"
-              className="metrics-chart-reset-btn"
-              onClick={resetZoom}
-              aria-label={`Reset zoom on ${title} chart`}
-            >
-              Reset zoom
+            <button type="button" className="link-btn metrics-chart-reset-btn" onClick={() => setZoom(null)} title={`Show the whole run on the ${title} chart`}>
+              Whole run
             </button>
           ) : null}
-          <span className="metrics-chart-latest" title="Latest value at playhead">
-            {formatAxisTick(latestValue, valueDecimals)}
-            {unit ? ` ${unit}` : ""}
+          <span className="metrics-chart-latest" title={cursor === null ? "Latest value" : "Value at the play head"}>
+            {valueText}
           </span>
         </div>
       </div>
-      <svg
-        ref={svgRef}
-        className={`metrics-chart-svg${zoomed ? " metrics-chart-svg--zoomed" : ""}`}
-        width={CHART_WIDTH}
-        height={CHART_HEIGHT}
-        viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
-        role="img"
-        aria-label={`${title} over time for relation ${formatRelationId(relationId, actorNames)}`}
-      >
-        <title>{`${title}: ${formatRelationId(relationId, actorNames)}`}</title>
+      <div className="metrics-chart-plot" ref={hostRef}>
+      {points.length === 0 ? (
+        <p className="meta metrics-chart-empty">Not reported for this pair.</p>
+      ) : !view || !xScale ? (
+        <p className="meta metrics-chart-empty">One sample at {formatClock(points[0]!.t)}: the chart fills once there are trajectories.</p>
+      ) : (
+        <svg
+          ref={svgRef}
+          className={`metrics-chart-svg${zoomed ? " metrics-chart-svg--zoomed" : ""}`}
+          width={width}
+          height={HEIGHT}
+          viewBox={`0 0 ${width} ${HEIGHT}`}
+          role="img"
+          aria-label={`${title} over time for ${seriesLabel}`}
+        >
+          <defs>
+            <clipPath id={`${clipId}-plot`}>
+              <rect x={plotLeft} y={plotTop - 4} width={plotRight - plotLeft} height={plotBottom - plotTop + 8} />
+            </clipPath>
+            <clipPath id={`${clipId}-past`}>
+              <rect x={plotLeft} y={plotTop - 4} width={Math.max(0, (cursorX ?? (cursor !== null && view && cursor > view.end ? plotRight : plotLeft)) - plotLeft)} height={plotBottom - plotTop + 8} />
+            </clipPath>
+          </defs>
 
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={accentColor} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={accentColor} stopOpacity={0.02} />
-          </linearGradient>
-          <clipPath id={`${gradientId}-plot`}>
-            <rect
-              x={MARGIN.left}
-              y={MARGIN.top}
-              width={chart.plotWidth}
-              height={chart.plotHeight}
-            />
-          </clipPath>
-        </defs>
+          <rect x={plotLeft} y={plotTop} width={plotRight - plotLeft} height={plotBottom - plotTop} className="metrics-chart-plot-bg" />
 
-        <rect
-          x={MARGIN.left}
-          y={MARGIN.top}
-          width={chart.plotWidth}
-          height={chart.plotHeight}
-          className="metrics-chart-plot-bg"
-        />
-
-        {chart.yScale.ticks.map((tick) => {
-          const y = scaleLinear(tick, chart.yScale.min, chart.yScale.max, chart.plotBottom, MARGIN.top);
-          return (
-            <g key={`y-grid-${tick}`}>
-              <line
-                x1={MARGIN.left}
-                y1={y}
-                x2={chart.plotRight}
-                y2={y}
-                className="metrics-chart-grid-line"
-              />
-              <text
-                x={MARGIN.left - 8}
-                y={y}
-                className="metrics-chart-tick metrics-chart-tick--y"
-                textAnchor="end"
-                dominantBaseline="middle"
-              >
-                {formatAxisTick(tick, yDecimals)}
+          {yScale.ticks.map((tick) => (
+            <g key={`y-${tick}`}>
+              <line x1={plotLeft} y1={yAt(tick)} x2={plotRight} y2={yAt(tick)} className="metrics-chart-grid-line" />
+              <text x={plotLeft - 6} y={yAt(tick)} className="metrics-chart-tick" textAnchor="end" dominantBaseline="middle">
+                {formatCompactTick(tick, yDecimals)}
               </text>
             </g>
-          );
-        })}
+          ))}
 
-        {chart.xScale.ticks.map((tick) => {
-          const x = scaleLinear(tick, chart.xScale.min, chart.xScale.max, MARGIN.left, chart.plotRight);
-          return (
-            <g key={`x-grid-${tick}`}>
-              <line
-                x1={x}
-                y1={MARGIN.top}
-                x2={x}
-                y2={chart.plotBottom}
-                className="metrics-chart-grid-line metrics-chart-grid-line--vertical"
-              />
-              <text
-                x={x}
-                y={chart.plotBottom + 16}
-                className="metrics-chart-tick metrics-chart-tick--x"
-                textAnchor="middle"
-              >
-                {formatAxisTick(tick, 0)}
-              </text>
-            </g>
-          );
-        })}
-
-        <line
-          x1={MARGIN.left}
-          y1={chart.plotBottom}
-          x2={chart.plotRight}
-          y2={chart.plotBottom}
-          className="metrics-chart-axis"
-        />
-        <line
-          x1={MARGIN.left}
-          y1={MARGIN.top}
-          x2={MARGIN.left}
-          y2={chart.plotBottom}
-          className="metrics-chart-axis"
-        />
-
-        <g clipPath={`url(#${gradientId}-plot)`}>
-          {chart.areaPath ? (
-            <path d={chart.areaPath} fill={`url(#${gradientId})`} stroke="none" />
-          ) : null}
-
-          <path
-            d={chart.linePath}
-            fill="none"
-            stroke={accentColor}
-            strokeWidth={2}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            className="metrics-chart-line"
-          />
-
-          <circle
-            cx={chart.lastX}
-            cy={chart.lastY}
-            r={4}
-            fill={accentColor}
-            stroke="var(--chart-point-ring)"
-            strokeWidth={1.5}
-            className="metrics-chart-endpoint"
-          />
-
-          {hover && nearestPoint ? (
-            <>
-              <line
-                x1={hover.px}
-                y1={MARGIN.top}
-                x2={hover.px}
-                y2={chart.plotBottom}
-                className="metrics-chart-crosshair"
-              />
-              <line
-                x1={MARGIN.left}
-                y1={scaleLinear(
-                  nearestPoint.y,
-                  chart.yScale.min,
-                  chart.yScale.max,
-                  chart.plotBottom,
-                  MARGIN.top
-                )}
-                x2={chart.plotRight}
-                y2={scaleLinear(
-                  nearestPoint.y,
-                  chart.yScale.min,
-                  chart.yScale.max,
-                  chart.plotBottom,
-                  MARGIN.top
-                )}
-                className="metrics-chart-crosshair metrics-chart-crosshair--horizontal"
-              />
-              <circle
-                cx={scaleLinear(
-                  nearestPoint.t,
-                  chart.xScale.min,
-                  chart.xScale.max,
-                  MARGIN.left,
-                  chart.plotRight
-                )}
-                cy={scaleLinear(
-                  nearestPoint.y,
-                  chart.yScale.min,
-                  chart.yScale.max,
-                  chart.plotBottom,
-                  MARGIN.top
-                )}
-                r={5}
-                className="metrics-chart-hover-point"
-                fill={accentColor}
-                stroke="var(--chart-hover-ring)"
-                strokeWidth={1.5}
-              />
-            </>
-          ) : null}
-        </g>
-
-        <rect
-          x={MARGIN.left}
-          y={MARGIN.top}
-          width={chart.plotWidth}
-          height={chart.plotHeight}
-          className="metrics-chart-interaction-layer"
-          onWheel={onWheel}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={() => setHover(null)}
-          onDoubleClick={resetZoom}
-        />
-
-        {hover && nearestPoint ? (
-          <g className="metrics-chart-tooltip" pointerEvents="none">
-            <rect
-              x={Math.min(hover.px + 10, chart.plotRight - 108)}
-              y={Math.max(MARGIN.top + 4, hover.py - 34)}
-              width={104}
-              height={30}
-              rx={4}
-              className="metrics-chart-tooltip-box"
-            />
-            <text
-              x={Math.min(hover.px + 16, chart.plotRight - 102)}
-              y={Math.max(MARGIN.top + 16, hover.py - 20)}
-              className="metrics-chart-tooltip-label"
-            >
-              t={formatAxisTick(nearestPoint.t, 1)}s
+          {xScale.ticks.map((tick) => (
+            <text key={`x-${tick}`} x={xAt(tick)} y={plotBottom + 15} className="metrics-chart-tick" textAnchor="middle">
+              {formatClock(tick)}
             </text>
-            <text
-              x={Math.min(hover.px + 16, chart.plotRight - 102)}
-              y={Math.max(MARGIN.top + 28, hover.py - 8)}
-              className="metrics-chart-tooltip-label"
-            >
-              {formatAxisTick(nearestPoint.y, valueDecimals)}
-              {unit ? ` ${unit}` : ""}
-            </text>
+          ))}
+
+          <g clipPath={`url(#${clipId}-plot)`}>
+            <path d={linePath} fill="none" stroke={accentColor} strokeWidth={1.5} strokeLinejoin="round" className="metrics-chart-line metrics-chart-line--ahead" />
+            {cursor !== null ? (
+              <path d={linePath} fill="none" stroke={accentColor} strokeWidth={2} strokeLinejoin="round" clipPath={`url(#${clipId}-past)`} className="metrics-chart-line" />
+            ) : null}
+            {cursorX !== null ? <line x1={cursorX} y1={plotTop} x2={cursorX} y2={plotBottom} className="metrics-chart-cursor" /> : null}
+            {cursorX !== null && atCursor ? (
+              <circle cx={xAt(atCursor.t)} cy={yAt(atCursor.y)} r={3.5} fill={accentColor} stroke="var(--chart-point-ring)" strokeWidth={1.5} />
+            ) : null}
+            {hover ? (
+              <>
+                <line x1={hover.px} y1={plotTop} x2={hover.px} y2={plotBottom} className="metrics-chart-crosshair" />
+                <circle cx={hover.px} cy={yAt(hover.point.y)} r={4} fill={accentColor} stroke="var(--chart-hover-ring)" strokeWidth={1.5} />
+              </>
+            ) : null}
           </g>
-        ) : null}
 
-        <text
-          x={(MARGIN.left + chart.plotRight) / 2}
-          y={CHART_HEIGHT - 6}
-          className="metrics-chart-axis-label"
-          textAnchor="middle"
-        >
-          Time (s)
-        </text>
+          <rect
+            x={plotLeft}
+            y={plotTop}
+            width={plotRight - plotLeft}
+            height={plotBottom - plotTop}
+            className="metrics-chart-interaction-layer"
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerCancel={() => {
+              pressRef.current = null;
+            }}
+            onPointerLeave={() => setHover(null)}
+            onDoubleClick={() => setZoom(null)}
+          />
 
-        <text
-          x={12}
-          y={(MARGIN.top + chart.plotBottom) / 2}
-          className="metrics-chart-axis-label metrics-chart-axis-label--y"
-          textAnchor="middle"
-          transform={`rotate(-90, 12, ${(MARGIN.top + chart.plotBottom) / 2})`}
-        >
-          {yAxisLabel}
-        </text>
-      </svg>
+          {hover ? (
+            <g className="metrics-chart-tooltip" pointerEvents="none">
+              <rect x={Math.min(hover.px + 8, plotRight - 96)} y={plotTop + 2} width={92} height={32} rx={4} className="metrics-chart-tooltip-box" />
+              <text x={Math.min(hover.px + 14, plotRight - 90)} y={plotTop + 15} className="metrics-chart-tooltip-label">
+                {formatClock(hover.point.t)}
+              </text>
+              <text x={Math.min(hover.px + 14, plotRight - 90)} y={plotTop + 29} className="metrics-chart-tooltip-label">
+                {formatAxisTick(hover.point.y, valueDecimals)}
+                {unit ? ` ${unit}` : ""}
+              </text>
+            </g>
+          ) : null}
+        </svg>
+      )}
+      </div>
     </div>
   );
+}
+
+/** The index of the point nearest to `t` (points sorted by time). */
+function nearestIndex(points: MetricSeriesPoint[], t: number): number {
+  let lo = 0;
+  let hi = points.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid]!.t < t) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo > 0 && Math.abs(points[lo - 1]!.t - t) <= Math.abs(points[lo]!.t - t)) {
+    return lo - 1;
+  }
+  return lo;
 }

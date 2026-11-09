@@ -17,13 +17,32 @@ import { StepOutputs } from "./StepOutputs";
 import { useCampaignConfig, useCampaignEvents, useCampaignFeed, useStartBlocker } from "./useCampaignFeed";
 import { useKnownEntryNames } from "./useHistoryData";
 
-function useNow(intervalMs: number): number {
+function useNow(intervalMs: number, ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
+    if (!ticking) {
+      return undefined;
+    }
+    // The clock may have stood still since the entry was shown: catch up at once, then tick
+    const first = setTimeout(() => setNow(Date.now()), 0);
     const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
+    return () => {
+      clearTimeout(first);
+      clearInterval(timer);
+    };
+  }, [intervalMs, ticking]);
   return now;
+}
+
+/** How long the entry ran; it counts up each second while the entry runs, and only this text renders again. */
+export function RunDuration({ startedAt, finishedAt, prefix = "" }: { startedAt: string | null; finishedAt: string | null; prefix?: string }) {
+  const now = useNow(1_000, startedAt !== null && finishedAt === null);
+  return (
+    <>
+      {prefix}
+      {runDuration(startedAt, finishedAt, now)}
+    </>
+  );
 }
 
 function Totals({ detail }: { detail: CampaignDetailView }) {
@@ -109,7 +128,6 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
   const feed = useCampaignFeed(campaignId);
   const events = useCampaignEvents(campaignId, feed.lastEventId, feed.pushedEvents, feed.source === "poll");
   const config = useCampaignConfig(campaignId);
-  const now = useNow(1_000);
   const { detail } = feed;
   const startBlocker = useStartBlocker(config.data);
   const knownNames = useKnownEntryNames();
@@ -205,7 +223,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           headingLevel={null}
           title="Entry details"
           openTitle="Hide entry details"
-          hint={`ran for ${runDuration(detail.started_at, detail.finished_at, now)}`}
+          hint={<RunDuration startedAt={detail.started_at} finishedAt={detail.finished_at} prefix="ran for " />}
         >
           <dl className="camp-facts">
             <div>
@@ -228,7 +246,9 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
             </div>
             <div>
               <dt>Ran for</dt>
-              <dd>{runDuration(detail.started_at, detail.finished_at, now)}</dd>
+              <dd>
+                <RunDuration startedAt={detail.started_at} finishedAt={detail.finished_at} />
+              </dd>
             </div>
             <div>
               <dt>Config</dt>

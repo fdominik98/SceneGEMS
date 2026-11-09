@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { GeneratedSceneData } from "../simulation/types";
 import type {
   TrajectoryGenerationParamsWire,
@@ -102,6 +102,49 @@ interface TrajectoryGenerationState {
   reset: () => void;
 }
 
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === "undefined" ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Local storage that never throws: a planned trajectory of several MB may not fit the quota.
+ * Then the form and the input are kept without the result, which the page reads again from its
+ * loaded entry on the next start; a write must never fail the run that produced the result.
+ */
+export const quotaSafeStorage: StateStorage = {
+  getItem: (name) => browserStorage()?.getItem(name) ?? null,
+  setItem: (name, value) => {
+    const storage = browserStorage();
+    if (storage === null) {
+      return;
+    }
+    try {
+      storage.setItem(name, value);
+    } catch {
+      try {
+        const parsed = JSON.parse(value) as { state?: Partial<TrajectoryGenerationPersisted> };
+        if (parsed.state) {
+          parsed.state = { ...parsed.state, resultScenarioJson: null, resultValid: false, resultComplete: null, status: "idle" };
+        }
+        storage.setItem(name, JSON.stringify(parsed));
+      } catch {
+        // Even the form does not fit: keep what was stored before.
+      }
+    }
+  },
+  removeItem: (name) => {
+    try {
+      browserStorage()?.removeItem(name);
+    } catch {
+      // Nothing to remove where storage is unavailable.
+    }
+  },
+};
+
 export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
   persist(
     (set) => ({
@@ -168,6 +211,7 @@ export const useTrajectoryGenerationStore = create<TrajectoryGenerationState>()(
     {
       name: "scenegems:trajectory-generation",
       version: 3,
+      storage: createJSONStorage(() => quotaSafeStorage),
       // Persist the advanced-parameter form, the handoff scene and
       // the last generated trajectory so the page restores on reload. A run that was
       // still in flight is downgraded to "idle" (there is no live request to resume).

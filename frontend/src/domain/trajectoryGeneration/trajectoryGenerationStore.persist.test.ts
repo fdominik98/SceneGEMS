@@ -60,4 +60,21 @@ describe("trajectory generation persistence", () => {
     };
     expect(migrate?.(saved, 2)).toEqual({ ...saved, params });
   });
+
+  it("keeps the form without the result when the result does not fit the quota", () => {
+    const setItem = vi.spyOn(storage, "setItem").mockImplementationOnce(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    const blob = { state: { timespan: 600, resultScenarioJson: "x".repeat(1000), resultValid: true, resultComplete: true, status: "done" }, version: 3 };
+    expect(() => trajectory.quotaSafeStorage.setItem("probe", JSON.stringify(blob))).not.toThrow();
+    const stored = JSON.parse(storage.getItem("probe") ?? "null") as typeof blob;
+    expect(stored.state).toEqual({ timespan: 600, resultScenarioJson: null, resultValid: false, resultComplete: null, status: "idle" });
+    setItem.mockRestore();
+  });
+
+  it("persists through the quota-safe storage", () => {
+    trajectory.useTrajectoryGenerationStore.getState().setTimespan(1234);
+    const stored = JSON.parse(storage.getItem("scenegems:trajectory-generation") ?? "null") as { state: { timespan: number } } | null;
+    expect(stored?.state.timespan).toBe(1234);
+  });
 });

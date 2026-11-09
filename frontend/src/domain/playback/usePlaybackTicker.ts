@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useStore } from "zustand";
-import { usePlaybackStore, type PlaybackStore } from "./playbackStore";
+import { playbackRange, usePlaybackStore, type PlaybackStore } from "./playbackStore";
 
 /** Smooth playback of one page's store via requestAnimationFrame (real-time speed multiplier). */
 export function usePlaybackTicker(store: PlaybackStore = usePlaybackStore) {
@@ -20,7 +20,8 @@ export function usePlaybackTicker(store: PlaybackStore = usePlaybackStore) {
 
     const loop = (now: number) => {
       const state = store.getState();
-      if (!state.isPlaying || state.frames.length === 0) {
+      const range = playbackRange(state);
+      if (!state.isPlaying || range === null) {
         lastTickRef.current = now;
         rafRef.current = requestAnimationFrame(loop);
         return;
@@ -28,8 +29,10 @@ export function usePlaybackTicker(store: PlaybackStore = usePlaybackStore) {
       const last = lastTickRef.current ?? now;
       const elapsedSec = (now - last) / 1000;
       lastTickRef.current = now;
-      const minT = state.frames[0]!.timestamp;
-      const maxT = state.frames[state.frames.length - 1]!.timestamp;
+      const minT = range.min;
+      // Waiting for more frames, the play head stops at the newest simulation frame: the live edge.
+      const simulationEnd = state.simulationFrames[state.simulationFrames.length - 1]?.timestamp;
+      const maxT = state.holdAtLiveEdge && simulationEnd !== undefined ? simulationEnd : range.max;
       const next = Math.min(state.playbackCursor + state.speed * elapsedSec, maxT);
       state.advancePlayback(next);
       // Stop at the end of the buffered trajectory instead of spinning RAF forever

@@ -6,7 +6,7 @@ import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
 import { useNodesFeed, useNodesStore } from "../../../domain/cluster/nodesStore";
 import { describeOperatorError, OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { NodeView } from "../../../domain/cluster/schemas";
-import { planResources, requiredCapabilities, slotsByJobType, startBlocker } from "../resourcePlan";
+import { planKey, planResources, requiredCapabilities, slotsByJobType, startBlocker, type ResourcePlan } from "../resourcePlan";
 import { useCatalogClasses, useCatalogStacks, useOperatorClient } from "../useCampaignData";
 import { buildCampaignMap, reviewStatusOf } from "./campaignMapModel";
 import { CampaignMap, type MapTarget } from "./CampaignMap";
@@ -35,6 +35,17 @@ const CLOCK_MS = 60_000;
 const EMPTY_BUILDER: BuilderCatalog = { stacks: [], generators: [] };
 const NO_NODES: readonly NodeView[] = [];
 
+/** The plan as the previous render had it while it says the same (`planKey`): the map and the problem counts built from it are kept then. */
+function useSamePlan(plan: ResourcePlan | null): ResourcePlan | null {
+  const key = planKey(plan);
+  const [kept, setKept] = useState({ key, plan });
+  if (kept.key !== key) {
+    setKept({ key, plan });
+    return plan;
+  }
+  return kept.plan;
+}
+
 /** Kept per browser: the pages shown as the campaign map or as a list, and whether the pages explain every field. */
 export const MAP_SHOWN_KEY = "campaign-wizard-map";
 export const EXPLANATIONS_KEY = "campaign-wizard-explanations";
@@ -47,6 +58,10 @@ export interface CampaignWizardProps {
 function describeCreateFailure(error: unknown): string {
   if (error instanceof OperatorApiError && error.status === 422) {
     return "The master refused the config. The reasons are listed above.";
+  }
+  if (error instanceof OperatorApiError && error.kind === "timeout") {
+    // No answer is no refusal: the campaign may exist, and the message says to look in Campaign History first
+    return `The master did not confirm the campaign: ${describeOperatorError(error)}.`;
   }
   return `The campaign was not created: ${describeOperatorError(error)}`;
 }
@@ -96,9 +111,12 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   // The cluster's nodes: what the campaign needs is checked against them, and full usage sizes its queues to their slots
   const operatorUrl = useSelectedCluster()?.operatorUrl ?? null;
   useNodesFeed(operatorUrl);
-  const nodesState = useNodesStore();
-  const nodesLoaded = operatorUrl !== null && nodesState.operatorUrl === operatorUrl && nodesState.loaded;
-  const nodes = nodesLoaded ? nodesState.nodes : NO_NODES;
+  const nodesUrl = useNodesStore((state) => state.operatorUrl);
+  const nodesReady = useNodesStore((state) => state.loaded);
+  const storeNodes = useNodesStore((state) => state.nodes);
+  const nodesError = useNodesStore((state) => state.error);
+  const nodesLoaded = operatorUrl !== null && nodesUrl === operatorUrl && nodesReady;
+  const nodes = nodesLoaded ? storeNodes : NO_NODES;
   const labels = useMemo(() => requiredLabelsOf(draft), [draft]);
   // Kept by content: heartbeats replace the node list every few seconds, the slots rarely change
   const slotsKey = JSON.stringify(slotsByJobType(nodes, labels));
@@ -118,14 +136,16 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   }, []);
   const localReasons = useMemo(() => checkDraft(draft, stacks.data ? builderCatalog : null, now), [draft, builderCatalog, stacks.data, now]);
 
-  const plan = useMemo(
+  const freshPlan = useMemo(
     () => (nodesLoaded ? planResources(requiredCapabilities(config), nodes, { nodes: draft.resources.fullUsage ? null : draft.resources.nodes, labels }) : null),
     [nodesLoaded, config, nodes, draft.resources.fullUsage, draft.resources.nodes, labels]
   );
+  // Kept by content: heartbeats replace the node views every few seconds, what the plan says rarely changes
+  const plan = useSamePlan(freshPlan);
   const cluster: ClusterResources = {
     selected: operatorUrl !== null,
     loaded: nodesLoaded,
-    error: nodesState.operatorUrl === operatorUrl ? nodesState.error : null,
+    error: nodesUrl === operatorUrl ? nodesError : null,
     nodes,
     plan,
     slots,

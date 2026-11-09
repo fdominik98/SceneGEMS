@@ -34,9 +34,9 @@ describe("buildRuleTimeline on the recorded two-vessel crossing", () => {
   it("keeps one track per rule and subject, rules before suggestions, encounter-wide rules first", () => {
     expect(pair.rules.map((r) => `${ruleTag(r)} ${r.subjectActorName}`)).toEqual([
       "R8 ",
-      "R8 OS_0",
-      "R16 OS_0",
-      "Tip OS_0",
+      "R8 os",
+      "R16 os",
+      "Tip os",
     ]);
   });
 
@@ -74,8 +74,8 @@ describe("buildRuleTimeline on the recorded three-vessel run", () => {
     expect(headOn.encounter[0]!.value.type).toBe("HEAD_ON");
     const r16 = headOn.rules.filter((r) => r.ruleName === R16);
     expect(r16.map((r) => [r.subjectActorName, r.firstFailure])).toEqual([
-      ["OS_0", 70],
-      ["TS_2", 70],
+      ["os", 70],
+      ["ts2", 70],
     ]);
   });
 

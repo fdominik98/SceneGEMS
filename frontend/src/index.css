@@ -2018,16 +2018,17 @@ pre {
   border-bottom: none;
 }
 
+/* One column in a narrow panel, two side by side once each can be 300px wide. */
 .metrics-grid--column {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   padding: 0;
 }
 
 .metrics-chart-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3);
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-panel);
@@ -2036,7 +2037,8 @@ pre {
 
 .metrics-chart-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  min-height: 24px;
   justify-content: space-between;
   gap: var(--space-3);
 }
@@ -2054,9 +2056,6 @@ pre {
 
 .metrics-chart-reset-btn {
   font-size: var(--font-size-xs);
-  padding: 1px 6px;
-  min-height: var(--hit-target);
-  border-radius: var(--radius);
 }
 
 .metrics-chart-title {
@@ -2080,13 +2079,23 @@ pre {
 
 .metrics-chart-empty {
   margin: 0;
-  padding: 12px 4px;
+  padding: var(--space-1) 0;
 }
 
 .metrics-chart-svg {
   display: block;
-  width: 100%;
-  height: auto;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.metrics-chart-line--ahead {
+  opacity: 0.35;
+}
+
+.metrics-chart-cursor {
+  stroke: var(--text-label);
+  stroke-width: 1;
+  pointer-events: none;
 }
 
 .metrics-chart-plot-bg {
@@ -2175,25 +2184,24 @@ pre {
   min-width: 0;
 }
 
+.metrics-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
 .metrics-toolbar label {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: var(--space-2);
   font-size: var(--font-size-sm);
 }
 
-.metrics-values-table {
-  width: 100%;
-  font-size: var(--font-size-sm);
-  margin: 8px 0;
-  border-collapse: collapse;
-}
-
-.metrics-values-table th,
-.metrics-values-table td {
-  border: 1px solid var(--border);
-  padding: 4px 8px;
-  text-align: left;
+.metrics-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
 }
 
 .batch-preset-runner {

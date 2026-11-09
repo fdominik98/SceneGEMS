@@ -148,6 +148,17 @@ describe("Input for a later start", () => {
     expect(screen.getByRole("row", { name: "Input item 1" })).toBeVisible();
   });
 
+  it("searches the entries by name once typing pauses, not on every key", async () => {
+    history();
+    const { user } = setup((draft) => void (draft.steps = ["trajectory_generation"]));
+    await screen.findByText("Head-on scenes");
+    const reads = mocks.listHistory.mock.calls.length;
+    await user.type(screen.getByRole("searchbox", { name: "Find an entry by name" }), "head");
+    await waitFor(() => expect(mocks.listHistory).toHaveBeenLastCalledWith(mocks.client, { q: "head", limit: 50 }, expect.anything()));
+    // one read for the whole word, none for "h", "he" or "hea"
+    expect(mocks.listHistory.mock.calls.slice(reads).map((call) => call[1].q)).toEqual(["head"]);
+  });
+
   it("adds every usable output of the entry at once and skips the unusable one", async () => {
     history();
     const { latest, user } = setup((draft) => void (draft.steps = ["trajectory_generation"]));

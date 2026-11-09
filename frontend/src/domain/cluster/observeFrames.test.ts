@@ -37,7 +37,7 @@ describe("trajectoryPreviewFrames", () => {
     expect(frames.map((frame) => frame.timestamp)).toEqual([0, 2, 4, 6]);
     expect(frames[3].timeStep).toBe(2);
     expect(frames[3].statesByActorId["0"].x).toBe(30);
-    expect(frames[3].actors.find((actor) => actor.isOwnShip)?.name).toBe("OS");
+    expect(frames[3].actors.find((actor) => actor.isOwnShip)?.name).toBe("os");
   });
 
   it("converts the final result the same way", () => {

@@ -1,0 +1,238 @@
+{
+  "format": 1,
+  "name": "scenegems",
+  "revision": "db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+  "dirty": false,
+  "created_at": "2026-11-08T21:54:24+00:00",
+  "images": {
+    "postgres:16.10-alpine": {
+      "id": "sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297",
+      "labels": {}
+    },
+    "scenegems-ardupilot-sitl:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:d1f6389e13267fb95ff6f137dee655b41c15e7d58d14ec09903027813b9ba862",
+      "labels": {
+        "org.scenegems.fingerprint": "1fcccfe6386fc794d6145ca013469926c22ede546f552a7cdac2e2e4c31ef27c"
+      }
+    },
+    "scenegems-gazebo-harmonic:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:dfcecceb3e35701cd97c349517f66f73272b1d9bfd9a9af53d68324bf1c20948",
+      "labels": {
+        "org.scenegems.fingerprint": "fd07952d489ea9dc549367a91a9d7d4cc0811ab9a8b80135280baf15a9b0527e"
+      }
+    },
+    "scenegems-master-api:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:f704f8a65114d9abfc5e566e11266ff950b67e264d8723018b94e8f3e56ead14",
+      "labels": {
+        "org.scenegems.fingerprint": "dddb20714164bc5b13685d2c58a7ffbc07745ec522defe6e64a702d660e25567"
+      }
+    },
+    "scenegems-monitoring-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:6cb0c2acf03274b9236789e6253113394ffdefdd23ae1329a798b45420d60217",
+      "labels": {
+        "org.scenegems.fingerprint": "490c05311ea43da7eb65f757529d328e3a1a889376bbcc7c89eb3df73b9c2b8a"
+      }
+    },
+    "scenegems-mqtt-broker:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:826b59a70ec9dda51c918f7e45f58bb30113ddd399a99ac4111289187104a457",
+      "labels": {
+        "org.scenegems.fingerprint": "7fbf5137fba8d9faaa79a3a7ff357a5169160c1fa32beefbbf3649c76e569d8d"
+      }
+    },
+    "scenegems-node:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:e8470936622a4742c7b157b574f897f1b9e8d43b79e1380160aa69fc119e0736",
+      "labels": {
+        "org.scenegems.fingerprint": "cb3191bb73903f8c81c0e5ada59b4cea7034d244435661985db491d89ea1cef6"
+      }
+    },
+    "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:8a5af34d4240ba9f9a5042eb64904056144e2bff8edd38b93a7575287a529d00",
+      "labels": {
+        "org.scenegems.fingerprint": "57be3d3c7e92c5192ecd66fe33d1beb23fc9b112d92da870a1bad846e3c09f68"
+      }
+    },
+    "scenegems-scene-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:00867b81f4f50c1fe19960bc1ca7dad9d2eee27fbdb06947eecd969bb0cef070",
+      "labels": {
+        "org.scenegems.fingerprint": "67934db888e6f33918be0cf2e5fa9f4013af0153757c51e0d4e9fde1849b8204"
+      }
+    },
+    "scenegems-trajectory-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
+      "id": "sha256:59f42e07b9068cf3b5075196b8d1b879f4e7f02a33df84238b92468caf0ad9d8",
+      "labels": {
+        "org.scenegems.fingerprint": "0edeae7fd87b9b264a463f262b2f7702b593d5136ec7ea6cdc1d75c2483e40e6"
+      }
+    }
+  },
+  "roles": {
+    "master": {
+      "description": "Master: node API, scheduler, Postgres and the cluster broker",
+      "count": "one",
+      "stack": "master",
+      "project": "scenegems-{cluster}",
+      "images": [
+        "scenegems-master-api:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+        "scenegems-mqtt-broker:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+        "postgres:16.10-alpine"
+      ],
+      "env": {
+        "COMPOSE_PROJECT_NAME": "scenegems-{cluster}",
+        "COMPOSE_PATH_SEPARATOR": ":",
+        "SCENEGEMS_MASTER_ID": "{cluster}",
+        "SCENEGEMS_IMAGE_TAG": "db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+        "POSTGRES_DB": "scenegems",
+        "POSTGRES_USER": "scenegems"
+      },
+      "parameters": {
+        "SCENEGEMS_API_PORT": {
+          "default": "8443",
+          "description": "HTTP port of the node API"
+        },
+        "SCENEGEMS_BROKER_PORT": {
+          "default": "1883",
+          "description": "MQTT port of the cluster broker"
+        },
+        "SCENEGEMS_OPERATOR_PORT": {
+          "default": "5174",
+          "description": "operator API and workbench gateway, published on 127.0.0.1 only"
+        },
+        "SCENEGEMS_OPERATOR_ALLOWED_ORIGINS": {
+          "default": "http://localhost:5173,http://127.0.0.1:5173",
+          "description": "browser origins the operator API allows (CORS), comma separated: where the web UI is served from"
+        },
+        "POSTGRES_HOST_PORT": {
+          "default": "5432",
+          "description": "Postgres, published on 127.0.0.1 only"
+        },
+        "SCENEGEMS_API_BIND_ADDRESS": {
+          "default": "0.0.0.0",
+          "description": "host address the node API is published on"
+        },
+        "SCENEGEMS_BROKER_BIND_ADDRESS": {
+          "default": "0.0.0.0",
+          "description": "host address the cluster broker is published on"
+        },
+        "SCENEGEMS_ARTIFACT_MAX_BYTES": {
+          "default": "268435456",
+          "description": "largest artifact a node may upload, uncompressed, in bytes"
+        },
+        "SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S": {
+          "default": "600",
+          "description": "seconds between sweeps of unreferenced artifacts; 0 turns the sweep off"
+        },
+        "SCENEGEMS_ARTIFACT_SWEEP_GRACE_S": {
+          "default": "3600",
+          "description": "seconds an unreferenced artifact is kept after its last use"
+        },
+        "COMPOSE_FILE": {
+          "default": "docker-compose.yml:docker-compose.live-sessions.yml",
+          "description": "compose files of the master, separated by ':'; without docker-compose.live-sessions.yml master-api gets no Docker socket and the workbench's live sessions are off on this master"
+        }
+      },
+      "secrets": [
+        "POSTGRES_PASSWORD"
+      ],
+      "setup": [],
+      "outputs": {},
+      "ready": {
+        "healthy": [
+          "master-api"
+        ],
+        "running": [
+          "postgres",
+          "cluster-broker"
+        ]
+      }
+    },
+    "node": {
+      "description": "Node: the node daemon, which leases jobs from its master and runs them in subsystem containers; it needs no deployed master",
+      "count": "many",
+      "stack": "node",
+      "project": "scenegems-node-{cluster}-{name}",
+      "images": [
+        "scenegems-node:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+      ],
+      "env": {
+        "SCENEGEMS_MASTER_ID": "{cluster}",
+        "SCENEGEMS_MASTER_URL": "http://{master.vpn_ip}:{master.SCENEGEMS_API_PORT}",
+        "SCENEGEMS_BROKER_PORT": "{master.SCENEGEMS_BROKER_PORT}",
+        "SCENEGEMS_NODE_NAME": "{name}",
+        "SCENEGEMS_NODE_MACHINE": "{machine.name}",
+        "SCENEGEMS_SOFTWARE_REVISION": "{release.revision}",
+        "SCENEGEMS_IMAGE_TAG": "db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+      },
+      "parameters": {
+        "SCENEGEMS_NODE_COMPONENTS": {
+          "default": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
+          "description": "what the node runs: vessel stack layers and subsystems separated by commas; their images are installed",
+          "items": {
+            "separator": ",",
+            "images": {
+              "asv_software/replay": [],
+              "asv_software/usv_navigation": [],
+              "control_layer/none": [],
+              "control_layer/ardupilot": [
+                "scenegems-ardupilot-sitl:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "control_layer/custom": [],
+              "simulation_layer/kinematic": [
+                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "simulation_layer/ardupilot_sim": [
+                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "simulation_layer/gazebo": [
+                "scenegems-gazebo-harmonic:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "scene_generation": [
+                "scenegems-scene-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "trajectory_generation": [
+                "scenegems-trajectory-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "monitoring": [
+                "scenegems-monitoring-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ],
+              "calibration": [
+                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+              ]
+            }
+          }
+        },
+        "SCENEGEMS_NODE_SLOTS": {
+          "default": "simulation:2,scene_generation:1,trajectory_generation:1,monitoring.post_hoc:1",
+          "description": "job types and how many of each run at once, as type:slots separated by commas",
+          "items": {
+            "separator": ",",
+            "key_separator": ":",
+            "images": {
+              "scene_generation": [],
+              "trajectory_generation": [],
+              "simulation": [],
+              "monitoring.post_hoc": [],
+              "calibration.deviation": []
+            }
+          }
+        },
+        "SCENEGEMS_NODE_LABELS": {
+          "default": "",
+          "description": "optional labels jobs can require, as key=value separated by commas"
+        },
+        "SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES": {
+          "default": "2147483648",
+          "description": "bound of the node's artifact cache in bytes; 0 turns it off"
+        }
+      },
+      "secrets": [],
+      "setup": [],
+      "outputs": {},
+      "ready": {
+        "running": [
+          "node"
+        ]
+      }
+    }
+  },
+  "name_pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"
+}

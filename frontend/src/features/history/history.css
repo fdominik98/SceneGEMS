@@ -46,8 +46,27 @@
   gap: var(--space-2);
 }
 
+/* The list and the outputs fit the page beside the left pane: tighter sides and links that wrap */
+.history-table th,
+.history-table td {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+.history-table .camp-link,
+.history-outputs .camp-table .camp-link {
+  white-space: normal;
+  text-align: left;
+}
+
+/* A class folder or name is one long word: let it break rather than widen the table */
+.history-outputs .camp-class-name,
+.history-outputs .camp-class-folder {
+  overflow-wrap: anywhere;
+}
+
 .history-cell-totals {
-  min-width: 180px;
+  min-width: 150px;
 }
 
 .history-cell-actions {

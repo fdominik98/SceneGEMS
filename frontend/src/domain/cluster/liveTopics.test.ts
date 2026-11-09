@@ -14,7 +14,8 @@ import {
 describe("live topic reducers", () => {
   it("campaigns: the snapshot resets, rows replace by id, deletions drop the row and are remembered", () => {
     let state = campaignsReducer.snapshot({});
-    expect(state).toEqual({ rows: {}, deleted: [], last: null });
+    expect(state).toEqual({ rows: {}, deleted: [], last: null, epoch: {} });
+    const epoch = state.epoch;
     state = campaignsReducer.update(state, { campaign: sampleCampaignRow() }, 1);
     state = campaignsReducer.update(state, { campaign: sampleWorkbenchRow() }, 2);
     state = campaignsReducer.update(state, { campaign: sampleCampaignRow({ actual_state: "paused" }) }, 3);
@@ -24,7 +25,10 @@ describe("live topic reducers", () => {
     expect(Object.keys(state.rows)).toEqual(["c1"]);
     expect(state.deleted).toEqual(["wb1"]);
     expect(state.last).toEqual({ deleted: "wb1" });
+    // updates keep the snapshot's epoch, a new snapshot has its own
+    expect(state.epoch).toBe(epoch);
     expect(campaignsReducer.snapshot({}).rows).toEqual({});
+    expect(campaignsReducer.snapshot({}).epoch).not.toBe(epoch);
     expect(() => campaignsReducer.update(state, { campaign: { campaign_id: "x" } }, 5)).toThrow();
   });
 
@@ -82,6 +86,7 @@ describe("live topic reducers", () => {
 
   it("job: status from the snapshot's progress, then status, log and job updates", () => {
     let state = jobReducer.snapshot({ ...sampleJob(), logs: [sampleLogLine] });
+    expect(state.firstLog).toBe(0);
     expect(state.status).toEqual({ progress: 0.5, message: "sampling", at: "2026-10-26T09:59:00+00:00" });
     expect(state.logs).toHaveLength(1);
 
@@ -92,6 +97,9 @@ describe("live topic reducers", () => {
     state = jobReducer.update(state, { logs: many }, 2);
     expect(state.logs).toHaveLength(JOB_LOG_LINES_KEPT);
     expect(state.logs.at(-1)?.text).toBe(`line ${JOB_LOG_LINES_KEPT + 4}`);
+    // the snapshot's line and the first 5 pushed ones dropped off: the first kept line is number 6
+    expect(state.firstLog).toBe(6);
+    expect(state.logs[0].text).toBe("line 5");
 
     state = jobReducer.update(state, { job: sampleJob({ state: "succeeded", finished_at: "2026-10-26T10:00:00+00:00" }) }, 3);
     expect(state.job.state).toBe("succeeded");

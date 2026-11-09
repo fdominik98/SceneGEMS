@@ -112,20 +112,30 @@ export function WorkbenchEncounterStrip() {
   }
   const start = Math.min(frames[0]?.timestamp ?? Infinity, simulationFrames[0]?.timestamp ?? Infinity);
   const step = serverTimeStep ?? frames[0]?.timeStep ?? simulationFrames[0]?.timeStep ?? 1;
+  const hasFrames = frames.length > 0 || simulationFrames.length > 0;
+  const startTime = Number.isFinite(start) ? start : 0;
+  // Play at the end starts over, as the encounter view's bar does.
+  const togglePlay = () => {
+    const end = Math.max(frames[frames.length - 1]?.timestamp ?? -Infinity, simulationFrames[simulationFrames.length - 1]?.timestamp ?? -Infinity);
+    if (!isPlaying && cursor >= end && end > startTime) {
+      seek(startTime);
+    }
+    setPlaying(!isPlaying);
+  };
 
   return (
     <div className="workbench-encounter-strip">
       <div className="workbench-encounter-strip-bar">
         <PlaybackBar
-          start={Number.isFinite(start) ? start : 0}
+          start={startTime}
           end={latestTimestamp}
           current={cursor}
           playing={isPlaying}
           speed={speed}
           live={simulationFrames.length > 0}
           following={followLatestPush && !isPlaying}
-          disabled={frames.length === 0}
-          onTogglePlay={() => setPlaying(!isPlaying)}
+          disabled={!hasFrames}
+          onTogglePlay={togglePlay}
           onSeek={seek}
           onStep={(direction) => stepBy(direction * step)}
           onSpeed={setSpeed}
@@ -145,7 +155,7 @@ export function WorkbenchEncounterStrip() {
           <RuleTimeline
             groups={groups}
             currentTime={cursor}
-            onSeek={frames.length > 0 ? seek : undefined}
+            onSeek={hasFrames ? seek : undefined}
             selectedRelationId={selectedRelationId}
             onSelectRelation={setSelectedRelationId}
             emptyMessage="Rule states appear here once a scenario with monitor results is loaded."

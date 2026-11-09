@@ -1,3 +1,4 @@
+import { saveBlob } from "../../../components/saveBlob";
 import JSZip from "jszip";
 import type { BatchRunResult } from "../../../domain/sceneGeneration/batchGenerationStore";
 import { formatScenarioJsonForExport } from "../../../domain/sceneGeneration/parseEvaluationDataFile";
@@ -28,10 +29,5 @@ export async function downloadValidBatchScenesZip(results: BatchRunResult[]): Pr
     );
   }
   const blob = await zip.generateAsync({ type: "blob" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `batch_scenes_${new Date().toISOString().slice(0, 10)}.zip`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  saveBlob(blob, `batch_scenes_${new Date().toISOString().slice(0, 10)}.zip`);
 }

@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { selectSelectedCluster, useClusterStore } from "./clusterStore";
 import type { CampaignStep } from "./schemas";
 import {
   clampPage,
@@ -13,9 +14,12 @@ import {
  * What the Results section shows: the entry (a campaign or a workbench run, `campaignId`), the
  * step view that was picked, the verdict table's filters and page, and the case page that is open. Kept in memory (not persisted): a reload starts at the newest campaign.
  * Other sections open a campaign's results with `openCampaign` (or `openCase`) and then show
- * the section (`features/results/showResults.ts`).
+ * the section (`features/results/showResults.ts`). The entry belongs to the cluster selected when it
+ * was opened: the section is not mounted while hidden, so it reads it with `selectShownEntry`.
  */
 export interface ResultsState {
+  /** The cluster the entry belongs to; an entry of another cluster is not shown. */
+  clusterId: string | null;
   campaignId: string | null;
   /** The step view the user picked; null shows the last step the entry executed. */
   step: CampaignStep | null;
@@ -49,6 +53,7 @@ export interface ResultsState {
 }
 
 const INITIAL = {
+  clusterId: null,
   campaignId: null,
   step: null,
   caseId: null,
@@ -59,21 +64,29 @@ const INITIAL = {
   sort: "fec_id" as VerdictSort,
 };
 
+/** The cluster an entry opened now belongs to: the selected one, as every section works on it. */
+function selectedClusterId(): string | null {
+  return selectSelectedCluster(useClusterStore.getState())?.id ?? null;
+}
+
 export const useResultsStore = create<ResultsState>()((set, get) => ({
   ...INITIAL,
   openCampaign: (campaignId, step) => {
     const state = get();
-    if (state.campaignId === campaignId && state.caseId === null && (step === undefined || step === state.step)) {
+    const clusterId = selectedClusterId();
+    const same = state.campaignId === campaignId && state.clusterId === clusterId;
+    if (same && state.caseId === null && (step === undefined || step === state.step)) {
       return;
     }
-    set({ campaignId, step: step ?? (state.campaignId === campaignId ? state.step : null), caseId: null, filters: DEFAULT_VERDICT_FILTERS, page: 0 });
+    set({ clusterId, campaignId, step: step ?? (same ? state.step : null), caseId: null, filters: DEFAULT_VERDICT_FILTERS, page: 0 });
   },
   openCase: (campaignId, caseId, step) => {
     const state = get();
-    if (state.campaignId === campaignId) {
+    const clusterId = selectedClusterId();
+    if (state.campaignId === campaignId && state.clusterId === clusterId) {
       set({ caseId, step: step ?? state.step });
     } else {
-      set({ campaignId, step: step ?? null, caseId, filters: DEFAULT_VERDICT_FILTERS, page: 0 });
+      set({ clusterId, campaignId, step: step ?? null, caseId, filters: DEFAULT_VERDICT_FILTERS, page: 0 });
     }
   },
   setStep: (step) => set({ step, caseId: null, filters: DEFAULT_VERDICT_FILTERS, page: 0 }),
@@ -88,3 +101,13 @@ export const useResultsStore = create<ResultsState>()((set, get) => ({
     set((state) => (state.sort === sort ? { direction: state.direction === "asc" ? "desc" : "asc", page: 0 } : { sort, direction: "asc", page: 0 })),
   reset: () => set({ ...INITIAL }),
 }));
+
+/** Whether the store's entry belongs to the selected cluster (a cluster switch made while the section was hidden leaves one that does not). */
+export function isShownCluster(state: Pick<ResultsState, "clusterId" | "campaignId">, clusterId: string | null): boolean {
+  return state.campaignId === null || state.clusterId === clusterId;
+}
+
+/** The entry to show for the selected cluster, or null (the section then shows the newest entry). */
+export function selectShownEntry(state: Pick<ResultsState, "clusterId" | "campaignId">, clusterId: string | null): string | null {
+  return isShownCluster(state, clusterId) ? state.campaignId : null;
+}

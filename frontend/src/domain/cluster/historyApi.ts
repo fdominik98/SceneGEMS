@@ -64,7 +64,7 @@ export const outputVerdictSchema = z.object({
   failed_rules: z.array(z.string()),
   /** The earliest failure over all rules, in seconds. This and the two below are missing from an older master. */
   first_failure_time_s: z.number().nullable().optional(),
-  /** Per vessel pair (`OS_0 - TS_1`), the encounter types in order of first appearance; null for a verdict stored before them. */
+  /** Per vessel pair (`os - ts1`; `OS_0 - TS_1` in verdicts stored before 2026-11-09), the encounter types in order of first appearance; null for a verdict stored before them. */
   encounters: z.record(z.string(), z.array(z.string())).nullable().optional(),
   /**
    * Per vessel pair and encounter type (OTHER has none), the vessel names by role when the type first
@@ -168,7 +168,8 @@ export async function uploadArtifact(
   contentType = "application/json",
   signal?: AbortSignal
 ): Promise<ArtifactRef> {
-  return (await client.request("POST", ARTIFACTS_PATH, artifactRefSchema, { query: { kind }, rawBody: content, contentType, signal })).data;
+  // No timeout: a large file takes as long as the link needs; the signal ends it
+  return (await client.request("POST", ARTIFACTS_PATH, artifactRefSchema, { query: { kind }, rawBody: content, contentType, signal, timeoutMs: null })).data;
 }
 
 function campaignPath(campaignId: string): string {

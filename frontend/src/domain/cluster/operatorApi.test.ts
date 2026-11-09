@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sampleCampaignSummary, sampleMasterStatus, sampleNode } from "../../test/fixtures/clusterViews";
-import { buildQueryString, createOperatorClient, describeErrorBody, describeOperatorError, OperatorApiError } from "./operatorApi";
+import { buildQueryString, createOperatorClient, describeErrorBody, describeOperatorError, LARGE_PAGE_TIMEOUT_MS, OperatorApiError } from "./operatorApi";
 
 const BASE = "http://127.0.0.1:5174";
 
@@ -132,6 +132,79 @@ describe("operator API client", () => {
     expect(error.unreachable).toBe(true);
   });
 
+  it("takes a call's own timeout over the client's, and none when it is null", async () => {
+    vi.useFakeTimers();
+    let answer: ((response: Response) => void) | null = null;
+    const { client } = clientWith(
+      (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          answer = resolve;
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+      2000
+    );
+    const longer = rejection(client.request("GET", "/x", z.object({}), { timeoutMs: 5000 }));
+    await vi.advanceTimersByTimeAsync(2000);
+    let settled = false;
+    void longer.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(3000);
+    const error = await longer;
+    expect(error.kind).toBe("timeout");
+    expect(error.message).toContain("within 5 s");
+
+    const unlimited = client.request("GET", "/x", z.object({ ok: z.boolean() }), { timeoutMs: null });
+    await vi.advanceTimersByTimeAsync(60_000);
+    (answer as unknown as (response: Response) => void)(jsonResponse({ ok: true }));
+    expect((await unlimited).data).toEqual({ ok: true });
+  });
+
+  it("gives up when the answer's body stalls after its headers", async () => {
+    vi.useFakeTimers();
+    const { client } = clientWith(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream({
+            start(stream) {
+              init?.signal?.addEventListener("abort", () => stream.error(new DOMException("aborted", "AbortError")));
+            },
+          }),
+          { status: 200 }
+        ),
+      2000
+    );
+    const pending = rejection(client.getStatus());
+    await vi.advanceTimersByTimeAsync(2000);
+    expect((await pending).kind).toBe("timeout");
+  });
+
+  it("passes on the caller's abort, also when it came before the call", async () => {
+    const { client, spy } = clientWith(async (_url, init) => {
+      if (init?.signal?.aborted) {
+        throw new DOMException("aborted", "AbortError");
+      }
+      return jsonResponse(sampleMasterStatus);
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const error = await client.getStatus(controller.signal).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(DOMException);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads an artifact as a blob, and an error answer with the server's message", async () => {
+    const { client, spy } = clientWith(async (url) =>
+      url.endsWith("/abc") ? new Response('{"a": 1}', { status: 200, headers: { "Content-Type": "application/json" } }) : jsonResponse({ detail: "no artifact def" }, { status: 404 })
+    );
+    const blob = await client.getArtifactBlob("abc");
+    expect(await blob.text()).toBe('{"a": 1}');
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/artifacts/abc`);
+    const error = await rejection(client.getArtifactBlob("def"));
+    expect(error.status).toBe(404);
+    expect(error.message).toBe("no artifact def");
+  });
+
   it("refuses an answer that does not match the schema", async () => {
     const { client } = clientWith(async () => jsonResponse({ ...sampleMasterStatus, connected_nodes: "all" }));
     const error = await rejection(client.getStatus());
@@ -158,5 +231,23 @@ describe("operator API client", () => {
     expect((init?.headers as Record<string, string>)["Content-Type"]).toBe("text/csv");
     await client.request("POST", "/x", z.object({ ok: z.boolean() }), { body: { a: 1 } });
     expect(spy.mock.calls[1][1]?.body).toBe('{"a":1}');
+  });
+
+  it("gives a large verdict page longer than the client's timeout", async () => {
+    vi.useFakeTimers();
+    let answer: ((response: Response) => void) | null = null;
+    const { client } = clientWith(
+      (_url, init) =>
+        new Promise<Response>((resolve, reject) => {
+          answer = resolve;
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+      2000
+    );
+    const page = client.listVerdicts("c1", { limit: 1000 });
+    await vi.advanceTimersByTimeAsync(LARGE_PAGE_TIMEOUT_MS - 1000);
+    (answer as unknown as (response: Response) => void)(jsonResponse([], { headers: { "X-Total-Count": "0" } }));
+    expect((await page).items).toEqual([]);
+    vi.useRealTimers();
   });
 });

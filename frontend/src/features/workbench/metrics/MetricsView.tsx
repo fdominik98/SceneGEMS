@@ -3,77 +3,58 @@ import type { SimulationFrame } from "../../../domain/simulation/types";
 import { ActorNamesProvider } from "../monitor/actorNameFormat";
 import { buildActorNameMap, formatRelationId } from "../monitor/actorNames";
 import { MetricTimeSeriesChart } from "./MetricTimeSeriesChart";
+import { seriesFromFrames, type MetricKey } from "./metricSeries";
 import { collectRelationIds } from "./metricsRelations";
 
-type MetricKey = keyof NonNullable<SimulationFrame["metrics"]>;
-
-function seriesFromFrames(
-  frames: SimulationFrame[],
-  relationId: string,
-  key: MetricKey
-) {
-  return frames.map((f) => ({
-    t: f.timestamp,
-    y: (f.metrics?.[key] as Record<string, number> | undefined)?.[relationId] ?? 0,
-  }));
-}
+const CHARTS: { key: MetricKey; title: string; unit: string; accent: string; yDomain?: [number, number]; valueDecimals?: number }[] = [
+  { key: "distanceByRelationId", title: "Distance", unit: "m", accent: "var(--accent)" },
+  { key: "dcpaByRelationId", title: "DCPA", unit: "m", accent: "var(--chart-series-1)" },
+  { key: "tcpaByRelationId", title: "TCPA", unit: "s", accent: "var(--chart-series-2)" },
+  { key: "dsIndexByRelationId", title: "DS index", unit: "", accent: "var(--chart-series-3)", yDomain: [0, 1], valueDecimals: 3 },
+];
 
 interface MetricsViewProps {
+  /** Every frame of the shown stream, sorted by time. */
   frames: SimulationFrame[];
+  /** The play head (seconds). */
+  cursor: number | null;
   relationId: string | null;
   onRelationIdChange: (id: string) => void;
+  /** Moves the play head (a click on a chart). */
+  onSeek?: (t: number) => void;
 }
 
-export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsViewProps) {
-
+/**
+ * The charts of a vessel pair's metrics over the whole stream, with the play head and the
+ * values at it.
+ */
+export function MetricsView({ frames, cursor, relationId, onRelationIdChange, onSeek }: MetricsViewProps) {
   const relationOptions = useMemo(() => collectRelationIds(frames), [frames]);
   const latestActors = frames[frames.length - 1]?.actors;
   const actorNames = useMemo(() => buildActorNameMap(latestActors), [latestActors]);
-  const activeRelation =
-    relationId && relationOptions.includes(relationId)
-      ? relationId
-      : (relationOptions[0] ?? null);
+  const activeRelation = relationId && relationOptions.includes(relationId) ? relationId : (relationOptions[0] ?? null);
 
-  const distance = useMemo(
-    () => (activeRelation ? seriesFromFrames(frames, activeRelation, "distanceByRelationId") : []),
-    [frames, activeRelation]
-  );
-  const dcpa = useMemo(
-    () => (activeRelation ? seriesFromFrames(frames, activeRelation, "dcpaByRelationId") : []),
-    [frames, activeRelation]
-  );
-  const tcpa = useMemo(
-    () => (activeRelation ? seriesFromFrames(frames, activeRelation, "tcpaByRelationId") : []),
-    [frames, activeRelation]
-  );
-  const ds = useMemo(
-    () => (activeRelation ? seriesFromFrames(frames, activeRelation, "dsIndexByRelationId") : []),
-    [frames, activeRelation]
+  const series = useMemo(
+    () => (activeRelation ? CHARTS.map((chart) => seriesFromFrames(frames, activeRelation, chart.key)) : []),
+    [activeRelation, frames]
   );
 
   if (frames.length === 0) {
-    return (
-      <p className="meta metrics-empty">No trajectory frames yet: metrics appear after playback data arrives.</p>
-    );
+    return <p className="meta metrics-empty">No frames yet: the charts appear once trajectories are loaded.</p>;
   }
 
   if (!activeRelation) {
-    return <p className="meta metrics-empty">No COLREGS relations in the current stream.</p>;
+    return <p className="meta metrics-empty">No vessel pairs in this stream.</p>;
   }
 
-  const latest = frames[frames.length - 1];
-  const metrics = latest?.metrics;
+  const pairLabel = formatRelationId(activeRelation, actorNames);
 
   return (
     <div className="metrics-section metrics-section--column">
-      <div className="toolbar-row metrics-toolbar">
+      <div className="metrics-toolbar">
         <label>
-          Relation
-          <select
-            value={activeRelation}
-            onChange={(e) => onRelationIdChange(e.target.value)}
-            aria-label="Select relation for metrics"
-          >
+          Pair
+          <select value={activeRelation} onChange={(e) => onRelationIdChange(e.target.value)} aria-label="Vessel pair of the charts">
             {relationOptions.map((id) => (
               <option key={id} value={id}>
                 {formatRelationId(id, actorNames)}
@@ -81,66 +62,25 @@ export function MetricsView({ frames, relationId, onRelationIdChange }: MetricsV
             ))}
           </select>
         </label>
+        <p className="meta metrics-hint">Click a chart to move the play head; Ctrl + wheel zooms the time axis.</p>
       </div>
-      <table className="metrics-values-table" aria-label="Latest metric values">
-        <thead>
-          <tr>
-            <th>Metric</th>
-            <th>Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Distance</td>
-            <td>{metrics?.distanceByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
-          </tr>
-          <tr>
-            <td>DCPA</td>
-            <td>{metrics?.dcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
-          </tr>
-          <tr>
-            <td>TCPA</td>
-            <td>{metrics?.tcpaByRelationId?.[activeRelation]?.toFixed(1) ?? "-"}</td>
-          </tr>
-          <tr>
-            <td>DS index</td>
-            <td>{metrics?.dsIndexByRelationId?.[activeRelation]?.toFixed(3) ?? "-"}</td>
-          </tr>
-        </tbody>
-      </table>
       <ActorNamesProvider actors={latestActors}>
-      <div className="metrics-grid metrics-grid--column">
-        <MetricTimeSeriesChart
-          title="Distance"
-          unit="m"
-          points={distance}
-          relationId={activeRelation}
-        />
-        <MetricTimeSeriesChart
-          title="DCPA"
-          unit="m"
-          points={dcpa}
-          relationId={activeRelation}
-          accentColor="var(--chart-series-1)"
-        />
-        <MetricTimeSeriesChart
-          title="TCPA"
-          unit="s"
-          points={tcpa}
-          relationId={activeRelation}
-          accentColor="var(--chart-series-2)"
-        />
-        <MetricTimeSeriesChart
-          title="DS index"
-          unit=""
-          points={ds}
-          relationId={activeRelation}
-          yDomain={[0, 1]}
-          yDecimals={2}
-          valueDecimals={3}
-          accentColor="var(--chart-series-3)"
-        />
-      </div>
+        <div className="metrics-grid metrics-grid--column">
+          {CHARTS.map((chart, index) => (
+            <MetricTimeSeriesChart
+              key={chart.key}
+              title={chart.title}
+              unit={chart.unit}
+              points={series[index] ?? []}
+              cursor={cursor}
+              seriesLabel={pairLabel}
+              yDomain={chart.yDomain}
+              valueDecimals={chart.valueDecimals}
+              accentColor={chart.accent}
+              onSeek={onSeek}
+            />
+          ))}
+        </div>
       </ActorNamesProvider>
     </div>
   );

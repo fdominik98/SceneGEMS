@@ -112,6 +112,9 @@ describe("entry loader", () => {
       ref: { sha256: SCENE, size_bytes: new TextEncoder().encode(JSON.stringify(scenario)).length, kind: "scene", pointer: null },
       source: { campaign_id: "wb1", case_id: 1, step: "scene_generation" },
     });
+    // People count cases from 1 by their index in the class; the database id is not shown.
+    expect(loaded.caseIndex).toBe(detail.case_index);
+    expect(loaded.output.label).toBe(`Scene of case ${detail.case_index + 1} of entry wb1`);
   });
 
   it("loads an unmonitored scene without a monitor frame", async () => {

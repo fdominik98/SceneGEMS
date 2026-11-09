@@ -19,6 +19,17 @@ describe("the domain draft store", () => {
     expect(useDomainDraftStore.getState().drafts).toEqual({});
   });
 
+  it("discards a saved draft only while it holds what was sent", () => {
+    const store = useDomainDraftStore.getState();
+    store.setText(URL_A, SAVED, "colregs_constants", "A: 2\n");
+    const sent = useDomainDraftStore.getState().drafts[URL_A];
+    store.setText(URL_A, SAVED, "vessel_types", "Tug: {}\n");
+    store.discardSaved(URL_A, sent);
+    expect(useDomainDraftStore.getState().drafts[URL_A]).toEqual({ ...SAVED, colregs_constants: "A: 2\n", vessel_types: "Tug: {}\n" });
+    store.discardSaved(URL_A, useDomainDraftStore.getState().drafts[URL_A]);
+    expect(useDomainDraftStore.getState().drafts[URL_A]).toBeUndefined();
+  });
+
   it("compares texts with line endings aside", () => {
     expect(sameTexts(SAVED, { ...SAVED, colregs_constants: "A: 1\r\n" })).toBe(true);
     expect(sameTexts(SAVED, { ...SAVED, obstacle_types: "Rock: {}\n" })).toBe(false);

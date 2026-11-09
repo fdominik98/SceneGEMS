@@ -65,7 +65,7 @@ export function monitoredFrame({ timestamp, timeStep = 1, failFrom, monitorHisto
     scenarioId: "run-record-11",
     timestamp,
     timeStep,
-    actors: [actor("0", "OS_0", true), actor("1", "TS_1", false)],
+    actors: [actor("0", "os", true), actor("1", "ts1", false)],
     statesByActorId: {
       "0": { x: 50 + timestamp * 4, y: 120, speed: 6.5, heading: 0 },
       "1": { x: 450 - timestamp * 3, y: 200 - timestamp, speed: 5.8, heading: Math.PI },
@@ -140,7 +140,7 @@ export function monitoredFrame({ timestamp, timeStep = 1, failFrom, monitorHisto
             kind: "rule",
             description: "A vessel directed to keep out of the way should take early and substantial action to keep well clear.",
             subjectActorId: "0",
-            subjectActorName: "OS_0",
+            subjectActorName: "os",
             result: failed ? "FAILED" : "PASSED",
             ...history(RULE_16_ID, failed ? failFrom! : null),
           },

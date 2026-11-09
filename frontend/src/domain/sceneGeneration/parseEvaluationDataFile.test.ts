@@ -60,8 +60,8 @@ describe("parseScenarioFile", () => {
       })
     );
     expect(parsed.scene.actors).toHaveLength(2);
-    expect(parsed.scene.actors[0]?.name).toBe("OS");
-    expect(parsed.scene.actors[1]?.name).toBe("TS1");
+    expect(parsed.scene.actors[0]?.name).toBe("os");
+    expect(parsed.scene.actors[1]?.name).toBe("ts1");
     expect(parsed.scene.actors[0]?.isOwnShip).toBe(true);
     expect(parsed.scene.statesByActorId["0"]?.x).toBe(0);
     expect(parsed.evaluationData).toMatchObject({
@@ -132,7 +132,7 @@ describe("parseScenarioFile", () => {
     );
     expect(parsed.hasFullTrajectories).toBe(true);
     expect(parsed.scene.actors).toHaveLength(2);
-    expect(parsed.scene.actors[0]?.name).toBe("OS");
+    expect(parsed.scene.actors[0]?.name).toBe("os");
     expect(parsed.evaluationData).toMatchObject({
       algorithm_desc: "RRTStar_algo",
       config_name: "3vessel_0obstacle",

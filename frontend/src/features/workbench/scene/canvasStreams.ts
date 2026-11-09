@@ -52,6 +52,19 @@ export function anchorOf(frame: SimulationFrame | null): Point {
   };
 }
 
+/** Whether two frames place the same vessels at the same positions (a scene and the same scene with the monitor's verdicts). */
+export function samePositions(a: SimulationFrame, b: SimulationFrame): boolean {
+  const aIds = Object.keys(a.statesByActorId);
+  if (aIds.length !== Object.keys(b.statesByActorId).length) {
+    return false;
+  }
+  return aIds.every((id) => {
+    const p = a.statesByActorId[id]!;
+    const q = b.statesByActorId[id];
+    return q !== undefined && p.x === q.x && p.y === q.y;
+  });
+}
+
 /** Every vessel of the drawn streams with the room it needs around it, for fitting the view. */
 export function fitPoints(streams: DrawnStream[]): { x: number; y: number; radius: number }[] {
   return streams.flatMap((stream) =>

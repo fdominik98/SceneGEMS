@@ -14,7 +14,7 @@ import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGenerati
 import { EntrySeedField } from "../pages/EntrySeedField";
 import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { PageInputPanel } from "../pages/PageInputPanel";
-import { forgetSimulationRun, inputOfFile, trajectoriesOfTrajectoryPage, trajectoryContentOfDocument } from "../pages/pageHandoff";
+import { inputOfFile, trajectoriesOfTrajectoryPage, trajectoryContentOfDocument } from "../pages/pageHandoff";
 import { useSimulationPageStore, type PageInput } from "../pages/pageStore";
 import { RunRecordingStatus } from "../pages/RunRecordingStatus";
 import { StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
@@ -114,7 +114,6 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
     if (content === null) {
       throw new Error("The file holds no trajectories (a trajectories.scene_list).");
     }
-    forgetSimulationRun();
     await streamControls.setSimulationInput(picked, content, { colregsConstraintsContent });
   };
 

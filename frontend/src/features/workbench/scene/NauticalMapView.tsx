@@ -33,6 +33,8 @@ interface NauticalMapViewProps {
   reference: Reference;
   /** Changing this number fits the map to the vessels (once they are there). */
   fitSignal?: number;
+  /** Changing this number fits the map too, unless the user moved or zoomed it since the last fit. */
+  followSignal?: number;
   /** Called after each fit the signal asked for. */
   onFit?: () => void;
   selectedRelationId?: string | null;
@@ -87,6 +89,7 @@ export function NauticalMapView({
   layerColumns,
   reference,
   fitSignal = 0,
+  followSignal = 0,
   onFit,
   selectedRelationId = null,
   onSelectRelation,
@@ -253,6 +256,19 @@ export function NauticalMapView({
     if (fitNow(map, visibleStreams, reference)) {
       fittedRequest.current = fitRequest;
       onFit?.();
+    }
+  });
+
+  // A follow signal fits only a view the user left as the last fit placed it.
+  const followedSignal = useRef(followSignal);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !view || followedSignal.current === followSignal) {
+      return;
+    }
+    followedSignal.current = followSignal;
+    if (!fitState.current.adjusted) {
+      fitNow(map, visibleStreams, reference);
     }
   });
 

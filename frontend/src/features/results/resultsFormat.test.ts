@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeStack, formatBytes, formatSeconds, runLabel, shortClassId, shortHash, sortedArtifacts, stageLabel } from "./resultsFormat";
+import { artifactFileName, describeStack, formatBytes, formatSeconds, runLabel, shortClassId, shortHash, sortedArtifacts, stageLabel } from "./resultsFormat";
 
 describe("results formatting", () => {
   it("names the stages, the last one as the monitor summary", () => {
@@ -29,8 +29,9 @@ describe("results formatting", () => {
   });
 
   it("labels runs and stacks", () => {
-    expect(runLabel(1, 2)).toBe("run 1, repeat 2");
-    expect(runLabel(0)).toBe("run 0");
+    // Counted from 1 for people.
+    expect(runLabel(1, 2)).toBe("run 2, repeat 3");
+    expect(runLabel(0)).toBe("run 1");
     expect(runLabel(null)).toBe("-");
     expect(describeStack({ simulation_layer: "kinematic", mode: "usv_navigation", dt: 0.1 })).toBe("kinematic usv_navigation");
     expect(describeStack({ other: 1 })).toBe('{"other":1}');
@@ -38,5 +39,13 @@ describe("results formatting", () => {
 
   it("lists the state log and frames of a run first", () => {
     expect(sortedArtifacts({ zeta: "z", frames: "f", state_log: "s", alpha: "a" }).map(([role]) => role)).toEqual(["state_log", "frames", "alpha", "zeta"]);
+  });
+
+  it("names a downloaded artifact by its role, hash and media type", () => {
+    const sha = "0123456789abcdef".repeat(4);
+    expect(artifactFileName("state_log", sha, "application/json")).toBe("state_log-0123456789ab.json");
+    expect(artifactFileName("frames", sha, "application/x-ndjson; charset=utf-8")).toBe("frames-0123456789ab.jsonl");
+    expect(artifactFileName("report", sha, "application/vnd.x+json")).toBe("report-0123456789ab.json");
+    expect(artifactFileName("blob", sha, "")).toBe("blob-0123456789ab");
   });
 });

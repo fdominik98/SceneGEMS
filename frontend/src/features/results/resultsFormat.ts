@@ -65,7 +65,13 @@ export function runLabel(runIndex: number | null, repeatIndex?: number | null): 
   if (runIndex === null) {
     return "-";
   }
-  return repeatIndex === null || repeatIndex === undefined ? `run ${runIndex}` : `run ${runIndex}, repeat ${repeatIndex}`;
+  // Counted from 1 for people, as Campaign History and the workbench count them.
+  return repeatIndex === null || repeatIndex === undefined ? `run ${runIndex + 1}` : `run ${runIndex + 1}, repeat ${repeatIndex + 1}`;
+}
+
+/** A case's number for people: its index in the class counted from 1. */
+export function caseNumber(caseIndex: number): number {
+  return caseIndex + 1;
 }
 
 /** A compact text of a record's stack (`kinematic usv_navigation`) from its JSON. */
@@ -88,4 +94,24 @@ export function sortedArtifacts(artifacts: Record<string, string>): [string, str
     }
     return a.localeCompare(b);
   });
+}
+
+const EXTENSIONS: Record<string, string> = {
+  "application/json": "json",
+  "application/x-ndjson": "jsonl",
+  "application/yaml": "yaml",
+  "application/x-yaml": "yaml",
+  "text/yaml": "yaml",
+  "text/csv": "csv",
+  "text/plain": "txt",
+  "application/xml": "xml",
+  "application/gzip": "gz",
+  "application/zip": "zip",
+};
+
+/** The file name a downloaded artifact is saved as: its role and the start of its hash, with the extension of its media type when it is known. */
+export function artifactFileName(role: string, sha256: string, mediaType: string): string {
+  const type = mediaType.split(";")[0].trim().toLowerCase();
+  const extension = EXTENSIONS[type] ?? (type.endsWith("+json") ? "json" : null);
+  return `${role}-${sha256.slice(0, 12)}${extension ? `.${extension}` : ""}`;
 }

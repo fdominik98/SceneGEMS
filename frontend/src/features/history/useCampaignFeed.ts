@@ -86,7 +86,8 @@ export function useCampaignEvents(campaignId: string, lastEventId: number | null
   const client = useOperatorClient();
   const [feed, dispatch] = useReducer(eventFeedReducer, EMPTY_EVENT_FEED);
   const lastIdRef = useRef(0);
-  const loading = useRef(false);
+  // The signal of the read in flight: a new trigger waits for it unless it was aborted (an effect's cleanup), then it reads anew
+  const inFlight = useRef<AbortSignal | null>(null);
 
   useEffect(() => {
     lastIdRef.current = feed.lastId;
@@ -99,17 +100,17 @@ export function useCampaignEvents(campaignId: string, lastEventId: number | null
 
   const load = useCallback(
     async (signal: AbortSignal) => {
-      if (!client || loading.current) {
+      if (!client || signal.aborted || (inFlight.current !== null && !inFlight.current.aborted)) {
         return;
       }
-      loading.current = true;
+      inFlight.current = signal;
       try {
         let after = lastIdRef.current;
         for (let page = 0; page < EVENTS_PAGES_MAX; page += 1) {
           // The first read takes the newest page (what the feed keeps); a master without `newest` ignores it and pages from event 0 as before.
           const first = after === 0 && page === 0;
           const { items } = await client.listEvents(campaignId, first ? { newest: EVENTS_KEPT, limit: EVENTS_PAGE } : { after, limit: EVENTS_PAGE }, signal);
-          if (items.length === 0) {
+          if (signal.aborted || items.length === 0) {
             break;
           }
           dispatch({ type: "merge", events: items });
@@ -122,7 +123,9 @@ export function useCampaignEvents(campaignId: string, lastEventId: number | null
       } catch {
         // The next trigger tries again; the feed keeps what it has
       } finally {
-        loading.current = false;
+        if (inFlight.current === signal) {
+          inFlight.current = null;
+        }
       }
     },
     [client, campaignId]
@@ -164,10 +167,9 @@ export function useCampaignConfig(campaignId: string) {
 export function useStartBlocker(config: CampaignConfig | undefined): string | null {
   const operatorUrl = useSelectedCluster()?.operatorUrl ?? null;
   useNodesFeed(operatorUrl);
-  const nodesState = useNodesStore();
-  const loaded = operatorUrl !== null && nodesState.operatorUrl === operatorUrl && nodesState.loaded;
   const current = config?.versions.find((version) => version.version === config.current_version)?.config;
-  return useMemo(() => startBlocker(loaded && current ? planOfConfig(current, nodesState.nodes) : null), [loaded, current, nodesState.nodes]);
+  // Only the answer is selected: a heartbeat that leaves it as it was does not render the entry page again
+  return useNodesStore((state) => startBlocker(operatorUrl !== null && state.operatorUrl === operatorUrl && state.loaded && current ? planOfConfig(current, state.nodes) : null));
 }
 
 export function useCampaignControl(campaignId: string, onDone: (summary: CampaignSummary) => void) {

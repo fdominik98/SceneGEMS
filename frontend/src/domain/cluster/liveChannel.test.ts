@@ -148,6 +148,20 @@ describe("LiveChannel subscriptions", () => {
     socket.receive({ type: "error", message: "malformed frame" });
     expect(channel.getLastError()).toBe("malformed frame");
   });
+
+  it("tells a later subscriber of a refused topic the error instead of leaving it waiting", () => {
+    const { channel } = openChannel();
+    const a = recorder();
+    channel.subscribe("campaign:gone", a.listener);
+    const socket = MockWebSocket.latest();
+    socket.open();
+    socket.receive({ type: "error", topic: "campaign:gone", message: "unknown campaign gone" });
+    const b = recorder();
+    channel.subscribe("campaign:gone", b.listener);
+    expect(b.events).toEqual([{ type: "error", topic: "campaign:gone", message: "unknown campaign gone" }]);
+    // no second subscribe: the server's answer stands until the topic is subscribed anew
+    expect(socket.sent.filter((message) => message.type === "subscribe")).toHaveLength(1);
+  });
 });
 
 describe("LiveChannel sequence numbers", () => {

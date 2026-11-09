@@ -1,12 +1,15 @@
+import type { ConfigArtifactRef } from "../../../domain/cluster/campaignApi";
 import type { OutputRow } from "../../../domain/cluster/historyApi";
+import type { OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { CampaignRow, CampaignStep } from "../../../domain/cluster/schemas";
 import { useScenePlaybackStore } from "../../../domain/playback/playbackStore";
 import { parseScenarioFile } from "../../../domain/sceneGeneration/parseEvaluationDataFile";
 import type { GeneratedSceneData } from "../../../domain/simulation/types";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
 import { configRef } from "./entryConfig";
-import { trajectoryScenarioOf } from "./entryLoader";
-import { inputFromPreviousPage, useScenePageStore, useTrajectoryPageStore, useSimulationPageStore, type PageInput } from "./pageStore";
+import { fetchArtifact, trajectoryScenarioOf } from "./entryLoader";
+import { inputFromPreviousPage, useScenePageStore, useTrajectoryPageStore, type PageInput } from "./pageStore";
+import { clearPageOutput } from "./showEntryOutput";
 
 /**
  * Setting a page's input in one click: from the previous page's output, from an output in
@@ -34,10 +37,28 @@ export function sceneOfScenePage(sourceName: string | null): { input: PageInput;
   };
 }
 
-/** Sets the trajectory page's input scene. */
+/** Whether two inputs are the same artifact on the master; a file or an output not on the master is always new. */
+export function sameStoredInput(a: PageInput | null, b: PageInput | null): boolean {
+  return a !== null && b !== null && a.ref !== null && b.ref !== null && a.ref.sha256 === b.ref.sha256;
+}
+
+/**
+ * Sets the trajectory page's input scene and draws it. Trajectories the page showed belong to
+ * the scene they were planned from, so another scene replaces them (they stay in Campaign
+ * History); the same scene again keeps them. While the page plans, its run owns the canvas.
+ */
 export function setTrajectoryInput(input: PageInput, scene: GeneratedSceneData): void {
-  useTrajectoryGenerationStore.getState().setHandoffScene(scene, input.origin === "file" ? input.label : null);
-  useTrajectoryPageStore.getState().setInput(input);
+  const generation = useTrajectoryGenerationStore.getState();
+  const page = useTrajectoryPageStore.getState();
+  const unchanged = sameStoredInput(page.input, input) && generation.handoffScene !== null;
+  generation.setHandoffScene(scene, input.origin === "file" ? input.label : null);
+  page.setInput(input);
+  if (unchanged || generation.status === "running") {
+    return;
+  }
+  // Draws the new input scene in place of the old trajectories.
+  clearPageOutput("trajectoryGeneration");
+  page.setLocalOutput(null);
 }
 
 /** The trajectories the trajectory page shows, as the simulation page's input; null when it shows none usable. */
@@ -88,7 +109,31 @@ export function trajectoryContentOfDocument(document: unknown): string | null {
   return scenario === null ? null : JSON.stringify(scenario);
 }
 
-/** On the simulation page the input and the run share the canvas and the session: a new input replaces the shown run. */
-export function forgetSimulationRun(): void {
-  useSimulationPageStore.getState().setLocalOutput(null);
+/**
+ * The trajectories of an input stored on the master, read again (after a reload the simulation
+ * page keeps only its input's name and artifact); null when the artifact holds no trajectories.
+ */
+export async function storedTrajectoryContent(
+  client: Pick<OperatorClient, "artifactUrl">,
+  ref: Pick<ConfigArtifactRef, "sha256">,
+  options: { signal?: AbortSignal; fetch?: typeof fetch } = {}
+): Promise<string | null> {
+  const { document } = await fetchArtifact(client, ref.sha256, options);
+  return trajectoryContentOfDocument(document);
+}
+
+/**
+ * What the simulation page loads again after a reload: nothing while it shows a loaded run (the
+ * run's refresh loads its input) or has trajectories; a stored input from the master; a file, which
+ * is gone.
+ */
+export function simulationInputToRestore(
+  page: { input: PageInput | null; loaded: unknown },
+  hasTrajectories: boolean
+): { kind: "none" } | { kind: "file"; input: PageInput } | { kind: "stored"; input: PageInput; ref: ConfigArtifactRef } {
+  const { input } = page;
+  if (input === null || page.loaded !== null || hasTrajectories) {
+    return { kind: "none" };
+  }
+  return input.ref === null ? { kind: "file", input } : { kind: "stored", input, ref: input.ref };
 }

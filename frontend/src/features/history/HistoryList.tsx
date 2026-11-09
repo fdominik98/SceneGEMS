@@ -1,13 +1,14 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useState } from "react";
 import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
 import { CAMPAIGN_STEPS, type CampaignKind, type CampaignRow, type CampaignStep } from "../../domain/cluster/schemas";
 import { SSH_TUNNEL_COMMAND } from "../cluster/ClusterListPanel";
 import { formatDateTime, plural } from "../campaigns/campaignFormat";
-import { ACTUAL_STATES, ACTUAL_STATE_LABELS, INITIAL_LIST_VIEW, LIST_PAGE_SIZES, listViewReducer, pageInfo } from "./campaignModel";
+import { ACTUAL_STATES, ACTUAL_STATE_LABELS, LIST_PAGE_SIZES, pageInfo } from "./campaignModel";
 import { EmptyState, StateBadge, ToneBadge } from "./campaignParts";
 import { DeleteEntry } from "./DeleteEntry";
 import { entryKind, entrySteps, KIND_LABELS, madeByLabel, rowTotalsSummary, STEP_LABELS, stepsLabel } from "./historyModel";
 import { MadeFrom, VerdictChips } from "./historyParts";
+import { useHistoryStore } from "./historyStore";
 import { useHistoryList } from "./useHistoryData";
 
 export interface HistoryListProps {
@@ -63,20 +64,22 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
  * kept live through the `campaigns` topic, polled while the topic is not live.
  */
 export function HistoryList({ onOpen, clusterName, operatorUrl }: HistoryListProps) {
-  const [view, dispatch] = useReducer(listViewReducer, INITIAL_LIST_VIEW);
-  const [search, setSearch] = useState("");
+  // Kept in the store, so the filters and the page are still set after Back from an entry
+  const view = useHistoryStore((state) => state.listView);
+  const dispatch = useHistoryStore((state) => state.updateListView);
+  const [search, setSearch] = useState(view.q ?? "");
   const { result, rows, total, liveStatus } = useHistoryList(view);
 
   useEffect(() => {
     const timer = setTimeout(() => dispatch({ type: "setQuery", q: search }), 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, dispatch]);
 
   useEffect(() => {
     if (total !== null) {
       dispatch({ type: "clampPage", total });
     }
-  }, [total]);
+  }, [total, dispatch]);
 
   const error = result.error;
   const unreachable = error instanceof OperatorApiError && error.unreachable;

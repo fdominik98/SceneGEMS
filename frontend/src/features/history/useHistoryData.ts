@@ -52,6 +52,21 @@ export function useHistoryList(view: ListViewState) {
     }
   }, [last, pageIds, view, queryClient, baseUrl]);
 
+  // A later snapshot (a reconnect, or a resubscribe after a gap in seq) drops the pushed rows: read the page again.
+  // The first one is not: the page was read as the section opened.
+  const epoch = live.data?.epoch ?? null;
+  const seenEpoch = useRef<object | null>(null);
+  useEffect(() => {
+    if (epoch === null || seenEpoch.current === epoch) {
+      return;
+    }
+    const again = seenEpoch.current !== null;
+    seenEpoch.current = epoch;
+    if (again) {
+      void queryClient.invalidateQueries({ queryKey: ["history", baseUrl, "list"] });
+    }
+  }, [epoch, queryClient, baseUrl]);
+
   return { result, rows, total: result.data?.total ?? null, liveStatus: live.status };
 }
 
@@ -92,6 +107,8 @@ export function useDeleteEntry(campaignId: string, onDeleted: () => void) {
     mutationFn: () => deleteCampaign(client as OperatorClient, campaignId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["history", client?.baseUrl, "list"] });
+      // The Results section's entry picker lists the entries too (`features/results/useResultsData.ts`)
+      void queryClient.invalidateQueries({ queryKey: ["results", client?.baseUrl, "history"] });
       queryClient.removeQueries({ queryKey: ["history", client?.baseUrl, "outputs", campaignId] });
       queryClient.removeQueries({ queryKey: ["campaigns", client?.baseUrl, "detail", campaignId] });
       onDeleted();

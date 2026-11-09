@@ -3,9 +3,9 @@ import "./simulationPanel.css";
 import { useUiStore, type TrajectoryStream } from "../../../app/uiStore";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { IconButton } from "../../../components/IconButton";
+import { saveBlob } from "../../../components/saveBlob";
 import { DownloadIcon, PanelRightCloseIcon } from "../../../components/icons";
 import { useShownPlayback } from "../../../domain/playback/playbackContext";
-import { framesAtOrBeforeCursor } from "../../../domain/playback/playbackFrameResolve";
 import type { SimulationFrame } from "../../../domain/simulation/types";
 import { MetricsView } from "../metrics/MetricsView";
 import { pickDefaultRelationId } from "../metrics/metricsRelations";
@@ -21,14 +21,8 @@ function exportTrajectoryFrames(stream: "preview" | "simulation", scenarioId: st
     frameCount: sortedFrames.length,
     frames: sortedFrames,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${stream}_trajectory_${stamp}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  saveBlob(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }), `${stream}_trajectory_${stamp}.json`);
 }
 
 const STREAM_LABELS: Record<TrajectoryStream, string> = { animation: "Preview", simulation: "Simulation" };
@@ -47,7 +41,6 @@ export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?
   const activeScenarioId = useShownPlayback((s) => s.activeScenarioId);
   const previewFrames = useShownPlayback((s) => s.frames);
   const simulationFrames = useShownPlayback((s) => s.simulationFrames);
-  const playbackCursor = useShownPlayback((s) => s.playbackCursor);
   const [chosenStream, setChosenStream] = usePersistedState<TrajectoryStream>("monitor-panel-stream", "animation");
 
   const hasSimulation = !previewOnly && simulationFrames.length > 0;
@@ -62,10 +55,8 @@ export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?
     hadSimulation.current = hasSimulation;
   }, [hasSimulation, setChosenStream]);
 
-  const frames = stream === "simulation" ? simulationFrames : previewFrames;
-  const sortedFrames = useMemo(() => [...frames].sort((a, b) => a.timestamp - b.timestamp), [frames]);
-  const metricsFrames = useMemo(() => framesAtOrBeforeCursor(sortedFrames, playbackCursor), [sortedFrames, playbackCursor]);
-  const activeRelation = selectedMetricsRelationId ?? pickDefaultRelationId(metricsFrames);
+  // The stores keep both streams sorted by time.
+  const sortedFrames = stream === "simulation" ? simulationFrames : previewFrames;
 
   return (
     <aside className="right-pane right-pane-trajectory">
@@ -124,9 +115,25 @@ export function TrajectoryMonitorSidebar({ previewOnly = false }: { previewOnly?
             <BasicActorInfoPanel stream={stream} />
           </>
         ) : (
-          <MetricsView frames={metricsFrames} relationId={activeRelation} onRelationIdChange={setSelectedMetricsRelationId} />
+          <MetricsCharts frames={sortedFrames} relationId={selectedMetricsRelationId} onRelationIdChange={setSelectedMetricsRelationId} />
         )}
       </div>
     </aside>
   );
+}
+
+/** The Charts tab: the only part of the panel that follows the play head, so the rest does not re-render every frame. */
+function MetricsCharts({
+  frames,
+  relationId,
+  onRelationIdChange,
+}: {
+  frames: SimulationFrame[];
+  relationId: string | null;
+  onRelationIdChange: (id: string) => void;
+}) {
+  const cursor = useShownPlayback((s) => (s.frames.length > 0 || s.simulationFrames.length > 0 ? s.playbackCursor : null));
+  const seek = useShownPlayback((s) => s.seek);
+  const defaultRelation = useMemo(() => pickDefaultRelationId(frames), [frames]);
+  return <MetricsView frames={frames} cursor={cursor} relationId={relationId ?? defaultRelation} onRelationIdChange={onRelationIdChange} onSeek={seek} />;
 }

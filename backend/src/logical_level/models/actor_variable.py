@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import List
 
+from functional_level.models.object_generator import obstacle_name, vessel_name
 from logical_level.mapping.static_obstacle import StaticObstacleType
 from logical_level.mapping.vessel_type import VesselType
 from utils.global_constants import EPSILON, MAX_COORD, MAX_HEADING, MIN_COORD, MIN_HEADING
@@ -150,7 +151,7 @@ class OSVariable(VesselVariable):
 
     @property
     def name(self) -> str:
-        return f"OS_{self.id}"
+        return vessel_name(self.id, is_os=True)
 
     @property
     def is_os(self) -> bool:
@@ -161,7 +162,7 @@ class OSVariable(VesselVariable):
 class TSVariable(VesselVariable):
     @property
     def name(self) -> str:
-        return f"TS_{self.id}"
+        return vessel_name(self.id, is_os=False)
 
     @property
     def is_os(self) -> bool:
@@ -174,7 +175,7 @@ class StaticObstacleVariable(ActorVariable):
 
     @property
     def name(self) -> str:
-        return f"SO_{self.id}"
+        return obstacle_name(self.id)
 
     @property
     def min_radius(self) -> float:

@@ -6,10 +6,6 @@ import { gatewayWsUrl } from "./simulationConfig";
 import type { SimulationFrame } from "./types";
 import type { ClientToServerMessage } from "./wireTypes";
 import { useUiStore } from "../../app/uiStore";
-import {
-  mergeFramesInWorker,
-  shouldMergeFramesInWorker,
-} from "../playback/mergeFramesInWorker";
 import { useBatchGenerationStore } from "../sceneGeneration/batchGenerationStore";
 import { buildFramesFromTrajectoryData } from "../sceneGeneration/parseEvaluationDataFile";
 import { useTrajectoryGenerationStore } from "../trajectoryGeneration/trajectoryGenerationStore";
@@ -25,23 +21,15 @@ import type { SceneGenerationInput } from "../../features/workbench/cluster/work
 import { simulationSubmission, type ClusterRunPlan } from "../../features/workbench/cluster/simulationJobs";
 import { useSimulationSetupRequestStore } from "../../features/workbench/controls/simulationSetupRequest";
 import type { LoadedRun } from "../../features/workbench/pages/entryLoader";
+import { simulationInputToRestore, storedTrajectoryContent } from "../../features/workbench/pages/pageHandoff";
+import { OperatorApiError } from "../cluster/operatorApi";
 import { useSimulationPageStore, type PageInput } from "../../features/workbench/pages/pageStore";
 import { useRunRecordingStore } from "../../features/workbench/pages/runRecordingStore";
 import type { WorkbenchTarget } from "../../features/workbench/pages/workbenchTarget";
 import { isFullTrajectoryScenario } from "../sceneGeneration/parseEvaluationDataFile";
 import { missingTrajectoriesReason, NO_TRAJECTORIES_MESSAGE } from "./trajectoryGuard";
 
-let previewTrajectoryChunkQueue = Promise.resolve();
-let simulationTrajectoryChunkQueue = Promise.resolve();
 let simulationModelsToken = 0;
-
-function enqueuePreviewTrajectoryChunk(task: () => Promise<void>): void {
-  previewTrajectoryChunkQueue = previewTrajectoryChunkQueue.then(task, task);
-}
-
-function enqueueSimulationTrajectoryChunk(task: () => Promise<void>): void {
-  simulationTrajectoryChunkQueue = simulationTrajectoryChunkQueue.then(task, task);
-}
 
 function trajectoryChunkMatchesActiveScenario(
   activeScenarioId: string | null,
@@ -89,9 +77,7 @@ export function setupRequestOf(run: LoadedRun) {
  */
 export function useSimulationWorkflow() {
   const ingestFrames = usePlaybackStore((s) => s.ingestFrames);
-  const applyMergedPreviewFrames = usePlaybackStore((s) => s.applyMergedPreviewFrames);
   const ingestSimulationFrames = usePlaybackStore((s) => s.ingestSimulationFrames);
-  const applyMergedSimulationFrames = usePlaybackStore((s) => s.applyMergedSimulationFrames);
   const ingestPushFrame = usePlaybackStore((s) => s.ingestPushFrame);
   const clearSimulationTrajectories = usePlaybackStore((s) => s.clearSimulationTrajectories);
   const resetForNewScene = usePlaybackStore((s) => s.resetForNewScene);
@@ -109,7 +95,6 @@ export function useSimulationWorkflow() {
   const setSpeed = usePlaybackStore((s) => s.setSpeed);
   const seek = usePlaybackStore((s) => s.seek);
   const setReceivedSimulationModels = usePlaybackStore((s) => s.setReceivedSimulationModels);
-  const setControlPanelMode = useUiStore((s) => s.setControlPanelMode);
   const clientRef = useRef<BackendWsClient | null>(null);
   const dispatchMessageRef = useRef<(message: ParsedServerMessage) => void>(() => {});
   const workbenchCluster = useWorkbenchCluster();
@@ -134,40 +119,6 @@ export function useSimulationWorkflow() {
     [setError]
   );
 
-  const ingestPreviewChunk = useCallback(
-    async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
-      if (shouldMergeFramesInWorker(incoming.length)) {
-        try {
-          const merged = await mergeFramesInWorker(existing, incoming);
-          applyMergedPreviewFrames(merged);
-          return;
-        } catch (error) {
-          // Never drop a chunk on a worker failure: fall back to the equivalent
-          // synchronous store merge instead of losing these frames silently.
-          console.error("[SimulationWorkflow] preview merge worker failed; using main-thread merge", error);
-        }
-      }
-      ingestFrames(incoming);
-    },
-    [applyMergedPreviewFrames, ingestFrames]
-  );
-
-  const ingestSimulationChunk = useCallback(
-    async (existing: Parameters<typeof mergeFramesInWorker>[0], incoming: Parameters<typeof mergeFramesInWorker>[1]) => {
-      if (shouldMergeFramesInWorker(incoming.length)) {
-        try {
-          const merged = await mergeFramesInWorker(existing, incoming);
-          applyMergedSimulationFrames(merged);
-          return;
-        } catch (error) {
-          console.error("[SimulationWorkflow] simulation merge worker failed; using main-thread merge", error);
-        }
-      }
-      ingestSimulationFrames(incoming);
-    },
-    [applyMergedSimulationFrames, ingestSimulationFrames]
-  );
-
   const dispatchMessage = useCallback(
     (message: ParsedServerMessage) => {
       switch (message.kind) {
@@ -177,7 +128,6 @@ export function useSimulationWorkflow() {
           // (captured before the reset) if a message ever omits it.
           const priorScenarioId = usePlaybackStore.getState().activeScenarioId;
           resetForNewScene();
-          setControlPanelMode("simulation");
           setActiveScenarioId(message.scenarioId ?? priorScenarioId);
           markSimulationInitialized();
           setPlaying(false);
@@ -201,14 +151,9 @@ export function useSimulationWorkflow() {
           if (store.previewMonitor.status === "done" && store.previewMonitor.scenarioId === store.activeScenarioId) {
             break;
           }
-          const incoming = message.frames;
-          enqueuePreviewTrajectoryChunk(async () => {
-            const latest = usePlaybackStore.getState();
-            if (!trajectoryChunkMatchesActiveScenario(latest.activeScenarioId, message.scenarioId)) {
-              return;
-            }
-            await ingestPreviewChunk(latest.frames, incoming);
-          });
+          // Merged into the store's current frames in one step (linear for sorted chunks), so a
+          // chunk never lands on a stale copy of the frames.
+          ingestFrames(message.frames);
           break;
         }
         case "simulation_trajectory_chunk": {
@@ -216,14 +161,7 @@ export function useSimulationWorkflow() {
           if (!trajectoryChunkMatchesActiveScenario(store.activeScenarioId, message.scenarioId)) {
             break;
           }
-          const incoming = message.frames;
-          enqueueSimulationTrajectoryChunk(async () => {
-            const latest = usePlaybackStore.getState();
-            if (!trajectoryChunkMatchesActiveScenario(latest.activeScenarioId, message.scenarioId)) {
-              return;
-            }
-            await ingestSimulationChunk(latest.simulationFrames, incoming);
-          });
+          ingestSimulationFrames(message.frames);
           break;
         }
         case "generated_scene": {
@@ -383,8 +321,7 @@ export function useSimulationWorkflow() {
       }
     },
     [
-      ingestPreviewChunk,
-      ingestSimulationChunk,
+      ingestFrames,
       ingestSimulationFrames,
       ingestPushFrame,
       markSimulationInitialized,
@@ -397,7 +334,6 @@ export function useSimulationWorkflow() {
       setMqttBrokerStatus,
       setMonitorStatus,
       setActiveScenarioId,
-      setControlPanelMode,
       setReceivedSimulationModels,
     ]
   );
@@ -505,11 +441,68 @@ export function useSimulationWorkflow() {
 
   const setSimulationInput = useCallback(
     async (input: PageInput, content: string, options: LoadScenarioOptions = {}) => {
+      // The input and the run share the canvas and the session: a new input replaces the shown run.
+      useSimulationPageStore.getState().setLocalOutput(null);
       useSimulationPageStore.getState().setInput(input);
       const fileName = "file" in input.source && input.source.file ? input.source.file : "trajectories.json";
       await loadScenarioFromFile(new File([content], fileName, { type: "application/json" }), options);
     },
     [loadScenarioFromFile]
+  );
+
+  /**
+   * After a reload the simulation page keeps its input's name and artifact but not its
+   * trajectories: reads them again from the master and loads them as taking the input did. A file
+   * that never reached the master cannot be read again, so the page drops it and says so. Does
+   * nothing while the page shows a loaded run (its refresh loads the run's input) or has
+   * trajectories already.
+   */
+  const restoreSimulationInput = useCallback(
+    async (colregsConstraintsContent: string) => {
+      const page = useSimulationPageStore.getState();
+      const client = workbenchCluster.cluster?.client ?? null;
+      const restore = simulationInputToRestore(page, loadedTrajectoriesRef.current !== null);
+      if (restore.kind === "none" || client === null) {
+        return;
+      }
+      const { input } = restore;
+      if (restore.kind === "file") {
+        page.setInput(null);
+        page.setStatus("idle", `The input "${input.label}" was a file, which is not kept after a reload: take it again.`);
+        return;
+      }
+      // The user may have taken another input while this read.
+      const stillWanted = () => {
+        const now = useSimulationPageStore.getState();
+        return now.input === input && now.loaded === null && loadedTrajectoriesRef.current === null;
+      };
+      try {
+        const content = await storedTrajectoryContent(client, restore.ref);
+        if (!stillWanted()) {
+          return;
+        }
+        if (content === null) {
+          throw new Error("it holds no trajectories");
+        }
+        const fileName = "file" in input.source && input.source.file ? input.source.file : "trajectories.json";
+        await loadScenarioFromFile(new File([content], fileName, { type: "application/json" }), { colregsConstraintsContent });
+      } catch (error) {
+        if (!stillWanted()) {
+          return;
+        }
+        const gone = error instanceof OperatorApiError && error.status === 404;
+        if (gone) {
+          page.setInput(null);
+        }
+        page.setStatus(
+          "idle",
+          gone
+            ? "The input trajectories were deleted from the master: take them again."
+            : `The input trajectories could not be read again: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
+    [loadScenarioFromFile, workbenchCluster]
   );
 
   const colregsRef = useRef("");
@@ -620,6 +613,8 @@ export function useSimulationWorkflow() {
     },
     /** Sets the simulation page's input and loads its trajectories (for a live session and the cluster). */
     setSimulationInput,
+    /** Loads the simulation page's stored input again after a reload. */
+    restoreSimulationInput,
     /** Shows a target on its page: follows a live one, loads a finished one. */
     openTarget: (target: WorkbenchTarget, colregsConstraintsContent: string) => {
       colregsRef.current = colregsConstraintsContent;

@@ -1,8 +1,9 @@
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
+import { saveBlob } from "../../components/saveBlob";
 import { SectionFrame } from "../../components/SectionFrame";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
-import { OperatorApiError } from "../../domain/cluster/operatorApi";
+import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
 import type { DomainKey } from "../../domain/cluster/presetsApi";
 import "./domain.css";
 import { DomainConfigurationPanel } from "./DomainConfigurationPanel";
@@ -16,12 +17,7 @@ const EXPORT_NAMES: Record<DomainKey, string> = {
 };
 
 function exportText(content: string, fileName: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/yaml" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  saveBlob(new Blob([content], { type: "text/yaml" }), fileName);
 }
 
 function formatSavedAt(iso: string | null): string {
@@ -47,6 +43,7 @@ export function DomainSection() {
   const setText = useDomainDraftStore((s) => s.setText);
   const setTexts = useDomainDraftStore((s) => s.setTexts);
   const discard = useDomainDraftStore((s) => s.discard);
+  const discardSaved = useDomainDraftStore((s) => s.discardSaved);
 
   const saved = query.data ? textsOf(query.data) : null;
   const texts = draft ?? saved;
@@ -70,7 +67,8 @@ export function DomainSection() {
           disabled={!dirty || !editable || save.isPending}
           onClick={() => {
             if (draft) {
-              save.mutate(draft, { onSuccess: () => discard(clusterUrl) });
+              // Edits typed while the save was on its way stay a draft
+              save.mutate(draft, { onSuccess: () => discardSaved(clusterUrl, draft) });
             }
           }}
         >
@@ -95,7 +93,7 @@ export function DomainSection() {
         <LoadingSpinner /> Reading the domain configuration from {cluster.name}
       </div>
     );
-  } else if (query.isError || texts === null) {
+  } else if (!query.data || texts === null) {
     const unreachable = query.error instanceof OperatorApiError && query.error.unreachable;
     content = (
       <EmptyState
@@ -107,7 +105,7 @@ export function DomainSection() {
           </button>
         }
       >
-        <p className="meta">{query.error instanceof Error ? query.error.message : "The master answered without a domain configuration."}</p>
+        <p className="meta">{query.error ? describeOperatorError(query.error) : "The master answered without a domain configuration."}</p>
       </EmptyState>
     );
   } else {
@@ -127,12 +125,17 @@ export function DomainSection() {
             Load the default presets
           </button>
         </div>
+        {query.isError && (
+          <p className="meta warning" role="status">
+            The configuration may be out of date: reading it again failed ({describeOperatorError(query.error)}).
+          </p>
+        )}
         {!editable && (
           <p className="wiz-notice" role="note">
             This master runs without its database, so it keeps no domain configuration of its own: every run uses its default presets.
           </p>
         )}
-        {presets.isError && <p className="error">The master's presets could not be read: {presets.error instanceof Error ? presets.error.message : String(presets.error)}</p>}
+        {presets.isError && <p className="error">The master's presets could not be read: {describeOperatorError(presets.error)}</p>}
         {saveError && (
           <div className="error" role="alert">
             <p>{saveError.message}</p>

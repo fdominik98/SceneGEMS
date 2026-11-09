@@ -36,7 +36,7 @@ export function EncounterHarness() {
           frames={frames}
           timeStep={10}
           live={live && count < all.length}
-          title={scenario === "two" ? "OS_0 and TS_1, crossing" : "OS_0, TS_1 and TS_2"}
+          title={scenario === "two" ? "os and ts1, crossing" : "os, ts1 and ts2"}
           initialTimestamp={initial}
           onTimestampChange={setShownAt}
         />

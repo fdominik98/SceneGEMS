@@ -11,17 +11,17 @@ const vessels: VesselDescriptor[] = [
 describe("simulationInitConfig", () => {
   it("creates deterministic default vessel names and topics", () => {
     const drafts = buildInitialVesselConnectionDrafts(vessels);
-    expect(drafts[0]?.agentName).toBe("OS_0_SIM");
-    expect(drafts[0]?.topic).toBe("waraps/unit/surface/simulation/OS_0_SIM");
+    expect(drafts[0]?.agentName).toBe("os_sim");
+    expect(drafts[0]?.topic).toBe("waraps/unit/surface/simulation/os_sim");
     expect(drafts[0]?.asvSoftware).toBe("replay");
     expect(drafts[0]?.controlLayer).toBe("ardupilot");
     expect(drafts[0]?.context).toBe("simulation");
     expect(drafts[0]?.port).toBe(14570);
-    expect(drafts[1]?.agentName).toBe("TS_1_SIM");
+    expect(drafts[1]?.agentName).toBe("ts1_sim");
     expect(drafts[1]?.asvSoftware).toBe("replay");
     expect(drafts[1]?.context).toBe("simulation");
     expect(drafts[1]?.port).toBe(14571);
-    expect(drafts[2]?.agentName).toBe("TS_2_SIM");
+    expect(drafts[2]?.agentName).toBe("ts2_sim");
     expect(drafts[2]?.asvSoftware).toBe("replay");
     expect(drafts[2]?.context).toBe("simulation");
     expect(drafts[2]?.port).toBe(14572);
@@ -49,8 +49,8 @@ describe("simulationInitConfig", () => {
       context: "simulation",
       asvSoftware: "replay",
       controlLayer: "ardupilot",
-      agentName: "OS_0_SIM",
-      topic: "waraps/unit/surface/simulation/OS_0_SIM",
+      agentName: "os_sim",
+      topic: "waraps/unit/surface/simulation/os_sim",
       port: 14572,
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
@@ -60,8 +60,8 @@ describe("simulationInitConfig", () => {
         asvSoftware: "replay",
         controlLayer: "ardupilot",
         controlMode: "autonomous",
-        agentName: "OS_0_SIM",
-        topic: "waraps/unit/surface/simulation/OS_0_SIM",
+        agentName: "os_sim",
+        topic: "waraps/unit/surface/simulation/os_sim",
         port: 14572,
       },
     });
@@ -73,8 +73,8 @@ describe("simulationInitConfig", () => {
       context: "real",
       asvSoftware: "mission_planner",
       controlLayer: "ardupilot",
-      agentName: "OS_0_REAL",
-      topic: "waraps/unit/surface/real/OS_0_REAL",
+      agentName: "os_real",
+      topic: "waraps/unit/surface/real/os_real",
       port: 14572,
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
@@ -84,8 +84,8 @@ describe("simulationInitConfig", () => {
         asvSoftware: "mission_planner",
         controlLayer: "real_vessel",
         controlMode: "external",
-        agentName: "OS_0_REAL",
-        topic: "waraps/unit/surface/real/OS_0_REAL",
+        agentName: "os_real",
+        topic: "waraps/unit/surface/real/os_real",
       },
     });
     expect("port" in map.os!).toBe(false);
@@ -97,8 +97,8 @@ describe("simulationInitConfig", () => {
       context: "simulation",
       asvSoftware: "replay",
       controlLayer: "ardupilot",
-      agentName: "OS_0_SIM",
-      topic: "waraps/unit/surface/simulation/OS_0_SIM",
+      agentName: "os_sim",
+      topic: "waraps/unit/surface/simulation/os_sim",
       port: 14570,
       gazeboVesselModel: "<sdf></sdf>",
     };
@@ -112,8 +112,8 @@ describe("simulationInitConfig", () => {
       context: "simulation",
       asvSoftware: "replay",
       controlLayer: "ardupilot",
-      agentName: "OS_0_SIM",
-      topic: "waraps/unit/surface/simulation/OS_0_SIM",
+      agentName: "os_sim",
+      topic: "waraps/unit/surface/simulation/os_sim",
       port: 14570,
       gazeboVesselModel: "",
     };
@@ -146,7 +146,7 @@ describe("simulationInitConfig", () => {
 
   it("upgrades settings saved with a control mode to the ASV software it names", () => {
     const generated = buildInitialVesselConnectionDrafts([{ id: "1", isOwnShip: false }]);
-    const legacy = [{ vesselId: "1", controlMode: "external", agentName: "TS_1_SIM" }] as unknown as PersistedVesselConnectionDraft[];
+    const legacy = [{ vesselId: "1", controlMode: "external", agentName: "ts1_sim" }] as unknown as PersistedVesselConnectionDraft[];
     const [restored] = mergePersistedVesselSettings(legacy, generated);
     expect(restored?.asvSoftware).toBe("mission_planner");
     expect(restored).not.toHaveProperty("controlMode");

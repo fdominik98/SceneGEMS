@@ -10,7 +10,7 @@ function evaluation(overrides: Partial<RuleEvaluation>): RuleEvaluation {
     kind: "rule",
     description: "",
     subjectActorId: "0",
-    subjectActorName: "OS_0",
+    subjectActorName: "os",
     result: "UNKNOWN",
     ...overrides,
   };
@@ -28,7 +28,7 @@ describe("sortEvaluations", () => {
   });
 
   it("orders one rule of two vessels by vessel, whatever order the frame lists them in", () => {
-    const target = evaluation({ subjectActorId: "1", subjectActorName: "TS_1" });
+    const target = evaluation({ subjectActorId: "1", subjectActorName: "ts1" });
     const own = evaluation({});
     expect(sortEvaluations([target, own])).toEqual([own, target]);
     expect(sortEvaluations([own, target])).toEqual([own, target]);

@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { defaultReferenceGeofence, type ReferenceGeofence } from "../features/workbench/connection/referenceGeofence";
 
 export interface OverlayVisibility {
   dot: boolean;
@@ -14,9 +13,6 @@ export interface OverlayVisibility {
   /** Planner maneuvering corridor (give-way A-B-C-D). */
   maneuveringDomain: boolean;
 }
-
-/** Bottom control panel tab (preview animation playback or simulation playback). */
-export type ControlPanelMode = "animation" | "simulation";
 
 /** Which trajectory stream the right-hand monitor columns refer to (preview vs simulation). */
 export type TrajectoryStream = "animation" | "simulation";
@@ -103,8 +99,6 @@ interface UiState {
   /** Workbench view; selecting one also shows the workbench section. */
   workbenchView: WorkbenchView;
   setWorkbenchView: (view: WorkbenchView) => void;
-  controlPanelMode: ControlPanelMode;
-  setControlPanelMode: (mode: ControlPanelMode) => void;
   /** Whether the entire right-hand monitoring panel is shown (vs fully hidden, occupying no space). */
   rightPaneVisible: boolean;
   setRightPaneVisible: (value: boolean) => void;
@@ -150,9 +144,6 @@ interface UiState {
   /** When true, every incoming generated scene is shown; when false, only final valid (single) or user-selected (batch) scenes. */
   sceneGenerationLivePreview: boolean;
   setSceneGenerationLivePreview: (value: boolean) => void;
-  /** Shared geofence center and radius selected on the Connections page. */
-  referenceGeofence: ReferenceGeofence;
-  setReferenceGeofence: (geofence: ReferenceGeofence) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -162,8 +153,6 @@ export const useUiStore = create<UiState>()(
   setSection: (section) => set({ section }),
   workbenchView: readLegacyWorkbenchView() ?? "simulation",
   setWorkbenchView: (workbenchView) => set({ workbenchView }),
-  controlPanelMode: "animation",
-  setControlPanelMode: (mode) => set({ controlPanelMode: mode }),
   rightPaneVisible: true,
   setRightPaneVisible: (value) => set({ rightPaneVisible: value }),
   rightTrajectoryPreviewVisible: true,
@@ -207,13 +196,11 @@ export const useUiStore = create<UiState>()(
   setSceneGenerationPaneView: (view) => set({ sceneGenerationPaneView: view }),
   sceneGenerationLivePreview: true,
   setSceneGenerationLivePreview: (value) => set({ sceneGenerationLivePreview: value }),
-  referenceGeofence: defaultReferenceGeofence,
-  setReferenceGeofence: (referenceGeofence) => set({ referenceGeofence }),
     }),
     {
       name: "scenegems:ui",
       version: 7,
-      // v2: the monitor tab moved to the Connections page.
+      // v2: the monitor tab moved to the Connections page (the control panel mode it touched is gone).
       // v3: persist monitor section collapse and preview/simulation column visibility.
       // v4: sections; the workbench view moved here from its own "active-view" key.
       // v5: the Connections view's id is "connections" (was "waraps").
@@ -221,13 +208,9 @@ export const useUiStore = create<UiState>()(
       // v7: the domain configuration is the cluster's section "domain", no longer the workbench view "domainConfig".
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as {
-          controlPanelMode?: string;
           section?: AppSection | typeof LEGACY_OBSERVE_SECTION;
           workbenchView?: WorkbenchView | typeof LEGACY_CONNECTIONS_VIEW | typeof LEGACY_DOMAIN_CONFIG_VIEW;
         };
-        if (version < 2 && state.controlPanelMode === "monitor") {
-          state.controlPanelMode = "animation";
-        }
         if (version < 4) {
           state.section = "workbench";
           state.workbenchView = readLegacyWorkbenchView() ?? "simulation";
@@ -249,7 +232,6 @@ export const useUiStore = create<UiState>()(
       partialize: (state) => ({
         section: state.section,
         workbenchView: state.workbenchView,
-        controlPanelMode: state.controlPanelMode,
         sceneViewMode: state.sceneViewMode,
         sceneGenerationTab: state.sceneGenerationTab,
         sceneGenerationPaneView: state.sceneGenerationPaneView,

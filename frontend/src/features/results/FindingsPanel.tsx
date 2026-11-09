@@ -110,18 +110,15 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
   const view = describeFindings(findings);
   const judged = view.verdicts?.judged ?? 0;
   return (
-    <section className="results-panel" aria-label="Findings of the step">
+    <section className="results-panel" aria-label="Findings of the step" aria-busy={loading}>
       <header className="results-panel-head">
         <h3>Findings</h3>
         <span className={`results-chip results-chip--${view.monitored ? "passed" : "undecided"}`}>{view.monitored ? "monitored" : "partial findings"}</span>
         <span className="meta">
           {view.totalCases} {view.totalCases === 1 ? "case" : "cases"} reached this step
         </span>
-        {loading && (
-          <span className="meta" role="status">
-            updating
-          </span>
-        )}
+        {/* Not a live region: a poll every few seconds would be announced each time */}
+        {loading && <span className="meta">updating</span>}
       </header>
       {view.partial ? (
         <p className="results-notice results-notice--warn" role="note">

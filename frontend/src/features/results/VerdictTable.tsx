@@ -1,7 +1,7 @@
 import type { Verdict } from "../../domain/cluster/schemas";
 import { clampPage, describeRange, pageCount, PAGE_SIZES, splitFailedRule, type VerdictPaging, type VerdictSort } from "../../domain/cluster/resultsApi";
 import { StateChip } from "./CaseParts";
-import { formatSeconds, shortClassId } from "./resultsFormat";
+import { caseNumber, formatSeconds, shortClassId } from "./resultsFormat";
 
 interface VerdictTableProps {
   verdicts: Verdict[];
@@ -113,8 +113,8 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
                     {shortClassId(verdict.fec_id, 38)}
                   </button>
                 </td>
-                <td className="mono">{verdict.case_index ?? `id ${verdict.case_id}`}</td>
-                <td className="mono">{verdict.run_index}</td>
+                <td className="mono">{verdict.case_index !== undefined ? caseNumber(verdict.case_index) : `id ${verdict.case_id}`}</td>
+                <td className="mono">{verdict.run_index + 1}</td>
                 <td>
                   <StateChip state={verdict.state} />
                 </td>
@@ -133,7 +133,8 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
       <footer className="results-pager">
         <span className="meta" role="status">
           {total === null ? `${verdicts.length} shown (the master sent no total)` : describeRange(total, paging, verdicts.length)}
-          {loading ? ", updating" : ""}
+          {/* Not announced: every poll would; the table carries aria-busy instead */}
+          {loading ? <span aria-hidden="true">, updating</span> : ""}
         </span>
         <span className="results-spacer" />
         <label className="results-inline-field">

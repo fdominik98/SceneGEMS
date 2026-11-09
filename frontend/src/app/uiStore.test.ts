@@ -30,10 +30,9 @@ describe("uiStore sections", () => {
 
   it("moves the workbench view out of its old key when migrating to v4", () => {
     storage.setItem(ui.LEGACY_ACTIVE_VIEW_KEY, JSON.stringify("sceneGeneration"));
-    const state = migrate({ controlPanelMode: "simulation", sceneViewMode: "nautical" }, 3);
+    const state = migrate({ sceneViewMode: "nautical" }, 3);
     expect(state.section).toBe("workbench");
     expect(state.workbenchView).toBe("sceneGeneration");
-    expect(state.controlPanelMode).toBe("simulation");
     expect(state.sceneViewMode).toBe("nautical");
   });
 
@@ -45,10 +44,8 @@ describe("uiStore sections", () => {
     expect(ui.readLegacyWorkbenchView()).toBeNull();
   });
 
-  it("still applies the v2 migration of the monitor control panel mode", () => {
-    const state = migrate({ controlPanelMode: "monitor" }, 1);
-    expect(state.controlPanelMode).toBe("animation");
-    expect(state.section).toBe("workbench");
+  it("moves a v1 state to the workbench section", () => {
+    expect(migrate({}, 1).section).toBe("workbench");
   });
 
   it("keeps a v4 state as it is", () => {

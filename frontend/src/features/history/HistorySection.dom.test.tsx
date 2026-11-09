@@ -9,6 +9,7 @@ import { sampleCampaignRow, sampleHistoryRows, sampleMonitorVerdict, sampleRunni
 import { MockWebSocket } from "../../test/mockWebSocket";
 import { useWorkbenchTargetStore } from "../workbench/pages/workbenchTarget";
 import { HistorySection } from "./HistorySection";
+import { INITIAL_LIST_VIEW } from "./campaignModel";
 import { useHistoryStore } from "./historyStore";
 
 // Campaign History against a fake operator API (fetch) and a fake live channel socket.
@@ -92,7 +93,7 @@ beforeEach(() => {
   MockWebSocket.reset();
   resetLiveChannels({ createSocket: MockWebSocket.factory });
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
-  useHistoryStore.setState({ clusterId: null, entryId: null, step: null });
+  useHistoryStore.setState({ clusterId: null, entryId: null, step: null, listView: INITIAL_LIST_VIEW });
   useWorkbenchTargetStore.setState({ pending: {} });
   useUiStore.getState().setSection("history");
 });
@@ -129,6 +130,20 @@ describe("Campaign History in the DOM", () => {
     await waitFor(() => expect(calls.filter((call) => call.path === "/cluster/campaigns").length).toBeGreaterThan(listReads));
   });
 
+  it("reads the page again when the campaigns topic starts over from a new snapshot", async () => {
+    renderSection();
+    await screen.findByRole("button", { name: "head-on sweep" });
+    const socket = await goLive();
+    const listReads = () => calls.filter((call) => call.path === "/cluster/campaigns").length;
+    act(() => socket.receive({ type: "update", topic: "campaigns", seq: 1, data: { campaign: sampleRunningWorkbenchRow({ actual_state: "stalled" }) } }));
+    await waitFor(() => expect(screen.getAllByText("Stalled").length).toBeGreaterThan(0));
+    const before = listReads();
+    // A gap in seq: the channel subscribes again and the snapshot drops the pushed rows
+    act(() => socket.receive({ type: "update", topic: "campaigns", seq: 5, data: { campaign: sampleRunningWorkbenchRow({ actual_state: "paused" }) } }));
+    act(() => socket.receive({ type: "subscribed", topic: "campaigns", snapshot: {} }));
+    await waitFor(() => expect(listReads()).toBeGreaterThan(before));
+  });
+
   it("filters by kind through the route and by step on the page", async () => {
     const user = userEvent.setup();
     renderSection();
@@ -139,6 +154,19 @@ describe("Campaign History in the DOM", () => {
     await user.selectOptions(screen.getByLabelText("Step"), "scene_generation");
     await waitFor(() => expect(screen.queryByRole("button", { name: "Simulation" })).not.toBeInTheDocument());
     expect(screen.getByRole("button", { name: "head-on sweep" })).toBeInTheDocument();
+  });
+
+  it("comes back from an entry to the list with its filters", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByRole("button", { name: "head-on sweep" });
+    await user.click(screen.getByRole("button", { name: "Workbench runs" }));
+    await user.type(screen.getByRole("searchbox", { name: /name/i }), "traj");
+    await waitFor(() => expect(useHistoryStore.getState().listView).toMatchObject({ kind: "workbench", q: "traj" }));
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    await user.click(await screen.findByRole("button", { name: "Back to the history" }));
+    expect(await screen.findByRole("searchbox", { name: /name/i })).toHaveValue("traj");
+    expect(screen.getByRole("button", { name: "Workbench runs" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("opens an entry with a tab per executed step and opens an output on its workbench page", async () => {
@@ -174,25 +202,25 @@ describe("Campaign History in the DOM", () => {
     expect(within(output).getByText("failed")).toBeInTheDocument();
     expect(within(output).getByText("2 rules failed, first at 1 min 1 s")).toBeInTheDocument();
 
-    const crossing = within(output).getByText("OS_0 - TS_1").parentElement as HTMLElement;
+    const crossing = within(output).getByText("os - ts1").parentElement as HTMLElement;
     expect(within(crossing).getByText("Crossing from Port")).toBeInTheDocument();
-    expect(within(crossing).getByText("TS_1 give-way")).toHaveAttribute("title", "TS_1 is the give-way vessel");
-    expect(within(crossing).getByText("OS_0 stand-on")).toBeInTheDocument();
-    expect(within(crossing).getByText("Rule 16: Give-Way Vessel Takes Early and Substantial Action (TS_1)")).toBeInTheDocument();
+    expect(within(crossing).getByText("ts1 give-way")).toHaveAttribute("title", "ts1 is the give-way vessel");
+    expect(within(crossing).getByText("os stand-on")).toBeInTheDocument();
+    expect(within(crossing).getByText("Rule 16: Give-Way Vessel Takes Early and Substantial Action (ts1)")).toBeInTheDocument();
 
-    const headOn = within(output).getByText("OS_0 - TS_2").parentElement as HTMLElement;
+    const headOn = within(output).getByText("os - ts2").parentElement as HTMLElement;
     expect(within(headOn).getByText("Head-On")).toBeInTheDocument();
-    expect(within(headOn).getByText("OS_0 give-way")).toBeInTheDocument();
-    expect(within(headOn).getByText("TS_2 give-way")).toBeInTheDocument();
+    expect(within(headOn).getByText("os give-way")).toBeInTheDocument();
+    expect(within(headOn).getByText("ts2 give-way")).toBeInTheDocument();
 
-    expect(within(output).getByText("Rule 8: Readily Apparent Course Change (OS_0)")).toBeInTheDocument();
+    expect(within(output).getByText("Rule 8: Readily Apparent Course Change (os)")).toBeInTheDocument();
     expect(within(output).getByText("1 pair without an encounter")).toBeInTheDocument();
-    expect(within(output).queryByText("OS_0 - TS_10")).not.toBeInTheDocument();
+    expect(within(output).queryByText("os - ts10")).not.toBeInTheDocument();
   });
 
   it("cuts a long list of failed rules short, and says when the roles were not recorded", async () => {
     const user = userEvent.setup();
-    const rules = ["a", "b", "c", "d", "e"].map((name) => `OS_0 - TS_1: Rule ${name}`);
+    const rules = ["a", "b", "c", "d", "e"].map((name) => `os - ts1: Rule ${name}`);
     outputs = [sampleTrajectoryOutput({ verdict: sampleMonitorVerdict({ failed_rules: rules, encounter_roles: null }) })];
     renderSection();
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));

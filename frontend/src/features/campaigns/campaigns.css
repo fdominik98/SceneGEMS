@@ -168,9 +168,19 @@
   color: var(--text-faint);
 }
 
+/*
+ * A table wider than its frame scrolls inside it. The overlay scrollbar shows only while the pointer is over it,
+ * so a shadow at a cut edge says there is more: the panel-colored covers scroll with the content and hide the
+ * shadow once that end is reached.
+ */
 .camp-table-wrap {
   overflow-x: auto;
-  background: var(--bg-panel);
+  background:
+    linear-gradient(to right, var(--bg-panel) 40%, rgb(var(--panel-rgb) / 0)) left center / var(--space-6) 100% no-repeat local,
+    linear-gradient(to left, var(--bg-panel) 40%, rgb(var(--panel-rgb) / 0)) right center / var(--space-6) 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgb(var(--shadow-rgb) / 0.3), rgb(var(--shadow-rgb) / 0)) left center / var(--space-3) 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgb(var(--shadow-rgb) / 0.3), rgb(var(--shadow-rgb) / 0)) right center / var(--space-3) 100% no-repeat scroll,
+    var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
 }

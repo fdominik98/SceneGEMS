@@ -89,7 +89,7 @@ function buildFrame(timestamp: number): SimulationFrame {
             description:
               "A vessel directed to keep out of the way should take early and substantial action to keep well clear.",
             subjectActorId: "own_ship",
-            subjectActorName: "OS_0",
+            subjectActorName: "os",
             result: timestamp > 150 ? "FAILED" : "PASSED",
           },
           {

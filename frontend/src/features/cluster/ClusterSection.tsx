@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
 import "./cluster.css";
 import { Disclosure } from "../../components/Disclosure";
 import { EmptyState } from "../../components/EmptyState";
@@ -157,7 +158,10 @@ export function ClusterSection() {
   const cluster = useSelectedCluster();
   const operatorUrl = cluster?.operatorUrl ?? null;
   useNodesFeed(operatorUrl);
-  const nodesState = useNodesStore();
+  // What the page shows of the store, not its actions
+  const nodesState = useNodesStore(
+    useShallow((state) => ({ operatorUrl: state.operatorUrl, nodes: state.nodes, loaded: state.loaded, error: state.error, unreachable: state.unreachable, source: state.source }))
+  );
   const liveStatus = useLiveChannelStatus(operatorUrl);
   const statusQuery = useMasterStatus(operatorUrl);
   const now = useNow(5_000);

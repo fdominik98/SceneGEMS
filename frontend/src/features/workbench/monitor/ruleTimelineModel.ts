@@ -230,7 +230,22 @@ export function firstFailureAtOrBefore(track: RuleTrack | undefined, t: number):
 }
 
 /** Worst result over a pair's rules in each time slice (FAILED over UNKNOWN over PASSED). */
+// A pair's tracks never change once built, and the timeline redraws at every playback tick.
+const summaryCache = new WeakMap<PairTrack, TimelineSegment<RuleResult>[]>();
+
 export function pairSummarySegments(pair: PairTrack, includeSuggestions = false): TimelineSegment<RuleResult>[] {
+  if (includeSuggestions) {
+    return computePairSummary(pair, true);
+  }
+  let summary = summaryCache.get(pair);
+  if (summary === undefined) {
+    summary = computePairSummary(pair, false);
+    summaryCache.set(pair, summary);
+  }
+  return summary;
+}
+
+function computePairSummary(pair: PairTrack, includeSuggestions: boolean): TimelineSegment<RuleResult>[] {
   const rank: Record<RuleResult, number> = { FAILED: 0, UNKNOWN: 1, PASSED: 2 };
   const tracks = pair.rules.filter((rule) => includeSuggestions || rule.kind === "rule");
   const cuts = new Set<number>();

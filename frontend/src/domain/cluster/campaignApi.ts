@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { OperatorClient } from "./operatorApi";
+import { OperatorApiError, type OperatorClient } from "./operatorApi";
 import { campaignDetailSchema, campaignStepSchema, type CampaignKind, type CampaignOrigin, type CampaignStep } from "./schemas";
 
 /**
@@ -160,6 +160,9 @@ export type ValidationResult = z.infer<typeof validationResultSchema>;
 const CAMPAIGNS_PATH = "/cluster/campaigns";
 const CATALOG_PATH = "/cluster/catalog";
 
+/** How long a create may take: the master checks and expands the config and stores its cases first. */
+export const CREATE_TIMEOUT_MS = 60_000;
+
 /** The largest page the catalog route serves. */
 export const CATALOG_PAGE_LIMIT = 1000;
 
@@ -227,7 +230,19 @@ export async function createCampaign(client: OperatorClient, yamlText: string, o
   if (options.origin !== undefined) {
     body.origin = options.origin;
   }
-  return (await client.request("POST", CAMPAIGNS_PATH, campaignDetailSchema, { body })).data;
+  try {
+    return (await client.request("POST", CAMPAIGNS_PATH, campaignDetailSchema, { body, timeoutMs: CREATE_TIMEOUT_MS })).data;
+  } catch (error) {
+    // The master may have stored it before the answer was lost: creating it again would make a second one
+    if (error instanceof OperatorApiError && error.kind === "timeout") {
+      throw new OperatorApiError(
+        "timeout",
+        `${error.message}; the master may have created it anyway, so check Campaign History before you create it again`,
+        error.path
+      );
+    }
+    throw error;
+  }
 }
 
 // Config format 2 (Phase 6, design doc 6.3). Format 1 still loads on the master, read as the full chain.

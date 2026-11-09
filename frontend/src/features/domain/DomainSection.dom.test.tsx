@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainSection } from "./DomainSection";
@@ -21,6 +21,10 @@ const PRESETS = {
 let domain: Record<string, unknown>;
 let posted: unknown[] = [];
 let saveStatus = 200;
+/** Holds the answer to a save until the test lets it go; null answers at once. */
+let saveGate: Promise<void> | null = null;
+/** Reading the configuration fails while set. */
+let readFails = false;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -34,6 +38,9 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (url.pathname === "/cluster/domain" && init?.method === "POST") {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     posted.push(body);
+    if (saveGate !== null) {
+      await saveGate;
+    }
     if (saveStatus !== 200) {
       return json({ detail: { message: "the domain configuration is not valid", reasons: ["vessel_types: expected a YAML mapping"] } }, saveStatus);
     }
@@ -41,24 +48,27 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
     return json(domain);
   }
   if (url.pathname === "/cluster/domain") {
-    return json(domain);
+    return readFails ? json({ detail: "the database is down" }, 503) : json(domain);
   }
   return json({ detail: "not found" }, 404);
 }
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <DomainSection />
     </QueryClientProvider>
   );
+  return { ...view, queryClient: client };
 }
 
 beforeEach(() => {
   domain = { colregs_constants: GENERAL, vessel_types: PRESETS.vessel_types[0].content, obstacle_types: PRESETS.obstacle_types[0].content, saved: false, updated_at: null, editable: true };
   posted = [];
   saveStatus = 200;
+  saveGate = null;
+  readFails = false;
   useDomainDraftStore.setState({ drafts: {} });
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
 });
@@ -102,6 +112,35 @@ describe("the Domain Configuration section", () => {
     expect(screen.getByText(/You have unsaved changes/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     expect(screen.queryByText(/You have unsaved changes/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the edits made while a save was on its way as a draft", async () => {
+    let release = () => undefined as void;
+    saveGate = new Promise<void>((resolve) => (release = resolve));
+    const user = userEvent.setup();
+    renderSection();
+    const select = await screen.findByRole("combobox", { name: /Load a preset of the COLREGS constants/ });
+    await waitFor(() => expect(select).not.toBeDisabled());
+    await user.selectOptions(select, "wara_ps_constants");
+    await user.click(screen.getByRole("button", { name: "Save to the cluster" }));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    // typed while the save is pending
+    const [clusterUrl, sent] = Object.entries(useDomainDraftStore.getState().drafts)[0];
+    act(() => useDomainDraftStore.getState().setTexts(clusterUrl, { ...sent, vessel_types: "Tug: {}\n" }));
+    release();
+    expect(await screen.findByText(/Saved on the master/)).toBeVisible();
+    expect(useDomainDraftStore.getState().drafts[clusterUrl]?.vessel_types).toBe("Tug: {}\n");
+    expect(screen.getByText(/You have unsaved changes/)).toBeVisible();
+  });
+
+  it("keeps the configuration shown when reading it again fails, and says it may be out of date", async () => {
+    const { queryClient } = renderSection();
+    await screen.findByRole("combobox", { name: /Load a preset of the COLREGS constants/ });
+    readFails = true;
+    await act(() => queryClient.refetchQueries({ queryKey: ["cluster-settings"] }));
+    expect(await screen.findByText(/may be out of date/)).toHaveTextContent("the database is down");
+    expect(screen.getByRole("combobox", { name: /Load a preset of the COLREGS constants/ })).toBeVisible();
+    expect(screen.queryByText("The domain configuration could not be read")).not.toBeInTheDocument();
   });
 
   it("gives each text a tab of its own", async () => {

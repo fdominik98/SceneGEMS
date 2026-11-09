@@ -31,7 +31,7 @@ export function showLoadedScene(target: WorkbenchTarget, loaded: LoadedScene): v
     evaluationData: loaded.evaluationData,
     valid: loaded.valid,
   });
-  PAGE_STORES.sceneGeneration.getState().setLoaded(target, loaded.valid ? loaded.output : null);
+  PAGE_STORES.sceneGeneration.getState().setLoaded({ ...target, caseIndex: loaded.caseIndex }, loaded.valid ? loaded.output : null);
 }
 
 export function showLoadedTrajectories(target: WorkbenchTarget, loaded: LoadedTrajectories): void {
@@ -44,7 +44,7 @@ export function showLoadedTrajectories(target: WorkbenchTarget, loaded: LoadedTr
     scenarioJson: loaded.valid ? JSON.stringify(loaded.trajectoryData) : null,
     errorMessage: null,
   });
-  PAGE_STORES.trajectoryGeneration.getState().setLoaded(target, loaded.valid ? loaded.output : null);
+  PAGE_STORES.trajectoryGeneration.getState().setLoaded({ ...target, caseIndex: loaded.caseIndex }, loaded.valid ? loaded.output : null);
 }
 
 /** Drops what a page shows of its loaded entry; its input stays. */
@@ -53,10 +53,17 @@ export function clearPageOutput(page: WorkbenchPage): void {
     case "sceneGeneration":
       useScenePlaybackStore.getState().clearVisualizedScenario();
       return;
-    case "trajectoryGeneration":
-      useTrajectoryPlaybackStore.getState().clearPreviewFrames();
-      useTrajectoryGenerationStore.getState().reset();
+    case "trajectoryGeneration": {
+      const playback = useTrajectoryPlaybackStore.getState();
+      const generation = useTrajectoryGenerationStore.getState();
+      playback.clearPreviewFrames();
+      generation.reset();
+      // The input scene stays the page's picture until trajectories are planned from it.
+      if (generation.handoffScene) {
+        playback.setTrajectoryPreviewFrames([generation.handoffScene.scene]);
+      }
       return;
+    }
     case "simulation":
       usePlaybackStore.getState().clearSimulationTrajectories();
   }

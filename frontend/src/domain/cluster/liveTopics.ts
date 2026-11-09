@@ -157,13 +157,18 @@ export interface CampaignsTopicState {
   deleted: string[];
   /** The latest update, so a consumer can tell whether its page must be read again. */
   last: CampaignsUpdate | null;
+  /**
+   * A token of the snapshot the rows follow. A new one (a reconnect, or a resubscribe after a gap
+   * in seq) drops the pushed rows, and what changed meanwhile is only in a fresh read of the page.
+   */
+  epoch: object;
 }
 
 const CAMPAIGNS_KEPT = 500;
 
 /** The `campaigns` topic: the snapshot carries nothing (the list is read from the route), updates are rows and deletions. */
 export const campaignsReducer: LiveTopicReducer<CampaignsTopicState> = {
-  snapshot: () => ({ rows: {}, deleted: [], last: null }),
+  snapshot: () => ({ rows: {}, deleted: [], last: null, epoch: {} }),
   update: (state, data) => {
     const update = campaignsUpdateSchema.parse(data);
     if ("campaign" in update) {
@@ -171,11 +176,11 @@ export const campaignsReducer: LiveTopicReducer<CampaignsTopicState> = {
       const { [id]: _previous, ...others } = state.rows;
       void _previous;
       const kept = Object.entries(others).slice(-(CAMPAIGNS_KEPT - 1));
-      return { rows: { ...Object.fromEntries(kept), [id]: update.campaign }, deleted: state.deleted.filter((entry) => entry !== id), last: update };
+      return { rows: { ...Object.fromEntries(kept), [id]: update.campaign }, deleted: state.deleted.filter((entry) => entry !== id), last: update, epoch: state.epoch };
     }
     const { [update.deleted]: _removed, ...rows } = state.rows;
     void _removed;
-    return { rows, deleted: [...state.deleted.filter((entry) => entry !== update.deleted), update.deleted].slice(-CAMPAIGNS_KEPT), last: update };
+    return { rows, deleted: [...state.deleted.filter((entry) => entry !== update.deleted), update.deleted].slice(-CAMPAIGNS_KEPT), last: update, epoch: state.epoch };
   },
 };
 
@@ -205,6 +210,8 @@ export interface JobTopicState {
   /** The latest status: from the snapshot's progress, then from status updates. */
   status: LiveJobStatus | null;
   logs: LogLine[];
+  /** The number of `logs[0]` since the snapshot: line i is number `firstLog + i`, a key that stays while older lines drop off. */
+  firstLog: number;
 }
 
 export const JOB_LOG_LINES_KEPT = 1000;
@@ -213,7 +220,8 @@ export const jobReducer: LiveTopicReducer<JobTopicState> = {
   snapshot: (raw) => {
     const { logs, ...job } = jobSnapshotSchema.parse(raw);
     const status = job.progress ? { progress: job.progress.progress, message: job.progress.message, at: job.progress.at } : null;
-    return { job, status, logs: logs.slice(-JOB_LOG_LINES_KEPT) };
+    const kept = logs.slice(-JOB_LOG_LINES_KEPT);
+    return { job, status, logs: kept, firstLog: logs.length - kept.length };
   },
   update: (state, data) => {
     const update = jobUpdateSchema.parse(data);
@@ -221,7 +229,9 @@ export const jobReducer: LiveTopicReducer<JobTopicState> = {
       return { ...state, status: update.status };
     }
     if ("logs" in update) {
-      return { ...state, logs: [...state.logs, ...update.logs].slice(-JOB_LOG_LINES_KEPT) };
+      const all = [...state.logs, ...update.logs];
+      const kept = all.slice(-JOB_LOG_LINES_KEPT);
+      return { ...state, logs: kept, firstLog: state.firstLog + all.length - kept.length };
     }
     return { ...state, job: update.job };
   },

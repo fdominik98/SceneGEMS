@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { LoadingSpinner } from "../components/LoadingSpinner";
+import { saveBlob } from "../components/saveBlob";
 import { usePlaybackTicker } from "../domain/playback/usePlaybackTicker";
 import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../domain/playback/playbackStore";
 import { PlaybackStoreContext } from "../domain/playback/playbackContext";
+import { useNodesStore } from "../domain/cluster/nodesStore";
 import { getClassContent } from "../domain/cluster/presetsApi";
 import { useOperatorClient } from "../features/campaigns/useCampaignData";
 import { useClusterDomain } from "../features/domain/useClusterDomain";
@@ -86,7 +88,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
   const sceneGenerationPaneView = useUiStore((s) => s.sceneGenerationPaneView);
   const setSceneGenerationPaneView = useUiStore((s) => s.setSceneGenerationPaneView);
-  const setControlPanelMode = useUiStore((s) => s.setControlPanelMode);
   const isSceneGenerationBusy =
     activeSceneGenerationRequestId !== null || batchGenerationRunning;
   const latestGeneratedScene = useScenePlaybackStore((s) => s.latestGeneratedScene);
@@ -144,18 +145,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   );
 
   useEffect(() => {
-    let wasInitialized = usePlaybackStore.getState().simulationInitialized;
-    const unsubscribe = usePlaybackStore.subscribe((state) => {
-      if (!wasInitialized && state.simulationInitialized) {
-        setControlPanelMode("animation");
-        setActiveView("simulation");
-      }
-      wasInitialized = state.simulationInitialized;
-    });
-    return unsubscribe;
-  }, [setActiveView, setControlPanelMode]);
-
-  useEffect(() => {
     if (
       (activeView === "simulation" || activeView === "sceneGeneration") &&
       previousViewRef.current !== activeView
@@ -207,6 +196,21 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   useEffect(() => {
     colregsTextRef.current = colregsConstraintsText;
   }, [colregsConstraintsText]);
+
+  // After a reload the simulation page has its input's name but not its trajectories: they load
+  // again once the gateway is connected (the live session needs it) and the domain configuration
+  // and the machines are known (the cluster's monitor judges the preview). Once per page load.
+  const streamStatus = usePlaybackStore((s) => s.streamStatus);
+  const nodesKnown = useNodesStore((s) => s.loaded || s.unreachable);
+  const domainKnown = clusterDomain.data !== undefined || clusterDomain.isError;
+  const inputRestoreTriedRef = useRef(false);
+  useEffect(() => {
+    if (inputRestoreTriedRef.current || streamStatus !== "connected" || !nodesKnown || !domainKnown) {
+      return;
+    }
+    inputRestoreTriedRef.current = true;
+    void streamControlsRef.current.restoreSimulationInput(colregsTextRef.current);
+  }, [domainKnown, nodesKnown, streamStatus]);
 
   // Only the latest load into the editor counts; while it runs the scenario list shows the pick and generating
   // waits, so a generation never pairs the old text with the new name (useEditorLoads.ts).
@@ -487,13 +491,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   );
 
   const exportTextFile = useCallback((content: string, fileName: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = fileName;
-    anchor.click();
-    URL.revokeObjectURL(url);
+    saveBlob(new Blob([content], { type: mimeType }), fileName);
   }, []);
 
   // The canvas, the playback bar and the monitor panels read the shown page's frames.
@@ -604,7 +602,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             >
               <div className="simulation-center-stage">
                 <div className="scene-host">
-                  <SceneCanvas />
+                  <SceneCanvas emptyMessage="Take an input scene below to see it here." />
                 </div>
                 <WorkbenchEncounterStrip />
               </div>
@@ -622,7 +620,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                     colregsConstraintsContent={colregsConstraintsText}
                     onNavigateToSimulation={() => {
                       requestAutoFit();
-                      setControlPanelMode("animation");
                       setActiveView("simulation");
                     }}
                   />
@@ -637,7 +634,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             >
               <div className="simulation-center-stage">
                 <div className="scene-host">
-                  <SceneCanvas />
+                  <SceneCanvas emptyMessage="Take input trajectories below to see the encounter." />
                 </div>
                 <WorkbenchEncounterStrip />
               </div>
@@ -667,7 +664,8 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
               aria-label="Resize right panel"
             />
             {activeView === "simulation" || activeView === "trajectoryGeneration" ? (
-              <TrajectoryMonitorSidebar previewOnly={activeView === "trajectoryGeneration"} />
+              // One panel per page: its stream choice starts from that page's frames.
+              <TrajectoryMonitorSidebar key={activeView} previewOnly={activeView === "trajectoryGeneration"} />
             ) : sceneGenerationPaneView === "monitor" ? (
               <SceneMonitorPreview />
             ) : (

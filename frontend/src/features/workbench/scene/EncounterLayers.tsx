@@ -12,7 +12,9 @@ import {
   type Point,
   type ViewTransform,
 } from "./encounterGeometry";
+import { useTheme } from "../../../app/theme";
 import { CANVAS_COLORS } from "./encounterPalette";
+import { ownShipColor } from "./shipColors";
 import { actorTracksFor, cpaMarks, splitTrack, type ActorTrack } from "./encounterScene";
 import {
   BearingScale,
@@ -78,6 +80,7 @@ export function EncounterLayers({
   northArrow = true,
   bottomInset = 0,
 }: EncounterLayersProps) {
+  const theme = useTheme();
   const primary = primaryStream(streams);
   const frame = primary?.frame ?? null;
   const own = ownShipOf(frame);
@@ -155,7 +158,7 @@ export function EncounterLayers({
           radius={minSide * 0.46}
           view={view}
           ownCourse={courseDeg(own.state.heading)}
-          ownColor={primary?.colorByActorId[own.actor.id] ?? "#06b6d4"}
+          ownColor={primary?.colorByActorId[own.actor.id] ?? ownShipColor(theme)}
           targets={bearingTargets}
         />
       ) : null}

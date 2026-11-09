@@ -4,6 +4,7 @@ import type {
   StackOptionsPayload,
   StackOptionWire,
 } from "../../../domain/simulation/wireTypes";
+import { createActorNamer } from "../../../domain/simulation/actorNaming";
 
 export type SimulationContext = "simulation" | "real";
 export type ControlMode = "autonomous" | "external";
@@ -103,16 +104,17 @@ export function toTopicSegment(context: SimulationContext): "simulation" | "real
   return context;
 }
 
-function toContextSuffix(context: SimulationContext): "SIM" | "REAL" {
-  return context === "simulation" ? "SIM" : "REAL";
+function toContextSuffix(context: SimulationContext): "sim" | "real" {
+  return context === "simulation" ? "sim" : "real";
 }
 
 export function buildInitialVesselConnectionDrafts(
   vessels: VesselDescriptor[]
 ): VesselInitConnectionDraft[] {
-  let targetShipCounter = 1;
+  const nameOf = createActorNamer();
   return vessels.map((vessel, index) => {
-    const vesselPrefix = vessel.isOwnShip ? "OS_0" : `TS_${targetShipCounter++}`;
+    // The vessel's name (os, ts1) and where it runs: os_sim, ts1_sim.
+    const vesselPrefix = nameOf(vessel.id, { isOwnShip: vessel.isOwnShip, isVessel: true });
     const context: SimulationContext = "simulation";
     const agentName = `${vesselPrefix}_${toContextSuffix(context)}`;
     const parsedId = Number.parseInt(vessel.id, 10);

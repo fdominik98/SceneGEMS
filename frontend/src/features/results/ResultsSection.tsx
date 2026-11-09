@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import "./results.css";
 import { useUiStore } from "../../app/uiStore";
 import { EmptyState } from "../../components/EmptyState";
 import { SectionFrame } from "../../components/SectionFrame";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
 import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
-import { useResultsStore } from "../../domain/cluster/resultsStore";
+import { isShownCluster, selectShownEntry, useResultsStore } from "../../domain/cluster/resultsStore";
 import type { CampaignSummary } from "../../domain/cluster/schemas";
 import { CasePage } from "./CasePage";
 import { EntryHeader } from "./EntryHeader";
@@ -36,25 +36,35 @@ export function ResultsSection() {
   const cluster = useSelectedCluster();
   const operatorUrl = cluster?.operatorUrl ?? null;
   const clusterId = cluster?.id ?? null;
-  const campaignId = useResultsStore((state) => state.campaignId);
-  const chosenStep = useResultsStore((state) => state.step);
-  const caseId = useResultsStore((state) => state.caseId);
+  // An entry opened on another cluster (switched while this section was hidden) counts as none
+  const campaignId = useResultsStore((state) => selectShownEntry(state, clusterId));
+  const chosenStep = useResultsStore((state) => (isShownCluster(state, clusterId) ? state.step : null));
+  const caseId = useResultsStore((state) => (isShownCluster(state, clusterId) ? state.caseId : null));
   const [kind, setKind] = useState<KindFilter>("any");
   const [name, setName] = useState("");
   const nameFilter = useDebounced(name.trim(), NAME_DEBOUNCE_MS);
   const history = useHistoryList(operatorUrl, { kind: kind === "any" ? undefined : kind, q: nameFilter === "" ? undefined : nameFilter });
 
-  // Another cluster has other entries: forget the one that was open (not on the first render).
-  const shownCluster = useRef(clusterId);
+  // Another cluster has other entries: forget the one that was open, with its filters and page.
   useEffect(() => {
-    if (shownCluster.current !== clusterId) {
-      shownCluster.current = clusterId;
-      useResultsStore.getState().reset();
+    const state = useResultsStore.getState();
+    if (!isShownCluster(state, clusterId)) {
+      state.reset();
     }
   }, [clusterId]);
 
   const list = history.data?.items ?? [];
-  const effectiveId = campaignId ?? list[0]?.campaign_id ?? null;
+  // Without a pick the newest entry is shown, pinned while it stays in the list: a run that starts while the page is read does not replace it.
+  const listKey = `${operatorUrl}|${kind}|${nameFilter}`;
+  const newestId = list[0]?.campaign_id ?? null;
+  const [pinned, setPinned] = useState<{ key: string; id: string } | null>(null);
+  const pinValid = pinned !== null && pinned.key === listKey && list.some((entry) => entry.campaign_id === pinned.id);
+  if (campaignId !== null && pinned !== null) {
+    setPinned(null); // a pick replaces the pin, so going back to no pick shows the newest entry again
+  } else if (campaignId === null && newestId !== null && !pinValid && !history.isPlaceholderData) {
+    setPinned({ key: listKey, id: newestId });
+  }
+  const effectiveId = campaignId ?? (pinValid ? pinned.id : newestId);
   const detail = useCampaignDetail(operatorUrl, effectiveId);
   // The shown entry need not be in the filtered list (opened from another section, or filtered away).
   const selected: CampaignSummary | null = list.find((entry) => entry.campaign_id === effectiveId) ?? detail.data ?? null;

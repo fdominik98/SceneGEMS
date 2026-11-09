@@ -18,8 +18,8 @@ describe("buildPairModels on the recorded two-vessel crossing", () => {
   it("describes the crossing at 100 s from the monitor's data", () => {
     const [pair] = buildPairModels(frameAt(frames, 100), timeline);
     expect(pair!.relationId).toBe("0->1");
-    expect(pair!.a.name).toBe("OS_0");
-    expect(pair!.b.name).toBe("TS_1");
+    expect(pair!.a.name).toBe("os");
+    expect(pair!.b.name).toBe("ts1");
     expect(pair!.encounterLabel).toBe("Crossing from Port");
     expect(pair!.encounterActive).toBe(true);
     expect(pair!.a.role).toBe("give-way");
@@ -30,7 +30,7 @@ describe("buildPairModels on the recorded two-vessel crossing", () => {
     expect(pair!.since).toBe(0);
   });
 
-  it("computes bearings from the states: TS_1 on the starboard bow of OS_0", () => {
+  it("computes bearings from the states: ts1 on the starboard bow of os", () => {
     const [pair] = buildPairModels(frameAt(frames, 100), timeline);
     // Northbound: the course is 000 (the recorded heading is rounded to 1.571 rad).
     expect(Math.min(pair!.a.courseDeg!, 360 - pair!.a.courseDeg!)).toBeLessThan(0.1);
@@ -89,9 +89,9 @@ describe("buildPairModels on the recorded three-vessel run", () => {
   it("gives one card per pair, own ship pairs first", () => {
     const pairs = buildPairModels(frameAt(frames, 100), timeline);
     expect(pairs.map((p) => `${p.a.name}-${p.b.name} ${p.situationType}`)).toEqual([
-      "OS_0-TS_1 CROSSING_FROM_PORT",
-      "OS_0-TS_2 HEAD_ON",
-      "TS_1-TS_2 OTHER",
+      "os-ts1 CROSSING_FROM_PORT",
+      "os-ts2 HEAD_ON",
+      "ts1-ts2 OTHER",
     ]);
   });
 
@@ -100,8 +100,8 @@ describe("buildPairModels on the recorded three-vessel run", () => {
     expect([headOn.a.role, headOn.b.role]).toEqual(["give-way", "give-way"]);
     expect(headOn.a.sectorOfOther).toBe("ahead");
     expect(headOn.rules.filter((r) => r.result === "FAILED").map((r) => r.subjectActorName)).toEqual([
-      "OS_0",
-      "TS_2",
+      "os",
+      "ts2",
     ]);
   });
 
@@ -115,8 +115,8 @@ describe("buildPairModels on the recorded three-vessel run", () => {
   it("tags each vessel with its encounters for the canvas", () => {
     const tags = encounterTagsByVessel(frameAt(frames, 100));
     expect(tags["0"]!.map((t) => `${t.abbreviation} ${t.role} ${t.otherName}`).sort()).toEqual([
-      "CR give-way TS_1",
-      "HO give-way TS_2",
+      "CR give-way ts1",
+      "HO give-way ts2",
     ]);
     expect(tags["1"]!.map((t) => `${t.abbreviation} ${t.role}`)).toEqual(["CR stand-on"]);
   });

@@ -49,4 +49,22 @@ describe("useCampaignEvents", () => {
     await waitFor(() => expect(result.current).toHaveLength(250));
     expect(listEvents.mock.calls.map((call) => call[1].after)).toEqual([undefined, 200, 250].slice(0, listEvents.mock.calls.length));
   });
+
+  it("reads again when a new trigger aborts the read in flight", async () => {
+    listEvents.mockReset();
+    // The first read hangs until it is aborted (the snapshot arrives while it is in flight), the next one answers
+    listEvents.mockImplementationOnce(
+      (_id: string, _filters: unknown, signal: AbortSignal) =>
+        new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))))
+    );
+    listEvents.mockImplementation(async () => ({ items: [event(1), event(2)], total: 2 }));
+    const { result, rerender } = renderHook(({ last }: { last: number | null }) => useCampaignEvents("c1", last, [], false), {
+      wrapper,
+      initialProps: { last: null as number | null },
+    });
+    await waitFor(() => expect(listEvents).toHaveBeenCalledTimes(1));
+    rerender({ last: 2 });
+    await waitFor(() => expect(result.current.map((item) => item.event_id)).toEqual([1, 2]));
+    expect(listEvents).toHaveBeenCalledTimes(2);
+  });
 });

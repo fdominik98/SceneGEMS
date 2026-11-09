@@ -13,6 +13,8 @@ interface DomainDraftState {
   setText: (clusterUrl: string, base: DomainTexts, key: DomainKey, text: string) => void;
   setTexts: (clusterUrl: string, texts: DomainTexts) => void;
   discard: (clusterUrl: string) => void;
+  /** Discards the cluster's draft once `sent` is saved, unless it was edited since: those edits stay a draft. */
+  discardSaved: (clusterUrl: string, sent: DomainTexts) => void;
 }
 
 export const useDomainDraftStore = create<DomainDraftState>((set) => ({
@@ -22,6 +24,16 @@ export const useDomainDraftStore = create<DomainDraftState>((set) => ({
   setTexts: (clusterUrl, texts) => set((state) => ({ drafts: { ...state.drafts, [clusterUrl]: { ...texts } } })),
   discard: (clusterUrl) =>
     set((state) => {
+      const rest = { ...state.drafts };
+      delete rest[clusterUrl];
+      return { drafts: rest };
+    }),
+  discardSaved: (clusterUrl, sent) =>
+    set((state) => {
+      const draft = state.drafts[clusterUrl];
+      if (draft === undefined || !sameTexts(draft, sent)) {
+        return state;
+      }
       const rest = { ...state.drafts };
       delete rest[clusterUrl];
       return { drafts: rest };

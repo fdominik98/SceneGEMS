@@ -1,5 +1,4 @@
-import { useCallback, useEffect } from "react";
-import { useUiStore } from "../../../app/uiStore";
+import { useCallback } from "react";
 import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
 import { Disclosure } from "../../../components/Disclosure";
 import { PageHeader } from "../../../components/PageHeader";
@@ -49,11 +48,6 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
   const usesMaster = selectedPreset === MASTER_BROKER_PRESET;
   const masterStatus = useMasterStatus(useSelectedCluster()?.operatorUrl ?? null);
   const liveSessionsOff = liveSessionsOffNote(masterStatus.data?.live_sessions);
-
-  const setReferenceGeofence = useUiStore((s) => s.setReferenceGeofence);
-  useEffect(() => {
-    setReferenceGeofence(geofence);
-  }, [geofence, setReferenceGeofence]);
 
   const choosePreset = useCallback(
     (preset: MqttConnectionPresetKey | "") => {

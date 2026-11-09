@@ -1,5 +1,6 @@
 import { parseFrame } from "../simulation/protocol";
 import type { ActorStaticInfo, EvaluationData, SimulationFrame } from "../simulation/types";
+import { createActorNamer } from "../simulation/actorNaming";
 
 export interface ParsedScenarioFile {
   evaluationData: EvaluationData;
@@ -109,7 +110,7 @@ function bestSceneDataToFramePayload(bestScene: Record<string, unknown>): unknow
 
   const actors: Record<string, unknown>[] = [];
   const statesByActorId: Record<string, Record<string, unknown>> = {};
-  let targetNumber = 0;
+  const nameOf = createActorNamer();
 
   for (const entry of data) {
     if (!Array.isArray(entry) || entry.length < 2) {
@@ -122,7 +123,8 @@ function bestSceneDataToFramePayload(bestScene: Record<string, unknown>): unknow
     }
     const id = String(actorRaw.id ?? actors.length);
     const isOwnShip = actorRaw._is_os === true;
-    const displayName = isOwnShip ? "OS" : `TS${++targetNumber}`;
+    // The names the backend gives these actors in its frames (os, ts1, so1), so a vessel reads the same on every page.
+    const displayName = nameOf(id, { isOwnShip, isVessel: actorRaw.is_vessel !== false });
     actors.push(normalizeBackendActor(actorRaw, id, displayName));
     statesByActorId[id] = {
       x: Number(stateRaw.x ?? 0),

@@ -201,7 +201,7 @@ export interface VerdictSummary {
   sensitive: number;
 }
 
-/** A relation reads `OS_0 - TS_1` (the backend) or `0->1`; a rule such as "Rule 16" or "Rule 17 - Stand-On" is not one. */
+/** A relation reads `os - ts1` (the backend; `OS_0 - TS_1` in older verdicts) or `0->1`; a rule such as "Rule 16" or "Rule 17 - Stand-On" is not one. */
 const RELATION_TEXT = /^(?!Rule\b|Suggestion\b)[^:]+?(?: - |->)[^:]+$/;
 
 /** A verdict's failed rule text is `<relation>: <rule>`; the rule name itself can hold a colon, so it splits on the first `: ` after a relation. */

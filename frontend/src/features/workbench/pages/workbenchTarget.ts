@@ -17,6 +17,8 @@ export interface WorkbenchTarget {
   step: "scene_generation" | "trajectory_generation" | "simulation";
   /** Simulation outputs. */
   runRecordId?: number;
+  /** The case's index in its class (0-based), for labels; `caseId` is the master's database id. Absent on targets stored before it. */
+  caseIndex?: number;
   /** Follow the running job instead of loading the finished output. */
   live?: boolean;
 }

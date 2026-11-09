@@ -8,6 +8,7 @@ import {
   catalogStackSchema,
   catalogStacksSchema,
   createCampaign,
+  CREATE_TIMEOUT_MS,
   getCatalogStacks,
   inputItemSourceSchema,
   listCatalogClasses,
@@ -165,6 +166,32 @@ describe("validate and create", () => {
     expect(JSON.parse(spy.mock.calls[0][1]?.body as string)).toEqual({ config: "format: 2\n", start: true, kind: "workbench", origin: "scene_generation" });
     await createCampaign(client, "format: 2\n");
     expect(JSON.parse(spy.mock.calls[1][1]?.body as string)).toEqual({ config: "format: 2\n", start: false });
+  });
+
+  it("waits longer than other calls, and on a timeout says to check Campaign History first", async () => {
+    vi.useFakeTimers();
+    try {
+      const { client } = clientWith(
+        (_url, init) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          })
+      );
+      let settled = false;
+      const pending = createCampaign(client, "name: x\n").catch((caught: unknown) => {
+        settled = true;
+        return caught;
+      });
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(CREATE_TIMEOUT_MS - 10_000);
+      const error = (await pending) as OperatorApiError;
+      expect(error).toBeInstanceOf(OperatorApiError);
+      expect(error.kind).toBe("timeout");
+      expect(error.message).toContain("check Campaign History before you create it again");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

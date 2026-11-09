@@ -9,9 +9,7 @@ export function useMonitorFrameForKind(panelKind: TrajectoryStream): {
   frame: SimulationFrame | null;
   panelKind: TrajectoryStream;
 } {
-  const playback = useStore(useShownPlaybackStore());
-  if (panelKind === "animation") {
-    return { frame: getCurrentFrame(playback), panelKind: "animation" };
-  }
-  return { frame: getCurrentSimulationFrame(playback), panelKind: "simulation" };
+  // Only the frame: the store changes every playback tick, the frame only when the play head reaches another one.
+  const frame = useStore(useShownPlaybackStore(), (s) => (panelKind === "animation" ? getCurrentFrame(s) : getCurrentSimulationFrame(s)));
+  return { frame, panelKind };
 }

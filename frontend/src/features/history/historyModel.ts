@@ -239,8 +239,10 @@ export function outputFlags(row: OutputRow): OutputFlag[] {
 /**
  * What an output's case is called: a case of a catalog class (with its folder), a case of a
  * scenario given as content, or the input item a case of a later start stands for (one case each).
+ * Cases are counted from 1 for people (the API's `case_index` from 0), as the workbench pages count them.
  */
 export function outputCaseLabel(row: Pick<OutputRow, "fec_id" | "case_index">): { title: string; detail: string | null } {
+  const number = row.case_index + 1;
   const slash = row.fec_id.indexOf("/");
   const folder = slash === -1 ? "" : row.fec_id.slice(0, slash);
   const name = slash === -1 ? row.fec_id : row.fec_id.slice(slash + 1);
@@ -248,12 +250,12 @@ export function outputCaseLabel(row: Pick<OutputRow, "fec_id" | "case_index">): 
     return { title: `input item ${name}`, detail: null };
   }
   if (folder === "scenario") {
-    return { title: `case ${row.case_index} of ${name}`, detail: "scenario given as content" };
+    return { title: `case ${number} of ${name}`, detail: "scenario given as content" };
   }
   const last = name.lastIndexOf("/");
   return last === -1
-    ? { title: `case ${row.case_index} of ${name}`, detail: folder || null }
-    : { title: `case ${row.case_index} of ${name.slice(last + 1)}`, detail: `${folder}/${name.slice(0, last)}` };
+    ? { title: `case ${number} of ${name}`, detail: folder || null }
+    : { title: `case ${number} of ${name.slice(last + 1)}`, detail: `${folder}/${name.slice(0, last)}` };
 }
 
 /** The run and repeat of a simulated output, counted from 1, or null for other steps. */
@@ -278,7 +280,8 @@ export function inputSourceLabel(source: InputSource | null): SourceLabel | null
   }
   if (source.campaign_id) {
     const step = source.step && source.step in STEP_LABELS ? ` (${STEP_LABELS[source.step as CampaignStep].toLowerCase()})` : "";
-    const caseText = source.case_id !== undefined ? `case ${source.case_id}` : "an output";
+    // The source names the case by its database id, not by its number in the entry: say so, or it reads as a case number
+    const caseText = source.case_id !== undefined ? `case id ${source.case_id}` : "an output";
     return { kind: "entry", campaignId: source.campaign_id, text: `${caseText}${step}` };
   }
   return { kind: "text", text: "a deleted entry" };
@@ -313,7 +316,7 @@ export interface MonitorSummary {
   otherFailedRules: string[];
 }
 
-/** A vessel's own rules are kept under the relation of the vessel with itself (`OS_0 - OS_0`). */
+/** A vessel's own rules are kept under the relation of the vessel with itself (`os - os`). */
 function isOwnRelation(relation: string): boolean {
   const [first, second] = relation.split(" - ");
   return first === second;

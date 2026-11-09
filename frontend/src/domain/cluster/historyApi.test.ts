@@ -124,8 +124,8 @@ describe("outputs", () => {
   it("parses a verdict's monitor summary, which null and an older master's leave out", () => {
     const verdict = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })).verdict;
     expect(verdict?.first_failure_time_s).toBe(61);
-    expect(verdict?.encounters?.["OS_0 - TS_1"]).toEqual(["CROSSING_FROM_PORT", "OTHER"]);
-    expect(verdict?.encounter_roles?.["OS_0 - TS_1"].CROSSING_FROM_PORT).toEqual({ give_way: ["TS_1"], stand_on: ["OS_0"] });
+    expect(verdict?.encounters?.["os - ts1"]).toEqual(["CROSSING_FROM_PORT", "OTHER"]);
+    expect(verdict?.encounter_roles?.["os - ts1"].CROSSING_FROM_PORT).toEqual({ give_way: ["ts1"], stand_on: ["os"] });
     const stored = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict({ first_failure_time_s: null, encounters: null, encounter_roles: null }) })).verdict;
     expect([stored?.first_failure_time_s, stored?.encounters, stored?.encounter_roles]).toEqual([null, null, null]);
   });
@@ -188,6 +188,26 @@ describe("uploadArtifact", () => {
     await uploadArtifact(client, blob, "functional_scenario");
     expect(spy.mock.calls[0][1]?.body).toBe(blob);
     expect(spy.mock.calls[0][0]).toContain("kind=functional_scenario");
+  });
+
+  it("has no timeout, since a large file takes as long as the link needs", async () => {
+    vi.useFakeTimers();
+    try {
+      let answer: ((response: Response) => void) | null = null;
+      const { client } = clientWith(
+        (_url, init) =>
+          new Promise<Response>((resolve, reject) => {
+            answer = resolve;
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          })
+      );
+      const pending = uploadArtifact(client, "x", "scene");
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      (answer as unknown as (response: Response) => void)(jsonResponse(sampleUploadedRef, { status: 201 }));
+      expect((await pending).sha256).toBe("d".repeat(64));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("surfaces a file that is too large", async () => {

@@ -147,16 +147,16 @@ export function sampleSimulationOutput(overrides: Record<string, unknown> = {}):
 export function sampleMonitorVerdict(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     state: "failed",
-    failed_rules: ["OS_0 - TS_1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (TS_1)", "OS_0 - OS_0: Rule 8: Readily Apparent Course Change (OS_0)"],
+    failed_rules: ["os - ts1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (ts1)", "os - os: Rule 8: Readily Apparent Course Change (os)"],
     first_failure_time_s: 61,
     encounters: {
-      "OS_0 - TS_10": ["OTHER"],
-      "OS_0 - TS_2": ["OTHER", "HEAD_ON"],
-      "OS_0 - TS_1": ["CROSSING_FROM_PORT", "OTHER"],
+      "os - ts10": ["OTHER"],
+      "os - ts2": ["OTHER", "HEAD_ON"],
+      "os - ts1": ["CROSSING_FROM_PORT", "OTHER"],
     },
     encounter_roles: {
-      "OS_0 - TS_1": { CROSSING_FROM_PORT: { give_way: ["TS_1"], stand_on: ["OS_0"] } },
-      "OS_0 - TS_2": { HEAD_ON: { give_way: ["OS_0", "TS_2"], stand_on: [] } },
+      "os - ts1": { CROSSING_FROM_PORT: { give_way: ["ts1"], stand_on: ["os"] } },
+      "os - ts2": { HEAD_ON: { give_way: ["os", "ts2"], stand_on: [] } },
     },
     ...overrides,
   };

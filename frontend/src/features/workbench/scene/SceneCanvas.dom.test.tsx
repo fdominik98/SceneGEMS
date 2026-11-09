@@ -66,15 +66,43 @@ describe("SceneCanvas", () => {
 
     await user.click(screen.getByRole("checkbox", { name: "Course vectors" }));
     expect(useUiStore.getState().previewOverlays.velocity).toBe(false);
-    await user.click(screen.getByRole("checkbox", { name: "Visible" }));
-    expect(useUiStore.getState().hidePreviewStream).toBe(true);
+    // Alone, the preview is the page's only picture: it has no switch to hide it.
+    expect(screen.queryByRole("checkbox", { name: /visible/i })).not.toBeInTheDocument();
 
     act(() => store.getState().ingestSimulationFrames(sampleFrames.slice(0, 5)));
+    await user.click(screen.getByRole("checkbox", { name: "Preview visible" }));
+    expect(useUiStore.getState().hidePreviewStream).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: "Tracks, Simulation" }));
     expect(useUiStore.getState().simulationOverlays.trajectory).toBe(false);
     expect(useUiStore.getState().previewOverlays.trajectory).toBe(true);
     await user.click(screen.getByRole("checkbox", { name: "Simulation visible" }));
     expect(useUiStore.getState().hideSimulationStream).toBe(true);
+  });
+
+  it("draws a lone preview even when the preview was hidden beside a simulation on another page", () => {
+    useUiStore.setState({ hidePreviewStream: true });
+    renderCanvas();
+    expect(screen.queryByText("Load a scenario to see the encounter.")).not.toBeInTheDocument();
+  });
+
+  it("says what the page needs while it has nothing to draw", () => {
+    render(
+      <PlaybackStoreContext.Provider value={createPlaybackStore()}>
+        <SceneCanvas emptyMessage="Take an input scene below to see it here." />
+      </PlaybackStoreContext.Provider>
+    );
+    expect(screen.getByText("Take an input scene below to see it here.")).toBeInTheDocument();
+  });
+
+  it("exports each stream by name once there are two", async () => {
+    const user = userEvent.setup();
+    const store = renderCanvas();
+    await user.click(screen.getByRole("button", { name: "Export" }));
+    expect(screen.getByRole("button", { name: "Table (CSV)" })).toBeEnabled();
+
+    act(() => store.getState().ingestSimulationFrames(sampleFrames.slice(0, 5)));
+    expect(screen.getByRole("button", { name: "Preview: table (CSV)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Simulation: map data (GeoJSON)" })).toBeEnabled();
   });
 
   it("switches between the encounter canvas and the nautical map", async () => {

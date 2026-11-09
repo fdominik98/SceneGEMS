@@ -273,6 +273,24 @@ export function planOfConfig(config: Record<string, unknown>, nodes: readonly No
   return planResources(requiredCapabilities(config), nodes, { nodes: named.length > 0 ? named : null, labels: stringsOf(resources.required_labels) });
 }
 
+/**
+ * What a plan says, as text: the needs, the ids of the nodes covering each with their slots, the
+ * missing needs, the usable and the unknown nodes. Plans with the same key show the same, whatever
+ * the nodes' heartbeats changed in their views (`last_seen_at`, slots in use). Null has "".
+ */
+export function planKey(plan: ResourcePlan | null): string {
+  if (plan === null) {
+    return "";
+  }
+  return JSON.stringify({
+    required: plan.required,
+    coverage: plan.coverage.map((entry) => [needKey(entry.capability), entry.nodes.map((node) => node.node_id), entry.slots]),
+    missing: plan.missing.map(needKey),
+    usable: plan.usable.map((node) => node.node_id),
+    unknown: plan.unknownNodes,
+  });
+}
+
 /** Why the campaign cannot start, or null when every required capability has a usable node. */
 export function startBlocker(plan: ResourcePlan | null): string | null {
   if (plan === null) {

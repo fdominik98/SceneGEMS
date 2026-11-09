@@ -5,7 +5,7 @@ import type { CampaignStep, CaseDetail, RunRecord } from "../../domain/cluster/s
 import { CaseJobsTable, RunRecordCard, StateChip, VerdictCard } from "./CaseParts";
 import { caseStepRows, describeStepVerdict } from "./stepViews";
 import { RecordedRun } from "./RecordedRun";
-import { formatTime, shortClassId, stageLabel } from "./resultsFormat";
+import { caseNumber, formatTime, runLabel, shortClassId, stageLabel } from "./resultsFormat";
 import { useCaseDetail } from "./useResultsData";
 
 interface CasePageProps {
@@ -62,7 +62,7 @@ function CaseSummary({ detail }: { detail: CaseDetail }) {
     <section className="results-panel" aria-label="The case">
       <header className="results-panel-head">
         <h3 title={detail.fec_id}>{shortClassId(detail.fec_id, 64)}</h3>
-        <span className="meta">case {detail.case_index}</span>
+        <span className="meta">case {caseNumber(detail.case_index)}</span>
         <StateChip state={detail.state} />
         <span className="run-tag">stage {stageLabel(detail.stage)}</span>
       </header>
@@ -73,8 +73,8 @@ function CaseSummary({ detail }: { detail: CaseDetail }) {
           <dd className="mono">{detail.fec_id}</dd>
         </div>
         <div>
-          <dt>Case index</dt>
-          <dd className="mono">{detail.case_index}</dd>
+          <dt>Case</dt>
+          <dd className="mono">{caseNumber(detail.case_index)}</dd>
         </div>
         <div>
           <dt>Seed</dt>
@@ -196,7 +196,7 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
           campaignId={campaignId}
           runRecord={shown}
           verdict={verdictOfShown}
-          title={`${shortClassId(detail.fec_id, 40)}, case ${detail.case_index}, run ${shown.run_index}`}
+          title={`${shortClassId(detail.fec_id, 40)}, case ${caseNumber(detail.case_index)}, ${runLabel(shown.run_index)}`}
           autoStart
         />
       )}

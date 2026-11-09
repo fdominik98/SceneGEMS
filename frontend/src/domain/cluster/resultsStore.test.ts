@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { useClusterStore } from "./clusterStore";
 import { DEFAULT_PAGE_SIZE, DEFAULT_VERDICT_FILTERS } from "./resultsApi";
-import { useResultsStore } from "./resultsStore";
+import { selectShownEntry, useResultsStore } from "./resultsStore";
 
 describe("results store", () => {
   beforeEach(() => {
     useResultsStore.getState().reset();
+    useClusterStore.setState({ clusters: [{ id: "a", name: "A", operatorUrl: "http://a:5174" }, { id: "b", name: "B", operatorUrl: "http://b:5174" }], selectedClusterId: "a" });
   });
 
   it("starts with no campaign, the default filters and the first page", () => {
@@ -132,5 +134,18 @@ describe("results store", () => {
     store.setFilters({ state: "failed" });
     store.openCase("c2", 7);
     expect(useResultsStore.getState()).toMatchObject({ campaignId: "c2", caseId: 7, filters: DEFAULT_VERDICT_FILTERS });
+  });
+
+  it("keeps the cluster an entry was opened on and shows it on that cluster only", () => {
+    const store = useResultsStore.getState();
+    store.openCampaign("c1");
+    expect(useResultsStore.getState().clusterId).toBe("a");
+    expect(selectShownEntry(useResultsStore.getState(), "a")).toBe("c1");
+    expect(selectShownEntry(useResultsStore.getState(), "b")).toBeNull();
+    // the same id on another cluster is another entry: it opens with clean filters
+    store.setFilters({ state: "failed" });
+    useClusterStore.setState({ selectedClusterId: "b" });
+    store.openCase("c1", 2);
+    expect(useResultsStore.getState()).toMatchObject({ clusterId: "b", campaignId: "c1", caseId: 2, filters: DEFAULT_VERDICT_FILTERS });
   });
 });

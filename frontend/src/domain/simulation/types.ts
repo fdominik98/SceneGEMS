@@ -124,7 +124,7 @@ export interface RuleEvaluation {
   description: string;
   /** Id of the vessel the rule constrains, or null when it applies to the encounter. */
   subjectActorId: string | null;
-  /** Display name of the subject vessel, e.g. "OS_0"; empty when encounter-scoped. */
+  /** Display name of the subject vessel, e.g. "os" or "ts1"; empty when encounter-scoped. */
   subjectActorName: string;
   result: RuleResult;
   /**

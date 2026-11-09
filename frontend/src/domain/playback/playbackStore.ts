@@ -43,6 +43,26 @@ function applyPreviewMergeResult(
   };
 }
 
+/**
+ * The preview frame key at a play head time: `currentTimestamp` names a preview frame, so it
+ * snaps to the preview's own timestamps (the simulation may sample at other times).
+ */
+function previewKeyAt(frames: SimulationFrame[], t: number): number {
+  return frames.length > 0 ? timestampAtOrBefore(frames, t) : t;
+}
+
+/** The time span playback covers: the preview and the simulation together, null without frames. */
+export function playbackRange(state: Pick<PlaybackState, "frames" | "simulationFrames">): { min: number; max: number } | null {
+  const { frames, simulationFrames } = state;
+  if (frames.length === 0 && simulationFrames.length === 0) {
+    return null;
+  }
+  return {
+    min: Math.min(frames[0]?.timestamp ?? Infinity, simulationFrames[0]?.timestamp ?? Infinity),
+    max: Math.max(frames[frames.length - 1]?.timestamp ?? -Infinity, simulationFrames[simulationFrames.length - 1]?.timestamp ?? -Infinity),
+  };
+}
+
 function applySimulationMergeResult(
   state: PlaybackState,
   merged: SimulationFrame[]
@@ -53,7 +73,7 @@ function applySimulationMergeResult(
     simulationFrameIndexByTimestamp: rebuildIndex(merged),
     latestTimestamp: Math.max(state.latestTimestamp, latest),
     hasSimulationTrajectoryChunk: true,
-    currentTimestamp: state.followLatestPush ? latest : state.currentTimestamp,
+    currentTimestamp: state.followLatestPush ? previewKeyAt(state.frames, latest) : state.currentTimestamp,
     playbackCursor: state.followLatestPush ? latest : state.playbackCursor,
     simulationInitializing:
       state.simulationFrames.length === 0 ? false : state.simulationInitializing,
@@ -82,18 +102,45 @@ const clearedLoadedPlaybackState = {
   receivedSimulationModels: null,
 };
 
-function mergeSortedUnique(
-  existing: SimulationFrame[],
-  incoming: SimulationFrame[]
-): SimulationFrame[] {
-  const byTs = new Map<number, SimulationFrame>();
-  for (const f of existing) {
-    byTs.set(f.timestamp, f);
+/**
+ * The buffered frames (sorted by time) with a chunk merged in, an incoming frame replacing one
+ * at the same time. Linear in the frames, so a long stream of chunks stays cheap; a chunk that
+ * only extends the end, the usual case, is appended.
+ */
+export function mergeSortedUnique(existing: SimulationFrame[], incoming: SimulationFrame[]): SimulationFrame[] {
+  const chunk = [...incoming].sort((a, b) => a.timestamp - b.timestamp);
+  const lastExisting = existing[existing.length - 1];
+  if (lastExisting === undefined || chunk[0]!.timestamp > lastExisting.timestamp) {
+    const merged = existing.slice();
+    for (const frame of chunk) {
+      if (merged.length === 0 || frame.timestamp > merged[merged.length - 1]!.timestamp) {
+        merged.push(frame);
+      } else {
+        merged[merged.length - 1] = frame;
+      }
+    }
+    return merged;
   }
-  for (const f of incoming) {
-    byTs.set(f.timestamp, f);
+  const merged: SimulationFrame[] = [];
+  const push = (frame: SimulationFrame) => {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && last.timestamp === frame.timestamp) {
+      merged[merged.length - 1] = frame;
+    } else {
+      merged.push(frame);
+    }
+  };
+  let i = 0;
+  let j = 0;
+  while (i < existing.length || j < chunk.length) {
+    // On a tie the incoming frame comes second, so it replaces the buffered one.
+    if (j >= chunk.length || (i < existing.length && existing[i]!.timestamp <= chunk[j]!.timestamp)) {
+      push(existing[i++]!);
+    } else {
+      push(chunk[j++]!);
+    }
   }
-  return Array.from(byTs.values()).sort((a, b) => a.timestamp - b.timestamp);
+  return merged;
 }
 
 export interface ReceivedSimulationModels {
@@ -194,8 +241,6 @@ export interface PlaybackState {
   consumeAutoFit: () => void;
   ingestFrame: (frame: SimulationFrame) => void;
   ingestFrames: (frames: SimulationFrame[]) => void;
-  /** Apply pre-merged preview trajectory (e.g. from Web Worker). */
-  applyMergedPreviewFrames: (merged: SimulationFrame[]) => void;
   ingestSimulationFrames: (frames: SimulationFrame[]) => void;
   applyMergedSimulationFrames: (merged: SimulationFrame[]) => void;
   /** Replace the preview trajectory wholesale (trajectory generation previews/results). */
@@ -300,11 +345,10 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
           return base;
         }
         const latest = state.simulationFrames[state.simulationFrames.length - 1]!.timestamp;
-        const currentTimestamp = timestampAtOrBefore(state.simulationFrames, latest);
         return {
           ...base,
           playbackCursor: latest,
-          currentTimestamp,
+          currentTimestamp: previewKeyAt(state.frames, latest),
         };
       }),
     setLatestTimestamp: (value) =>
@@ -338,13 +382,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
           return state;
         }
         const merged = mergeSortedUnique(state.frames, incoming);
-        return applyPreviewMergeResult(state, merged, state.frames.length === 0);
-      }),
-    applyMergedPreviewFrames: (merged) =>
-      set((state) => {
-        if (merged.length === 0) {
-          return state;
-        }
         return applyPreviewMergeResult(state, merged, state.frames.length === 0);
       }),
     ingestSimulationFrames: (incoming) =>
@@ -553,26 +590,25 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
       const state = get();
       state.seek(state.playbackCursor + delta);
     },
+    // Seeking and playing cover both streams: a run loaded without its preview, or a simulation
+    // that outlasts the preview, plays to its end.
     seek: (timestamp) => {
       const state = get();
-      if (state.frames.length === 0) {
+      const range = playbackRange(state);
+      if (range === null) {
         return;
       }
-      const minT = state.frames[0]!.timestamp;
-      const maxT = state.frames[state.frames.length - 1]!.timestamp;
-      const clamped = Math.min(Math.max(timestamp, minT), maxT);
-      const currentTimestamp = timestampAtOrBefore(state.frames, clamped);
-      set({ followLatestPush: false, currentTimestamp, playbackCursor: clamped });
+      const clamped = Math.min(Math.max(timestamp, range.min), range.max);
+      set({ followLatestPush: false, currentTimestamp: previewKeyAt(state.frames, clamped), playbackCursor: clamped });
     },
     advancePlayback: (playbackCursor) => {
       set((state) => {
-        if (state.frames.length === 0) {
+        const range = playbackRange(state);
+        if (range === null) {
           return state;
         }
-        const minT = state.frames[0]!.timestamp;
-        const maxT = state.frames[state.frames.length - 1]!.timestamp;
-        const clamped = Math.min(Math.max(playbackCursor, minT), maxT);
-        const currentTimestamp = timestampAtOrBefore(state.frames, clamped);
+        const clamped = Math.min(Math.max(playbackCursor, range.min), range.max);
+        const currentTimestamp = previewKeyAt(state.frames, clamped);
         if (
           state.playbackCursor === clamped &&
           state.currentTimestamp === currentTimestamp &&
@@ -589,9 +625,13 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     },
   }));
   if (options.persistScene) {
-    // Persist the last generated/loaded scene so it is restored on a hard refresh.
+    // Persist the last generated/loaded scene so it is restored on a hard refresh. The samples a
+    // running generation shows are not written (one per sample, and a reload would restore an
+    // unfinished scene): what is shown when it ends is.
     store.subscribe((state, prev) => {
-      if (state.latestGeneratedScene !== prev.latestGeneratedScene) {
+      const generating = state.activeSceneGenerationRequestId !== null;
+      const ended = !generating && prev.activeSceneGenerationRequestId !== null;
+      if (!generating && (ended || state.latestGeneratedScene !== prev.latestGeneratedScene)) {
         savePersistedScene(state.latestGeneratedScene);
       }
     });

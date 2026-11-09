@@ -1,7 +1,7 @@
 import { IconButton } from "../../../components/IconButton";
 import { DownloadIcon, MapIcon, PanelRightOpenIcon, RadarIcon } from "../../../components/icons";
 import { PopoverMenu } from "../../../components/PopoverMenu";
-import { useMemo, useRef, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import {
   captureSvgScreenshot,
   exportFramesAsCsv,
@@ -15,8 +15,10 @@ import {
 import { useShownPlayback } from "../../../domain/playback/playbackContext";
 import { useTheme } from "../../../app/theme";
 import { useUiStore } from "../../../app/uiStore";
+import { useConnectionStore } from "../connection/connectionStore";
 import { useEncounterSelectionStore } from "../monitor/encounterSelectionStore";
 import { buildShipColorsByActorId, getShipColor, getSimulationStreamColor } from "./shipColors";
+import { samePositions } from "./canvasStreams";
 import { EncounterCanvas, type EncounterCanvasStream } from "./EncounterCanvas";
 import type { LayerColumn } from "./LayerMenu";
 import { NauticalMapView } from "./NauticalMapView";
@@ -24,6 +26,8 @@ import { NauticalMapView } from "./NauticalMapView";
 interface SceneCanvasProps {
   /** When provided, visualizes this generated scene instead of playback preview frames. */
   generatedScene?: SimulationFrame | null;
+  /** What the canvas says while it has nothing to draw: what the page needs first. */
+  emptyMessage?: string;
 }
 
 /**
@@ -32,7 +36,7 @@ interface SceneCanvasProps {
  * menu with a column per stream, the export menu, the map switch and, while the monitoring
  * panel is hidden, the button that shows it again.
  */
-export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
+export function SceneCanvas({ generatedScene, emptyMessage: pageEmptyMessage }: SceneCanvasProps = {}) {
   const isGeneratedMode = generatedScene !== undefined;
   const frames = useShownPlayback((s) => s.frames);
   const simulationFrames = useShownPlayback((s) => s.simulationFrames);
@@ -45,7 +49,6 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const consumeAutoFit = useShownPlayback((s) => s.consumeAutoFit);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  const controlPanelMode = useUiStore((s) => s.controlPanelMode);
   const previewOverlays = useUiStore((s) => s.previewOverlays);
   const simulationOverlays = useUiStore((s) => s.simulationOverlays);
   const setPreviewOverlay = useUiStore((s) => s.setPreviewOverlay);
@@ -58,15 +61,19 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
   const setSceneViewMode = useUiStore((s) => s.setSceneViewMode);
   const rightPaneVisible = useUiStore((s) => s.rightPaneVisible);
   const setRightPaneVisible = useUiStore((s) => s.setRightPaneVisible);
-  const referenceGeofence = useUiStore((s) => s.referenceGeofence);
+  // The geofence the runs use (kept per browser by the Connections page), also after a reload.
+  const referenceGeofence = useConnectionStore((s) => s.geofence);
   const selectedRelationId = useEncounterSelectionStore((s) => s.selectedRelationId);
   const setSelectedRelationId = useEncounterSelectionStore((s) => s.setSelectedRelationId);
 
   const [fitSignal, setFitSignal] = useState(0);
 
+  // The preview can be hidden only beside a simulation: alone it is the page's only picture, and
+  // the flag is shared by the pages (hiding it on the simulation page must not blank the trajectory page).
+  const previewHideable = !isGeneratedMode && hasSimulationTrajectoryChunk && simulationFrames.length > 0;
   const showPreview = isGeneratedMode
     ? generatedScene != null
-    : !hidePreviewStream && hasTrajectoryChunk && frames.length > 0;
+    : (!hidePreviewStream || !previewHideable) && hasTrajectoryChunk && frames.length > 0;
   const showSimulation =
     !isGeneratedMode &&
     !hideSimulationStream &&
@@ -143,8 +150,7 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
           label: "Preview",
           layers: previewOverlays,
           onChange: setPreviewOverlay,
-          shown: !hidePreviewStream,
-          onShownChange: (shown) => setHidePreviewStream(!shown),
+          ...(previewHideable ? { shown: !hidePreviewStream, onShownChange: (shown: boolean) => setHidePreviewStream(!shown) } : {}),
         },
         ...(hasSimulationTrajectoryChunk
           ? [
@@ -161,31 +167,36 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
       ];
 
   // Fit when a new generated scene is shown or the store asks for it (a new trajectory);
-  // derived from the previous values while rendering.
+  // derived from the previous values while rendering. The samples of a generation, the scene
+  // that ends it and a scene coming back with the monitor's verdicts only follow: they keep a
+  // view the user zoomed or panned.
   const wantsAutoFit = !isGeneratedMode && autoFitPending && hasTrajectoryChunk && playbackFrame !== null;
-  const [seen, setSeen] = useState({ scene: generatedScene, wantsAutoFit });
-  if (seen.scene !== generatedScene || seen.wantsAutoFit !== wantsAutoFit) {
+  const generating = useShownPlayback((s) => s.activeSceneGenerationRequestId !== null);
+  const [followSignal, setFollowSignal] = useState(0);
+  const [seen, setSeen] = useState({ scene: generatedScene, wantsAutoFit, generating });
+  if (seen.scene !== generatedScene || seen.wantsAutoFit !== wantsAutoFit || seen.generating !== generating) {
     const newScene = isGeneratedMode && generatedScene != null && seen.scene !== generatedScene;
-    if (newScene || (wantsAutoFit && !seen.wantsAutoFit)) {
+    const follows = newScene && seen.scene != null && (generating || seen.generating || samePositions(seen.scene, generatedScene));
+    if (follows) {
+      setFollowSignal((v) => v + 1);
+    } else if (newScene || (wantsAutoFit && !seen.wantsAutoFit)) {
       setFitSignal((v) => v + 1);
     }
-    setSeen({ scene: generatedScene, wantsAutoFit });
+    setSeen({ scene: generatedScene, wantsAutoFit, generating });
   }
 
-  const exportActiveFrames = isGeneratedMode
-    ? generatedFrames
-    : controlPanelMode === "simulation"
-      ? simulationFrames
-      : frames;
-  const exportPrefix = isGeneratedMode
-    ? "generated_scene"
-    : controlPanelMode === "simulation"
-      ? "simulation"
-      : "preview";
+  // Every stream with frames can be exported; the menu names the stream once there are two.
+  const exportStreams: { label: string; prefix: string; frames: SimulationFrame[] }[] = isGeneratedMode
+    ? [{ label: "", prefix: "generated_scene", frames: generatedFrames }]
+    : [
+        { label: "Preview", prefix: "preview", frames },
+        ...(simulationFrames.length > 0 ? [{ label: "Simulation", prefix: "simulation", frames: simulationFrames }] : []),
+      ];
+  const namedExports = exportStreams.length > 1;
 
   const onScreenshot = () => {
     if (svgRef.current) {
-      captureSvgScreenshot(svgRef.current, `scene_${exportPrefix}`);
+      captureSvgScreenshot(svgRef.current, `scene_${isGeneratedMode ? "generated_scene" : showSimulation ? "simulation" : "preview"}`);
     }
   };
 
@@ -198,20 +209,16 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
             Screenshot (image)
           </button>
         ) : null}
-        <button
-          type="button"
-          disabled={exportActiveFrames.length === 0}
-          onClick={() => exportFramesAsCsv(exportActiveFrames, exportPrefix)}
-        >
-          Table (CSV)
-        </button>
-        <button
-          type="button"
-          disabled={exportActiveFrames.length === 0}
-          onClick={() => exportFramesAsGeoJson(exportActiveFrames, exportPrefix)}
-        >
-          Map data (GeoJSON)
-        </button>
+        {exportStreams.map((stream) => (
+          <Fragment key={stream.prefix}>
+            <button type="button" disabled={stream.frames.length === 0} onClick={() => exportFramesAsCsv(stream.frames, stream.prefix)}>
+              {namedExports ? `${stream.label}: table (CSV)` : "Table (CSV)"}
+            </button>
+            <button type="button" disabled={stream.frames.length === 0} onClick={() => exportFramesAsGeoJson(stream.frames, stream.prefix)}>
+              {namedExports ? `${stream.label}: map data (GeoJSON)` : "Map data (GeoJSON)"}
+            </button>
+          </Fragment>
+        ))}
       </PopoverMenu>
       <IconButton
         label={onMap ? "Show encounter canvas" : "Show nautical map"}
@@ -224,7 +231,10 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
     </>
   );
 
-  const emptyMessage = isGeneratedMode ? "No scene generated or loaded yet." : "Load a scenario to see the encounter.";
+  const emptyMessage =
+    !isGeneratedMode && hidePreviewStream && !showPreview && frames.length > 0
+      ? "The preview is hidden: show it in the layer menu."
+      : (pageEmptyMessage ?? (isGeneratedMode ? "No scene generated or loaded yet." : "Load a scenario to see the encounter."));
 
   return (
     <div className="scene-panel">
@@ -234,6 +244,7 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
           layerColumns={layerColumns}
           reference={referenceGeofence}
           fitSignal={fitSignal}
+          followSignal={followSignal}
           onFit={isGeneratedMode ? undefined : consumeAutoFit}
           selectedRelationId={isGeneratedMode ? null : selectedRelationId}
           onSelectRelation={isGeneratedMode ? undefined : setSelectedRelationId}
@@ -246,6 +257,7 @@ export function SceneCanvas({ generatedScene }: SceneCanvasProps = {}) {
           streams={streams}
           layerColumns={layerColumns}
           fitSignal={fitSignal}
+          followSignal={followSignal}
           onFit={isGeneratedMode ? undefined : consumeAutoFit}
           selectedRelationId={isGeneratedMode ? null : selectedRelationId}
           onSelectRelation={isGeneratedMode ? undefined : setSelectedRelationId}

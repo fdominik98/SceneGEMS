@@ -238,6 +238,7 @@ export class WorkbenchJobDriver {
 
   /** One scene as a workbench entry, shown on the scene page as it arrives; resolves with its outcome once generated (the monitor follows). */
   async generateScene(requestId: string, input: SceneEntryRequest): Promise<SceneJobOutcome> {
+    this.cancelLoad("sceneGeneration");
     useScenePlaybackStore.getState().setActiveSceneGenerationRequestId(requestId);
     const outcome = await this.runSceneEntry(requestId, input);
     if (useScenePlaybackStore.getState().activeSceneGenerationRequestId === requestId) {
@@ -539,7 +540,14 @@ export class WorkbenchJobDriver {
   /** Plans trajectories for the page's input scene as a workbench entry; the trajectory page follows the previews and the result. */
   async generateTrajectories(requestId: string, request: TrajectoryEntryRequest): Promise<void> {
     this.abortTask(this.trajectoryJob);
-    useTrajectoryPlaybackStore.getState().clearPreviewFrames();
+    this.cancelLoad("trajectoryGeneration");
+    // The input scene stays on the canvas until the first preview replaces it, so the canvas is not empty while the job waits for a node.
+    const playback = useTrajectoryPlaybackStore.getState();
+    const inputScene = useTrajectoryGenerationStore.getState().handoffScene?.scene;
+    playback.clearPreviewFrames();
+    if (inputScene) {
+      playback.setTrajectoryPreviewFrames([inputScene]);
+    }
     useTrajectoryGenerationStore.getState().startRun(requestId);
     const cluster = this.access().cluster;
     const blocker = this.blocker(TRAJECTORY_GENERATION_JOB);
@@ -630,6 +638,7 @@ export class WorkbenchJobDriver {
    */
   async runSimulationEntry(plan: ClusterRunPlan, request: SimulationEntryRequest): Promise<void> {
     this.abortTask(this.simulationJob);
+    this.cancelLoad("simulation");
     const run = useClusterRunStore.getState();
     const cluster = this.access().cluster;
     const blocker = this.blocker(plan.jobType, plan.components);
@@ -790,6 +799,7 @@ export class WorkbenchJobDriver {
    */
   async runSimulation(submission: JobSubmission, colregsConstraintsContent: string): Promise<void> {
     this.abortTask(this.simulationJob);
+    this.cancelLoad("simulation");
     const run = useClusterRunStore.getState();
     const cluster = this.access().cluster;
     const blocker = this.blocker(submission.job_type, jobComponents(submission.job_type, submission.payload));
@@ -951,10 +961,12 @@ export class WorkbenchJobDriver {
       }
       return;
     }
-    this.loads.get(target.page)?.abort();
+    this.cancelLoad(target.page);
     const controller = new AbortController();
     this.loads.set(target.page, controller);
     if (!options.quiet) {
+      // The page shows one thing: it stops following its own run (which goes on as an entry of Campaign History).
+      this.releasePage(target.page);
       page.getState().setStatus("loading", "Loading the entry's output...", target.campaignId);
     }
     try {
@@ -998,8 +1010,25 @@ export class WorkbenchJobDriver {
         }
         this.hooks.fillSetup(loaded);
         usePlaybackStore.getState().requestAutoFit();
-        PAGE_STORES.simulation.getState().setLoaded({ ...target, runRecordId: loaded.runRecord.run_record_id }, null);
+        PAGE_STORES.simulation.getState().setLoaded({ ...target, runRecordId: loaded.runRecord.run_record_id, caseIndex: loaded.caseIndex }, null);
       }
+    }
+  }
+
+  /** A load still under way for the page no longer counts: a run or another load replaces it. */
+  private cancelLoad(page: WorkbenchPage): void {
+    this.loads.get(page)?.abort();
+    this.loads.delete(page);
+  }
+
+  /** The page stops following its own trajectory planning or simulation run, so what it loads next is not overwritten. */
+  private releasePage(page: WorkbenchPage): void {
+    if (page === "trajectoryGeneration" && this.trajectoryJob !== null) {
+      this.abortTask(this.trajectoryJob);
+      this.trajectoryJob = null;
+      useTrajectoryGenerationStore.getState().markStopped();
+    } else if (page === "simulation") {
+      this.stopSimulation();
     }
   }
 

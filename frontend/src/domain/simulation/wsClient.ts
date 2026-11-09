@@ -25,17 +25,23 @@ export class BackendWsClient {
   connect() {
     this.manuallyClosed = false;
     this.handlers.onStatus("connecting");
-    this.socket = new WebSocket(this.url);
+    const socket = new WebSocket(this.url);
+    this.socket = socket;
+    // Events of a socket this client replaced or closed (a cluster switch, a reconnect) say nothing
+    // about the current one: they must not mark the new session disconnected or feed it old messages.
+    const current = () => this.socket === socket;
 
-    this.socket.onopen = () => {
-      this.handlers.onStatus("connected");
+    socket.onopen = () => {
+      if (current()) {
+        this.handlers.onStatus("connected");
+      }
     };
 
-    this.socket.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (!current()) {
+        return;
+      }
       try {
-        if (import.meta.env.DEV) {
-          console.log("[BackendWsClient] RAW_IN", event.data);
-        }
         const data = JSON.parse(event.data) as unknown;
         const message = parseServerMessage(data);
         if (import.meta.env.DEV) {
@@ -58,7 +64,10 @@ export class BackendWsClient {
       }
     };
 
-    this.socket.onerror = () => {
+    socket.onerror = () => {
+      if (!current()) {
+        return;
+      }
       const isOpen = this.socket?.readyState === WebSocket.OPEN;
       if (!isOpen) {
         this.handlers.onStatus("error");
@@ -66,7 +75,10 @@ export class BackendWsClient {
       this.handlers.onError("WebSocket transport issue.");
     };
 
-    this.socket.onclose = () => {
+    socket.onclose = () => {
+      if (!current()) {
+        return;
+      }
       this.handlers.onStatus("disconnected");
       this.socket = null;
       if (!this.manuallyClosed) {
@@ -91,9 +103,9 @@ export class BackendWsClient {
       this.handlers.onError("Cannot send command: socket is not open.");
       return;
     }
-    console.log("[BackendWsClient] OUT", {
-      type: message.type,
-    });
+    if (import.meta.env.DEV) {
+      console.log("[BackendWsClient] OUT", { type: message.type });
+    }
     this.socket.send(JSON.stringify(message));
   }
 

@@ -6,7 +6,7 @@ import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { SectionFrame } from "../../components/SectionFrame";
 import type { ArchitectureDocument } from "../../domain/cluster/architectureApi";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
-import { OperatorApiError } from "../../domain/cluster/operatorApi";
+import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
 import { ArchitectureGraph, type Selection } from "./ArchitectureGraph";
 import type { DocumentView, GraphView } from "./capabilitiesModel";
 import { DetailPanel } from "./DetailPanel";
@@ -86,7 +86,7 @@ export function CapabilitiesSection() {
         <LoadingSpinner /> Reading the architecture from {cluster.name}
       </div>
     );
-  } else if (query.isError) {
+  } else if (query.isError && !query.data) {
     const unreachable = query.error instanceof OperatorApiError && query.error.unreachable;
     content = (
       <EmptyState
@@ -98,7 +98,7 @@ export function CapabilitiesSection() {
           </button>
         }
       >
-        <p className="meta">{query.error instanceof Error ? query.error.message : String(query.error)}</p>
+        <p className="meta">{describeOperatorError(query.error)}</p>
       </EmptyState>
     );
   } else if (!document) {
@@ -139,6 +139,11 @@ export function CapabilitiesSection() {
             </label>
           )}
         </div>
+        {query.isError && (
+          <p className="meta warning" role="status">
+            The architecture may be out of date: reading it again failed ({describeOperatorError(query.error)}).
+          </p>
+        )}
         <p className="cap-summary">{document.summary}</p>
         {view === "matrix" ? (
           <MatrixView document={document} />

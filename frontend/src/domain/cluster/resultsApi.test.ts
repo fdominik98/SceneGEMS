@@ -142,7 +142,7 @@ function sortingLister(total: number) {
   const calls: VerdictFilters[] = [];
   const listVerdicts = vi.fn(async (_campaignId: string, filters: VerdictFilters = {}) => {
     calls.push(filters);
-    const all = Array.from({ length: total }, (_, i) => verdict(i, { encounters: i % 2 === 0 ? { "OS_0 - TS_1": ["HEAD_ON"] } : null, first_failure_time_s: i % 3 === 0 ? null : i }));
+    const all = Array.from({ length: total }, (_, i) => verdict(i, { encounters: i % 2 === 0 ? { "os - ts1": ["HEAD_ON"] } : null, first_failure_time_s: i % 3 === 0 ? null : i }));
     if (filters.sort === "first_failure_time_s") {
       const sign = filters.order === "desc" ? -1 : 1;
       all.sort((a, b) => (a.first_failure_time_s === null ? 1 : b.first_failure_time_s === null ? -1 : sign * (a.first_failure_time_s - b.first_failure_time_s))); // nulls last, as the route does
@@ -157,7 +157,7 @@ function sortingLister(total: number) {
 
 describe("verdict encounters", () => {
   it("reads the encounter types of a verdict, null for an old one and nothing from an older master", () => {
-    expect(verdict(1, { encounters: { "OS_0 - TS_1": ["HEAD_ON", "OTHER"] } }).encounters).toEqual({ "OS_0 - TS_1": ["HEAD_ON", "OTHER"] });
+    expect(verdict(1, { encounters: { "os - ts1": ["HEAD_ON", "OTHER"] } }).encounters).toEqual({ "os - ts1": ["HEAD_ON", "OTHER"] });
     expect(verdict(1, { encounters: null }).encounters).toBeNull();
     expect(verdict(1).encounters).toBeUndefined();
   });
@@ -212,13 +212,13 @@ describe("verdict sort", () => {
 
 describe("failed rule text", () => {
   it("splits the relation from a rule name that holds a colon", () => {
-    expect(splitFailedRule("OS_0 - TS_1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (OS_0)")).toEqual({
-      relation: "OS_0 - TS_1",
-      rule: "Rule 16: Give-Way Vessel Takes Early and Substantial Action (OS_0)",
+    expect(splitFailedRule("os - ts1: Rule 16: Give-Way Vessel Takes Early and Substantial Action (os)")).toEqual({
+      relation: "os - ts1",
+      rule: "Rule 16: Give-Way Vessel Takes Early and Substantial Action (os)",
     });
-    expect(splitFailedRule("OS_0 - TS_1: Rule 8: Passing at a Safe Distance (OS_0 - TS_1)")).toEqual({
-      relation: "OS_0 - TS_1",
-      rule: "Rule 8: Passing at a Safe Distance (OS_0 - TS_1)",
+    expect(splitFailedRule("os - ts1: Rule 8: Passing at a Safe Distance (os - ts1)")).toEqual({
+      relation: "os - ts1",
+      rule: "Rule 8: Passing at a Safe Distance (os - ts1)",
     });
     expect(splitFailedRule("0->1: Rule 16: Give-Way Vessel")).toEqual({ relation: "0->1", rule: "Rule 16: Give-Way Vessel" });
   });
@@ -227,16 +227,16 @@ describe("failed rule text", () => {
     expect(splitFailedRule("rule_8")).toEqual({ relation: null, rule: "rule_8" });
     expect(splitFailedRule("Rule 8: Passing")).toEqual({ relation: null, rule: "Rule 8: Passing" });
     expect(splitFailedRule("Rule 17 - Stand-On: keeps course")).toEqual({ relation: null, rule: "Rule 17 - Stand-On: keeps course" });
-    expect(splitFailedRule("Rule 8: Passing at a Safe Distance (OS_0 - TS_1)")).toEqual({ relation: null, rule: "Rule 8: Passing at a Safe Distance (OS_0 - TS_1)" });
+    expect(splitFailedRule("Rule 8: Passing at a Safe Distance (os - ts1)")).toEqual({ relation: null, rule: "Rule 8: Passing at a Safe Distance (os - ts1)" });
   });
 });
 
 describe("summarizeVerdicts", () => {
   const verdicts = [
-    verdict(1, { run_index: 0, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A", "OS_0 - TS_2: Rule 8: B"], first_failure_time_s: 30 }),
-    verdict(2, { run_index: 0, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A"], first_failure_time_s: 12 }),
+    verdict(1, { run_index: 0, state: "failed", failed_rules: ["os - ts1: Rule 16: A", "os - ts2: Rule 8: B"], first_failure_time_s: 30 }),
+    verdict(2, { run_index: 0, state: "failed", failed_rules: ["os - ts1: Rule 16: A"], first_failure_time_s: 12 }),
     verdict(3, { run_index: 0, state: "passed" }),
-    verdict(4, { run_index: 1, state: "failed", failed_rules: ["OS_0 - TS_1: Rule 16: A", "OS_0 - TS_2: Rule 16: A"], first_failure_time_s: 50, sensitive: true }),
+    verdict(4, { run_index: 1, state: "failed", failed_rules: ["os - ts1: Rule 16: A", "os - ts2: Rule 16: A"], first_failure_time_s: 50, sensitive: true }),
     verdict(5, { run_index: 1, state: "unmonitored" }),
   ];
 
@@ -258,7 +258,7 @@ describe("summarizeVerdicts", () => {
       ["Rule 16: A", 3],
       ["Rule 8: B", 1],
     ]);
-    expect(failedRules[0].relations).toEqual(["OS_0 - TS_1", "OS_0 - TS_2"]);
+    expect(failedRules[0].relations).toEqual(["os - ts1", "os - ts2"]);
     expect(failedRules[0].earliestFailureS).toBe(12);
   });
 
@@ -270,7 +270,7 @@ describe("summarizeVerdicts", () => {
 
 describe("fetchVerdictSummary", () => {
   it("reads the filtered set in pages until it is complete", async () => {
-    const { client, calls } = fakeLister(2300, (i) => verdict(i, { state: i % 2 === 0 ? "failed" : "passed", failed_rules: i % 2 === 0 ? ["OS_0 - TS_1: Rule 8: B"] : [] }));
+    const { client, calls } = fakeLister(2300, (i) => verdict(i, { state: i % 2 === 0 ? "failed" : "passed", failed_rules: i % 2 === 0 ? ["os - ts1: Rule 8: B"] : [] }));
     const summary = await fetchVerdictSummary(client, "c1", { ...DEFAULT_VERDICT_FILTERS, runIndex: 0 });
     expect(calls.map((call) => [call.run_index, call.limit, call.offset])).toEqual([
       [0, 1000, 0],

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { listHistory, listOutputs, type OutputRow } from "../../../domain/cluster/historyApi";
 import { describeOperatorError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { CampaignRow } from "../../../domain/cluster/schemas";
@@ -10,6 +10,8 @@ import { CAMPAIGN_STEP_LABELS, CHAIN } from "./stepPlan";
 import type { InputItemDraft } from "./wizardState";
 
 const ENTRIES_SHOWN = 50;
+/** The name search reads the list once typing pauses, as the other searches of the console do. */
+const SEARCH_DEBOUNCE_MS = 300;
 const OUTPUTS_PER_PAGE = 25;
 /** "Add every output" reads pages of this size and stops at the cap, so a huge entry does not freeze the wizard. */
 const BULK_PAGE = 200;
@@ -45,9 +47,14 @@ function flagsOf(output: OutputRow): string {
 
 function EntryList({ client, sourceSteps, noun, onChoose }: { client: OperatorClient; sourceSteps: readonly CampaignStep[]; noun: string; onChoose: (row: CampaignRow) => void }) {
   const [search, setSearch] = useState("");
+  const [name, setName] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setName(search.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [search]);
   const query = useQuery({
-    queryKey: ["wizard-history", client.baseUrl, search.trim()],
-    queryFn: ({ signal }) => listHistory(client, { q: search.trim() || undefined, limit: ENTRIES_SHOWN }, signal),
+    queryKey: ["wizard-history", client.baseUrl, name],
+    queryFn: ({ signal }) => listHistory(client, { q: name || undefined, limit: ENTRIES_SHOWN }, signal),
     placeholderData: keepPreviousData,
   });
   const rows = (query.data?.items ?? []).filter((row) => stepsOfRow(row).some((step) => sourceSteps.includes(step)));
@@ -63,7 +70,7 @@ function EntryList({ client, sourceSteps, noun, onChoose }: { client: OperatorCl
           </button>
         </div>
       )}
-      {query.data && rows.length === 0 && <p className="meta">No entry has {noun} to start from{search.trim() ? " with this name" : ""}. Run a workbench page or a campaign first, or upload a file.</p>}
+      {query.data && rows.length === 0 && <p className="meta">No entry has {noun} to start from{name ? " with this name" : ""}. Run a workbench page or a campaign first, or upload a file.</p>}
       {rows.length > 0 && (
         <div className="camp-table-wrap wiz-class-scroll">
           <table className="camp-table camp-table--dense">
@@ -221,7 +228,7 @@ function OutputList({
                     const problem = outputProblem(row, kinds);
                     const added = items.some((item) => sameOutput(item, entry.campaign_id, step, row));
                     return (
-                      <tr key={`${row.case_id}-${row.run_record_id ?? "none"}`}>
+                      <tr key={`${row.case_id}/${row.run_record_id ?? "-"}/${row.run_index ?? "-"}/${row.repeat_index ?? "-"}`}>
                         <td className="camp-num">
                           {row.case_index}
                           {row.run_index !== null ? `, run ${row.run_index + 1}` : ""}

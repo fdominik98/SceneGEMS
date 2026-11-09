@@ -3,15 +3,18 @@ import type { Theme } from "../../../app/theme";
 import type { TrajectoryStream } from "../../../app/uiStore";
 
 /**
- * A vessel keeps its hue in both modes; light mode takes a darker shade of it to stand out on the pale sea.
+ * A vessel keeps its hue in both modes. os to ts3 are the colors of the paper's COLREGS scenario
+ * figure (`SceneGEMS_assets/figures/tool_paper/journal_figures/colregs_scenario.svg`): light mode, the
+ * day chart, uses them as they are; dark mode takes the same hue and saturation, lighter, to read at
+ * about 6:1 on the night chart's sea (the figure's own shades reach 2.2 to 3.6:1 there).
  * These are literals because the simulation stream's darker twin is computed from them.
  */
 const SHIP_COLOR_MAPS: Record<Theme, Record<string, string>> = {
   dark: {
-    os: "#06b6d4", // color interpretation: blue
-    ts1: "#f97316", // color interpretation: orange
-    ts2: "#22c55e", // color interpretation: green
-    ts3: "#a855f7", // color interpretation: purple
+    os: "#00a5c2", // color interpretation: teal, the figure's #00778c lighter
+    ts1: "#fa6600", // color interpretation: burnt orange, the figure's #ad4700 lighter
+    ts2: "#19ab4e", // color interpretation: green, the figure's #13813b lighter
+    ts3: "#ba74fc", // color interpretation: purple, the figure's #6d04d1 lighter
     ts4: "#eab308", // color interpretation: yellow
     ts5: "#ef4444", // color interpretation: red
     ts6: "#3b82f6", // color interpretation: blue
@@ -19,10 +22,10 @@ const SHIP_COLOR_MAPS: Record<Theme, Record<string, string>> = {
     ts8: "#f43f5e", // color interpretation: pink
   },
   light: {
-    os: "#0891b2",
-    ts1: "#ea580c",
-    ts2: "#16a34a",
-    ts3: "#9333ea",
+    os: "#00778c",
+    ts1: "#ad4700",
+    ts2: "#13813b",
+    ts3: "#6d04d1",
     ts4: "#ca8a04",
     ts5: "#dc2626",
     ts6: "#2563eb",
@@ -63,7 +66,14 @@ export function getShipColor(actor: ActorStaticInfo, theme: Theme = "dark"): str
     return shipColors.os;
   }
   const key = normalizeShipKey(actor.name);
-  return shipColors[key] ?? fallbackColor(actor.id, theme);
+  // A target named otherwise (its vessel type, from a file) is TS_<id> to the backend: it takes that color.
+  const byId = /^\d+$/.test(actor.id) ? shipColors[`ts${actor.id}`] : undefined;
+  return shipColors[key] ?? byId ?? fallbackColor(actor.id, theme);
+}
+
+/** The own ship's color, where no frame names it. */
+export function ownShipColor(theme: Theme = "dark"): string {
+  return SHIP_COLOR_MAPS[theme].os;
 }
 
 /**
