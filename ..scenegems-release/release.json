@@ -1,66 +1,66 @@
 {
   "format": 1,
   "name": "scenegems",
-  "revision": "db20cdb2d4e45f103080d3fafc90c854f7ff101c",
-  "dirty": false,
-  "created_at": "2026-11-08T21:54:24+00:00",
+  "revision": "031c16887b3a34310f780473868bae5edc3f2d7e",
+  "dirty": true,
+  "created_at": "2026-11-09T16:52:53+00:00",
   "images": {
     "postgres:16.10-alpine": {
       "id": "sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297",
       "labels": {}
     },
-    "scenegems-ardupilot-sitl:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:d1f6389e13267fb95ff6f137dee655b41c15e7d58d14ec09903027813b9ba862",
+    "scenegems-ardupilot-sitl:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:402325d00d54aa5920ab42f557ef48ea9718eab7c8adb63cc81c453a143118fb",
       "labels": {
         "org.scenegems.fingerprint": "1fcccfe6386fc794d6145ca013469926c22ede546f552a7cdac2e2e4c31ef27c"
       }
     },
-    "scenegems-gazebo-harmonic:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:dfcecceb3e35701cd97c349517f66f73272b1d9bfd9a9af53d68324bf1c20948",
+    "scenegems-gazebo-harmonic:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:a9e0a9dbadfe2aedfbc9f243b1fb3275f26c470ddb7770770e6a1de2c3cd89b7",
       "labels": {
         "org.scenegems.fingerprint": "fd07952d489ea9dc549367a91a9d7d4cc0811ab9a8b80135280baf15a9b0527e"
       }
     },
-    "scenegems-master-api:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:f704f8a65114d9abfc5e566e11266ff950b67e264d8723018b94e8f3e56ead14",
+    "scenegems-master-api:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:e04885ea5e2b8cd619bf50699b46c068c6ff5ee9440fdf4365d66027bf7c6c8f",
       "labels": {
-        "org.scenegems.fingerprint": "dddb20714164bc5b13685d2c58a7ffbc07745ec522defe6e64a702d660e25567"
+        "org.scenegems.fingerprint": "1426d5509d47cbd6bbd5905bc6f5b2d76fe24f583a7a7e1404b56e36d006683e"
       }
     },
-    "scenegems-monitoring-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:6cb0c2acf03274b9236789e6253113394ffdefdd23ae1329a798b45420d60217",
+    "scenegems-monitoring-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:b8b9fa09bdc03146b3c1e5443d5111251880258c31af9279cb389a4b6d6a7334",
       "labels": {
-        "org.scenegems.fingerprint": "490c05311ea43da7eb65f757529d328e3a1a889376bbcc7c89eb3df73b9c2b8a"
+        "org.scenegems.fingerprint": "5e4db11e9eef23e8a42a4147c31644e99e272c4f2dd7a0a3855bd7aaed383813"
       }
     },
-    "scenegems-mqtt-broker:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:826b59a70ec9dda51c918f7e45f58bb30113ddd399a99ac4111289187104a457",
+    "scenegems-mqtt-broker:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:48d03276c9a9a538e83a12348e3c995d54a703adfd11876fe199c1a01371a4bb",
       "labels": {
         "org.scenegems.fingerprint": "7fbf5137fba8d9faaa79a3a7ff357a5169160c1fa32beefbbf3649c76e569d8d"
       }
     },
-    "scenegems-node:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:e8470936622a4742c7b157b574f897f1b9e8d43b79e1380160aa69fc119e0736",
+    "scenegems-node:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:b374096bc15b3819fca64e6d4b0238c1a59fa8d9934916940662a1a40e85bb44",
       "labels": {
-        "org.scenegems.fingerprint": "cb3191bb73903f8c81c0e5ada59b4cea7034d244435661985db491d89ea1cef6"
+        "org.scenegems.fingerprint": "d09d2d9dbe51fe49553ec3d3c006fdb610c17fa1956e835c56d01818a8adea9d"
       }
     },
-    "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:8a5af34d4240ba9f9a5042eb64904056144e2bff8edd38b93a7575287a529d00",
+    "scenegems-scenario-execution-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:14791cc8654cf5a8316f4da8054589a48ae177c1adac604e446dda188745dfae",
       "labels": {
-        "org.scenegems.fingerprint": "57be3d3c7e92c5192ecd66fe33d1beb23fc9b112d92da870a1bad846e3c09f68"
+        "org.scenegems.fingerprint": "d397188167bdf057777ceade6274200cd44d85aa064386f00d0172015c6dc5d6"
       }
     },
-    "scenegems-scene-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:00867b81f4f50c1fe19960bc1ca7dad9d2eee27fbdb06947eecd969bb0cef070",
+    "scenegems-scene-generation-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:f6a0e8d50d385c7e88a23e151145af5b9b7d6180e19390f8c292576c54b64198",
       "labels": {
-        "org.scenegems.fingerprint": "67934db888e6f33918be0cf2e5fa9f4013af0153757c51e0d4e9fde1849b8204"
+        "org.scenegems.fingerprint": "d3e6b32d5dd736f7ab7d3a3f97832660c51438308659ffc5685f3f13afe2ada1"
       }
     },
-    "scenegems-trajectory-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c": {
-      "id": "sha256:59f42e07b9068cf3b5075196b8d1b879f4e7f02a33df84238b92468caf0ad9d8",
+    "scenegems-trajectory-generation-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty": {
+      "id": "sha256:cddffbc02ec8b26897ea44ef6acd18915cd6703c4610759be462c8010331c8b9",
       "labels": {
-        "org.scenegems.fingerprint": "0edeae7fd87b9b264a463f262b2f7702b593d5136ec7ea6cdc1d75c2483e40e6"
+        "org.scenegems.fingerprint": "12ede34862b7b49f67eae96c31f998d0de374d59fc98820ba04d7ceeedccf291"
       }
     }
   },
@@ -71,15 +71,15 @@
       "stack": "master",
       "project": "scenegems-{cluster}",
       "images": [
-        "scenegems-master-api:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
-        "scenegems-mqtt-broker:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+        "scenegems-master-api:031c16887b3a34310f780473868bae5edc3f2d7e-dirty",
+        "scenegems-mqtt-broker:031c16887b3a34310f780473868bae5edc3f2d7e-dirty",
         "postgres:16.10-alpine"
       ],
       "env": {
         "COMPOSE_PROJECT_NAME": "scenegems-{cluster}",
         "COMPOSE_PATH_SEPARATOR": ":",
         "SCENEGEMS_MASTER_ID": "{cluster}",
-        "SCENEGEMS_IMAGE_TAG": "db20cdb2d4e45f103080d3fafc90c854f7ff101c",
+        "SCENEGEMS_IMAGE_TAG": "031c16887b3a34310f780473868bae5edc3f2d7e-dirty",
         "POSTGRES_DB": "scenegems",
         "POSTGRES_USER": "scenegems"
       },
@@ -150,7 +150,7 @@
       "stack": "node",
       "project": "scenegems-node-{cluster}-{name}",
       "images": [
-        "scenegems-node:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+        "scenegems-node:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
       ],
       "env": {
         "SCENEGEMS_MASTER_ID": "{cluster}",
@@ -159,7 +159,7 @@
         "SCENEGEMS_NODE_NAME": "{name}",
         "SCENEGEMS_NODE_MACHINE": "{machine.name}",
         "SCENEGEMS_SOFTWARE_REVISION": "{release.revision}",
-        "SCENEGEMS_IMAGE_TAG": "db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+        "SCENEGEMS_IMAGE_TAG": "031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
       },
       "parameters": {
         "SCENEGEMS_NODE_COMPONENTS": {
@@ -172,30 +172,30 @@
               "asv_software/usv_navigation": [],
               "control_layer/none": [],
               "control_layer/ardupilot": [
-                "scenegems-ardupilot-sitl:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-ardupilot-sitl:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "control_layer/custom": [],
               "simulation_layer/kinematic": [
-                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-scenario-execution-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "simulation_layer/ardupilot_sim": [
-                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-scenario-execution-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "simulation_layer/gazebo": [
-                "scenegems-gazebo-harmonic:db20cdb2d4e45f103080d3fafc90c854f7ff101c",
-                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-gazebo-harmonic:031c16887b3a34310f780473868bae5edc3f2d7e-dirty",
+                "scenegems-scenario-execution-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "scene_generation": [
-                "scenegems-scene-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-scene-generation-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "trajectory_generation": [
-                "scenegems-trajectory-generation-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-trajectory-generation-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "monitoring": [
-                "scenegems-monitoring-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-monitoring-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ],
               "calibration": [
-                "scenegems-scenario-execution-subsystem:db20cdb2d4e45f103080d3fafc90c854f7ff101c"
+                "scenegems-scenario-execution-subsystem:031c16887b3a34310f780473868bae5edc3f2d7e-dirty"
               ]
             }
           }

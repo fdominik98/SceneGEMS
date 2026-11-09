@@ -53,7 +53,7 @@ describe("round trip", () => {
 
   it("a value edit changes only that value, byte for byte", () => {
     const edited = edit(GENERAL_COLREGS, { kind: "set", path: ["READILY_APPARENT_COURSE_CHANGE_TIME"], value: 45 });
-    expect(edited).toBe(replaceOnce(GENERAL_COLREGS, "READILY_APPARENT_COURSE_CHANGE_TIME: 30 ", "READILY_APPARENT_COURSE_CHANGE_TIME: 45 "));
+    expect(edited).toBe(replaceOnce(GENERAL_COLREGS, "READILY_APPARENT_COURSE_CHANGE_TIME: 70 ", "READILY_APPARENT_COURSE_CHANGE_TIME: 45 "));
     expect(edited).toContain("\r\n");
     expect(commentsOf(edited)).toEqual(commentsOf(GENERAL_COLREGS));
   });

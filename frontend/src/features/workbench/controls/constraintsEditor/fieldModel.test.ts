@@ -66,7 +66,7 @@ describe("the domain configuration files", () => {
 
   it("types the COLREGS fields and takes units from the comments", () => {
     const time = scalar(GENERAL_COLREGS, "READILY_APPARENT_COURSE_CHANGE_TIME");
-    expect(time).toMatchObject({ kind: "integer", value: 30, unit: "seconds", label: "Readily apparent course change time" });
+    expect(time).toMatchObject({ kind: "integer", value: 70, unit: "seconds", label: "Readily apparent course change time" });
     expect(time.description).toBe("Time for a course change to be readily apparent");
 
     const heading = scalar(GENERAL_COLREGS, "READILY_APPARENT_HEADING_CHANGE");

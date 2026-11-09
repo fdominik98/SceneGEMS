@@ -79,13 +79,14 @@ def test_the_stack_values_and_a_geofence_are_kept_and_round_trip_through_the_sto
     assert campaign_config_from_dict(config.to_json()) == config and campaign_config_from_dict(config.to_json()).config_hash() == config.config_hash()
 
 
-# Configs stored before USV Navigation on ArduPilot existed, with the FEC id they were stored with, and their hashes then
+# Configs stored before USV Navigation on ArduPilot existed, with the FEC id they were stored with, and their hashes with
+# the default domain presets of 2026-11-09 (READILY_APPARENT_COURSE_CHANGE_TIME and HEADING_PERSISTENCE_TIME 70 s)
 STORED_SCOPE = [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 1}]
 STORED_ARDUPILOT_HASHES = {
-    "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "a0cfa9556b4fe7df370d136abb190b68e1e7f5a2466f04bc41345ff1588278e9"),
+    "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "c0b9ce7fc3c3268a774719f15c84b8451fd3a7afe784b9fc685edf732ce339cb"),
     "sitl": (
         {"stack": {"simulation_layer": "ardupilot_sim", "speedup": 4, "dt": 2, "steps": 30, "geofence": {"latitude": 58.0}}, "monitor": "live", "repeats": 2},
-        "f4f8b82409661fb29e3fe760c3d6843a34fb4b4909814d814dae42b7c5218f77",
+        "331c57d17e259321d0c6c0fe29bc6815dc48f33e905adee041ed9e03f37e9893",
     ),
 }
 

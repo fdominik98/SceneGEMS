@@ -112,10 +112,13 @@ class TestGiveWayEarlyAction:
         deadline = self.condition.action_start_deadline
         assert deadline == max(0, self.immediate - constants().READILY_APPARENT_COURSE_CHANGE_TIME)
 
-    def test_early_in_the_encounter_turning_or_holding_are_both_suggested(self):
+    def test_at_the_start_of_the_encounter_turning_is_the_only_suggestion(self):
+        """The shipped presets give IMMEDIATE_HEADING_CHANGE_TIME 60 s and READILY_APPARENT_COURSE_CHANGE_TIME 70 s:
+        the turn has to be under way at once (deadline 0), so holding the course is not offered any more."""
+        assert self.condition.action_start_deadline == 0
         state = colregs_state(time_spent_in_current_context=0)
         suggestions = self.condition.maneuver_suggestions(scene(state), 1)
-        assert dict(suggestions) == {A: {LEFT, PERSIST}}
+        assert dict(suggestions) == {A: {LEFT}}
 
     def test_at_the_deadline_only_the_turn_is_suggested(self):
         state = colregs_state(time_spent_in_current_context=self.condition.action_start_deadline)

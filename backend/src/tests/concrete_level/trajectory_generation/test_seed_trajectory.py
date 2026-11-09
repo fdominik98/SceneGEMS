@@ -69,17 +69,19 @@ class TestPhases:
         assert [next_phase(phase) for phase in phases] == [PHASE_OUTBOUND, PHASE_PARALLEL, PHASE_INBOUND, PHASE_AFTER, PHASE_AFTER]
         assert next_phase("unknown") == PHASE_AFTER
 
+    # The corridor's first leg is speed times READILY_APPARENT_COURSE_CHANGE_TIME: 560 m at 8 m/s and the shipped
+    # 70 s, so the give-way ship is outbound from node 70.
     def test_a_run_goes_from_before_to_outbound_for_the_give_way_ship(self, failing_nodes):
         domain = latched_domains_from_nodes(failing_nodes)[OWN_SHIP]
         assert phase_of_actor(OWN_SHIP, failing_nodes[20], domain) == PHASE_BEFORE
-        assert phase_of_actor(OWN_SHIP, failing_nodes[40], domain) == PHASE_OUTBOUND
-        assert phase_of_actor(OWN_SHIP, failing_nodes[40], None) == PHASE_BEFORE
+        assert phase_of_actor(OWN_SHIP, failing_nodes[80], domain) == PHASE_OUTBOUND
+        assert phase_of_actor(OWN_SHIP, failing_nodes[80], None) == PHASE_BEFORE
 
     def test_the_desired_heading_is_the_original_one_without_a_domain_or_before_it(self, failing_nodes):
         domain = latched_domains_from_nodes(failing_nodes)[OWN_SHIP]
         assert seed_desired_heading(failing_nodes[0].scene[OWN_SHIP], None, 1.25) == 1.25
         assert seed_desired_heading(failing_nodes[0].scene[OWN_SHIP], domain, 1.25) == 1.25  # still before the manoeuvre
-        assert seed_desired_heading(failing_nodes[40].scene[OWN_SHIP], domain, 1.25) != 1.25
+        assert seed_desired_heading(failing_nodes[80].scene[OWN_SHIP], domain, 1.25) != 1.25
 
 
 class TestLatchedDomains:
