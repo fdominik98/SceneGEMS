@@ -67,7 +67,7 @@ describe("listHistory", () => {
     expect(campaign.totals?.cases.complete).toBe(5);
   });
 
-  it("still parses the rows of a master without Phase 6", async () => {
+  it("still parses the rows of a control node without Phase 6", async () => {
     const { client } = clientWith(async () => jsonResponse([samplePreSixCampaignRow]));
     const [row] = (await listHistory(client)).items;
     expect(row.campaign_id).toBe("c1");
@@ -121,7 +121,7 @@ describe("outputs", () => {
     expect(outputRowSchema.parse(sampleDroppedOutput()).artifact).toBeNull();
   });
 
-  it("parses a verdict's monitor result summary, which null and an older master's leave out", () => {
+  it("parses a verdict's monitor result summary, which null and an older control node's leave out", () => {
     const verdict = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })).verdict;
     expect(verdict?.first_failure_time_s).toBe(61);
     expect(verdict?.encounters?.["os - ts1"]).toEqual(["CROSSING_FROM_PORT", "OTHER"]);

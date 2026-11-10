@@ -164,8 +164,8 @@ export interface PlaybackState {
   streamStatus: "connecting" | "connected" | "disconnected" | "error";
   /** The interactive simulation's MQTT broker connection on the server. */
   mqttBrokerStatus: "connected" | "disconnected";
-  /** The master's own broker as the server dials it ("host:port"), null when it has none or is not known yet. */
-  masterBroker: string | null;
+  /** The control node's own broker as the server dials it ("host:port"), null when it has none or is not known yet. */
+  controlNodeBroker: string | null;
   monitorStatus: "connected" | "disconnected";
   errorMessage: string | null;
   isPlaying: boolean;
@@ -224,7 +224,7 @@ export interface PlaybackState {
   stackOptions: StackOptionsPayload | null;
   setStackOptions: (options: StackOptionsPayload | null) => void;
   setStreamStatus: (status: PlaybackState["streamStatus"]) => void;
-  setMqttBrokerStatus: (status: PlaybackState["mqttBrokerStatus"], masterBroker?: string | null) => void;
+  setMqttBrokerStatus: (status: PlaybackState["mqttBrokerStatus"], controlNodeBroker?: string | null) => void;
   previewMonitor: PreviewMonitorState;
   setPreviewMonitor: (state: PreviewMonitorState) => void;
   setMonitorStatus: (status: PlaybackState["monitorStatus"]) => void;
@@ -292,7 +292,7 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
   const store = create<PlaybackState>((set, get) => ({
     streamStatus: "disconnected",
     mqttBrokerStatus: "disconnected",
-    masterBroker: null,
+    controlNodeBroker: null,
     previewMonitor: IDLE_PREVIEW_MONITOR,
     setPreviewMonitor: (previewMonitor) => set({ previewMonitor }),
     monitorStatus: "disconnected",
@@ -329,8 +329,8 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     stackOptions: null,
     setStackOptions: (options) => set({ stackOptions: options }),
     setStreamStatus: (status) => set({ streamStatus: status }),
-    setMqttBrokerStatus: (status, masterBroker) =>
-      set(masterBroker === undefined ? { mqttBrokerStatus: status } : { mqttBrokerStatus: status, masterBroker }),
+    setMqttBrokerStatus: (status, controlNodeBroker) =>
+      set(controlNodeBroker === undefined ? { mqttBrokerStatus: status } : { mqttBrokerStatus: status, controlNodeBroker }),
     setMonitorStatus: (status) => set({ monitorStatus: status }),
     setError: (message) =>
       set({

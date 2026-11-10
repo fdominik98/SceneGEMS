@@ -1,4 +1,4 @@
-"""Records of the artifacts in the master's artifact store and of who references them.
+"""Records of the artifacts in the control node's artifact store and of who references them.
 
 The artifact store (P4.3) keeps the files; these rows say what it holds and what still
 needs each file. Retention removes references; the sweep deletes the files of artifacts

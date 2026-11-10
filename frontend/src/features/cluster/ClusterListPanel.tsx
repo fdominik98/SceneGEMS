@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Disclosure } from "../../components/Disclosure";
 import { DEFAULT_OPERATOR_URL, useClusterStore, type ClusterEntry } from "../../domain/cluster/clusterStore";
 
-export const SSH_TUNNEL_COMMAND = "ssh -L 5174:127.0.0.1:5174 <user>@<master>";
+export const SSH_TUNNEL_COMMAND = "ssh -L 5174:127.0.0.1:5174 <user>@<control node>";
 
 interface ClusterFormProps {
   initial: { name: string; operatorUrl: string };
@@ -128,7 +128,7 @@ export function ClusterListPanel() {
         )}
       </div>
       {clusters.length === 0 ? (
-        <p className="meta">No clusters yet. Add one with its master's operator URL.</p>
+        <p className="meta">No clusters yet. Add one with its control node's operator URL.</p>
       ) : (
         <ul className="cluster-rows">
           {clusters.map((cluster) => (
@@ -156,13 +156,13 @@ export function ClusterListPanel() {
         id="cluster:tunnel-hint"
         variant="link"
         headingLevel={null}
-        title="How do I reach a remote master?"
+        title="How do I reach a remote control node?"
         openTitle="Hide the tunnel instructions"
       >
         <div className="cluster-hint">
           <p>
-            The UI talks to a master's operator API, which listens on the master's 127.0.0.1:5174 only. On the
-            master itself use {DEFAULT_OPERATOR_URL}; from another machine, open a tunnel first and keep that URL:
+            The UI talks to a control node's operator API, which listens on the control node's 127.0.0.1:5174 only. On the
+            control node itself use {DEFAULT_OPERATOR_URL}; from another machine, open a tunnel first and keep that URL:
           </p>
           <code className="cluster-hint-command">{SSH_TUNNEL_COMMAND}</code>
           <p>

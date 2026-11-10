@@ -119,9 +119,9 @@ class TestDispatch:
         assert name == "connect_to_mqtt_broker"
         assert (kwargs["user"], kwargs["port"], kwargs["tls_connection"]) == ("u", 8883, True)
         assert (kwargs["reference_geofence"].latitude, kwargs["reference_geofence"].radius_meters) == (57.7, 2000.0)
-        assert kwargs["use_master_broker"] is False
+        assert kwargs["use_control_node_broker"] is False
 
-    async def test_connect_to_the_master_broker(self, setup):
+    async def test_connect_to_the_control_node_broker(self, setup):
         session, processor = setup
         await send(
             processor,
@@ -135,12 +135,12 @@ class TestDispatch:
                 "tls_connection": False,
                 "allow_certificates": False,
                 "geofence": {"latitude": 57.7, "longitude": 16.6, "radius_meters": 2000},
-                "use_master_broker": True,
+                "use_control_node_broker": True,
             },
         )
         ((name, kwargs),) = session.calls
         assert name == "connect_to_mqtt_broker"
-        assert kwargs["use_master_broker"] is True
+        assert kwargs["use_control_node_broker"] is True
 
     async def test_disconnect_and_monitor_commands(self, setup):
         session, processor = setup
@@ -281,7 +281,7 @@ class TestLiveSessionsOff:
         await send(processor, {"type": message_type})
         assert session.calls == []
         (error,) = session.errors
-        assert error.startswith("Live sessions are off on this master") and message_type in error and "docker-compose.live-sessions.yml" in error
+        assert error.startswith("Live sessions are off on this control node") and message_type in error and "docker-compose.live-sessions.yml" in error
 
     async def test_everything_else_still_works(self, off):
         session, processor = off

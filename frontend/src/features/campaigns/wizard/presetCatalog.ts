@@ -11,7 +11,7 @@ import { CAMPAIGN_STEP_LABELS, CHAIN } from "./stepPlan";
 
 /**
  * The preset catalog. A preset states no tags: what it can be filtered by is read from its config,
- * the way loading it reads it (`draftFromConfig`), against the master's stacks and FEC catalog, so a
+ * the way loading it reads it (`draftFromConfig`), against the control node's stacks and FEC catalog, so a
  * preset saved on the cluster is sorted in the same way as a shipped one.
  */
 
@@ -31,7 +31,7 @@ export interface PresetFacts {
   cases: number | null;
   /** The stacks of its runs, in catalog order; none when it does not simulate. */
   stacks: CatalogStack[];
-  /** A run needs a stack the master does not offer or cannot run. */
+  /** A run needs a stack the control node does not offer or cannot run. */
   blocked: boolean;
 }
 
@@ -41,7 +41,7 @@ function ascending(values: Iterable<number>): number[] {
   return [...new Set(values)].sort((a, b) => a - b);
 }
 
-/** What a preset's config says, read against the master's catalogs; while one of them loads its part stays empty. */
+/** What a preset's config says, read against the control node's catalogs; while one of them loads its part stays empty. */
 export function presetFacts(preset: CampaignPreset, catalog: BuilderCatalog | null, classes: readonly CatalogClass[] | undefined): PresetFacts {
   const draft = draftFromConfig(preset.config, catalog ?? NO_STACKS);
   const explores = preset.steps[0] === "design_space_exploration";
@@ -82,7 +82,7 @@ function obstacleValues(facts: PresetFacts): CatalogValue[] {
 }
 
 function sourceValues(facts: PresetFacts): CatalogValue[] {
-  return [facts.preset.builtin ? { value: "shipped", label: "Shipped with the master", rank: 0 } : { value: "saved", label: "Saved on this cluster", rank: 1 }];
+  return [facts.preset.builtin ? { value: "shipped", label: "Shipped with the control node", rank: 0 } : { value: "saved", label: "Saved on this cluster", rank: 1 }];
 }
 
 function stackValues(facts: PresetFacts): CatalogValue[] {

@@ -1,4 +1,4 @@
-from scenegems_tool.cluster.node.launchers.container_environment import geofence_from_environment
+from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.subsystems.scenario_execution.scenario_execution_worker import ScenarioExecutionWorker
 

@@ -332,7 +332,7 @@ class PipelineJobEvent:
     at: datetime
     kind: JobEventKind
     attempt: int
-    node_id: Optional[str]
+    worker_node_id: Optional[str]
     detail: Dict[str, Any]
     pipeline_job: PipelineJobRecord
     job_state: JobState

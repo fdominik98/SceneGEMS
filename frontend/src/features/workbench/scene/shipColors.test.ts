@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActorStaticInfo } from "../../../domain/simulation/types";
-import { buildShipColorsByActorId, getActorPanelDotColor, getShipColor, getSimulationStreamColor } from "./shipColors";
+import { buildShipColorsByActorId, getActorPanelDotColor, getShipColor, getSimulationStreamColor, shipColorOfName } from "./shipColors";
 
 function actor(partial: Partial<ActorStaticInfo> & Pick<ActorStaticInfo, "id">): ActorStaticInfo {
   return {
@@ -94,5 +94,27 @@ describe("the paper's COLREGS scenario figure", () => {
     expect(getShipColor(actor({ id: "2", name: "FishingVessel" }))).toBe(getShipColor(actor({ id: "2", name: "TS_2" })));
     const named = buildShipColorsByActorId([vessels[0]!, actor({ id: "1", name: "CargoShip" }), actor({ id: "2", name: "FishingVessel" })]);
     expect([named["1"], named["2"]]).toEqual([getShipColor(vessels[1]!), getShipColor(vessels[2]!)]);
+  });
+});
+
+describe("shipColorOfName", () => {
+  it("gives a vessel id the color of that vessel in each mode", () => {
+    const own = getShipColor(actor({ id: "0", name: "os", isOwnShip: true }), "light");
+    expect(shipColorOfName("os", "light")).toBe(own);
+    expect(shipColorOfName("ts1", "light")).toBe(getShipColor(actor({ id: "1", name: "ts1" }), "light"));
+    expect(shipColorOfName("ts3", "dark")).toBe(getShipColor(actor({ id: "3", name: "ts3" }), "dark"));
+    expect(shipColorOfName("ts1", "dark")).not.toBe(shipColorOfName("ts1", "light"));
+  });
+
+  it("does not care about the case of the id, so the generator's tS1 is ts1", () => {
+    expect(shipColorOfName("tS1")).toBe(shipColorOfName("ts1"));
+    expect(shipColorOfName("OS")).toBe(shipColorOfName("os"));
+    expect(shipColorOfName(" ts02 ")).toBe(shipColorOfName("ts2"));
+  });
+
+  it("has no color for a name that is not a vessel id, or a target ship beyond the palette", () => {
+    for (const name of ["osprey", "ts", "tsunami1", "obst1", "staticObstacle1", "OSPassengerShip", "", "ts99"]) {
+      expect(shipColorOfName(name)).toBeNull();
+    }
   });
 });

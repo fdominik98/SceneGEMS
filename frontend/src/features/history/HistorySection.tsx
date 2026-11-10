@@ -11,7 +11,7 @@ import { selectOpenEntry, useHistoryStore } from "./historyStore";
 /**
  * Campaign History of the selected cluster: every entry (campaigns and workbench runs, ongoing
  * and finished) and one entry's page with its steps and outputs. Replaces the Observe section;
- * the per-node instance browser is on the Cluster page.
+ * the per-worker-node instance browser is on the Cluster page.
  */
 export function HistorySection() {
   const cluster = useSelectedCluster();

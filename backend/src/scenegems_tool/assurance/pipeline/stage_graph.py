@@ -99,7 +99,7 @@ def stage_priority_offsets(scene_monitored: bool = False, trajectories_monitored
     return offsets
 
 
-# A job type and the components a node needs to run one of its jobs: what the stall check looks for
+# A job type and the components a worker node needs to run one of its jobs: what the stall check looks for
 JobNeed = Tuple[JobType, Tuple[ComponentId, ...]]
 
 

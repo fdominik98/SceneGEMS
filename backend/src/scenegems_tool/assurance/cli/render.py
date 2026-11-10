@@ -29,7 +29,7 @@ def verdicts_of(entry: Dict[str, Any]) -> Dict[str, int]:
 
 
 def campaign_row(campaign: Dict[str, Any]) -> List[Any]:
-    """A line of the campaign list; a master before Phase 6 sends no kind, origin or steps."""
+    """A line of the campaign list; a control node before Phase 6 sends no kind, origin or steps."""
     steps = ",".join(campaign["steps"]) if campaign.get("steps") else None
     return [campaign["campaign_id"], campaign["name"], campaign.get("kind"), campaign.get("origin"), steps, campaign["desired_state"], campaign["actual_state"], campaign["created_at"]]
 
@@ -101,7 +101,7 @@ def findings_summary(findings: Dict[str, Any]) -> str:
     durations = findings["durations_s"]
     if durations["median"] is not None:
         lines.append(f"job duration s: median {durations['median']:.1f}, p90 {durations['p90']:.1f}")
-    if findings.get("encounter_types"):  # absent from an older master
+    if findings.get("encounter_types"):  # absent from an older control node
         lines.append("encounters (vessel pairs by first type): " + ", ".join(f"{name} {count}" for name, count in findings["encounter_types"].items()))
     if findings["failed_rules"]:
         lines.append("")

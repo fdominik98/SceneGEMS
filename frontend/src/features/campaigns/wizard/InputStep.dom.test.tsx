@@ -13,7 +13,7 @@ import { draftOf } from "./wizardTestData";
 import type { WizardDraft } from "./wizardState";
 
 const mocks = vi.hoisted(() => ({
-  client: { baseUrl: "http://master.test" },
+  client: { baseUrl: "http://control-node.test" },
   uploadArtifact: vi.fn(),
   listHistory: vi.fn(),
   listOutputs: vi.fn(),
@@ -64,7 +64,7 @@ describe("Input for a start with scene generation", () => {
     expect(latest().input.scenarios[0]).toMatchObject({ name: "my_head_on", fileName: "my_head_on.problem", quota: 1, failureBudget: 0, ref: { sha256: SCENE_SHA, kind: "functional_scenario" } });
 
     const card = screen.getByRole("region", { name: "Scenario file 1" });
-    expect(within(card).getByText(/the master deletes it in about 24 hours unless a campaign uses it/)).toBeVisible();
+    expect(within(card).getByText(/the control node deletes it in about 24 hours unless a campaign uses it/)).toBeVisible();
     const quota = within(card).getByRole("spinbutton", { name: "Quota" });
     await user.clear(quota);
     await user.type(quota, "4");
@@ -89,7 +89,7 @@ describe("Input for a start with scene generation", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows the master's reasons on the scenario file they name", () => {
+  it("shows the control node's reasons on the scenario file they name", () => {
     setup(
       (draft) => {
         draft.input.scenarios = [{ id: "s1", fileName: "a.problem", name: "a", ref: { sha256: SCENE_SHA, size_bytes: 3, kind: "functional_scenario" }, quota: 1, failureBudget: 0, uploadedAt: Date.now() }];
@@ -198,7 +198,7 @@ describe("Input for a later start", () => {
     expect(mocks.uploadArtifact).toHaveBeenCalledWith(mocks.client, "{\"scene\": 1}", "scene", "application/json");
     expect(latest().input.items[0]).toMatchObject({ name: "head_on", source: { file: "head_on.json" }, ref: { kind: "scene", size_bytes: 321 } });
     expect(latest().input.items[0].uploadedAt).not.toBeNull();
-    expect(screen.getByText(/the master deletes it in about 24 hours unless a campaign uses it/)).toBeVisible();
+    expect(screen.getByText(/the control node deletes it in about 24 hours unless a campaign uses it/)).toBeVisible();
   });
 
   it("uploads trajectory files for a simulation start", async () => {
@@ -218,7 +218,7 @@ describe("Input for a later start", () => {
     expect(mocks.uploadArtifact).not.toHaveBeenCalled();
   });
 
-  it("renames and removes items, and shows the master's reason on the item it names", async () => {
+  it("renames and removes items, and shows the control node's reason on the item it names", async () => {
     history();
     const { latest, user } = setup(
       (draft) => {
@@ -243,7 +243,7 @@ describe("Input for a later start", () => {
   });
 
   it("says when Campaign History did not load and loads again on request", async () => {
-    mocks.listHistory.mockRejectedValueOnce(new OperatorApiError("http", "master error", "/cluster/campaigns", 500)).mockResolvedValue({ items: entries, total: 2 });
+    mocks.listHistory.mockRejectedValueOnce(new OperatorApiError("http", "control node error", "/cluster/campaigns", 500)).mockResolvedValue({ items: entries, total: 2 });
     const { user } = setup((draft) => void (draft.steps = ["trajectory_generation"]));
     expect(await screen.findByRole("alert")).toHaveTextContent("Campaign History did not load");
     await user.click(screen.getByRole("button", { name: "Try again" }));

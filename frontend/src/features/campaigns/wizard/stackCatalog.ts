@@ -3,7 +3,7 @@ import { COMPONENTS, componentLabel } from "../../../domain/cluster/components";
 import type { CatalogFacet, CatalogModel, CatalogValue } from "./catalogModel";
 import { supportsEnvironment } from "./configBuilder";
 
-/** The stack catalog: every field it filters and groups by is one the master reports per stack. */
+/** The stack catalog: every field it filters and groups by is one the control node reports per stack. */
 
 function componentValue(kind: string, id: string): CatalogValue {
   const component = `${kind}/${id}`;
@@ -15,7 +15,7 @@ export function simulationValue(stack: CatalogStack): CatalogValue {
   return componentValue("simulation_layer", stack.simulation_layer);
 }
 
-/** An older master reports the control layer only per vessel. */
+/** An older control node reports the control layer only per vessel. */
 export function controlValue(stack: CatalogStack): CatalogValue {
   return componentValue("control_layer", stack.control_layer ?? stack.vessels.own_ship?.control_layer ?? "none");
 }
@@ -50,7 +50,7 @@ export function supportValues(stack: CatalogStack): CatalogValue[] {
 }
 
 function availabilityValue(stack: CatalogStack): CatalogValue {
-  return stack.available ? { value: "available", label: "Runs on this master", rank: 0 } : { value: "unavailable", label: "Cannot run on this master", rank: 1 };
+  return stack.available ? { value: "available", label: "Runs on this control node", rank: 0 } : { value: "unavailable", label: "Cannot run on this control node", rank: 1 };
 }
 
 /** Orders stacks wherever they are listed: by simulation layer, then control layer, then what the own ship runs. */

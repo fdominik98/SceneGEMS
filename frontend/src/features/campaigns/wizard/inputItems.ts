@@ -93,7 +93,7 @@ export function sameOutput(item: InputItemDraft, campaignId: string, step: Campa
   return output.artifact === null || item.ref.sha256 === output.artifact.sha256;
 }
 
-/** Whole hours an upload still has on the master (at most 24, as a clock that lags the upload may be earlier than it), or 0 once it has expired; `null` for an item that is not an upload. */
+/** Whole hours an upload still has on the control node (at most 24, as a clock that lags the upload may be earlier than it), or 0 once it has expired; `null` for an item that is not an upload. */
 export function uploadHoursLeft(uploadedAt: number | null, now: number): number | null {
   if (uploadedAt === null) {
     return null;
@@ -105,10 +105,10 @@ export function uploadHoursLeft(uploadedAt: number | null, now: number): number 
 export function uploadNote(uploadedAt: number | null, now: number): string {
   const hours = uploadHoursLeft(uploadedAt, now);
   if (hours === null) {
-    return "Kept by the master with the entry it came from.";
+    return "Kept by the control node with the entry it came from.";
   }
   if (hours === 0) {
-    return "Expired: the master has removed the upload. Upload the file again.";
+    return "Expired: the control node has removed the upload. Upload the file again.";
   }
-  return `Uploaded; the master deletes it in about ${hours === 1 ? "1 hour" : `${hours} hours`} unless a campaign uses it.`;
+  return `Uploaded; the control node deletes it in about ${hours === 1 ? "1 hour" : `${hours} hours`} unless a campaign uses it.`;
 }

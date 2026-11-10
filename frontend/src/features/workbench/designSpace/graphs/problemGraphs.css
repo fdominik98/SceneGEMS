@@ -1,0 +1,342 @@
+/* The graphs of a .problem text: the metamodel as a class diagram and a model as an object graph. */
+
+.pg-switch {
+  display: inline-flex;
+}
+
+.pg-switch button {
+  border-radius: 0;
+  color: var(--text-muted);
+}
+
+.pg-switch button:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.pg-switch button:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+  margin-left: -1px;
+}
+
+.pg-switch button[aria-pressed="true"] {
+  position: relative;
+  border-color: var(--accent-strong);
+  background: var(--accent-solid);
+  color: var(--text);
+}
+
+.pg-graph {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.pg-graph--empty {
+  justify-content: center;
+}
+
+.pg-summary,
+.pg-notice {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.pg-summary {
+  color: var(--text-muted);
+}
+
+.pg-disclosure {
+  font-size: var(--font-size-sm);
+}
+
+.pg-predicate-lists {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  max-height: 220px;
+  overflow: auto;
+}
+
+.pg-predicates h5 {
+  margin: 0 0 var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.pg-predicates ul {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--font-size-xs);
+}
+
+.pg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  list-style: none;
+  background: var(--bg-pane);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.pg-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pg-legend-sample {
+  flex: none;
+  overflow: visible;
+}
+
+.pg-markers {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.pg-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 300px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--bg-panel);
+}
+
+.pg-canvas .react-flow {
+  --xy-background-color: var(--bg-panel);
+  --xy-background-pattern-color: var(--graph-dots);
+  --xy-controls-button-background-color: var(--bg-control);
+  --xy-controls-button-background-color-hover: var(--bg-control-hover);
+  --xy-controls-button-color: var(--text);
+  --xy-controls-button-border-color: var(--border);
+  --xy-edge-label-background-color: transparent;
+}
+
+/* Tones: a class's place among the classes, never its name. */
+.pg-tone-0 {
+  --pg-tone: var(--chart-series-1);
+}
+
+.pg-tone-1 {
+  --pg-tone: var(--chart-series-2);
+}
+
+.pg-tone-2 {
+  --pg-tone: var(--chart-series-3);
+}
+
+.pg-tone-3 {
+  --pg-tone: var(--accent-strong);
+}
+
+.pg-tone-4 {
+  --pg-tone: var(--ok);
+}
+
+.pg-tone-5 {
+  --pg-tone: var(--warn-bright);
+}
+
+.pg-card {
+  --pg-node-color: var(--pg-tone, var(--text-faint));
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 2px solid var(--text);
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: default;
+}
+
+.pg-card.is-undefined {
+  border-style: dashed;
+}
+
+/* An enum and its literals are red, as in the paper's figures */
+.pg-card--enum {
+  --pg-node-color: var(--danger);
+}
+
+/* The header: the node's name on its color */
+.pg-card-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  background: color-mix(in srgb, var(--pg-node-color) 62%, var(--bg-panel));
+  border-bottom: 2px solid var(--text);
+}
+
+.pg-card-title {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pg-card.is-abstract .pg-card-title {
+  font-style: italic;
+}
+
+.pg-tag {
+  flex: none;
+  color: var(--text);
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+
+.pg-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.pg-card-note {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pg-card-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-xs);
+  line-height: 20px;
+}
+
+.pg-card-rows li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.pg-row-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The tag in front of a row: solid for a class, gray for another fact, outlined for a value */
+.pg-row-tag {
+  flex: none;
+  fill: var(--text);
+  stroke: var(--text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.pg-row-tag--fact {
+  fill: var(--text-faint);
+  stroke: var(--text-faint);
+}
+
+.pg-row-tag--value {
+  fill: none;
+  stroke: var(--text-muted);
+}
+
+.pg-row-class {
+  font-weight: 600;
+}
+
+.pg-row-fact {
+  font-style: italic;
+}
+
+.pg-row-type {
+  color: var(--text-muted);
+}
+
+.pg-card-rows li.is-possible {
+  color: var(--text-faint);
+}
+
+.pg-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Edges: plain dark lines with their name beside them, as in the paper's figures */
+
+.pg-edge.react-flow__edge-path,
+.react-flow__edge .pg-edge,
+.pg-legend-sample .pg-edge {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.75;
+}
+
+.react-flow__edge .pg-edge--extends,
+.pg-legend-sample .pg-edge--extends {
+  stroke-width: 1.5;
+}
+
+.react-flow__edge .pg-edge--contains,
+.pg-legend-sample .pg-edge--contains {
+  stroke-width: 2.25;
+}
+
+.react-flow__edge .pg-edge.is-possible,
+.pg-legend-sample .pg-edge.is-possible {
+  stroke-dasharray: 6 5;
+}
+
+.pg-marker-fill {
+  fill: var(--text);
+}
+
+.pg-marker-hollow {
+  fill: var(--bg-panel);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.pg-edge-label {
+  position: absolute;
+  pointer-events: all;
+  max-width: 220px;
+  padding: 0 var(--space-1);
+  background: var(--bg-panel);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: var(--font-size-xs);
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pg-edge-label.is-possible {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.pg-edge-label--end {
+  color: var(--text-muted);
+}

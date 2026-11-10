@@ -9,10 +9,10 @@ import pytest
 import yaml
 
 from scenegems_tool.cluster.release.bundle import STACK_COMPOSE_FILES
-from scenegems_tool.cluster.release.roles import DEFAULT_MASTER_COMPOSE_FILES, LIVE_SESSIONS_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
+from scenegems_tool.cluster.release.roles import DEFAULT_CONTROL_NODE_COMPOSE_FILES, LIVE_SESSIONS_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
-ENV_TEMPLATES = {"master": "deploy/master/.env.example", "node": "deploy/node/.env.example"}
+ENV_TEMPLATES = {"control-node": "deploy/control_node/.env.example", "worker-node": "deploy/worker_node/.env.example"}
 _INTERPOLATION = re.compile(r"(?<!\$)\$\{([A-Z_][A-Z0-9_]*)(:?[-?][^}]*)?\}")
 
 
@@ -91,19 +91,19 @@ def _settings_of(compose: dict) -> str:
     return " ".join(parts).lower()
 
 
-def test_the_master_stack_has_no_security_tool_certificates_or_tokens():
-    compose = _compose("master")
-    assert set(_compose_file(STACK_COMPOSE_FILES["master"][1])["services"]) == {"master-api"}, "the live sessions file only adds to master-api"
-    assert set(compose["services"]) == {"postgres", "cluster-broker", "master-api"}
+def test_the_control_node_stack_has_no_security_tool_certificates_or_tokens():
+    compose = _compose("control-node")
+    assert set(_compose_file(STACK_COMPOSE_FILES["control-node"][1])["services"]) == {"control-node-api"}, "the live sessions file only adds to control-node-api"
+    assert set(compose["services"]) == {"postgres", "cluster-broker", "control-node-api"}
     settings = _settings_of(compose)
-    for word in ("security", "pairing", "certificate", "auth_hook", "broker_master", "8883"):
+    for word in ("security", "pairing", "certificate", "auth_hook", "broker_control_node", "8883"):
         assert word not in settings, word
-    role = scenegems_roles()["master"]
+    role = scenegems_roles()["control-node"]
     assert role["setup"] == [] and role["outputs"] == {}
 
 
 def test_postgres_is_the_same_image_everywhere():
-    assert _compose("master")["services"]["postgres"]["image"] == POSTGRES_IMAGE
+    assert _compose("control-node")["services"]["postgres"]["image"] == POSTGRES_IMAGE
     build_script = (REPO_ROOT / "deploy" / "scripts" / "build.sh").read_text(encoding="utf-8")
     assert f'RELEASE_PULLED_IMAGES=("{POSTGRES_IMAGE}")' in build_script
 
@@ -125,9 +125,9 @@ def _example_env(role_name: str) -> str:
             .replace("{name}", "worker-1")
             .replace("{machine.vpn_ip}", "10.88.0.2")
             .replace("{release.revision}", "abc")
-            .replace("{master.vpn_ip}", "10.88.0.2")
-            .replace("{master.SCENEGEMS_API_PORT}", "8443")
-            .replace("{master.SCENEGEMS_BROKER_PORT}", "1883")
+            .replace("{control-node.vpn_ip}", "10.88.0.2")
+            .replace("{control-node.SCENEGEMS_API_PORT}", "8443")
+            .replace("{control-node.SCENEGEMS_BROKER_PORT}", "1883")
             for key, text in role["env"].items()
         }
     )
@@ -147,61 +147,61 @@ def test_docker_compose_accepts_the_stack_with_the_role_env(role_name, tmp_path)
     assert completed.returncode == 0, completed.stderr
 
 
-def test_the_master_keeps_artifacts_on_their_own_volume():
-    compose = _compose("master")
-    service = compose["services"]["master-api"]
+def test_the_control_node_keeps_artifacts_on_their_own_volume():
+    compose = _compose("control-node")
+    service = compose["services"]["control-node-api"]
     folder = service["environment"]["SCENEGEMS_ARTIFACT_DIR"]
     assert f"artifacts:{folder}" in service["volumes"]
-    assert compose["volumes"]["artifacts"]["name"] == "scenegems-${SCENEGEMS_MASTER_ID}-artifacts"
+    assert compose["volumes"]["artifacts"]["name"] == "scenegems-${SCENEGEMS_CONTROL_NODE_ID}-artifacts"
     for key in ("SCENEGEMS_ARTIFACT_MAX_BYTES", "SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S", "SCENEGEMS_ARTIFACT_SWEEP_GRACE_S"):
-        assert service["environment"][key] == f"${{{key}:-{scenegems_roles()['master']['parameters'][key]['default']}}}"
+        assert service["environment"][key] == f"${{{key}:-{scenegems_roles()['control-node']['parameters'][key]['default']}}}"
 
 
-def test_the_master_passes_the_allowed_origins_to_master_api_with_the_roles_default():
-    service = _compose("master")["services"]["master-api"]
-    default = scenegems_roles()["master"]["parameters"]["SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"]["default"]
+def test_the_control_node_passes_the_allowed_origins_to_control_node_api_with_the_roles_default():
+    service = _compose("control-node")["services"]["control-node-api"]
+    default = scenegems_roles()["control-node"]["parameters"]["SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"]["default"]
     assert service["environment"]["SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"] == f"${{SCENEGEMS_OPERATOR_ALLOWED_ORIGINS:-{default}}}"
-    assert f"SCENEGEMS_OPERATOR_ALLOWED_ORIGINS={default}" in (REPO_ROOT / ENV_TEMPLATES["master"]).read_text(encoding="utf-8").splitlines()
+    assert f"SCENEGEMS_OPERATOR_ALLOWED_ORIGINS={default}" in (REPO_ROOT / ENV_TEMPLATES["control-node"]).read_text(encoding="utf-8").splitlines()
 
 
-def test_the_node_passes_its_machine_on_and_lists_it_in_its_env_template():
-    service = _compose("node")["services"]["node"]
-    assert service["environment"]["SCENEGEMS_NODE_MACHINE"] == "${SCENEGEMS_NODE_MACHINE:-}"  # optional for a hand-written .env
-    assert "SCENEGEMS_NODE_MACHINE" in _template_keys("node") and "SCENEGEMS_NODE_MACHINE" in scenegems_roles()["node"]["env"]
+def test_the_worker_node_passes_its_machine_on_and_lists_it_in_its_env_template():
+    service = _compose("worker-node")["services"]["worker-node"]
+    assert service["environment"]["SCENEGEMS_WORKER_NODE_MACHINE"] == "${SCENEGEMS_WORKER_NODE_MACHINE:-}"  # optional for a hand-written .env
+    assert "SCENEGEMS_WORKER_NODE_MACHINE" in _template_keys("worker-node") and "SCENEGEMS_WORKER_NODE_MACHINE" in scenegems_roles()["worker-node"]["env"]
 
 
-def test_the_node_caches_artifacts_in_its_state_volume():
-    service = _compose("node")["services"]["node"]
-    state = service["environment"]["SCENEGEMS_NODE_STATE_DIR"]
+def test_the_worker_node_caches_artifacts_in_its_state_volume():
+    service = _compose("worker-node")["services"]["worker-node"]
+    state = service["environment"]["SCENEGEMS_WORKER_NODE_STATE_DIR"]
     assert f"state:{state}" in service["volumes"]
-    assert service["environment"]["SCENEGEMS_NODE_ARTIFACT_CACHE_DIR"].startswith(state + "/")
-    default = scenegems_roles()["node"]["parameters"]["SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES"]["default"]
-    assert service["environment"]["SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES"] == f"${{SCENEGEMS_NODE_ARTIFACT_CACHE_MAX_BYTES:-{default}}}"
+    assert service["environment"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR"].startswith(state + "/")
+    default = scenegems_roles()["worker-node"]["parameters"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES"]["default"]
+    assert service["environment"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES"] == f"${{SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES:-{default}}}"
 
 
-def test_the_master_observes_the_plain_cluster_broker_on_the_compose_network():
-    compose = _compose("master")
-    environment = compose["services"]["master-api"]["environment"]
+def test_the_control_node_observes_the_plain_cluster_broker_on_the_compose_network():
+    compose = _compose("control-node")
+    environment = compose["services"]["control-node-api"]["environment"]
     assert (environment["SCENEGEMS_BROKER_HOST"], environment["SCENEGEMS_BROKER_PORT"]) == ("cluster-broker", "1883")
-    default = scenegems_roles()["master"]["parameters"]["SCENEGEMS_BROKER_PORT"]["default"]
+    default = scenegems_roles()["control-node"]["parameters"]["SCENEGEMS_BROKER_PORT"]["default"]
     assert default == "1883"
     ports = compose["services"]["cluster-broker"]["ports"]
     assert ports == ["${SCENEGEMS_BROKER_BIND_ADDRESS:-0.0.0.0}:${SCENEGEMS_BROKER_PORT:-" + default + "}:1883"]
 
 
-def test_the_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials_the_master_url():
-    compose = _compose("node")
-    service = compose["services"]["node"]
-    assert "SCENEGEMS_MASTER_URL" in service["environment"] and "SCENEGEMS_BROKER_PORT" in service["environment"]
+def test_the_worker_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials_the_control_node_url():
+    compose = _compose("worker-node")
+    service = compose["services"]["worker-node"]
+    assert "SCENEGEMS_CONTROL_NODE_URL" in service["environment"] and "SCENEGEMS_BROKER_PORT" in service["environment"]
     settings = _settings_of(compose)
     for word in ("pairing", "ca_sha256", "trust", "token"):
         assert word not in settings, word
     assert set(compose["volumes"]) == {"runtime", "state"}
 
 
-def test_only_the_live_sessions_file_gives_master_api_the_docker_socket():
-    base, live = (_compose_file(path)["services"]["master-api"] for path in STACK_COMPOSE_FILES["master"])
-    assert Path(STACK_COMPOSE_FILES["master"][1]).name == LIVE_SESSIONS_COMPOSE_FILE
+def test_only_the_live_sessions_file_gives_control_node_api_the_docker_socket():
+    base, live = (_compose_file(path)["services"]["control-node-api"] for path in STACK_COMPOSE_FILES["control-node"])
+    assert Path(STACK_COMPOSE_FILES["control-node"][1]).name == LIVE_SESSIONS_COMPOSE_FILE
     assert not any("docker.sock" in str(volume) for volume in base["volumes"])
     assert "/var/run/docker.sock:/var/run/docker.sock" in live["volumes"]
     assert base["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "false" and live["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "true"
@@ -209,20 +209,20 @@ def test_only_the_live_sessions_file_gives_master_api_the_docker_socket():
         assert key not in base["environment"] and key in live["environment"]
 
 
-def test_compose_reads_both_master_files_by_default_through_compose_file():
-    role = scenegems_roles()["master"]
+def test_compose_reads_both_control_node_files_by_default_through_compose_file():
+    role = scenegems_roles()["control-node"]
     default = role["parameters"]["COMPOSE_FILE"]["default"]
-    assert default == DEFAULT_MASTER_COMPOSE_FILES
-    assert default.split(role["env"]["COMPOSE_PATH_SEPARATOR"]) == [Path(path).name for path in STACK_COMPOSE_FILES["master"]]
-    template = (REPO_ROOT / ENV_TEMPLATES["master"]).read_text(encoding="utf-8").splitlines()
+    assert default == DEFAULT_CONTROL_NODE_COMPOSE_FILES
+    assert default.split(role["env"]["COMPOSE_PATH_SEPARATOR"]) == [Path(path).name for path in STACK_COMPOSE_FILES["control-node"]]
+    template = (REPO_ROOT / ENV_TEMPLATES["control-node"]).read_text(encoding="utf-8").splitlines()
     assert f"COMPOSE_FILE={default}" in template and "COMPOSE_PATH_SEPARATOR=:" in template
 
 
 def test_every_image_scenegems_builds_carries_the_release_tag():
     tag = "${SCENEGEMS_IMAGE_TAG:-latest}"
-    master, node = _compose("master")["services"], _compose("node")["services"]
-    assert master["master-api"]["image"] == f"scenegems-master-api:{tag}" and master["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
-    assert node["node"]["image"] == f"scenegems-node:{tag}"
-    assert node["node"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the node names its jobs' images with it"
+    control_node, worker_node = _compose("control-node")["services"], _compose("worker-node")["services"]
+    assert control_node["control-node-api"]["image"] == f"scenegems-control-node-api:{tag}" and control_node["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
+    assert worker_node["worker-node"]["image"] == f"scenegems-worker-node:{tag}"
+    assert worker_node["worker-node"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the worker node names its jobs' images with it"
     roles = scenegems_roles("abc123")
-    assert roles["master"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123"
+    assert roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123"

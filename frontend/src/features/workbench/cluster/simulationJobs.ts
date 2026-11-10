@@ -9,10 +9,10 @@ import type { AsvSoftware, ControlLayer, GlobalSimulatorType, SimulationContext 
  * kinematic), on ArduPilot SITL or Gazebo over the lockstep MAVLink adapters (runner ardupilot), or
  * on the custom controller in a Gazebo world the runner steps (runner gazebo_custom). Each runs
  * every vessel on replay, or USV Navigation on the own ship and replay on the others. Every other
- * setup is a live session on the master over the MQTT broker: real vessels and Mission Planner are
+ * setup is a live session on the control node over the MQTT broker: real vessels and Mission Planner are
  * only ever run that way, and so are setups no runner takes (USV Navigation on a target ship,
  * mixed control layers, the weather a job does not apply). A plan names the components its job
- * needs, so the workbench counts the nodes that have them.
+ * needs, so the workbench counts the worker nodes that have them.
  */
 
 export { SIMULATION_JOB };
@@ -131,7 +131,7 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
     return planArduPilotRun(setup, arduPilotLayer);
   }
   if (setup.simulatorType !== "Kinematic") {
-    return { where: "session", reason: `${setup.simulatorType} has no cluster job yet, so it runs as a live session on the master.` };
+    return { where: "session", reason: `${setup.simulatorType} has no cluster job yet, so it runs as a live session on the control node.` };
   }
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
     return { where: "session", reason: "The kinematic layer has no wind or waves." };
@@ -196,7 +196,7 @@ function liveMonitorFields(colregsConstraintsContent: string): Record<string, un
   };
 }
 
-/** The simulation job's kinematic runner (cluster/node/jobs/simulation_runners/kinematic_runner.py) with the COLREGS monitor live, over the loaded trajectories. */
+/** The simulation job's kinematic runner (cluster/worker_node/jobs/simulation_runners/kinematic_runner.py) with the COLREGS monitor live, over the loaded trajectories. */
 export function kinematicSimulationSubmission(plan: KinematicRunPlan, trajectories: Record<string, unknown>, colregsConstraintsContent: string): JobSubmission {
   const payload: Record<string, unknown> = { runner: plan.runner, mode: plan.mode, trajectories, ...liveMonitorFields(colregsConstraintsContent) };
   withOwnShip(payload, plan);
@@ -205,7 +205,7 @@ export function kinematicSimulationSubmission(plan: KinematicRunPlan, trajectori
 }
 
 /**
- * The simulation job's ardupilot runner (cluster/node/jobs/simulation_runners/ardupilot_runner.py): replay over the lockstep
+ * The simulation job's ardupilot runner (cluster/worker_node/jobs/simulation_runners/ardupilot_runner.py): replay over the lockstep
  * MAVLink adapter with the COLREGS monitor live, the reference geofence placing the local frame
  * on SITL's map.
  */
@@ -229,7 +229,7 @@ export function arduPilotSimulationSubmission(
 }
 
 /**
- * The simulation job's gazebo_custom runner (cluster/node/jobs/simulation_runners/gazebo_custom_runner.py): the custom
+ * The simulation job's gazebo_custom runner (cluster/worker_node/jobs/simulation_runners/gazebo_custom_runner.py): the custom
  * controller on a Gazebo world the runner steps, in the setup's wind, with the COLREGS monitor live.
  */
 export function gazeboCustomSimulationSubmission(
@@ -291,7 +291,7 @@ export function describeClusterPlan(plan: ClusterRunPlan): string {
 }
 
 /**
- * Whether the watch speed paces the run on the node: the kinematic and the custom controller's runners
+ * Whether the watch speed paces the run on the worker node: the kinematic and the custom controller's runners
  * step their run themselves. SITL runs free at the job's speedup, so an ArduPilot run's watch speed
  * is the playback speed of the shown run in the browser instead.
  */

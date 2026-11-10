@@ -4,7 +4,7 @@ import type { RunRecordingStatus } from "../../../domain/simulation/wireTypes";
 /**
  * Whether the gateway records the live session as a workbench entry (design doc 6.4), from its
  * `run_recording` messages: recording while it runs, saved (with the entry) once the post-hoc
- * monitor has it, failed, or unavailable on a gateway without a master.
+ * monitor has it, failed, or unavailable on a gateway without a control node.
  */
 
 export interface RunRecordingState {

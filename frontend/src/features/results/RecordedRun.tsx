@@ -38,7 +38,7 @@ function PhaseProgress({ phase }: { phase: FramesPhase }) {
   );
 }
 
-/** "Show the run" for one run record: asks the master for the frames, follows the job and plays the frames. */
+/** "Show the run" for one run record: asks the control node for the frames, follows the job and plays the frames. */
 export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title, autoStart = false }: RecordedRunProps) {
   const [phase, setPhase] = useState<FramesPhase>({ phase: "idle" });
   const controller = useRef<AbortController | null>(null);
@@ -50,7 +50,7 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
     controller.current = null;
   }, []);
 
-  // `retry` asks the master for a new job when the last one failed or was cancelled; a job that runs or succeeded is returned as it is.
+  // `retry` asks the control node for a new job when the last one failed or was cancelled; a job that runs or succeeded is returned as it is.
   const start = useCallback(
     (retry: boolean) => {
       stop();
@@ -108,8 +108,8 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
 
       {phase.phase === "idle" && (
         <p className="meta">
-          The master replays the stored state log through the monitor and returns the frames
-          {hasStateLog ? "." : ", but this run record lists no state log, so the master may refuse."}
+          The control node replays the stored state log through the monitor and returns the frames
+          {hasStateLog ? "." : ", but this run record lists no state log, so the control node may refuse."}
         </p>
       )}
       {busy && <PhaseProgress phase={phase} />}
@@ -118,7 +118,7 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
           <strong>This run cannot be shown.</strong>
           <span>{phase.message}</span>
           <span className="meta">
-            The state log of a run is kept only while the campaign&apos;s retention keeps it; without it the master cannot compute frames. The monitor result summary and the
+            The state log of a run is kept only while the campaign&apos;s retention keeps it; without it the control node cannot compute frames. The monitor result summary and the
             rule outcomes stay available.
           </span>
         </div>
@@ -127,7 +127,7 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
         <div className="results-notice results-notice--bad" role="alert">
           <strong>The monitoring job did not finish.</strong>
           <span>{phase.message}</span>
-          <span className="meta">The master submits a new monitoring job when you run it again; if the cause is on the cluster, resolve it there first.</span>
+          <span className="meta">The control node submits a new monitoring job when you run it again; if the cause is on the cluster, resolve it there first.</span>
           <button type="button" onClick={() => start(true)}>
             Run the job again
           </button>
@@ -135,7 +135,7 @@ export function RecordedRun({ operatorUrl, campaignId, runRecord, verdict, title
       )}
       {phase.phase === "error" && (
         <div className="results-notice results-notice--bad" role="alert">
-          <strong>{phase.unreachable ? "The master cannot be reached." : "The frames could not be loaded."}</strong>
+          <strong>{phase.unreachable ? "The control node cannot be reached." : "The frames could not be loaded."}</strong>
           <span>{phase.message}</span>
         </div>
       )}

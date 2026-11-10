@@ -13,7 +13,7 @@ import {
 describe("operator URLs", () => {
   it("normalizes http and https URLs and refuses others", () => {
     expect(normalizeOperatorUrl(" http://127.0.0.1:5174/ ")).toBe("http://127.0.0.1:5174");
-    expect(normalizeOperatorUrl("https://master.example:8443/api//")).toBe("https://master.example:8443/api");
+    expect(normalizeOperatorUrl("https://control-node.example:8443/api//")).toBe("https://control-node.example:8443/api");
     expect(normalizeOperatorUrl("ws://127.0.0.1:5174")).toBeNull();
     expect(normalizeOperatorUrl("127.0.0.1:5174")).toBeNull();
     expect(normalizeOperatorUrl("http://host:5174/?x=1")).toBeNull();
@@ -22,7 +22,7 @@ describe("operator URLs", () => {
 
   it("builds the live channel URL with the matching ws scheme", () => {
     expect(liveChannelUrl("http://127.0.0.1:5174")).toBe("ws://127.0.0.1:5174/cluster/live");
-    expect(liveChannelUrl("https://master.example/api")).toBe("wss://master.example/api/cluster/live");
+    expect(liveChannelUrl("https://control-node.example/api")).toBe("wss://control-node.example/api/cluster/live");
   });
 
   it("validates names and URLs", () => {
@@ -38,7 +38,7 @@ describe("operator URLs", () => {
 });
 
 describe("cluster list store", () => {
-  it("starts with the local master selected", () => {
+  it("starts with the local control node selected", () => {
     const store = createClusterStore(new MemoryStorage());
     const state = store.getState();
     expect(state.clusters).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("cluster list store", () => {
 
     expect(store.getState().updateCluster(added.cluster.id, { name: "Fleet 2", operatorUrl: "http://10.0.0.5:5174" })).toEqual({ ok: true });
     expect(selectSelectedCluster(store.getState())).toEqual({ id: added.cluster.id, name: "Fleet 2", operatorUrl: "http://10.0.0.5:5174" });
-    expect(store.getState().updateCluster(added.cluster.id, { name: "Local master", operatorUrl: DEFAULT_OPERATOR_URL }).ok).toBe(false);
+    expect(store.getState().updateCluster(added.cluster.id, { name: "Local control node", operatorUrl: DEFAULT_OPERATOR_URL }).ok).toBe(false);
 
     store.getState().removeCluster(added.cluster.id);
     expect(store.getState().selectedClusterId).toBe("local");
@@ -87,7 +87,7 @@ describe("cluster list store", () => {
     expect(JSON.parse(storage.getItem(CLUSTERS_STORAGE_KEY) ?? "{}").version).toBe(1);
 
     const second = createClusterStore(storage);
-    expect(second.getState().clusters.map((cluster) => cluster.name)).toEqual(["Local master", "Fleet"]);
+    expect(second.getState().clusters.map((cluster) => cluster.name)).toEqual(["Local control node", "Fleet"]);
     expect(second.getState().selectedClusterId).toBe(added.cluster.id);
   });
 });

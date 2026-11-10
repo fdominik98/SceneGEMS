@@ -7,7 +7,7 @@ Browser-based console for exploring autonomous surface vehicle (ASV) maritime as
 ## Prerequisites
 
 - Node.js 20.19 or newer
-- A deployed SceneGEMS cluster whose master's operator API this machine reaches (see the repository [`README.md`](../README.md))
+- A deployed SceneGEMS cluster whose control node's operator API this machine reaches (see the repository [`README.md`](../README.md))
 
 ## Quick start
 
@@ -16,13 +16,13 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The console has no backend of its own: the workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on the master's operator URL), and the cluster's nodes run its jobs.
+Open http://localhost:5173. The console has no backend of its own: the workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on the control node's operator URL), and the cluster's worker nodes run its jobs.
 
 ### Typical demo flow
 
 1. Run `npm run dev` and select a deployed cluster in the left pane.
-2. Optional: open **Domain Configuration** in the Cluster group to review the cluster's COLREGS constants, vessel types and obstacle types (the master's default presets apply until one is saved).
-3. Open **Scene Generation**: pick one of the master's FECs (use **Find a FEC** to search and filter), then click **Generate scene**.
+2. Optional: open **Domain Configuration** in the Cluster group to review the cluster's COLREGS constants, vessel types and obstacle types (the control node's default presets apply until one is saved).
+3. Open **Scene Generation**: pick one of the control node's FECs (use **Find a FEC** to search and filter), then click **Generate scene**.
 4. Click **Next: Trajectory Generation**, generate trajectories, then **Next: Simulation** to open **Simulation** for dual-stream playback, metrics, and exports.
 5. Optional: the **Batch** tab in Scene Generation to run several FECs, and **Campaigns** to run them at scale. Every run is kept in **Campaign History**, which replays it in the workbench.
 
@@ -49,7 +49,7 @@ During `npm run dev`, Docusaurus starts **only when you open** **Documentation**
 
 ## Presets
 
-The console ships no presets of its own. The domain presets, the functional scenarios and the campaign presets come from the active cluster's master (`backend/assets/` in the master image): see the catalog and setting routes in `domain/cluster/presetsApi.ts`.
+The console ships no presets of its own. The domain presets, the functional scenarios and the campaign presets come from the active cluster's control node (`backend/assets/` in the control node image): see the catalog and setting routes in `domain/cluster/presetsApi.ts`.
 
 ## Architecture
 

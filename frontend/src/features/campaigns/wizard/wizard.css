@@ -362,7 +362,8 @@
 
 .wiz-number input {
   width: 100%;
-  min-width: 70px;
+  /* Six digits beside the spin buttons */
+  min-width: calc(6ch + 2 * var(--control-pad-x) + 22px);
 }
 
 .wiz-unit,
@@ -383,7 +384,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
-  flex: 1 1 80px;
+  flex: 1 1 130px;
 }
 
 .wiz-check {
@@ -1195,7 +1196,7 @@
   background: rgb(var(--danger-rgb) / 0.08);
 }
 
-/* Campaign presets: start from one of the master's, or save the draft as one. */
+/* Campaign presets: start from one of the control node's, or save the draft as one. */
 
 .wiz-presets {
   display: flex;

@@ -60,7 +60,7 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (parts[3] === "config" && entryConfig !== null) {
     return json({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-28T10:00:00+00:00", config: entryConfig }] });
   }
-  if (parts[3] === "events" || url.pathname === "/cluster/nodes") {
+  if (parts[3] === "events" || url.pathname === "/cluster/worker-nodes") {
     return json([], 0);
   }
   return json({ detail: "not found" }, undefined, 404);
@@ -182,7 +182,7 @@ describe("Campaign History in the DOM", () => {
     // A workbench entry has no campaign controls
     expect(screen.queryByRole("region", { name: "Campaign controls" })).not.toBeInTheDocument();
 
-    const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
+    const output = (await screen.findByText("incomplete")).closest("tr") as HTMLElement;
     expect(within(output).getByText("failed")).toBeInTheDocument();
     expect(within(output).getByText("rule_15")).toBeInTheDocument();
     await user.click(within(output).getByRole("button", { name: "Open in workbench" }));
@@ -198,7 +198,7 @@ describe("Campaign History in the DOM", () => {
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
     expect(await screen.findByRole("columnheader", { name: "Monitor result summary" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /verdict/i })).not.toBeInTheDocument();
-    const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
+    const output = (await screen.findByText("incomplete")).closest("tr") as HTMLElement;
     expect(within(output).getByText("failed")).toBeInTheDocument();
     expect(within(output).getByText("2 rules failed, first at 1 min 1 s")).toBeInTheDocument();
 
@@ -224,7 +224,7 @@ describe("Campaign History in the DOM", () => {
     outputs = [sampleTrajectoryOutput({ verdict: sampleMonitorVerdict({ failed_rules: rules, encounter_roles: null }) })];
     renderSection();
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
-    const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
+    const output = (await screen.findByText("incomplete")).closest("tr") as HTMLElement;
     expect(within(output).getByText("Rule c")).toBeInTheDocument();
     expect(within(output).queryByText("Rule d")).not.toBeInTheDocument();
     expect(within(output).getByText("and 2 more")).toHaveAttribute("title", "Rule d\nRule e");
@@ -238,7 +238,7 @@ describe("Campaign History in the DOM", () => {
     renderSection();
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
     await waitFor(() => expect(calls.some((call) => call.path === "/cluster/campaigns/wb1/config")).toBe(true));
-    expect(await screen.findByText("partial")).toBeInTheDocument();
+    expect(await screen.findByText("incomplete")).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Monitor result summary" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Input from" })).toBeInTheDocument();
   });
@@ -252,7 +252,7 @@ describe("Campaign History in the DOM", () => {
     expect(await screen.findByText("no monitor result summary yet")).toBeInTheDocument();
   });
 
-  it("deletes a final entry after a confirmation, and says to stop one the master refuses", async () => {
+  it("deletes a final entry after a confirmation, and says to stop one the control node refuses", async () => {
     const user = userEvent.setup();
     renderSection();
     const running = (await screen.findByRole("button", { name: "Simulation" })).closest("tr") as HTMLElement;

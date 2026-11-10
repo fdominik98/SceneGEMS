@@ -12,11 +12,11 @@ export const DEFAULT_RUN_SPEED = 10;
 export interface ClusterRunState {
   status: ClusterRunStatus;
   jobId: string | null;
-  /** The node that runs the job, once one took it. */
-  nodeId: string | null;
+  /** The worker node that runs the job, once one took it. */
+  workerNodeId: string | null;
   /** What happens now, or why the run ended as it did. */
   message: string | null;
-  /** Multiple of real time the master paces the observed run to. */
+  /** Multiple of real time the control node paces the observed run to. */
   speed: number;
   update: (patch: Partial<Omit<ClusterRunState, "update">>) => void;
 }
@@ -24,7 +24,7 @@ export interface ClusterRunState {
 export const useClusterRunStore = create<ClusterRunState>()((set) => ({
   status: "idle",
   jobId: null,
-  nodeId: null,
+  workerNodeId: null,
   message: null,
   speed: DEFAULT_RUN_SPEED,
   update: (patch) => set(patch),

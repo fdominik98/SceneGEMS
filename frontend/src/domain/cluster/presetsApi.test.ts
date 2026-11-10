@@ -40,7 +40,7 @@ const PRESET = {
   updated_at: null,
 };
 
-describe("the master's presets", () => {
+describe("the control node's presets", () => {
   it("reads a class's functional scenario as text, its id kept as a path", async () => {
     const { client: operator, calls } = client(() => new Response("OS(os1).\n", { headers: { "Content-Type": "text/plain" } }));
     expect(await getClassContent(operator, "2vessel_0obstacle_scenarios/fec1")).toBe("OS(os1).\n");
@@ -73,7 +73,7 @@ describe("the master's presets", () => {
     expect(calls[2].url.pathname).toBe("/cluster/campaign-presets/p-1");
   });
 
-  it("rejects a taken preset name with the master's status", async () => {
+  it("rejects a taken preset name with the control node's status", async () => {
     const { client: operator } = client(() => json({ detail: "a saved preset is named 'Mine'" }, 409));
     await expect(saveCampaignPreset(operator, { name: "Mine", description: "", config: {} })).rejects.toMatchObject({ status: 409 });
   });
@@ -91,7 +91,7 @@ describe("matchingPreset", () => {
     expect(matchingPreset(presets, "A: 6\n")).toBeNull();
   });
 
-  it("reads the default design space, and none from a master that has no route for it", async () => {
+  it("reads the default design space, and none from a control node that has no route for it", async () => {
     const shipped = { specification: "class OS.\n", scope: "TS = 2, StaticObstacle = 0" };
     const { client: operator, calls } = client(() => json(shipped));
     expect(await getDesignSpaceDefault(operator)).toEqual(shipped);

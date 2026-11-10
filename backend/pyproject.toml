@@ -48,14 +48,14 @@ dependencies = [
     "uvicorn",
     "fastapi",
     "pydantic==2.13.4",  # cluster protocol and job payloads (scenegems_tool.cluster), also in the runner images
-    "websockets==16.0",  # the node daemon's control connection (cluster/node/daemon), also in the node image
+    "websockets==16.0",  # the worker node daemon's control connection (cluster/worker_node/daemon), also in the worker node image
     "omegaconf",
     "flake8",
     "black",
     "isort",
     "pytest",
     "pytest-cov",
-    "httpx==0.28.1",  # starlette's TestClient, for the master's API tests
+    "httpx==0.28.1",  # starlette's TestClient, for the control node's API tests
     "pre-commit",
     "portion",
     "svgpath2mpl",
@@ -66,11 +66,11 @@ dependencies = [
     # unsafe-set package declares protobuf<=3.20.1 and hatch, which it never imports.
     "colav-automaton @ https://github.com/michaelstolberger27/usv-navigation/archive/54866f24a04987334057ae5c5896dfc3ee8ca058.zip",
     "pymavlink>=2.4.50",
-    # Master job store and node registry (scenegems_tool.persistence)
+    # Control node job store and worker node registry (scenegems_tool.persistence)
     "SQLAlchemy==2.0.55",
     "alembic==1.20.1",
     "psycopg[binary]==3.3.6",
-    # Master certificate authority and server certificates (cluster/security, P3.6)
+    # Control node certificate authority and server certificates (cluster/security, P3.6)
     "cryptography==49.0.0",
 ]
 

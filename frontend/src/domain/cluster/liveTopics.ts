@@ -7,8 +7,8 @@ import {
   classViewSchema,
   jobViewSchema,
   logLineSchema,
-  nodeListSchema,
-  nodeViewSchema,
+  workerNodeListSchema,
+  workerNodeViewSchema,
   type CampaignDetail,
   type CampaignEvent,
   type CampaignRow,
@@ -16,7 +16,7 @@ import {
   type ClassView,
   type JobView,
   type LogLine,
-  type NodeView,
+  type WorkerNodeView,
 } from "./schemas";
 
 /**
@@ -42,31 +42,31 @@ export const rawTopicReducer: LiveTopicReducer<RawTopicState> = {
   update: (state, data, seq) => ({ snapshot: state.snapshot, updates: [...state.updates, { seq, data }].slice(-RAW_UPDATES_KEPT) }),
 };
 
-// nodes
+// worker nodes
 
-export const nodesUpdateSchema = z.union([
-  z.object({ node: nodeViewSchema }),
+export const workerNodesUpdateSchema = z.union([
+  z.object({ worker_node: workerNodeViewSchema }),
   z.object({ removed: z.string() }),
 ]);
 
-function sortNodes(nodes: NodeView[]): NodeView[] {
-  return [...nodes].sort((a, b) => a.name.localeCompare(b.name) || a.node_id.localeCompare(b.node_id));
+function sortWorkerNodes(workerNodes: WorkerNodeView[]): WorkerNodeView[] {
+  return [...workerNodes].sort((a, b) => a.name.localeCompare(b.name) || a.worker_node_id.localeCompare(b.worker_node_id));
 }
 
-/** Replaces the node with the same id, or adds it. */
-export function upsertNode(nodes: readonly NodeView[], node: NodeView): NodeView[] {
-  const others = nodes.filter((entry) => entry.node_id !== node.node_id);
-  return sortNodes([...others, node]);
+/** Replaces the worker node with the same id, or adds it. */
+export function upsertWorkerNode(workerNodes: readonly WorkerNodeView[], workerNode: WorkerNodeView): WorkerNodeView[] {
+  const others = workerNodes.filter((entry) => entry.worker_node_id !== workerNode.worker_node_id);
+  return sortWorkerNodes([...others, workerNode]);
 }
 
-export const nodesReducer: LiveTopicReducer<NodeView[]> = {
-  snapshot: (raw) => sortNodes(nodeListSchema.parse(raw)),
-  update: (nodes, data) => {
-    const update = nodesUpdateSchema.parse(data);
-    if ("node" in update) {
-      return upsertNode(nodes, update.node);
+export const workerNodesReducer: LiveTopicReducer<WorkerNodeView[]> = {
+  snapshot: (raw) => sortWorkerNodes(workerNodeListSchema.parse(raw)),
+  update: (workerNodes, data) => {
+    const update = workerNodesUpdateSchema.parse(data);
+    if ("worker_node" in update) {
+      return upsertWorkerNode(workerNodes, update.worker_node);
     }
-    return nodes.filter((node) => node.node_id !== update.removed);
+    return workerNodes.filter((workerNode) => workerNode.worker_node_id !== update.removed);
   },
 };
 
@@ -238,14 +238,14 @@ export const jobReducer: LiveTopicReducer<JobTopicState> = {
 };
 
 export const instanceSnapshotSchema = z.object({
-  node_id: z.string(),
+  worker_node_id: z.string(),
   instance: z.string(),
   kind: z.string(),
-  /** The job's state for a job instance, the node's status for a pool. */
+  /** The job's state for a job instance, the worker node's status for a pool. */
   state: z.string(),
   job_id: z.string().nullable().optional(),
   attempt: z.number().int().nullable().optional(),
-  /** Speed (multiple of real time) the master paces an observed simulation to; null when unpaced or not observed. */
+  /** Speed (multiple of real time) the control node paces an observed simulation to; null when unpaced or not observed. */
   observed_speed: z.number().nullable().optional(),
 });
 

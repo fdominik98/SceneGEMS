@@ -125,8 +125,8 @@ def test_actual_state_sets_start_and_finish_times(stores, campaign, clock):
     running = stores.campaigns.set_actual_state(campaign.campaign_id, CampaignActualState.RUNNING)
     assert running.started_at == clock.now
     clock.advance(10)
-    stalled = stores.campaigns.set_actual_state(campaign.campaign_id, CampaignActualState.STALLED, reason="no node runs release 6de1e06")
-    assert (stalled.state_reason, stalled.started_at) == ("no node runs release 6de1e06", running.started_at)
+    stalled = stores.campaigns.set_actual_state(campaign.campaign_id, CampaignActualState.STALLED, reason="no worker node runs release 6de1e06")
+    assert (stalled.state_reason, stalled.started_at) == ("no worker node runs release 6de1e06", running.started_at)
     clock.advance(10)
     resumed = stores.campaigns.set_actual_state(campaign.campaign_id, CampaignActualState.RUNNING, expected=CampaignActualState.STALLED)
     assert resumed.state_reason is None and resumed.started_at == running.started_at

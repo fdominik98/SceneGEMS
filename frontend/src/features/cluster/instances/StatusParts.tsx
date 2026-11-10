@@ -41,7 +41,7 @@ export function TopicNotice({ topic, noun }: { topic: LiveTopicState<unknown>; n
   if (topic.status === "error") {
     return (
       <p className="instances-notice instances-notice--bad" role="alert">
-        {topic.error ?? `The master refused the ${noun}.`}
+        {topic.error ?? `The control node refused the ${noun}.`}
       </p>
     );
   }
@@ -55,7 +55,7 @@ export function TopicNotice({ topic, noun }: { topic: LiveTopicState<unknown>; n
   if (topic.status === "waiting") {
     return (
       <p className="instances-notice" role="status">
-        Waiting for the {noun} from the master.
+        Waiting for the {noun} from the control node.
       </p>
     );
   }

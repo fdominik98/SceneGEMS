@@ -104,7 +104,7 @@ def build_simulation_docker_stack_artifacts(
     docker_compose = {"services": artifacts.services, "networks": maritime_network}
     if any(service.get("volumes") for service in artifacts.services.values()):
         # Only a stack with a simulator that reads generated files needs the runtime assets volume where it runs;
-        # a kinematic stack declares none, so a node without that volume runs it.
+        # a kinematic stack declares none, so a worker node without that volume runs it.
         docker_compose = merge_compose_volumes(docker_compose)
     return artifacts.pending_writes, docker_compose
 

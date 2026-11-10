@@ -9,6 +9,26 @@ from concrete_level.models.relation import Relation
 from utils.colregs_approximations import COLREGSConstraints
 from utils.math_utils import Direction
 
+# Share of IMMEDIATE_HEADING_CHANGE_TIME after which the first turn has to be under way.
+ACTION_START_WINDOW_FRACTION: float = 0.5
+
+
+def early_action_start_deadline(colregs_constants: COLREGSConstraints) -> int:
+    """Seconds into an encounter by which the give-way vessel's first turn has to be under way.
+
+    Rule 16 is failed once IMMEDIATE_HEADING_CHANGE_TIME is over without a manoeuvre, and
+    nothing holds the first turn back: the persistence times only bind after a manoeuvre.
+    So the vessel may keep its course for a while, but not until the last moment. A turn
+    forced only in the last step before the limit left no margin: the planner turned at the
+    last possible node, and the same path judged at one second, where the encounter is
+    detected a few seconds earlier, reached the limit with the vessel three seconds into
+    its turn and not yet displaced, so the rule failed on a path the planner had certified.
+    Half the window is that margin. It used to be IMMEDIATE_HEADING_CHANGE_TIME minus
+    READILY_APPARENT_COURSE_CHANGE_TIME, which is 0 with the shipped 60 s and 70 s and so
+    demanded the turn at once.
+    """
+    return int(ACTION_START_WINDOW_FRACTION * colregs_constants.IMMEDIATE_HEADING_CHANGE_TIME)
+
 
 class GiveWayEarlyActionCondition(RuleCondition):
     def __init__(self, relation: Relation, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
@@ -61,16 +81,10 @@ class GiveWayEarlyActionCondition(RuleCondition):
     def action_start_deadline(self) -> int:
         """Latest moment the alteration has to be under way to count as early action.
 
-        The rule asks for action that is early AND substantial: what has to be true by
-        IMMEDIATE_HEADING_CHANGE_TIME is a manoeuvre the other vessel can already see, so
-        the turn has to start at least READILY_APPARENT_COURSE_CHANGE_TIME before that.
-        Forcing it only in the last step before the deadline left no margin at all: the
-        planner turned at the last possible node, and the same path judged at one second,
-        where the encounter is detected a few seconds earlier, reached the deadline with
-        the vessel three seconds into its turn and not yet displaced, so the rule failed
-        on a path the planner had certified.
+        Before it the suggestions offer the turn and holding the course, from one step
+        before it only the turn. See ``early_action_start_deadline``.
         """
-        return max(0, self.colregs_constants.IMMEDIATE_HEADING_CHANGE_TIME - self.colregs_constants.READILY_APPARENT_COURSE_CHANGE_TIME)
+        return early_action_start_deadline(self.colregs_constants)
 
     def is_time_to_give_way_early(self, current_monitored_scene: MonitoredScene, time_step: int) -> bool:
         return (

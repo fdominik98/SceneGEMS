@@ -11,8 +11,8 @@ def _release(**changes) -> Release:
         revision="abc123",
         dirty=False,
         created_at="2026-10-25T12:00:00+00:00",
-        images={"scenegems-node:latest": ReleaseImage("sha256:1", "fp-node"), "postgres:16.10-alpine": ReleaseImage("sha256:2")},
-        roles={"node": {"count": "many"}},
+        images={"scenegems-worker-node:latest": ReleaseImage("sha256:1", "fp-worker-node"), "postgres:16.10-alpine": ReleaseImage("sha256:2")},
+        roles={"worker-node": {"count": "many"}},
         name_pattern="^[a-z]+$",
     )
     values.update(changes)
@@ -29,12 +29,12 @@ def test_the_fingerprint_is_stored_as_the_image_label(tmp_path):
     path = tmp_path / "release.json"
     write_release(path, _release())
     images = json.loads(path.read_text(encoding="utf-8"))["images"]
-    assert images["scenegems-node:latest"] == {"id": "sha256:1", "labels": {FINGERPRINT_LABEL: "fp-node"}}
+    assert images["scenegems-worker-node:latest"] == {"id": "sha256:1", "labels": {FINGERPRINT_LABEL: "fp-worker-node"}}
     assert images["postgres:16.10-alpine"] == {"id": "sha256:2", "labels": {}}
 
 
 def test_fingerprints_leave_out_images_without_one():
-    assert _release().fingerprints() == {"scenegems-node:latest": "fp-node"}
+    assert _release().fingerprints() == {"scenegems-worker-node:latest": "fp-worker-node"}
 
 
 def test_another_format_is_refused():

@@ -2,9 +2,9 @@ import { z } from "zod";
 import { artifactRefSchema, type ArtifactRef } from "../cluster/schemas";
 
 /**
- * The design space exploration as the master reports it: the result of its job (the stage
+ * The design space exploration as the control node reports it: the result of its job (the stage
  * `explore_design_space` of the exploration case), the explored FECs and their ids. The campaign
- * gets one class with id `exploration` for the exploration itself; when it succeeds, the master
+ * gets one class with id `exploration` for the exploration itself; when it succeeds, the control node
  * adds one class per generated model, `explored/<five digit index>`.
  */
 
@@ -43,7 +43,7 @@ export const explorationResultSchema = z.object({
 });
 export type ExplorationResult = z.infer<typeof explorationResultSchema>;
 
-/** The job result as an exploration result, null when it is none (a job that has not ended, another master). */
+/** The job result as an exploration result, null when it is none (a job that has not ended, another control node). */
 export function parseExplorationResult(value: unknown): ExplorationResult | null {
   const parsed = explorationResultSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
@@ -55,7 +55,7 @@ export interface ExploredFec {
   index: number;
   vesselCount: number | null;
   obstacleCount: number | null;
-  /** Its `.problem` text on the master, null when the master names none. */
+  /** Its `.problem` text on the control node, null when the control node names none. */
   artifact: ArtifactRef | null;
 }
 

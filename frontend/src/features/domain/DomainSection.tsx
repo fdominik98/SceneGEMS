@@ -31,7 +31,7 @@ function formatSavedAt(iso: string | null): string {
 /**
  * The cluster's domain configuration: the COLREGS constants, vessel types and obstacle types every
  * workbench run and every campaign without its own domain content uses. It is global for the
- * cluster and kept on the master; edits stay a draft in this page until they are saved.
+ * cluster and kept on the control node; edits stay a draft in this page until they are saved.
  */
 export function DomainSection() {
   const cluster = useSelectedCluster();
@@ -84,7 +84,7 @@ export function DomainSection() {
   if (!cluster) {
     content = (
       <EmptyState title="No cluster selected">
-        <p className="meta">The domain configuration is kept by a master. Add a cluster or select one in the Cluster section.</p>
+        <p className="meta">The domain configuration is kept by a control node. Add a cluster or select one in the Cluster section.</p>
       </EmptyState>
     );
   } else if (query.isPending) {
@@ -97,7 +97,7 @@ export function DomainSection() {
     const unreachable = query.error instanceof OperatorApiError && query.error.unreachable;
     content = (
       <EmptyState
-        title={unreachable ? "The master cannot be reached" : "The domain configuration could not be read"}
+        title={unreachable ? "The control node cannot be reached" : "The domain configuration could not be read"}
         tone="error"
         action={
           <button type="button" onClick={() => void query.refetch()}>
@@ -105,7 +105,7 @@ export function DomainSection() {
           </button>
         }
       >
-        <p className="meta">{query.error ? describeOperatorError(query.error) : "The master answered without a domain configuration."}</p>
+        <p className="meta">{query.error ? describeOperatorError(query.error) : "The control node answered without a domain configuration."}</p>
       </EmptyState>
     );
   } else {
@@ -113,13 +113,13 @@ export function DomainSection() {
       <div className="domain-section">
         <div className="domain-section-bar">
           <p className="meta" role="status">
-            {query.data.saved ? `Saved on the master: ${formatSavedAt(query.data.updated_at)}.` : "Not saved yet: the master's default presets apply."}
+            {query.data.saved ? `Saved on the control node: ${formatSavedAt(query.data.updated_at)}.` : "Not saved yet: the control node's default presets apply."}
             {dirty ? " You have unsaved changes; runs use the saved configuration until you save." : ""}
           </p>
           <button
             type="button"
             disabled={defaults === null || sameTexts(texts, defaults)}
-            title="Replace the three texts with the master's default presets (save to apply them)"
+            title="Replace the three texts with the control node's default presets (save to apply them)"
             onClick={() => defaults && setTexts(clusterUrl, defaults)}
           >
             Load the default presets
@@ -132,10 +132,10 @@ export function DomainSection() {
         )}
         {!editable && (
           <p className="wiz-notice" role="note">
-            This master runs without its database, so it keeps no domain configuration of its own: every run uses its default presets.
+            This control node runs without its database, so it keeps no domain configuration of its own: every run uses its default presets.
           </p>
         )}
-        {presets.isError && <p className="error">The master's presets could not be read: {describeOperatorError(presets.error)}</p>}
+        {presets.isError && <p className="error">The control node's presets could not be read: {describeOperatorError(presets.error)}</p>}
         {saveError && (
           <div className="error" role="alert">
             <p>{saveError.message}</p>

@@ -44,7 +44,7 @@ class MonitorGuidedPlanner:
         other_trajectories: Trajectories,
         colregs_constants: COLREGSConstraints,
         *,
-        observer: Optional[Callable[[Trajectories, MonitoredTrajectory, int], None]] = None,
+        observer: Optional[Callable[[Trajectories, MonitoredTrajectory, int], Optional[bool]]] = None,
         termination_signal: Optional[Callable[[], bool]] = None,
         max_iterations: Optional[int] = None,
         anim_update_interval: Optional[int] = None,
@@ -80,6 +80,9 @@ class MonitorGuidedPlanner:
         self._iteration_count = 0
         self.stop = False
         self._best_leaf: Optional[SceneNode] = None
+        # Index of the first scene of the planned path that still fails a COLREGS rule, None
+        # for a clean plan (and before planning). A path is returned either way.
+        self.first_failed_step: Optional[int] = None
 
         # other_trajectories is the constant-course baseline for the whole scene, so its
         # timespan is the horizon the planner is expected to cover, and that is what
@@ -133,6 +136,7 @@ class MonitorGuidedPlanner:
         if not self._should_stop():
             nodes = self._repair_until_clean(nodes, original_headings, horizon)
         self._install_path(nodes)
+        self.first_failed_step = first_failure_index(nodes)
         self._notify_observer()
         return self._trajectories_from_nodes(nodes)
 
@@ -142,10 +146,22 @@ class MonitorGuidedPlanner:
             return
         if self._iteration_count % self.ANIM_UPDATE_INTERVAL != 0:
             return
+        self._preview(nodes)
+
+    def _preview(self, nodes: List[SceneNode]) -> bool:
+        """Show the observer the path as it stands. False when the observer did not take it.
+
+        The repair calls this too: a window search can take a minute while the seed before
+        it takes a fraction of a second, and without a preview from the repair an observer
+        that drops previews arriving too fast was left with the first seed step. Such an
+        observer returns False for a preview it dropped, so the caller can offer it again.
+        """
+        if self._observer is None:
+            return True
         try:
-            self._observer(self._trajectories_from_nodes(nodes), self._monitored_from_nodes(nodes), self._iteration_count)
+            return self._observer(self._trajectories_from_nodes(nodes), self._monitored_from_nodes(nodes), self._iteration_count) is not False
         except Exception:
-            return
+            return True
 
     def _monitored_from_nodes(self, nodes: List[SceneNode]) -> MonitoredTrajectory:
         monitored = MonitoredTrajectory(time_step=self.time_step)
@@ -173,6 +189,7 @@ class MonitorGuidedPlanner:
                     print(f"Window repair could not replace the failed seed step at index {failure}")
                 return nodes
             nodes = repaired
+            self._preview(nodes)
         return nodes
 
     def _repair_one_failure(
@@ -262,9 +279,13 @@ class MonitorGuidedPlanner:
         )
         objectives.window_spec = spec
         best_leaf = tree.root
+        # The path under repair is shown once per search: offered each round until the
+        # observer takes it, since it may still be dropping previews right after the seed.
+        shown = False
         for _ in range(self.WINDOW_MAX_ITERATIONS):
             if self._should_stop():
                 break
+            shown = shown or self._preview(spec.seed_nodes)
             parents = self._window_parents(tree, objectives)
             if not parents:
                 break

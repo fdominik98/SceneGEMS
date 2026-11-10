@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "../../../app/uiStore";
 import type { ExploredFec } from "../../../domain/designSpace/explorationResult";
+import { useBatchGenerationStore } from "../../../domain/sceneGeneration/batchGenerationStore";
 import { MemoryStorage } from "../../../test/memoryStorage";
 import { sendToScenePage, useSceneSpecificationHandoff } from "../pages/sceneSpecificationHandoff";
 import { createExplorationInputStore, editedLabel, EXPLORATION_INPUT_KEY } from "./explorationInputStore";
@@ -20,14 +21,14 @@ describe("the exploration page's input", () => {
     const storage = new MemoryStorage();
     const store = createExplorationInputStore(() => storage);
     expect(store.getState()).toMatchObject({ specification: "", specificationLabel: null, scope: "", maxFecs: 1000, timeoutSeconds: 600 });
-    store.getState().loadSpecification("class OS.\n", "the master's default");
+    store.getState().loadSpecification("class OS.\n", "the control node's default");
     store.getState().editSpecification("class OS.\nclass TS.\n");
     store.getState().setScope("TS = 2");
     store.getState().setMaxFecs(null);
-    expect(store.getState()).toMatchObject({ specificationLabel: "the master's default (edited)", maxFecs: null });
+    expect(store.getState()).toMatchObject({ specificationLabel: "the control node's default (edited)", maxFecs: null });
     expect(JSON.parse(storage.getItem(EXPLORATION_INPUT_KEY) ?? "{}").state).toEqual({
       specification: "class OS.\nclass TS.\n",
-      specificationLabel: "the master's default (edited)",
+      specificationLabel: "the control node's default (edited)",
       scope: "TS = 2",
       maxFecs: null,
       timeoutSeconds: 600,
@@ -70,7 +71,7 @@ describe("the explored FECs the page shows", () => {
 
   it("reads the texts it is asked for once, and says which cannot be read", async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => (String(input).endsWith("1".repeat(64)) ? new Response("gone", { status: 404 }) : new Response("declare os.\r\n")));
-    const client = { artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` };
+    const client = { artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` };
     useExplorationStore.getState().show({ campaignId: "c1", result: null, fecs: [fec(0), fec(1), fec(2, null)] });
     await loadFecTexts(client, ["explored/00000", "explored/00001", "explored/00002"], fetchImpl as unknown as typeof fetch);
     await loadFecTexts(client, ["explored/00000"], fetchImpl as unknown as typeof fetch);
@@ -99,10 +100,12 @@ describe("the explored FECs the page shows", () => {
 });
 
 describe("a FEC sent to the scene page", () => {
-  it("is queued for the scene page's editor, which is shown", async () => {
-    useUiStore.setState({ section: "history", workbenchView: "simulation", sceneGenerationTab: "batch", sceneGenerationPaneView: "monitor" });
+  it("is queued for the scene page's editor, which is shown: the FECs selected there are cleared", async () => {
+    useUiStore.setState({ section: "history", workbenchView: "simulation", sceneGenerationPaneView: "monitor" });
+    useBatchGenerationStore.setState({ selectedClassIds: ["2vessel_0obstacle_scenarios/fec1", "2vessel_0obstacle_scenarios/fec2"] });
     sendToScenePage({ label: "explored/00003", text: async () => "declare os.\n" });
-    expect(useUiStore.getState()).toMatchObject({ section: "workbench", workbenchView: "sceneGeneration", sceneGenerationTab: "single", sceneGenerationPaneView: "specification" });
+    expect(useUiStore.getState()).toMatchObject({ section: "workbench", workbenchView: "sceneGeneration", sceneGenerationPaneView: "specification" });
+    expect(useBatchGenerationStore.getState().selectedClassIds).toEqual([]);
     const load = useSceneSpecificationHandoff.getState().take();
     expect(load?.label).toBe("explored/00003");
     expect(await load?.text()).toBe("declare os.\n");

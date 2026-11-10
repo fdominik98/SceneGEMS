@@ -109,7 +109,7 @@ def in_container(monkeypatch):
 
 
 @pytest.mark.parametrize("loopback", ["localhost", "127.0.0.1", "::1", " LocalHost "])
-def test_a_loopback_broker_is_the_master_machine_from_its_container(in_container, loopback):
+def test_a_loopback_broker_is_the_control_node_machine_from_its_container(in_container, loopback):
     assert resolve_mqtt_broker_endpoints(loopback, loopback, 1882, tls_connection=False) == ("host.docker.internal", "host.docker.internal", 1882)
 
 

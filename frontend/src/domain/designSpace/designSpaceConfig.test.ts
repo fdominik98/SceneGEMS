@@ -11,7 +11,7 @@ describe("the config's design space exploration section", () => {
       quota: 2,
       failure_budget: "unlimited",
     });
-    // A preset may leave the specification to the master
+    // A preset may leave the specification to the control node
     expect(designSpaceSectionOf({ design_space_exploration: { scope: "TS = 2" } })).toEqual({ specification: "", scope: "TS = 2" });
     expect(designSpaceSectionOf({ steps: ["scene_generation"] })).toBeNull();
   });

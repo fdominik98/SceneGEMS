@@ -24,17 +24,20 @@ from scenegems_tool.persistence.schema import (
     CaseState,
     JobEventKind,
     MonitorImplementation,
-    NodeStatus,
     PipelineStage,
     RunSource,
     StepKind,
     TrajectoryGeneratorImplementation,
     VerdictState,
+    WorkerNodeStatus,
 )
 from scenegems_tool.persistence.schema.campaign_tables import KIND_OF_ORIGIN_CHECK
 from tests.scenegems_tool.persistence.schema.test_tables import CAMPAIGN_TABLES, CLUSTER_TABLES, SETTING_TABLES
 
 ALL_TABLES = CLUSTER_TABLES | CAMPAIGN_TABLES | SETTING_TABLES
+# The names the cluster tables had before revision 0013 renamed the node tables to worker node tables
+NAME_BEFORE_0013 = {"worker_node": "node", "worker_node_capability": "node_capability", "worker_node_component": "node_component", "worker_node_fingerprint": "node_fingerprint"}
+CLUSTER_TABLES_BEFORE_0013 = {NAME_BEFORE_0013.get(table, table) for table in CLUSTER_TABLES}
 
 
 def _scripts() -> ScriptDirectory:
@@ -56,10 +59,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0012"]
+    assert scripts.get_heads() == ["0013"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -84,7 +87,7 @@ def test_revision_enum_values_match_the_code():
     assert set(ninth.JOB_TYPES) == set(twelfth.PREVIOUS_JOB_TYPES)
     assert set(twelfth.JOB_TYPES) == _values(JobType)
     assert set(first.JOB_STATES) == _values(JobState)
-    assert set(first.NODE_STATUSES) == _values(NodeStatus)
+    assert set(first.NODE_STATUSES) == _values(WorkerNodeStatus)
     assert set(first.JOB_EVENT_KINDS) == _values(JobEventKind)
     assert set(second.CAMPAIGN_DESIRED_STATES) == _values(CampaignDesiredState)
     assert set(second.CAMPAIGN_ACTUAL_STATES) == _values(CampaignActualState)
@@ -111,7 +114,12 @@ def test_offline_upgrade_renders_the_tables(capsys):
     command.upgrade(alembic_config("postgresql://u:p@db/scenegems"), "head", sql=True)
     sql = capsys.readouterr().out
     for table in ALL_TABLES:
-        assert f"CREATE TABLE {table} " in sql
+        assert f"CREATE TABLE {NAME_BEFORE_0013.get(table, table)} " in sql
+    for table, before in NAME_BEFORE_0013.items():
+        assert f"ALTER TABLE {before} RENAME TO {table}" in sql
+    assert "ALTER TABLE job RENAME allowed_nodes TO allowed_worker_nodes" in sql
+    assert "ALTER TABLE worker_node_capability RENAME CONSTRAINT fk_node_capability_node_id_node TO fk_worker_node_capability_worker_node_id_worker_node" in sql
+    assert "ALTER INDEX ix_node_last_seen_at RENAME TO ix_worker_node_last_seen_at" in sql
     assert "WHERE state = 'queued'" in sql
     assert "ALTER TABLE job ADD COLUMN available_at" in sql
     assert "UPDATE job SET available_at = submitted_at" in sql
@@ -134,7 +142,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0012"
+            assert MigrationContext.configure(connection).get_current_revision() == "0013"
     finally:
         engine.dispose()
 
@@ -198,14 +206,14 @@ def test_the_machine_column_comes_and_goes_with_revision_0003(empty_database_url
         columns = {column["name"]: column for column in inspect(engine).get_columns("node")}
         assert columns["machine"]["nullable"] and str(columns["machine"]["type"]) == "VARCHAR(256)"
         with engine.begin() as connection:
-            assert connection.execute(text("SELECT machine FROM node WHERE id = 'node-1'")).scalar_one() is None  # nodes of before say hello again
+            assert connection.execute(text("SELECT machine FROM node WHERE id = 'node-1'")).scalar_one() is None  # worker nodes of before say hello again
             connection.execute(text("UPDATE node SET machine = 'lab-pc-3' WHERE id = 'node-1'"))
         command.downgrade(config, "0002")
         assert "machine" not in {column["name"] for column in inspect(engine).get_columns("node")}
         with engine.connect() as connection:
-            assert connection.execute(text("SELECT name FROM node WHERE id = 'node-1'")).scalar_one() == "worker-1"  # the node stays
+            assert connection.execute(text("SELECT name FROM node WHERE id = 'node-1'")).scalar_one() == "worker-1"  # the worker node stays
         command.upgrade(config, "head")
-        assert "machine" in {column["name"] for column in inspect(engine).get_columns("node")}
+        assert "machine" in {column["name"] for column in inspect(engine).get_columns("worker_node")}
     finally:
         engine.dispose()
 
@@ -363,7 +371,7 @@ def test_downgrade_to_the_cluster_tables_and_upgrade_again(empty_database_url):
     engine = create_engine(empty_database_url)
     try:
         inspector = inspect(engine)
-        assert set(inspector.get_table_names()) == CLUSTER_TABLES - {"node_component"} | {"alembic_version"}
+        assert set(inspector.get_table_names()) == CLUSTER_TABLES_BEFORE_0013 - {"node_component"} | {"alembic_version"}
         assert "available_at" not in {column["name"] for column in inspector.get_columns("job")}
         assert "tx_id" not in {column["name"] for column in inspector.get_columns("job_event")}
         command.upgrade(config, "head")
@@ -477,7 +485,7 @@ def test_revision_0008_splits_the_ardupilot_jobs_by_their_layer_and_drops_the_ol
             job_types = dict(connection.execute(text("SELECT id, job_type FROM job")).all())
             assert job_types == {"on-sitl": "simulation.ardupilot_sim", "on-gazebo": "simulation.gazebo"}
             capabilities = connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all()
-            assert capabilities == ["simulation.kinematic"], "the node lists its capabilities again in its Hello"
+            assert capabilities == ["simulation.kinematic"], "the worker node lists its capabilities again in its Hello"
             connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation.gazebo', 1, 0)"))
         with pytest.raises(IntegrityError):
             with engine.begin() as connection:
@@ -535,7 +543,7 @@ def test_revision_0009_merges_the_simulation_jobs_by_their_runner_and_stores_nod
                 "scene": ("scene_generation", {"seed": 1}, []),
             }
             capabilities = connection.execute(text("SELECT job_type FROM node_capability WHERE node_id = 'node-1'")).scalars().all()
-            assert capabilities == ["scene_generation"], "the node lists its slots again in its Hello"
+            assert capabilities == ["scene_generation"], "the worker node lists its slots again in its Hello"
             connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation', 2, 0)"))
             connection.execute(text("INSERT INTO node_component (node_id, component) VALUES ('node-1', 'simulation_layer/kinematic')"))
         with pytest.raises(IntegrityError):
@@ -656,5 +664,60 @@ def test_the_design_space_exploration_values_come_and_go_with_revision_0012(empt
         command.upgrade(config, "head")
         with engine.begin() as connection:
             connection.execute(text(campaign_class), {**explored, "campaign": "plain", "class_id": "exploration"})
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0012")
+    at = datetime(2026, 11, 10, 9, 30, tzinfo=timezone.utc)
+    engine = create_engine(empty_database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('node-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(text("INSERT INTO node_capability (node_id, job_type, slots, slots_in_use) VALUES ('node-1', 'simulation', 2, 0)"))
+            connection.execute(text("INSERT INTO node_component (node_id, component) VALUES ('node-1', 'simulation_layer/kinematic')"))
+            connection.execute(
+                text(
+                    "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+                    " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at, allowed_nodes)"
+                    " VALUES ('job-1', 'scene_generation', '{}', '{}', '{}', 0, 0, 0, 3, 'key-1', 'queued', 0, 0, :at, :at, :at, CAST(:allowed AS jsonb))"
+                ),
+                {"at": at, "allowed": '["node-1"]'},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO campaign_preset (id, name, description, config, created_at, updated_at) VALUES ('p1', 'chosen', '', CAST(:chosen AS jsonb), :at, :at), ('p2', 'any', '', CAST(:any AS jsonb), :at, :at)"
+                ),
+                {"at": at, "chosen": '{"resources": {"nodes": ["node-1"], "priority": 2}}', "any": '{"resources": {"priority": 0}}'},
+            )
+        command.upgrade(config, "0013")
+        with engine.connect() as connection:
+            assert compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True}), Base.metadata) == []
+            assert connection.execute(text("SELECT name FROM worker_node WHERE id = 'node-1'")).scalar_one() == "worker-1"
+            assert connection.execute(text("SELECT slots FROM worker_node_capability WHERE worker_node_id = 'node-1'")).scalar_one() == 2
+            assert connection.execute(text("SELECT component FROM worker_node_component WHERE worker_node_id = 'node-1'")).scalar_one() == "simulation_layer/kinematic"
+            assert connection.execute(text("SELECT allowed_worker_nodes FROM job WHERE id = 'job-1'")).scalar_one() == ["node-1"]
+            assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p1'")).scalar_one() == {"resources": {"worker_nodes": ["node-1"], "priority": 2}}
+            assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p2'")).scalar_one() == {"resources": {"priority": 0}}
+        inspector = inspect(engine)
+        assert {key["name"] for key in inspector.get_foreign_keys("worker_node_capability")} == {"fk_worker_node_capability_worker_node_id_worker_node"}
+        assert {index["name"] for index in inspector.get_indexes("worker_node")} == {"ix_worker_node_last_seen_at"}
+        assert inspector.get_pk_constraint("worker_node")["name"] == "pk_worker_node"
+        command.downgrade(config, "0012")
+        with engine.connect() as connection:
+            assert set(inspect(connection).get_table_names()) >= {"node", "node_capability", "node_component", "node_fingerprint"}
+            assert connection.execute(text("SELECT slots FROM node_capability WHERE node_id = 'node-1'")).scalar_one() == 2
+            assert connection.execute(text("SELECT allowed_nodes FROM job WHERE id = 'job-1'")).scalar_one() == ["node-1"]
+            assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p1'")).scalar_one() == {"resources": {"nodes": ["node-1"], "priority": 2}}
+        command.upgrade(config, "head")
     finally:
         engine.dispose()

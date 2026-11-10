@@ -42,7 +42,7 @@ describe("LiveChannel subscriptions", () => {
     const { channel } = openChannel();
     expect(MockWebSocket.instances).toHaveLength(0);
     const a = recorder();
-    channel.subscribe("nodes", a.listener);
+    channel.subscribe("worker_nodes", a.listener);
     expect(channel.getStatus()).toBe("connecting");
     const socket = MockWebSocket.latest();
     expect(socket.url).toBe(URL);
@@ -50,13 +50,13 @@ describe("LiveChannel subscriptions", () => {
 
     socket.open();
     expect(channel.getStatus()).toBe("open");
-    expect(socket.sent).toEqual([{ type: "subscribe", version: 1, topic: "nodes" }]);
+    expect(socket.sent).toEqual([{ type: "subscribe", version: 1, topic: "worker_nodes" }]);
 
-    socket.receive({ type: "subscribed", topic: "nodes", snapshot: [1] });
-    socket.receive({ type: "update", topic: "nodes", seq: 1, data: "a" });
+    socket.receive({ type: "subscribed", topic: "worker_nodes", snapshot: [1] });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 1, data: "a" });
     expect(a.events).toEqual([
-      { type: "snapshot", topic: "nodes", snapshot: [1] },
-      { type: "update", topic: "nodes", seq: 1, data: "a" },
+      { type: "snapshot", topic: "worker_nodes", snapshot: [1] },
+      { type: "update", topic: "worker_nodes", seq: 1, data: "a" },
     ]);
   });
 
@@ -127,10 +127,10 @@ describe("LiveChannel subscriptions", () => {
   it("ignores updates before the snapshot and for topics nobody subscribes", () => {
     const { channel } = openChannel();
     const a = recorder();
-    channel.subscribe("nodes", a.listener);
+    channel.subscribe("worker_nodes", a.listener);
     const socket = MockWebSocket.latest();
     socket.open();
-    socket.receive({ type: "update", topic: "nodes", seq: 1, data: "early" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 1, data: "early" });
     socket.receive({ type: "update", topic: "job:9", seq: 1, data: "other" });
     socket.receive({ type: "subscribed", topic: "job:9", snapshot: {} });
     expect(a.events).toEqual([]);
@@ -168,35 +168,35 @@ describe("LiveChannel sequence numbers", () => {
   function liveTopic() {
     const { channel } = openChannel();
     const a = recorder();
-    channel.subscribe("nodes", a.listener);
+    channel.subscribe("worker_nodes", a.listener);
     const socket = MockWebSocket.latest();
     socket.open();
-    socket.receive({ type: "subscribed", topic: "nodes", snapshot: [] });
+    socket.receive({ type: "subscribed", topic: "worker_nodes", snapshot: [] });
     socket.clearSent();
     return { channel, socket, a };
   }
 
   it("takes the first update after a snapshot as the baseline and drops repeated or older ones", () => {
     const { socket, a } = liveTopic();
-    socket.receive({ type: "update", topic: "nodes", seq: 5, data: "five" });
-    socket.receive({ type: "update", topic: "nodes", seq: 5, data: "five again" });
-    socket.receive({ type: "update", topic: "nodes", seq: 4, data: "four" });
-    socket.receive({ type: "update", topic: "nodes", seq: 6, data: "six" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 5, data: "five" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 5, data: "five again" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 4, data: "four" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 6, data: "six" });
     expect(a.events.filter((event) => event.type === "update").map((event) => (event as { data: unknown }).data)).toEqual(["five", "six"]);
     expect(socket.sent).toEqual([]);
   });
 
   it("subscribes again on a gap and resumes from the new snapshot", () => {
     const { socket, a } = liveTopic();
-    socket.receive({ type: "update", topic: "nodes", seq: 1, data: "one" });
-    socket.receive({ type: "update", topic: "nodes", seq: 3, data: "three" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 1, data: "one" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 3, data: "three" });
     expect(socket.sent).toEqual([
-      { type: "unsubscribe", version: 1, topic: "nodes" },
-      { type: "subscribe", version: 1, topic: "nodes" },
+      { type: "unsubscribe", version: 1, topic: "worker_nodes" },
+      { type: "subscribe", version: 1, topic: "worker_nodes" },
     ]);
-    socket.receive({ type: "update", topic: "nodes", seq: 4, data: "stale" });
-    socket.receive({ type: "subscribed", topic: "nodes", snapshot: ["fresh"] });
-    socket.receive({ type: "update", topic: "nodes", seq: 1, data: "new one" });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 4, data: "stale" });
+    socket.receive({ type: "subscribed", topic: "worker_nodes", snapshot: ["fresh"] });
+    socket.receive({ type: "update", topic: "worker_nodes", seq: 1, data: "new one" });
     expect(a.events.map((event) => (event.type === "update" ? event.data : event.type === "snapshot" ? event.snapshot : null))).toEqual([
       [],
       "one",
@@ -209,13 +209,13 @@ describe("LiveChannel sequence numbers", () => {
 describe("LiveChannel connection", () => {
   it("reconnects with backoff and subscribes every topic again", () => {
     const { channel } = openChannel();
-    const nodes = recorder();
+    const workerNodes = recorder();
     const job = recorder();
-    channel.subscribe("nodes", nodes.listener);
+    channel.subscribe("worker_nodes", workerNodes.listener);
     channel.subscribe("job:1", job.listener);
     const first = MockWebSocket.latest();
     first.open();
-    first.receive({ type: "subscribed", topic: "nodes", snapshot: ["before"] });
+    first.receive({ type: "subscribed", topic: "worker_nodes", snapshot: ["before"] });
 
     first.drop();
     expect(channel.getStatus()).toBe("reconnecting");
@@ -234,9 +234,9 @@ describe("LiveChannel connection", () => {
 
     third.open();
     expect(channel.getStatus()).toBe("open");
-    expect(third.sentOfType("subscribe").map((message) => message.topic).sort()).toEqual(["job:1", "nodes"]);
-    third.receive({ type: "subscribed", topic: "nodes", snapshot: ["after"] });
-    expect(nodes.events.map((event) => (event.type === "snapshot" ? event.snapshot : null))).toEqual([["before"], ["after"]]);
+    expect(third.sentOfType("subscribe").map((message) => message.topic).sort()).toEqual(["job:1", "worker_nodes"]);
+    third.receive({ type: "subscribed", topic: "worker_nodes", snapshot: ["after"] });
+    expect(workerNodes.events.map((event) => (event.type === "snapshot" ? event.snapshot : null))).toEqual([["before"], ["after"]]);
 
     // A successful connection resets the backoff.
     third.drop();
@@ -246,7 +246,7 @@ describe("LiveChannel connection", () => {
 
   it("caps the backoff", () => {
     const { channel } = openChannel();
-    channel.subscribe("nodes", () => {});
+    channel.subscribe("worker_nodes", () => {});
     for (let attempt = 0; attempt < 6; attempt += 1) {
       MockWebSocket.latest().drop();
       vi.advanceTimersByTime(1000);
@@ -261,7 +261,7 @@ describe("LiveChannel connection", () => {
 
   it("pings and treats a silent connection as lost", () => {
     const { channel } = openChannel();
-    channel.subscribe("nodes", () => {});
+    channel.subscribe("worker_nodes", () => {});
     const socket = MockWebSocket.latest();
     socket.open();
 
@@ -283,12 +283,12 @@ describe("LiveChannel connection", () => {
 
   it("closes the socket after the last subscription has been gone for a while", () => {
     const { channel } = openChannel();
-    const off = channel.subscribe("nodes", () => {});
+    const off = channel.subscribe("worker_nodes", () => {});
     const socket = MockWebSocket.latest();
     socket.open();
     off();
     vi.advanceTimersByTime(200);
-    const again = channel.subscribe("nodes", () => {});
+    const again = channel.subscribe("worker_nodes", () => {});
     expect(socket.sentOfType("subscribe")).toHaveLength(2);
     vi.advanceTimersByTime(500);
     expect(socket.closedByClient).toBe(false);
@@ -298,13 +298,13 @@ describe("LiveChannel connection", () => {
     expect(socket.closedByClient).toBe(true);
     expect(channel.getStatus()).toBe("idle");
 
-    channel.subscribe("nodes", () => {});
+    channel.subscribe("worker_nodes", () => {});
     expect(MockWebSocket.instances).toHaveLength(2);
   });
 
   it("stops reconnecting when nobody subscribes", () => {
     const { channel } = openChannel();
-    const off = channel.subscribe("nodes", () => {});
+    const off = channel.subscribe("worker_nodes", () => {});
     MockWebSocket.latest().drop();
     off();
     vi.advanceTimersByTime(5000);
@@ -316,10 +316,10 @@ describe("LiveChannel connection", () => {
     const { channel } = openChannel();
     const statuses: string[] = [];
     channel.onStatusChange((status) => statuses.push(status));
-    channel.subscribe("nodes", () => {});
+    channel.subscribe("worker_nodes", () => {});
     MockWebSocket.latest().open();
     channel.close();
     expect(statuses).toEqual(["connecting", "open", "closed"]);
-    expect(() => channel.subscribe("nodes", () => {})).toThrow();
+    expect(() => channel.subscribe("worker_nodes", () => {})).toThrow();
   });
 });

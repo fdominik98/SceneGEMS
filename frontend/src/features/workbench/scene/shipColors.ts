@@ -202,3 +202,17 @@ export function getSimulationStreamColor(actor: ActorStaticInfo, theme: Theme = 
 export function getActorPanelDotColor(actor: ActorStaticInfo, panelKind: TrajectoryStream, theme: Theme = "dark"): string {
   return panelKind === "simulation" ? getSimulationStreamColor(actor, theme) : getShipColor(actor, theme);
 }
+
+/**
+ * The color of a vessel by its id alone (`os`, `ts1`, `ts2`, ...), for views that have the id and no actor,
+ * such as the model graph of a FEC; null for any other name. Case does not matter, so the `tS1` the Refinery
+ * generator names a target ship takes the color of `ts1`.
+ */
+export function shipColorOfName(name: string, theme: Theme = "dark"): string | null {
+  const id = name.trim().toLowerCase();
+  if (id === "os") {
+    return SHIP_COLOR_MAPS[theme].os;
+  }
+  const target = /^ts(\d+)$/.exec(id);
+  return target ? (SHIP_COLOR_MAPS[theme][`ts${Number(target[1])}`] ?? null) : null;
+}

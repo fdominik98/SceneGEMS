@@ -1,4 +1,4 @@
-"""python -m scenegems_tool.assurance --api http://127.0.0.1:5174 <command>: campaigns on a master's operator API."""
+"""python -m scenegems_tool.assurance --api http://127.0.0.1:5174 <command>: campaigns on a control node's operator API."""
 
 import sys
 

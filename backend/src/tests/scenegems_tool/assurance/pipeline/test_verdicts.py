@@ -43,7 +43,7 @@ def test_the_encounter_types_travel_from_the_monitor_result_to_the_verdict():
 
 
 def test_a_result_without_encounters_gives_a_verdict_without_them():
-    """A result of an older node, an empty summary and an unmonitored step all have none (stored as null)."""
+    """A result of an older worker node, an empty summary and an unmonitored step all have none (stored as null)."""
     assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=False).encounters is None
     assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounters": {}, "passed": True}), None, sensitive=False).encounters is None
     assert new_verdict(7, 0, pending_unmonitored(), None, sensitive=False).encounters is None
@@ -58,7 +58,7 @@ def test_the_vessel_roles_travel_from_the_monitor_result_to_the_verdict():
 
 
 def test_a_result_without_vessel_roles_gives_a_verdict_without_them():
-    """A result of an older node, a run without an encounter and an unmonitored step all have none (stored as null)."""
+    """A result of an older worker node, a run without an encounter and an unmonitored step all have none (stored as null)."""
     assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "passed": True}), None, sensitive=False).encounter_roles is None
     assert new_verdict(7, 0, pending_from_post_hoc({"rules": {}, "failed_rules": [], "encounter_roles": {}, "passed": True}), None, sensitive=False).encounter_roles is None
     assert new_verdict(7, 0, pending_unmonitored(), None, sensitive=False).encounter_roles is None
@@ -90,7 +90,7 @@ def test_the_empty_monitor_judges_nothing():
 
 def test_a_run_record_takes_the_simulation_and_its_job():
     start = datetime(2026, 10, 25, tzinfo=timezone.utc)
-    facts = JobFacts("job-1", JobState.SUCCEEDED, None, None, "node-1", {"image": "fp"}, start, start + timedelta(seconds=4), start + timedelta(seconds=10))
+    facts = JobFacts("job-1", JobState.SUCCEEDED, None, None, "worker-node-1", {"image": "fp"}, start, start + timedelta(seconds=4), start + timedelta(seconds=10))
     result = {"run_record": {"dt": 0.5, "steps": 20, "repeatability_tier": "exact", "environment": {"wind_vector": [0, 0, 0]}}, "steps": 20, "state_digest": "abc", "trajectories": LOG}
     record = new_run_record(
         7,
@@ -112,7 +112,7 @@ def test_a_run_record_takes_the_simulation_and_its_job():
     assert (record.repeat_index, record.seed, record.steps, record.dt, record.state_digest, record.repeatability_tier) == (1, 99, 20, 0.5, "abc", "exact")
     assert record.artifacts == {"trajectories": "ef" * 32, "state_log": "cd" * 32}
     assert record.environment == {"wind_vector": [0, 0, 0]} and record.stack["config"] == {"mode": "replay"} and record.stack["run_record"]["dt"] == 0.5
-    assert (record.job_id, record.node_id, record.fingerprints) == ("job-1", "node-1", {"image": "fp"})
+    assert (record.job_id, record.worker_node_id, record.fingerprints) == ("job-1", "worker-node-1", {"image": "fp"})
     assert record.durations_s == {"queued_s": 4.0, "running_s": 6.0, "total_s": 10.0}
     inline = new_run_record(
         7, 0, 0, TrajectoryGeneratorImplementation.STRAIGHT, True, {}, {"wind": "config"}, 1, {"steps": 3, "trajectories": {"scene_list": []}}, None, "job", None, {}, {}, "bounded"

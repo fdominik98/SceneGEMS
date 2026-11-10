@@ -5,15 +5,15 @@ import { Disclosure } from "../../components/Disclosure";
 import { EmptyState } from "../../components/EmptyState";
 import { SectionFrame } from "../../components/SectionFrame";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
-import { useNodesFeed, useNodesStore } from "../../domain/cluster/nodesStore";
+import { useWorkerNodesFeed, useWorkerNodesStore } from "../../domain/cluster/workerNodesStore";
 import { createOperatorClient, describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
-import type { MasterStatus, NodeView } from "../../domain/cluster/schemas";
+import type { ControlNodeStatus, WorkerNodeView } from "../../domain/cluster/schemas";
 import { useLiveChannelStatus } from "../../domain/cluster/useLiveTopic";
 import { ClusterListPanel, SSH_TUNNEL_COMMAND } from "./ClusterListPanel";
-import { shortHash, summarizeNodes } from "./clusterFormat";
-import { NodeInstances } from "./instances/NodeInstances";
-import { NodeCard } from "./NodeCard";
-import { useMasterStatus } from "./useMasterStatus";
+import { shortHash, summarizeWorkerNodes } from "./clusterFormat";
+import { WorkerNodeInstances } from "./instances/WorkerNodeInstances";
+import { WorkerNodeCard } from "./WorkerNodeCard";
+import { useControlNodeStatus } from "./useControlNodeStatus";
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -42,27 +42,27 @@ function StatTile({ label, value, detail, tone }: { label: string; value: string
   );
 }
 
-interface MasterDetailsProps {
-  status: MasterStatus;
+interface ControlNodeDetailsProps {
+  status: ControlNodeStatus;
   liveStatus: keyof typeof LIVE_LABELS;
-  nodesSource: string | null;
+  workerNodesSource: string | null;
   connected: number;
   total: number;
 }
 
-/** The technical side of the master: its id, the live channel, how nodes update, and the release fingerprints. */
-function MasterDetails({ status, liveStatus, nodesSource, connected, total }: MasterDetailsProps) {
+/** The technical side of the control node: its id, the live channel, how worker nodes update, and the release fingerprints. */
+function ControlNodeDetails({ status, liveStatus, workerNodesSource, connected, total }: ControlNodeDetailsProps) {
   const images = Object.entries(status.expected_fingerprints.images).sort(([a], [b]) => a.localeCompare(b));
   const fingerprints = status.expected_fingerprints;
   return (
-    <div className="master-status-panel">
-      <dl className="master-facts">
+    <div className="control-node-status-panel">
+      <dl className="control-node-facts">
         <div>
-          <dt>Master</dt>
-          <dd>{status.master_id}</dd>
+          <dt>Control node</dt>
+          <dd>{status.control_node_id}</dd>
         </div>
         <div>
-          <dt>Nodes with a control link</dt>
+          <dt>Worker nodes with a control link</dt>
           <dd>
             {connected} / {total}
           </dd>
@@ -72,8 +72,8 @@ function MasterDetails({ status, liveStatus, nodesSource, connected, total }: Ma
           <dd>{LIVE_LABELS[liveStatus]}</dd>
         </div>
         <div>
-          <dt>Node updates</dt>
-          <dd>{nodesSource === "live" && liveStatus === "open" ? "pushed live" : "polled every 5 s"}</dd>
+          <dt>Worker node updates</dt>
+          <dd>{workerNodesSource === "live" && liveStatus === "open" ? "pushed live" : "polled every 5 s"}</dd>
         </div>
         <div>
           <dt>Release fingerprints</dt>
@@ -85,7 +85,7 @@ function MasterDetails({ status, liveStatus, nodesSource, connected, total }: Ma
       </dl>
       {fingerprints.error && <p className="meta warning">{fingerprints.error}</p>}
       {images.length > 0 ? (
-        <table className="master-images">
+        <table className="control-node-images">
           <thead>
             <tr>
               <th>Image</th>
@@ -106,15 +106,15 @@ function MasterDetails({ status, liveStatus, nodesSource, connected, total }: Ma
           </tbody>
         </table>
       ) : (
-        <p className="meta">The master lists no expected images yet.</p>
+        <p className="meta">The control node lists no expected images yet.</p>
       )}
     </div>
   );
 }
 
-/** Removes every offline node of the cluster, e.g. the old versions of nodes that came back under a new id. */
-function ClearOfflineBar({ operatorUrl, offline }: { operatorUrl: string; offline: NodeView[] }) {
-  const removeNode = useNodesStore((s) => s.removeNode);
+/** Removes every offline worker node of the cluster, e.g. the old versions of worker nodes that came back under a new id. */
+function ClearOfflineBar({ operatorUrl, offline }: { operatorUrl: string; offline: WorkerNodeView[] }) {
+  const removeWorkerNode = useWorkerNodesStore((s) => s.removeWorkerNode);
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,11 +124,11 @@ function ClearOfflineBar({ operatorUrl, offline }: { operatorUrl: string; offlin
     setError(null);
     const client = createOperatorClient(operatorUrl);
     const failures: string[] = [];
-    for (const node of offline) {
+    for (const workerNode of offline) {
       try {
-        removeNode(await client.removeNode(node.node_id));
+        removeWorkerNode(await client.removeWorkerNode(workerNode.worker_node_id));
       } catch (failure) {
-        failures.push(`${node.name}: ${describeOperatorError(failure)}`);
+        failures.push(`${workerNode.name}: ${describeOperatorError(failure)}`);
       }
     }
     setError(failures.length > 0 ? failures.join("; ") : null);
@@ -140,11 +140,11 @@ function ClearOfflineBar({ operatorUrl, offline }: { operatorUrl: string; offlin
     <div className="cluster-clear-offline">
       <button
         type="button"
-        className={`node-card-action${confirming ? " node-card-action--danger" : ""}`}
+        className={`worker-node-card-action${confirming ? " worker-node-card-action--danger" : ""}`}
         disabled={pending}
         onClick={() => (confirming ? void clear() : setConfirming(true))}
         onBlur={() => setConfirming(false)}
-        title="Forget every offline node. One that connects again reappears."
+        title="Forget every offline worker node. One that connects again reappears."
       >
         {pending ? "Clearing..." : confirming ? `Confirm: remove ${offline.length}` : `Clear ${offline.length} offline`}
       </button>
@@ -153,35 +153,35 @@ function ClearOfflineBar({ operatorUrl, offline }: { operatorUrl: string; offlin
   );
 }
 
-/** The Cluster section: the selected cluster's master and its nodes as machine resources. */
+/** The Cluster section: the selected cluster's control node and its worker nodes as machine resources. */
 export function ClusterSection() {
   const cluster = useSelectedCluster();
   const operatorUrl = cluster?.operatorUrl ?? null;
-  useNodesFeed(operatorUrl);
+  useWorkerNodesFeed(operatorUrl);
   // What the page shows of the store, not its actions
-  const nodesState = useNodesStore(
-    useShallow((state) => ({ operatorUrl: state.operatorUrl, nodes: state.nodes, loaded: state.loaded, error: state.error, unreachable: state.unreachable, source: state.source }))
+  const workerNodesState = useWorkerNodesStore(
+    useShallow((state) => ({ operatorUrl: state.operatorUrl, workerNodes: state.workerNodes, loaded: state.loaded, error: state.error, unreachable: state.unreachable, source: state.source }))
   );
   const liveStatus = useLiveChannelStatus(operatorUrl);
-  const statusQuery = useMasterStatus(operatorUrl);
+  const statusQuery = useControlNodeStatus(operatorUrl);
   const now = useNow(5_000);
-  const [instancesNodeId, setInstancesNodeId] = useState<string | null>(null);
+  const [instancesWorkerNodeId, setInstancesWorkerNodeId] = useState<string | null>(null);
 
-  const nodesOfCluster = nodesState.operatorUrl === operatorUrl;
-  const nodes = nodesOfCluster ? nodesState.nodes : [];
-  const loaded = nodesOfCluster && nodesState.loaded;
+  const workerNodesOfCluster = workerNodesState.operatorUrl === operatorUrl;
+  const workerNodes = workerNodesOfCluster ? workerNodesState.workerNodes : [];
+  const loaded = workerNodesOfCluster && workerNodesState.loaded;
   const statusError = statusQuery.error;
   const unreachable =
     !loaded &&
-    ((statusError instanceof OperatorApiError && statusError.unreachable) || (nodesOfCluster && nodesState.unreachable));
-  const summary = summarizeNodes(nodes);
-  const offlineNodes = nodes.filter((node) => node.status === "offline");
-  const instancesNode = nodes.find((node) => node.node_id === instancesNodeId) ?? null;
+    ((statusError instanceof OperatorApiError && statusError.unreachable) || (workerNodesOfCluster && workerNodesState.unreachable));
+  const summary = summarizeWorkerNodes(workerNodes);
+  const offlineWorkerNodes = workerNodes.filter((workerNode) => workerNode.status === "offline");
+  const instancesWorkerNode = workerNodes.find((workerNode) => workerNode.worker_node_id === instancesWorkerNodeId) ?? null;
 
   const apiBadge = cluster && (
     <div className="section-badges">
       <span className={`section-badge${statusQuery.isSuccess ? " section-badge--ok" : statusError ? " section-badge--bad" : ""}`}>
-        {statusQuery.isSuccess ? "Connected to the master" : statusError ? "Cannot reach the master" : "Checking the master"}
+        {statusQuery.isSuccess ? "Connected to the control node" : statusError ? "Cannot reach the control node" : "Checking the control node"}
       </span>
     </div>
   );
@@ -208,7 +208,7 @@ export function ClusterSection() {
       </>
     );
   } else if (unreachable) {
-    const error = statusError ?? nodesState.error;
+    const error = statusError ?? workerNodesState.error;
     content = (
       <>
         <EmptyState
@@ -222,13 +222,13 @@ export function ClusterSection() {
         >
           <p>{error ? describeOperatorError(error) : `No answer from ${cluster.operatorUrl}.`}</p>
           <p>
-            Check that the master runs and that its operator API is reachable at <code>{cluster.operatorUrl}</code>.
+            Check that the control node runs and that its operator API is reachable at <code>{cluster.operatorUrl}</code>.
           </p>
           <Disclosure
             id="cluster:unreachable-tunnel"
             variant="link"
             headingLevel={null}
-            title="It is a remote master"
+            title="It is a remote control node"
             openTitle="Hide the tunnel command"
           >
             <p>Open the tunnel first:</p>
@@ -244,8 +244,8 @@ export function ClusterSection() {
         {manage}
         <div className="stat-tiles">
           <StatTile
-            label="Nodes online"
-            value={loaded ? `${summary.online} / ${summary.nodes}` : "..."}
+            label="Worker nodes online"
+            value={loaded ? `${summary.online} / ${summary.workerNodes}` : "..."}
             detail={loaded ? `${summary.draining} draining, ${summary.offline} offline` : "loading"}
             tone={loaded && summary.offline > 0 ? "warn" : undefined}
           />
@@ -257,60 +257,60 @@ export function ClusterSection() {
           <StatTile
             label="Out of date"
             value={loaded ? String(summary.outOfDate) : "..."}
-            detail={summary.outOfDate > 0 ? "images differ from the master's release" : "every node matches the release"}
+            detail={summary.outOfDate > 0 ? "images differ from the control node's release" : "every worker node matches the release"}
             tone={summary.outOfDate > 0 ? "bad" : loaded ? "ok" : undefined}
           />
         </div>
-        {nodesOfCluster && nodesState.error && loaded && (
-          <p className="meta warning">Nodes may be stale: {nodesState.error}</p>
+        {workerNodesOfCluster && workerNodesState.error && loaded && (
+          <p className="meta warning">Worker nodes may be stale: {workerNodesState.error}</p>
         )}
-        {offlineNodes.length > 0 && <ClearOfflineBar operatorUrl={cluster.operatorUrl} offline={offlineNodes} />}
-        {loaded && nodes.length === 0 ? (
-          <EmptyState title="No nodes yet">
-            <p>The master has no paired nodes. Nodes appear here once they pair and connect.</p>
+        {offlineWorkerNodes.length > 0 && <ClearOfflineBar operatorUrl={cluster.operatorUrl} offline={offlineWorkerNodes} />}
+        {loaded && workerNodes.length === 0 ? (
+          <EmptyState title="No worker nodes yet">
+            <p>The control node has no paired worker nodes. Worker nodes appear here once they pair and connect.</p>
           </EmptyState>
         ) : (
-          <div className="node-grid">
-            {nodes.map((node) => (
-              <NodeCard
-                key={node.node_id}
-                node={node}
+          <div className="worker-node-grid">
+            {workerNodes.map((workerNode) => (
+              <WorkerNodeCard
+                key={workerNode.worker_node_id}
+                workerNode={workerNode}
                 operatorUrl={cluster.operatorUrl}
                 nowMs={now}
-                instancesOpen={node.node_id === instancesNode?.node_id}
-                onToggleInstances={() => setInstancesNodeId((current) => (current === node.node_id ? null : node.node_id))}
+                instancesOpen={workerNode.worker_node_id === instancesWorkerNode?.worker_node_id}
+                onToggleInstances={() => setInstancesWorkerNodeId((current) => (current === workerNode.worker_node_id ? null : workerNode.worker_node_id))}
               />
             ))}
           </div>
         )}
-        {instancesNode && (
-          <div id="cluster-node-instances">
-            <NodeInstances
-              key={`${cluster.operatorUrl}/${instancesNode.node_id}`}
-              node={instancesNode}
+        {instancesWorkerNode && (
+          <div id="cluster-worker-node-instances">
+            <WorkerNodeInstances
+              key={`${cluster.operatorUrl}/${instancesWorkerNode.worker_node_id}`}
+              workerNode={instancesWorkerNode}
               operatorUrl={cluster.operatorUrl}
-              onClose={() => setInstancesNodeId(null)}
+              onClose={() => setInstancesWorkerNodeId(null)}
             />
           </div>
         )}
         <Disclosure
-          id="cluster:master-details"
-          title="Master and connection details"
-          hint={statusQuery.data ? `master ${statusQuery.data.master_id}` : undefined}
+          id="cluster:control-node-details"
+          title="Control node and connection details"
+          hint={statusQuery.data ? `control node ${statusQuery.data.control_node_id}` : undefined}
           headingLevel={3}
         >
           {statusQuery.data ? (
-            <MasterDetails
+            <ControlNodeDetails
               status={statusQuery.data}
               liveStatus={liveStatus}
-              nodesSource={nodesState.source}
+              workerNodesSource={workerNodesState.source}
               connected={summary.connected}
-              total={summary.nodes}
+              total={summary.workerNodes}
             />
           ) : statusError ? (
-            <p className="meta warning">Master status: {describeOperatorError(statusError)}</p>
+            <p className="meta warning">Control node status: {describeOperatorError(statusError)}</p>
           ) : (
-            <p className="meta">Checking the master...</p>
+            <p className="meta">Checking the control node...</p>
           )}
         </Disclosure>
       </>

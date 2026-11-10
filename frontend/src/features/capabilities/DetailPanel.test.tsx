@@ -28,7 +28,7 @@ describe("DetailPanel", () => {
     expect(html).not.toContain("Back to the overview");
   });
 
-  it("leaves out what a master from before the overview does not state", () => {
+  it("leaves out what a control node from before the overview does not state", () => {
     const older = { ...sampleStackDocument(), takes: "", gives: "", notes: [] };
     const html = renderToStaticMarkup(<DetailPanel document={older} view="concrete" selection={null} onShow={vi.fn()} />);
     expect(html).not.toContain("<dt>Takes</dt>");
@@ -36,7 +36,7 @@ describe("DetailPanel", () => {
     expect(html).not.toContain("Notes on this part");
   });
 
-  it("leaves the cluster job count out for a document of an older master", () => {
+  it("leaves the cluster job count out for a document of an older control node", () => {
     const older = { ...document, combinations: document.combinations.map((combination) => ({ ...combination, facts: combination.facts.filter((fact) => fact.key !== "cluster_job") })) };
     const html = renderToStaticMarkup(<DetailPanel document={older} view="concrete" selection={null} onShow={vi.fn()} />);
     expect(html).not.toContain("Run as cluster jobs");

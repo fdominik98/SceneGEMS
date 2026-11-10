@@ -164,7 +164,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
       <div className="camp-detail">
         {back}
         <EmptyState title="The entry did not load" tone="error">
-          <p className="meta">{feed.error ? describeOperatorError(feed.error) : `No entry ${campaignId} on this master. It may have been deleted.`}</p>
+          <p className="meta">{feed.error ? describeOperatorError(feed.error) : `No entry ${campaignId} on this control node. It may have been deleted.`}</p>
           <div>
             <button type="button" onClick={feed.refetch}>
               Try again
@@ -193,7 +193,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           <StateBadge state={detail.actual_state} desired={detail.desired_state} />
           <span
             className={`camp-badge camp-badge--${feed.source === "live" ? "ok" : "warn"}`}
-            title={feed.source === "live" ? "Coverage and events arrive over the live channel." : "The live channel is not delivering; the page polls the master every 4 s."}
+            title={feed.source === "live" ? "Coverage and events arrive over the live channel." : "The live channel is not delivering; the page polls the control node every 4 s."}
           >
             {feed.source === "live" ? "live" : feed.liveStatus === "error" ? "polling, live channel refused" : "polling"}
           </span>

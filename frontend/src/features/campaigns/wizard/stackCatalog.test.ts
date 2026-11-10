@@ -57,19 +57,19 @@ describe("the stack catalog", () => {
     ]);
   });
 
-  it("offers availability only when the master cannot run a stack, and says so", () => {
+  it("offers availability only when the control node cannot run a stack, and says so", () => {
     const withUnavailable = stacks.map((stack) => (stack.id === "gazebo_custom.replay" ? { ...stack, available: false, repeatability_tier: null } : stack));
     const facets = facetViews(withUnavailable, STACK_CATALOG, {}, "");
     expect(facets.map((facet) => facet.key)).toContain("availability");
     expect(facets.find((facet) => facet.key === "availability")?.options.map((option) => [option.label, option.count])).toEqual([
-      ["Runs on this master", 5],
-      ["Cannot run on this master", 1],
+      ["Runs on this control node", 5],
+      ["Cannot run on this control node", 1],
     ]);
   });
 });
 
 describe("what a stack is sorted by", () => {
-  it("reads the control layer from the own ship on a master that does not report it", () => {
+  it("reads the control layer from the own ship on a control node that does not report it", () => {
     expect(controlValue({ ...stackOf("ardupilot_sim.replay"), control_layer: undefined }).value).toBe("ardupilot");
   });
 

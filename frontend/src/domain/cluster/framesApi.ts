@@ -6,7 +6,7 @@ import { describeOperatorError, OperatorApiError } from "./operatorApi";
 import { jobViewSchema, type JobView } from "./schemas";
 
 /**
- * A recorded run's monitor frames on demand. The master submits a `monitoring.post_hoc` job
+ * A recorded run's monitor frames on demand. The control node submits a `monitoring.post_hoc` job
  * with frames over the run's stored state log (`POST .../run-records/<id>/frames`, answered
  * 201 when submitted and 200 when one exists) and answers the newest job's state to `GET` on the
  * same path; once the job succeeded, `frames` references the frames artifact, a JSON array of
@@ -54,7 +54,7 @@ export function isFramesBusy(phase: FramesPhase): boolean {
   return phase.phase !== "idle" && !FRAMES_END_PHASES.includes(phase.phase);
 }
 
-/** What the flow needs of the master; `createFramesApi` builds it, tests use a fake. */
+/** What the flow needs of the control node; `createFramesApi` builds it, tests use a fake. */
 export interface FramesApi {
   /** `POST`: the request, submitted or found. With `retry`, a failed or cancelled job is replaced by a new one (`?retry=true`). */
   submit(signal?: AbortSignal, options?: { retry?: boolean }): Promise<FramesRequestView>;
@@ -151,7 +151,7 @@ export interface FramesFlowOptions {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** The most polls before the flow gives up (a job that never starts). */
   maxPolls?: number;
-  /** Ask again after a failed or cancelled job: the master submits a new one instead of returning the old. */
+  /** Ask again after a failed or cancelled job: the control node submits a new one instead of returning the old. */
   retry?: boolean;
 }
 

@@ -20,14 +20,14 @@ const EDITOR_SCOPES: Partial<Record<DomainKey, string>> = { colregs_constants: "
 interface DomainFileToolsProps {
   domainKey: DomainKey;
   text: string;
-  /** The master's presets of this text; null while they load. */
+  /** The control node's presets of this text; null while they load. */
   presets: readonly DomainPreset[] | null;
   onTextChange: (key: DomainKey, text: string) => void;
   onLoadFile: (key: DomainKey, file: File) => void;
   onExport: (key: DomainKey) => void;
 }
 
-/** Pick one of the master's presets (the usual way to change a text) and, behind one toggle, load a file from the computer or export. */
+/** Pick one of the control node's presets (the usual way to change a text) and, behind one toggle, load a file from the computer or export. */
 function DomainFileTools({ domainKey, text, presets, onTextChange, onLoadFile, onExport }: DomainFileToolsProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const match = presets === null ? null : matchingPreset(presets, text);
@@ -45,7 +45,7 @@ function DomainFileTools({ domainKey, text, presets, onTextChange, onLoadFile, o
         }}
       >
         <option value="" disabled>
-          {presets === null ? "Loading the master's presets..." : text.trim() ? "Edited: load a preset of the master..." : "Load a preset of the master..."}
+          {presets === null ? "Loading the control node's presets..." : text.trim() ? "Edited: load a preset of the control node..." : "Load a preset of the control node..."}
         </option>
         {(presets ?? []).map((preset) => (
           <option key={preset.name} value={preset.name}>

@@ -9,7 +9,7 @@ export const ENCOUNTER_TYPE_LABELS: Readonly<Record<string, string>> = {
   OTHER: "Other",
 };
 
-/** The label of an encounter type; an unknown type (a newer master) reads as its name in words. */
+/** The label of an encounter type; an unknown type (a newer control node) reads as its name in words. */
 export function encounterTypeLabel(type: string): string {
   const known = ENCOUNTER_TYPE_LABELS[type.toUpperCase()];
   if (known) {

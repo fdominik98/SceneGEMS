@@ -19,7 +19,7 @@ parts.
      before its submission is retired);
    - the cursor advances to the batch's position.
 2. After the commit, on the event loop: the jobs of ended cases are cancelled through the
-   control plane (which tells their nodes), the intents are submitted through
+   control plane (which tells their worker nodes), the intents are submitted through
    ControlPlane.submit with their idempotency keys and linked to their jobs, and the jobs of
    a paused campaign are held.
 
@@ -32,7 +32,7 @@ reads what changed for the campaigns somebody watches; the engine itself queries
 
 Desired and actual states:
 
-    start    actual created, desired running or draining: pin the master's current expected
+    start    actual created, desired running or draining: pin the control node's current expected
              fingerprints when the campaign has none, actual running, event started
     pause    hold the campaign's unfinished jobs, start nothing, actual paused; jobs submitted
              while paused are held at once
@@ -41,7 +41,7 @@ Desired and actual states:
              reason "drained", so a later resume continues the campaign
     stop     cancel the active cases and every unfinished job, actual stopped once no job of the
              campaign is unfinished; open classes are abandoned
-    stalled  a job type the campaign needs, with the components of its stage, has no connected node
+    stalled  a job type the campaign needs, with the components of its stage, has no connected worker node
              that runs it with the pinned fingerprints (and the campaign's labels) for
              stall_after_s: actual stalled with the
              reason, back to running (or draining) once one appears; a stalled campaign starts
@@ -102,10 +102,10 @@ from scenegems_tool.persistence.schema import (
     CampaignOrigin,
     CaseState,
     JobEventKind,
-    NodeStatus,
     VerdictState,
+    WorkerNodeStatus,
 )
-from scenegems_tool.persistence.stores import ENGINE_CURSOR, EXPLORATION_CLASS_ID, AssuranceStores, CampaignRecord, JobStore, NodeRecord, PipelineJobEvent, SubmitOutcome
+from scenegems_tool.persistence.stores import ENGINE_CURSOR, EXPLORATION_CLASS_ID, AssuranceStores, CampaignRecord, JobStore, PipelineJobEvent, SubmitOutcome, WorkerNodeRecord
 
 logger = logging.getLogger(__name__)
 
@@ -116,20 +116,20 @@ STOPPED_REASON = "the campaign was stopped"
 
 
 @dataclass(frozen=True)
-class NodeAvailability:
-    """A connected node as the stall check sees it."""
+class WorkerNodeAvailability:
+    """A connected worker node as the stall check sees it."""
 
-    record: NodeRecord
+    record: WorkerNodeRecord
     stale_components: FrozenSet[str] = frozenset()  # its components whose images differ from the release
 
-    def runs(self, job_type: JobType, components: Collection[str], fingerprints: Mapping[str, str], labels: Mapping[str, str], nodes: Collection[str] = ()) -> bool:
-        """Whether the node may run a job of the type with these components now; nodes, when not empty, are the node ids the campaign allows."""
+    def runs(self, job_type: JobType, components: Collection[str], fingerprints: Mapping[str, str], labels: Mapping[str, str], worker_nodes: Collection[str] = ()) -> bool:
+        """Whether the worker node may run a job of the type with these components now; worker nodes, when not empty, are the worker node ids the campaign allows."""
         record = self.record
-        if record.status != NodeStatus.ONLINE or job_type not in record.slots:
+        if record.status != WorkerNodeStatus.ONLINE or job_type not in record.slots:
             return False
         if not set(components) <= set(record.components) - self.stale_components:
             return False
-        if nodes and record.node_id not in nodes:
+        if worker_nodes and record.worker_node_id not in worker_nodes:
             return False
         if any(record.labels.get(key) != value for key, value in labels.items()):
             return False
@@ -139,7 +139,7 @@ class NodeAvailability:
 @dataclass(frozen=True)
 class EngineSettings:
     batch_size: int = 500  # job events per transaction
-    stall_after_s: float = 60.0  # how long a needed job type may have no node before the campaign is stalled
+    stall_after_s: float = 60.0  # how long a needed job type may have no worker node before the campaign is stalled
     max_new_cases_per_tick: int = 256
     submit_concurrency: int = 8
 
@@ -183,7 +183,7 @@ class PipelineEngine:
         submit: Callable[[JobSubmission], Awaitable[SubmitOutcome]],
         cancel: Callable[[str, str], Awaitable[object]],
         expected: Callable[[], Optional[Dict[str, str]]],
-        nodes: Callable[[], Sequence[NodeAvailability]],
+        worker_nodes: Callable[[], Sequence[WorkerNodeAvailability]],
         wake: Callable[[], None] = lambda: None,
         clock: Clock = utc_now,
         settings: EngineSettings = EngineSettings(),
@@ -199,7 +199,7 @@ class PipelineEngine:
         self._submit = submit
         self._cancel = cancel
         self._expected = expected
-        self._nodes = nodes
+        self._worker_nodes = worker_nodes
         self._wake = wake
         self._clock = clock
         self._started = False
@@ -299,10 +299,10 @@ class PipelineEngine:
         if not self._started or self._started_term != self.leadership.term:
             if not await self.start():
                 return self._stand_by()
-        nodes = list(self._nodes())
+        worker_nodes = list(self._worker_nodes())
         recorded, self._recorded_classes = self._recorded_classes, set()
         try:
-            plan = await anyio.to_thread.run_sync(self._step, nodes, recorded)
+            plan = await anyio.to_thread.run_sync(self._step, worker_nodes, recorded)
         except LeadershipLost:
             self._recorded_classes |= recorded
             self._lose_leadership()
@@ -355,7 +355,7 @@ class PipelineEngine:
         self._check_every_class = True
         return outbox
 
-    def _step(self, nodes: Sequence[NodeAvailability], recorded: Collection[Tuple[str, str]] = ()) -> StepPlan:
+    def _step(self, worker_nodes: Sequence[WorkerNodeAvailability], recorded: Collection[Tuple[str, str]] = ()) -> StepPlan:
         now = self._clock()
         plan = StepPlan(StepOutbox())
         plan.outbox.touched_classes.update(recorded)  # the coverage controller decides the classes of runs recorded since the last tick
@@ -372,7 +372,7 @@ class PipelineEngine:
             for event in batch.events:
                 self._apply_event(machine, session, event)
             for campaign in campaigns:
-                self._converge(machine, session, campaign, nodes, plan, now)
+                self._converge(machine, session, campaign, worker_nodes, plan, now)
             self.stores.pipeline.advance_cursor(ENGINE_CURSOR, position, batch.position, session=session)
             plan.submissions = self._pending_submissions(session, plan.outbox)
         self._check_every_class = False
@@ -397,7 +397,7 @@ class PipelineEngine:
 
     # Converging a campaign
 
-    def _converge(self, machine: CaseMachine, session: Session, campaign: CampaignRecord, nodes: Sequence[NodeAvailability], plan: StepPlan, now: datetime) -> None:
+    def _converge(self, machine: CaseMachine, session: Session, campaign: CampaignRecord, worker_nodes: Sequence[WorkerNodeAvailability], plan: StepPlan, now: datetime) -> None:
         campaign_id = campaign.campaign_id
         if campaign.desired_state == CampaignDesiredState.STOPPED:
             self._stop(machine, session, campaign)
@@ -424,7 +424,7 @@ class PipelineEngine:
             return
         campaign = self._follow_desired(session, campaign, plan)
         if campaign is not None:
-            self._advance(machine, session, self.contexts.get(campaign_id, session), nodes, now)
+            self._advance(machine, session, self.contexts.get(campaign_id, session), worker_nodes, now)
 
     def _follow_desired(self, session: Session, campaign: CampaignRecord, plan: StepPlan) -> Optional[CampaignRecord]:
         """Pause, resume and drain transitions; None when the campaign stays paused."""
@@ -446,11 +446,11 @@ class PipelineEngine:
             return self._set_actual(session, campaign, target, None, kind)
         return campaign
 
-    def _advance(self, machine: CaseMachine, session: Session, context: CampaignContext, nodes: Sequence[NodeAvailability], now: datetime) -> None:
+    def _advance(self, machine: CaseMachine, session: Session, context: CampaignContext, worker_nodes: Sequence[WorkerNodeAvailability], now: datetime) -> None:
         """A running or draining campaign: the stall check, the end of a drain, the stop conditions, new cases."""
         campaign_id = context.campaign_id
         queued = self.stores.pipeline.queued_jobs_by_stage(campaign_id, session=session)
-        campaign = self._check_stall(session, context, context.campaign, queued, nodes, now)
+        campaign = self._check_stall(session, context, context.campaign, queued, worker_nodes, now)
         if campaign.actual_state == CampaignActualState.STALLED:
             return
         if campaign.desired_state == CampaignDesiredState.DRAINING:
@@ -472,7 +472,7 @@ class PipelineEngine:
         if not pinned:
             expected = self._expected()
             if not expected:
-                return None  # the master's expected fingerprints are not loaded yet
+                return None  # the control node's expected fingerprints are not loaded yet
             pin_fingerprints(session, campaign.campaign_id, expected, now)
             pinned = dict(expected)
         target = _target_of(campaign.desired_state)
@@ -540,23 +540,23 @@ class PipelineEngine:
                 machine.end(context, self.stores.cases.get_case(case.case_id, session=session), CaseState.FAILED, f"its monitor result summaries could not be written: {type(error).__name__}: {error}")
             return False
 
-    def _check_stall(self, session: Session, context: CampaignContext, campaign: CampaignRecord, queued, nodes: Sequence[NodeAvailability], now: datetime) -> CampaignRecord:
-        missing = self._missing_needs(context, queued, nodes)
+    def _check_stall(self, session: Session, context: CampaignContext, campaign: CampaignRecord, queued, worker_nodes: Sequence[WorkerNodeAvailability], now: datetime) -> CampaignRecord:
+        missing = self._missing_needs(context, queued, worker_nodes)
         campaign_id = campaign.campaign_id
         target = _target_of(campaign.desired_state)
         if not missing:
             self._unrunnable_since.pop(campaign_id, None)
             if campaign.actual_state == CampaignActualState.STALLED:
                 kind = CampaignEventKind.RESUMED if target == CampaignActualState.RUNNING else CampaignEventKind.DRAINING
-                return self._set_actual(session, campaign, target, None, kind, {"reason": "a node runs every needed job type with its components again"})
+                return self._set_actual(session, campaign, target, None, kind, {"reason": "a worker node runs every needed job type with its components again"})
             return campaign
         since = self._unrunnable_since.setdefault(campaign_id, now)
         reason = (
-            "no connected node runs "
+            "no connected worker node runs "
             + "; ".join(f"{job_type.value} with {', '.join(components)}" for job_type, components in missing)
             + " with the campaign's pinned fingerprints"
             + (" and labels" if context.config.resources.required_labels else "")
-            + (" among its selected nodes" if context.config.resources.nodes else "")
+            + (" among its selected worker nodes" if context.config.resources.worker_nodes else "")
         )
         if campaign.actual_state != CampaignActualState.STALLED and now - since >= timedelta(seconds=self.settings.stall_after_s):
             logger.warning("Campaign %s is stalled: %s", campaign_id, reason)
@@ -565,10 +565,10 @@ class PipelineEngine:
         return campaign
 
     @staticmethod
-    def _missing_needs(context: CampaignContext, queued, nodes: Sequence[NodeAvailability]) -> List[JobNeed]:
-        """The job types with components that a stage with queued jobs needs and no connected node runs."""
+    def _missing_needs(context: CampaignContext, queued, worker_nodes: Sequence[WorkerNodeAvailability]) -> List[JobNeed]:
+        """The job types with components that a stage with queued jobs needs and no connected worker node runs."""
         labels = context.config.resources.required_labels
-        allowed = frozenset(context.config.resources.nodes)
+        allowed = frozenset(context.config.resources.worker_nodes)
         missing: List[JobNeed] = []
         for stage, count in sorted(queued.items(), key=lambda item: item[0].value):
             if count <= 0:
@@ -577,7 +577,7 @@ class PipelineEngine:
             for need in context.graph.stage_needs(stage):
                 job_type, components = need
                 fingerprints = required_fingerprints(components, context.pinned)
-                if need not in missing and not any(node.runs(job_type, components, fingerprints, labels, allowed) for node in nodes):
+                if need not in missing and not any(worker_node.runs(job_type, components, fingerprints, labels, allowed) for worker_node in worker_nodes):
                     missing.append(need)
         return missing
 
@@ -677,7 +677,7 @@ class PipelineEngine:
     async def _submit_all(self, submissions: Sequence[PlannedSubmission]) -> int:
         if not submissions:
             return 0
-        from scenegems_tool.cluster.master.control_plane import InvalidPayload
+        from scenegems_tool.cluster.control_node.control_plane import InvalidPayload
 
         limit = asyncio.Semaphore(self.settings.submit_concurrency)
         links: List[tuple] = []
@@ -719,7 +719,7 @@ class PipelineEngine:
                 case = self.stores.cases.get_case(planned.case_id, session=session)
                 context = self.contexts.get(planned.campaign_id, session, None if case is None else case.config_version)
                 if case is not None and context is not None and not case.state.is_final:
-                    machine.end(context, case, CaseState.FAILED, f"the master refused the {planned.submission.job_type.value} job: {error}")
+                    machine.end(context, case, CaseState.FAILED, f"the control node refused the {planned.submission.job_type.value} job: {error}")
         return self._take_changes(outbox)
 
     async def _cancel_jobs(self, outbox: StepOutbox) -> int:

@@ -12,7 +12,7 @@ export interface PendingEditorLoad {
 }
 
 /**
- * Loads into the scene page's editor (a scenario of the master, a file, a loaded scene's scenario). They end in any
+ * Loads into the scene page's editor (a scenario of the control node, a file, a loaded scene's scenario). They end in any
  * order: only the latest one is applied, and `cancel` (typing in the editor) drops the ones still running. While one
  * runs, `pending` names it, so the scenario list can show the pick at once and generating can wait for the text.
  */

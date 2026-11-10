@@ -82,7 +82,7 @@ class Server:
 
 def run(server: Server, *argv: str, sleep: Callable = None) -> Tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
-    code = main(["--api", "http://master"] + list(argv), transport=server.transport(), out=out, err=err, sleep=sleep)
+    code = main(["--api", "http://control-node"] + list(argv), transport=server.transport(), out=out, err=err, sleep=sleep)
     return code, out.getvalue(), err.getvalue()
 
 
@@ -220,7 +220,7 @@ def test_verdicts_pass_the_sort_and_order_on_and_leave_them_out_by_default(tmp_p
     assert (csv_server.requests[0].url.params["format"], csv_server.requests[0].url.params["sort"]) == ("csv", "state")
 
 
-def test_verdicts_refuse_a_sort_the_master_would_not_know():
+def test_verdicts_refuse_a_sort_the_control_node_would_not_know():
     for argv in (["verdicts", CAMPAIGN, "--sort", "margin"], ["verdicts", CAMPAIGN, "--order", "sideways"]):
         with pytest.raises(SystemExit):
             build_parser().parse_args(argv)
@@ -346,13 +346,13 @@ def test_artifact_refuses_a_malformed_hash():
     assert exit_info.value.code == 2
 
 
-def test_an_unreachable_master_fails_with_a_message():
+def test_an_unreachable_control_node_fails_with_a_message():
     def refuse(request):
         raise httpx.ConnectError("connection refused", request=request)
 
     out, err = io.StringIO(), io.StringIO()
-    code = main(["--api", "http://master", "list"], transport=httpx.MockTransport(refuse), out=out, err=err)
-    assert code == 1 and err.getvalue().startswith("error: cannot reach http://master")
+    code = main(["--api", "http://control-node", "list"], transport=httpx.MockTransport(refuse), out=out, err=err)
+    assert code == 1 and err.getvalue().startswith("error: cannot reach http://control-node")
 
 
 def test_the_api_default_comes_from_the_environment(monkeypatch):
@@ -391,7 +391,7 @@ def test_a_non_json_error_body_is_shown():
     assert code == 1 and err == "error: HTTP 502: bad gateway\n"
 
 
-def test_list_shows_kind_origin_and_steps_of_a_phase_six_master():
+def test_list_shows_kind_origin_and_steps_of_a_phase_six_control_node():
     row = campaign_json(kind="workbench", origin="simulation", steps=["simulation"])
     server = Server({("GET", "/cluster/campaigns"): json_response([row, campaign_json()])})
     code, out, _ = run(server, "list")
@@ -411,7 +411,7 @@ def test_delete_sends_a_delete_and_confirms():
     assert code == 0 and err == "" and out == f"deleted campaign {CAMPAIGN}\n"
 
 
-def test_delete_shows_the_masters_refusal():
+def test_delete_shows_the_control_nodes_refusal():
     server = Server({("DELETE", f"/cluster/campaigns/{CAMPAIGN}"): json_response({"detail": "campaign x is running; only a stopped or completed campaign can be deleted"}, 409)})
     code, out, err = run(server, "delete", CAMPAIGN)
     assert code == 1 and out == "" and err.startswith("error: HTTP 409: campaign x is running")
@@ -491,13 +491,13 @@ def test_findings_print_the_summary_of_a_monitored_step():
     assert "rule_15" in out and "12.5" in out and "20.1" in out and CLASS_A in out
 
 
-def test_findings_print_the_encounter_types_when_the_master_sends_them():
+def test_findings_print_the_encounter_types_when_the_control_node_sends_them():
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/findings"): json_response(findings_json(encounter_types={"HEAD_ON": 4, "OTHER": 1}))})
     out = run(server, "findings", CAMPAIGN, "--step", "scene_generation")[1]
     assert "encounters (vessel pairs by first type): HEAD_ON 4, OTHER 1" in out
     assert (
         "encounters" not in run(Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/findings"): json_response(findings_json())}), "findings", CAMPAIGN, "--step", "scene_generation")[1]
-    )  # an older master
+    )  # an older control node
 
 
 def test_findings_of_an_unmonitored_step_are_statistics_only():

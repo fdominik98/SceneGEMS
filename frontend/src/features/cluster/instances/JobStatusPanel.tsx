@@ -47,7 +47,7 @@ export function JobStatusPanel({ jobId }: { jobId: string | null }) {
               </dd>
             </div>
             <div>
-              <dt>Node</dt>
+              <dt>Worker node</dt>
               <dd>{data.job.lease_owner ?? "none"}</dd>
             </div>
           </dl>

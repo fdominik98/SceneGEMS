@@ -37,7 +37,7 @@ export function sceneOfScenePage(sourceName: string | null): { input: PageInput;
   };
 }
 
-/** Whether two inputs are the same artifact on the master; a file or an output not on the master is always new. */
+/** Whether two inputs are the same artifact on the control node; a file or an output not on the control node is always new. */
 export function sameStoredInput(a: PageInput | null, b: PageInput | null): boolean {
   return a !== null && b !== null && a.ref !== null && b.ref !== null && a.ref.sha256 === b.ref.sha256;
 }
@@ -110,7 +110,7 @@ export function trajectoryContentOfDocument(document: unknown): string | null {
 }
 
 /**
- * The trajectories of an input stored on the master, read again (after a reload the simulation
+ * The trajectories of an input stored on the control node, read again (after a reload the simulation
  * page keeps only its input's name and artifact); null when the artifact holds no trajectories.
  */
 export async function storedTrajectoryContent(
@@ -124,7 +124,7 @@ export async function storedTrajectoryContent(
 
 /**
  * What the simulation page loads again after a reload: nothing while it shows a loaded run (the
- * run's refresh loads its input) or has trajectories; a stored input from the master; a file, which
+ * run's refresh loads its input) or has trajectories; a stored input from the control node; a file, which
  * is gone.
  */
 export function simulationInputToRestore(

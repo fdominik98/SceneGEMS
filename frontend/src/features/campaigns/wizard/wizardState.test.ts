@@ -132,7 +132,7 @@ describe("normalizeDraft", () => {
     expect(draft.name).toBe("old");
     expect(draft.resources.priority).toBe(3);
     expect(draft.resources.queueDepth).toMatchObject({ simulate: 8, generate_scene: 16 });
-    expect(draft.resources).toMatchObject({ fullUsage: true, nodes: [] });
+    expect(draft.resources).toMatchObject({ fullUsage: true, workerNodes: [] });
     expect(draft.runs[0]).toMatchObject({ stackId: "kinematic.replay", monitor: "post_hoc", repeats: 1 });
     expect(draft.trajectories.generator).toBe("monitor_driven_rrt");
   });

@@ -66,8 +66,8 @@ function caseJob(stage: string, jobId: string, state: string) {
   };
 }
 
-/** A master that runs a trajectory generation entry: one case, its job succeeds at once, the case completes. */
-function fakeMaster() {
+/** A control node that runs a trajectory generation entry: one case, its job succeeds at once, the case completes. */
+function fakeControlNode() {
   const created: { body: Record<string, unknown> }[] = [];
   const uploads: { kind: unknown }[] = [];
   let caseGets = 0;
@@ -107,13 +107,13 @@ function fakeMaster() {
     getJob: async (jobId: string) => jobView(jobId, "succeeded", { trajectory_data: trajectoryData, valid: true, complete: true }),
     cancelJob: async () => ({}),
     controlCampaign: async () => ({}),
-    artifactUrl: (sha256: string) => `http://master/cluster/artifacts/${sha256}`,
+    artifactUrl: (sha256: string) => `http://control-node/cluster/artifacts/${sha256}`,
   };
   return { client: client as unknown as OperatorClient, created, uploads };
 }
 
 function access(client: OperatorClient): ClusterAccess {
-  return { cluster: { client, channel: null }, resources: (jobType, components = []) => ({ jobType, components: [...components], nodes: 1, slots: 1, freeSlots: 1, blocker: null }) };
+  return { cluster: { client, channel: null }, resources: (jobType, components = []) => ({ jobType, components: [...components], workerNodes: 1, slots: 1, freeSlots: 1, blocker: null }) };
 }
 
 describe("workbench job driver", () => {
@@ -136,9 +136,9 @@ describe("workbench job driver", () => {
   });
 
   it("runs a trajectory generation as a workbench entry and loads its output on the page", async () => {
-    const master = fakeMaster();
+    const controlNode = fakeControlNode();
     const messages: ParsedServerMessage[] = [];
-    const driver = new WorkbenchJobDriver(() => access(master.client), (message) => messages.push(message));
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client), (message) => messages.push(message));
     driver.pollMs = 1;
     driver.jobPollMs = 1;
     const input = { label: "head_on.json", origin: "file" as const, ref: null, source: { file: "head_on.json" } };
@@ -150,9 +150,9 @@ describe("workbench job driver", () => {
     });
 
     // The scene file was uploaded, and the entry made with kind and origin outside the config.
-    expect(master.uploads).toEqual([{ kind: "scene" }]);
-    expect(master.created).toHaveLength(1);
-    const body = master.created[0].body;
+    expect(controlNode.uploads).toEqual([{ kind: "scene" }]);
+    expect(controlNode.created).toHaveLength(1);
+    const body = controlNode.created[0].body;
     expect(body).toMatchObject({ kind: "workbench", origin: "trajectory_generation", start: true });
     const config = parse(body.config as string);
     expect(config).toMatchObject({
@@ -173,8 +173,8 @@ describe("workbench job driver", () => {
   });
 
   it("gives each entry a fresh seed", async () => {
-    const master = fakeMaster();
-    const driver = new WorkbenchJobDriver(() => access(master.client));
+    const controlNode = fakeControlNode();
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client));
     driver.pollMs = 1;
     driver.jobPollMs = 1;
     const request = {
@@ -186,8 +186,8 @@ describe("workbench job driver", () => {
     await driver.generateTrajectories("r1", request);
     await driver.generateTrajectories("r2", request);
     // A history output is used as it is: nothing is uploaded.
-    expect(master.uploads).toEqual([]);
-    const seeds = master.created.map(({ body }) => parse(body.config as string).policy.seed);
+    expect(controlNode.uploads).toEqual([]);
+    const seeds = controlNode.created.map(({ body }) => parse(body.config as string).policy.seed);
     expect(seeds[0]).not.toBe(seeds[1]);
   });
 
@@ -226,7 +226,7 @@ describe("workbench job driver", () => {
       cluster: { client, channel: null },
       resources: (jobType, components = []) => {
         requested.push(`${jobType} with ${components.join(", ")}`);
-        return { jobType, components: [...components], nodes: 1, slots: 1, freeSlots: 1, blocker: null };
+        return { jobType, components: [...components], workerNodes: 1, slots: 1, freeSlots: 1, blocker: null };
       },
     }));
     driver.pollMs = 1;
@@ -300,7 +300,7 @@ describe("workbench job driver", () => {
   it("keeps the page as it is when a quiet refresh fails for another reason", async () => {
     const client = {
       getCase: async () => {
-        throw new OperatorApiError("network", "cannot reach the master", "/x");
+        throw new OperatorApiError("network", "cannot reach the control node", "/x");
       },
       artifactUrl: (sha256: string) => sha256,
     } as unknown as OperatorClient;

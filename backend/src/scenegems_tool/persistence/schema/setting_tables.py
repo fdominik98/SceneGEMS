@@ -1,10 +1,10 @@
 """The cluster's own settings: its domain configuration and the campaign presets operators saved.
 
-    cluster_domain   one row at most (id 1): the COLREGS constants, vessel types and obstacle types every
-                     workbench run and every campaign without its own domain content uses. Without the row
-                     the master's default domain files apply.
-    campaign_preset  campaign configs saved under a name, to start the wizard from. The presets shipped in
-                     the master image are files (backend/assets/campaign_presets/), not rows.
+cluster_domain   one row at most (id 1): the COLREGS constants, vessel types and obstacle types every
+                 workbench run and every campaign without its own domain content uses. Without the row
+                 the control node's default domain files apply.
+campaign_preset  campaign configs saved under a name, to start the wizard from. The presets shipped in
+                 the control node image are files (backend/assets/campaign_presets/), not rows.
 """
 
 from datetime import datetime

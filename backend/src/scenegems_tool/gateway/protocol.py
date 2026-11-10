@@ -39,8 +39,8 @@ class GeofencePayload(TypedDict):
 class ConnectToMqttBrokerMessage(TypedDict):
     """Connect the workbench's interactive simulation to an MQTT broker.
 
-    With use_master_broker the broker is the master's own cluster broker (mqtt_broker_status
-    names it in masterBroker) and the address, user and TLS fields are ignored.
+    With use_control_node_broker the broker is the control node's own cluster broker (mqtt_broker_status
+    names it in controlNodeBroker) and the address, user and TLS fields are ignored.
     """
 
     type: Literal["connect_to_mqtt_broker"]
@@ -52,7 +52,7 @@ class ConnectToMqttBrokerMessage(TypedDict):
     tls_connection: bool
     allow_certificates: bool
     geofence: GeofencePayload
-    use_master_broker: NotRequired[bool]
+    use_control_node_broker: NotRequired[bool]
 
 
 class SimulationStatusMessage(TypedDict):
@@ -214,8 +214,8 @@ class ErrorMessage(TypedDict):
 class MqttBrokerStatusMessage(TypedDict):
     type: Literal["mqtt_broker_status"]
     status: str
-    # The master's own broker as this server dials it ("host:port"), None when it has none.
-    masterBroker: Optional[str]
+    # The control node's own broker as this server dials it ("host:port"), None when it has none.
+    controlNodeBroker: Optional[str]
 
 
 class SimulationStatus(Enum):
@@ -290,8 +290,8 @@ def make_error_message(message: str) -> ErrorMessage:
     return {"type": "error", "message": message}
 
 
-def make_mqtt_broker_status_message(*, status: str, master_broker: Optional[str]) -> MqttBrokerStatusMessage:
-    return {"type": "mqtt_broker_status", "status": status, "masterBroker": master_broker}
+def make_mqtt_broker_status_message(*, status: str, control_node_broker: Optional[str]) -> MqttBrokerStatusMessage:
+    return {"type": "mqtt_broker_status", "status": status, "controlNodeBroker": control_node_broker}
 
 
 def make_generated_scene_message(request_id: str, scene: Dict[str, Any], evaluation_data: Dict[str, Any], valid: bool) -> GeneratedSceneMessage:

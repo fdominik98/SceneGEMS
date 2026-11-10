@@ -46,7 +46,7 @@ function viewsOf(document: ArchitectureDocument): DocumentView[] {
  * The Capabilities page. It opens on the overview: the chain from a specification to judged runs, one card per part
  * of the system, with what each takes and gives and whether the selected cluster offers it. Each part has a tab of its
  * own, drawn as a graph of what is implemented, with the adapters between the parts and the measured values, and as a
- * graph of the metamodel the implementations fill in. The documents come from the master, which builds them from the
+ * graph of the metamodel the implementations fill in. The documents come from the control node, which builds them from the
  * specs in code, so a new simulator, generator or step shows up without a change here.
  */
 export function CapabilitiesSection() {
@@ -58,7 +58,7 @@ export function CapabilitiesSection() {
   const fullscreen = useFullscreen(workspace);
 
   const documents = query.data?.documents ?? [];
-  // A stored id that names no document (a part the master no longer has) falls back to the overview
+  // A stored id that names no document (a part the control node no longer has) falls back to the overview
   const document = documents.find((item) => item.id === stored.documentId);
   const available = document ? viewsOf(document) : [];
   const chosen = document ? stored.views[document.id] : undefined;
@@ -83,7 +83,7 @@ export function CapabilitiesSection() {
   if (!cluster) {
     content = (
       <EmptyState title="No cluster selected">
-        <p className="meta">The architecture comes from a master. Add a cluster or select one in the Cluster section.</p>
+        <p className="meta">The architecture comes from a control node. Add a cluster or select one in the Cluster section.</p>
       </EmptyState>
     );
   } else if (query.isPending) {
@@ -96,7 +96,7 @@ export function CapabilitiesSection() {
     const unreachable = query.error instanceof OperatorApiError && query.error.unreachable;
     content = (
       <EmptyState
-        title={unreachable ? "The master cannot be reached" : "The architecture could not be read"}
+        title={unreachable ? "The control node cannot be reached" : "The architecture could not be read"}
         tone="error"
         action={
           <button type="button" onClick={() => void query.refetch()}>
@@ -110,7 +110,7 @@ export function CapabilitiesSection() {
   } else if (documents.length === 0) {
     content = (
       <EmptyState title="Nothing described yet">
-        <p className="meta">The master returned no architecture documents.</p>
+        <p className="meta">The control node returned no architecture documents.</p>
       </EmptyState>
     );
   } else {

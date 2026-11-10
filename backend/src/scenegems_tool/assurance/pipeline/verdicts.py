@@ -17,7 +17,7 @@ bounded stack true while no calibration result exists for the stack on the run's
 fingerprints.
 
 A run record describes one simulation (every repeat): the simulation's run_record, steps
-and state digest, its artifacts as {role: sha256} for referenced ones, the job, the node
+and state digest, its artifacts as {role: sha256} for referenced ones, the job, the worker node
 that held its lease, its fingerprints and the job's durations. A run recorded from a live
 session has source live_session and no job.
 
@@ -80,7 +80,7 @@ def _pending(monitor: MonitorImplementation, outcomes: Mapping[str, Any], early_
         "failed_rules": [f"{rule.get('relation')}: {rule.get('rule')}" for rule in failed],
         "first_failure_time_s": None if passed or not times else min(times),
         "early_stop_time_s": early_stop_time_s,
-        "encounters": {relation: list(types) for relation, types in outcomes["encounters"].items()} if outcomes.get("encounters") else None,  # a result of an older node has none
+        "encounters": {relation: list(types) for relation, types in outcomes["encounters"].items()} if outcomes.get("encounters") else None,  # a result of an older worker node has none
         "encounter_roles": dict(outcomes["encounter_roles"]) if outcomes.get("encounter_roles") else None,  # as encounters; empty when no pair met in an encounter
     }
 
@@ -155,7 +155,7 @@ def new_run_record(
     simulation_result: Mapping[str, Any],
     input_trajectories_hash: Optional[str],
     job_id: Optional[str],
-    node_id: Optional[str],
+    worker_node_id: Optional[str],
     fingerprints: Mapping[str, str],
     durations_s: Mapping[str, float],
     tier: Optional[str],
@@ -184,7 +184,7 @@ def new_run_record(
         state_digest=simulation_result.get("state_digest", record.get("state_digest")),
         artifacts=artifacts,
         job_id=job_id,
-        node_id=node_id,
+        worker_node_id=worker_node_id,
         fingerprints=dict(fingerprints),
         durations_s=dict(durations_s),
         source=source,
@@ -228,7 +228,7 @@ def record_references(
     """Adds an artifact reference for every reference in the result and drops the job's own; returns {role: sha256}.
 
     The artifact's record is added when it is missing (the artifact store records an upload
-    before the node reports its result, so this only repairs a missing record).
+    before the worker node reports its result, so this only repairs a missing record).
     """
     roles: Dict[str, str] = {}
     for path, reference in find_references(result):

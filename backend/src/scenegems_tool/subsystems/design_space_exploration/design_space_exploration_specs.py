@@ -75,9 +75,9 @@ def parts() -> Tuple[Part, ...]:
             "cluster_job",
             LANE_ENTRY,
             "Cluster job",
-            "The design_space_exploration job: a container of its own per job, without a network, as many at once as the node has slots. A workbench run and a campaign's first step both queue this job.",
+            "The design_space_exploration job: a container of its own per job, without a network, as many at once as the worker node has slots. A workbench run and a campaign's first step both queue this job.",
             META_REQUEST,
-            "scenegems_tool/cluster/node/jobs/design_space_exploration_job.py",
+            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
             (
                 Fact("max_fecs", "FEC cap", DEFAULT_MAX_FECS, GROUP_PARAMETER, note="a campaign's default; without a cap every FEC is generated"),
                 Fact("timeout", "Time limit", DEFAULT_TIMEOUT_S, GROUP_PARAMETER, unit="s", note="the FECs found until then are kept"),
@@ -152,7 +152,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             KIND_ROLE,
             ("problem: the specification text", "scopes: the scope's entries", "max_models, timeout_s, random_seed", "reply: stop_reason, complete, fecs, functional_scenarios"),
             "Add a delivery path that submits a design_space_exploration job.",
-            "scenegems_tool/cluster/node/jobs/design_space_exploration_job.py",
+            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
         ),
         MetamodelNode(
             META_SPECIFICATION,
@@ -186,8 +186,8 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
                 "writes /job/result.json: stop_reason, complete and each model's source",
                 "runs without a network",
             ),
-            "Another generator is an image that speaks the job folder protocol (cluster/node/launchers/per_job/job_container_io.py) and returns each model's source.",
-            "scenegems_tool/cluster/node/jobs/design_space_exploration_job.py",
+            "Another generator is an image that speaks the job folder protocol (cluster/worker_node/launchers/per_job/job_container_io.py) and returns each model's source.",
+            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
         ),
         MetamodelNode(
             META_FECS,
@@ -197,7 +197,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             KIND_COMPONENT,
             ("functional_scenarios: one .problem text per FEC", "fecs: index, vessel count and obstacle count per FEC"),
             None,
-            "scenegems_tool/cluster/node/jobs/design_space_exploration_job.py",
+            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
         ),
     )
     edges = (
@@ -242,7 +242,7 @@ def design_space_exploration_document(measurements: Optional[Mapping[str, Measur
         nodes=tuple(nodes),
         edges=tuple(edges),
         notes=(
-            "The FEC catalog of the master (backend/assets/generated_functional_models/all) holds the FECs of the default specification for the scopes it was generated with; "
+            "The FEC catalog of the control node (backend/assets/generated_functional_models/all) holds the FECs of the default specification for the scopes it was generated with; "
             "an exploration with the same scope finds the same classes.",
             "Attribute values are not enumerated, and two models that differ only in the names of their objects count once.",
         ),

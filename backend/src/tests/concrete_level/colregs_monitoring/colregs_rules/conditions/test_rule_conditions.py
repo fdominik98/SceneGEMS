@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import COLREGSRuleResult
-from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import GiveWayEarlyActionCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import GiveWayEarlyActionCondition, early_action_start_deadline
 from concrete_level.colregs_monitoring.colregs_rules.conditions.readily_apparent_course_change_condition import ReadilyApparentCourseChangeCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.safe_distance_condition import SafeDistanceCondition
 from concrete_level.colregs_monitoring.maneuver import ManeuverType
@@ -108,22 +108,28 @@ class TestGiveWayEarlyAction:
         assert self.condition.condition(scene(), scene(forward)) is UNKNOWN
         assert self.condition.maneuver_suggestions(scene(forward), 1) == {}
 
-    def test_the_action_has_to_start_before_the_deadline(self):
+    def test_the_action_has_to_start_half_way_through_the_window(self):
+        """The time a turn takes to be readily apparent does not shorten the window: it only binds after a manoeuvre."""
         deadline = self.condition.action_start_deadline
-        assert deadline == max(0, self.immediate - constants().READILY_APPARENT_COURSE_CHANGE_TIME)
+        assert deadline == early_action_start_deadline(constants()) == self.immediate // 2 == 30
+        assert deadline > max(0, self.immediate - constants().READILY_APPARENT_COURSE_CHANGE_TIME)
 
-    def test_at_the_start_of_the_encounter_turning_is_the_only_suggestion(self):
-        """The shipped presets give IMMEDIATE_HEADING_CHANGE_TIME 60 s and READILY_APPARENT_COURSE_CHANGE_TIME 70 s:
-        the turn has to be under way at once (deadline 0), so holding the course is not offered any more."""
-        assert self.condition.action_start_deadline == 0
-        state = colregs_state(time_spent_in_current_context=0)
-        suggestions = self.condition.maneuver_suggestions(scene(state), 1)
-        assert dict(suggestions) == {A: {LEFT}}
+    @pytest.mark.parametrize("time_spent", [0, 10, 28])
+    def test_before_the_deadline_the_vessel_may_turn_or_hold_its_course(self, time_spent):
+        state = colregs_state(time_spent_in_current_context=time_spent)
+        assert not self.condition.is_time_to_give_way_early(scene(state), 1)
+        assert dict(self.condition.maneuver_suggestions(scene(state), 1)) == {A: {LEFT, PERSIST}}
 
-    def test_at_the_deadline_only_the_turn_is_suggested(self):
-        state = colregs_state(time_spent_in_current_context=self.condition.action_start_deadline)
+    @pytest.mark.parametrize("time_spent", [29, 30, 45, 60])
+    def test_from_one_step_before_the_deadline_only_the_turn_is_suggested(self, time_spent):
+        state = colregs_state(time_spent_in_current_context=time_spent)
         assert self.condition.is_time_to_give_way_early(scene(state), 1)
         assert dict(self.condition.maneuver_suggestions(scene(state), 1)) == {A: {LEFT}}
+
+    def test_a_longer_time_step_brings_the_last_free_step_forward(self):
+        """At the 15 s planner step the turn has to start in the step that ends at the deadline."""
+        assert dict(self.condition.maneuver_suggestions(scene(colregs_state(time_spent_in_current_context=0)), 15)) == {A: {LEFT, PERSIST}}
+        assert dict(self.condition.maneuver_suggestions(scene(colregs_state(time_spent_in_current_context=15)), 15)) == {A: {LEFT}}
 
     def test_nothing_is_suggested_once_the_actor_is_already_turning_or_the_time_has_run_out(self):
         assert self.condition.maneuver_suggestions(scene(self._in_left_maneuver()), 1) == {}

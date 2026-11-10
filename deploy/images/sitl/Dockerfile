@@ -56,7 +56,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iputils-ping \
     && rm -rf /var/lib/apt/lists/*
 
-# apt and pip packages are not pinned: record the installed versions so a node can report them.
+# apt and pip packages are not pinned: record the installed versions so a worker node can report them.
 RUN mkdir -p /etc/scenegems/package_versions && \
     dpkg-query -W -f='${Package}=${Version}\n' | LC_ALL=C sort > /etc/scenegems/package_versions/dpkg.txt && \
     pip freeze --all | LC_ALL=C sort > /etc/scenegems/package_versions/pip.txt

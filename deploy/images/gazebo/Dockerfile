@@ -152,7 +152,7 @@ RUN chmod +x /scripts/entrypoint.sh
 # it when GZ_ACTUATOR_PORT is set). It imports only the standard library and the gz bindings.
 COPY backend/src/scenegems_tool/vessel_stack/simulation_layers/gazebo/gz_transport_actuator.py /scripts/gz_transport_actuator.py
 
-# 8. apt and Python packages are not pinned: record the installed versions so a node can report them.
+# 8. apt and Python packages are not pinned: record the installed versions so a worker node can report them.
 RUN mkdir -p /etc/scenegems/package_versions && \
     dpkg-query -W -f='${Package}=${Version}\n' | LC_ALL=C sort > /etc/scenegems/package_versions/dpkg.txt && \
     python3 -c "import importlib.metadata as m; print(*sorted({'%s==%s' % (d.metadata.get('Name'), d.version) for d in m.distributions() if d.metadata.get('Name')}), sep=chr(10))" \

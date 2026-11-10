@@ -7,9 +7,9 @@ from scenegems_tool.assurance.pipeline.payload_builder import PayloadBuilder, Pa
 from scenegems_tool.assurance.pipeline.stage_graph import STAGE_JOB_TYPES, StageGraph, Step
 from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
-from scenegems_tool.cluster.node.jobs.job_types import payload_components
-from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationPayload
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.jobs.job_types import payload_components
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationPayload
 from scenegems_tool.persistence.schema import PipelineStage
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict, format2_dict, input_ref
 from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED
@@ -60,7 +60,7 @@ def test_usv_navigation_on_the_kinematic_layer_needs_replay_too_for_the_targets(
 
 
 @pytest.mark.parametrize("run", [KINEMATIC, {"stack": {"simulation_layer": "kinematic", "mode": "usv_navigation"}}, SITL, GAZEBO])
-def test_a_runs_components_are_the_ones_the_master_computes_from_its_payload(run):
+def test_a_runs_components_are_the_ones_the_control_node_computes_from_its_payload(run):
     graph = _graph(run)
     assert graph.run_components(0) == payload_components(SIMULATION, _builder(run).simulation(5, 0, TRAJECTORY_RESULT))
 
@@ -176,7 +176,7 @@ ON_CUSTOM = ("asv_software/replay", "control_layer/custom", "simulation_layer/ga
 
 
 @pytest.mark.parametrize("run", [SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION])
-def test_the_new_stacks_components_are_the_ones_the_master_computes_from_their_payloads(run):
+def test_the_new_stacks_components_are_the_ones_the_control_node_computes_from_their_payloads(run):
     assert _graph(run).run_components(0) == validate_payload(SIMULATION, _builder(run).simulation(5, 0, TRAJECTORY_RESULT))
 
 

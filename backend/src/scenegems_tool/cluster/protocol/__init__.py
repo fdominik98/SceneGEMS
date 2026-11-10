@@ -1,14 +1,14 @@
-"""Typed, versioned messages between the master and its nodes.
+"""Typed, versioned messages between the control node and its worker nodes.
 
-Both sides import these definitions, so master and node cannot drift apart silently.
+Both sides import these definitions, so control node and worker node cannot drift apart silently.
 
     version.py           PROTOCOL_VERSION and the mismatch error
     model_base.py        immutable models; frames carry the protocol version
     jobs.py              job types, states, requirements, submission and the leased job
     artifacts.py         artifact references in payloads and results, declared artifact fields
-    node_description.py  slot offers, resources
-    messages.py          WebSocket frames, node to master and master to node
+    worker_node_description.py  slot offers, resources
+    messages.py          WebSocket frames, worker node to control node and control node to worker node
     codec.py             encode and decode frames, version checked first
-    routes.py            HTTP paths and the node id header of the master's cluster API
+    routes.py            HTTP paths and the worker node id header of the control node's cluster API
     live.py              the browser's live channel on the operator API: messages and topics
 """

@@ -4,9 +4,9 @@ import type { OperatorClient } from "../../domain/cluster/operatorApi";
 import { retryUnlessUnreachable, useOperatorClient } from "../campaigns/useCampaignData";
 
 /**
- * The active cluster's domain configuration and the master's domain presets. The configuration is
+ * The active cluster's domain configuration and the control node's domain presets. The configuration is
  * global for the cluster: the Domain Configuration section edits it, and the workbench and the
- * campaign wizard read it from here, so every page uses the texts the master holds.
+ * campaign wizard read it from here, so every page uses the texts the control node holds.
  */
 
 export function domainQueryKey(baseUrl: string | undefined) {

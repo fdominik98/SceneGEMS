@@ -40,8 +40,8 @@ def test_the_fingerprints_of_images_hold_under_another_tag():
     assert fingerprints_of(["a:abc123"], {"a": "1"}) == {"a": "1"}
 
 
-def test_legacy_names_let_an_old_job_match_a_node_by_repository():
-    node = with_legacy_names({"a": "1"})
-    assert node == {"a": "1", "a:latest": "1"}
+def test_legacy_names_let_an_old_job_match_a_worker_node_by_repository():
+    worker_node = with_legacy_names({"a": "1"})
+    assert worker_node == {"a": "1", "a:latest": "1"}
     old_job = {"a:latest": "1"}
-    assert old_job.items() <= node.items() and {"a": "1"}.items() <= node.items()
+    assert old_job.items() <= worker_node.items() and {"a": "1"}.items() <= worker_node.items()

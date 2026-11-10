@@ -42,7 +42,7 @@ class JobRecord:
     result_attempt: Optional[int]
     result: Optional[Dict[str, Any]]
     error: Optional[str]
-    allowed_nodes: Tuple[str, ...] = ()  # node ids that may claim the job, empty for any
+    allowed_worker_nodes: Tuple[str, ...] = ()  # worker node ids that may claim the job, empty for any
 
     @classmethod
     def from_row(cls, row: JobRow) -> "JobRecord":
@@ -68,16 +68,16 @@ class JobRecord:
             result_attempt=row.result_attempt,
             result=None if row.result is None else dict(row.result),
             error=row.error,
-            allowed_nodes=tuple(row.allowed_nodes or ()),  # unset on a row that was never flushed
+            allowed_worker_nodes=tuple(row.allowed_worker_nodes or ()),  # unset on a row that was never flushed
         )
 
 
 @dataclass(frozen=True)
 class Lease:
-    """An active lease: the job as offered to its node, and until when the lease holds."""
+    """An active lease: the job as offered to its worker node, and until when the lease holds."""
 
     lease_id: str
-    node_id: str
+    worker_node_id: str
     state: JobState  # leased (offered) or running (accepted)
     expires_at: datetime
     job: JobSpec
@@ -85,7 +85,7 @@ class Lease:
     @classmethod
     def from_row(cls, row: JobRow) -> "Lease":
         job = JobSpec(job_id=row.id, job_type=row.job_type, payload=dict(row.payload), requirements=requirements_of(row), attempt=row.attempt, idempotency_key=row.idempotency_key)
-        return cls(lease_id=row.lease_id, node_id=row.lease_owner, state=row.state, expires_at=row.lease_expires_at, job=job)
+        return cls(lease_id=row.lease_id, worker_node_id=row.lease_owner, state=row.state, expires_at=row.lease_expires_at, job=job)
 
 
 @dataclass(frozen=True)
@@ -110,14 +110,14 @@ class ResultReport:
 class CancelOutcome:
     job: JobRecord
     cancelled: bool  # False when the job had already finished
-    lease_id: Optional[str]  # the lease that was active, so the master can send Cancel to its node
-    node_id: Optional[str]
+    lease_id: Optional[str]  # the lease that was active, so the control node can send Cancel to its worker node
+    worker_node_id: Optional[str]
 
 
 @dataclass(frozen=True)
 class ExpiredLease:
     lease_id: str
-    node_id: str
+    worker_node_id: str
     job: JobRecord  # queued for the next attempt, or failed when it had no attempts left
 
 
@@ -131,7 +131,7 @@ class JobEventRecord:
     to_state: JobState
     attempt: int
     lease_id: Optional[str]
-    node_id: Optional[str]
+    worker_node_id: Optional[str]
     detail: Dict[str, Any]
 
     @classmethod
@@ -145,6 +145,6 @@ class JobEventRecord:
             to_state=row.to_state,
             attempt=row.attempt,
             lease_id=row.lease_id,
-            node_id=row.node_id,
+            worker_node_id=row.worker_node_id,
             detail=dict(row.detail),
         )

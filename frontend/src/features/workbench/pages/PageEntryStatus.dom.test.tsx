@@ -18,7 +18,7 @@ describe("PageEntryStatus", () => {
 
   it("names the loaded case and links its entry, shortened, to Campaign History", async () => {
     const user = userEvent.setup();
-    // The master's case id is 7; the case is the first of its class.
+    // The control node's case id is 7; the case is the first of its class.
     useTrajectoryPageStore.setState({ loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 7, caseIndex: 0, step: "trajectory_generation" } });
     render(<PageEntryStatus store={useTrajectoryPageStore} />);
     expect(screen.getByText(/Case 1 of/)).toBeInTheDocument();
@@ -37,7 +37,7 @@ describe("PageEntryStatus", () => {
 });
 
 describe("PageEntryStatus of a target stored before case indexes", () => {
-  it("does not show the master's case id as a case number", () => {
+  it("does not show the control node's case id as a case number", () => {
     useTrajectoryPageStore.setState({ status: "shown", message: null, loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 7, step: "trajectory_generation" } });
     render(<PageEntryStatus store={useTrajectoryPageStore} />);
     expect(screen.getByText(/A case of/)).toBeInTheDocument();

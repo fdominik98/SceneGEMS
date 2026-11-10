@@ -9,7 +9,7 @@ import type { StepProps } from "./stepTypes";
 
 const FIELDS = ["specification", "scope", "max_fecs", "timeout_s", "quota", "failure_budget"];
 
-/** The master's reasons only: the browser's own scope check shows under the field as it is typed. */
+/** The control node's reasons only: the browser's own scope check shows under the field as it is typed. */
 function serverOnly(reasons: readonly Reason[] | undefined): Reason[] | undefined {
   return reasons?.filter((reason) => reason.source === "server");
 }

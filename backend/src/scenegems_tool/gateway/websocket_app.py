@@ -1,6 +1,6 @@
 """
-The workbench gateway: the web console's WebSocket. The master mounts `app` on its operator
-listener (cluster/master/server.py); it does not run on its own.
+The workbench gateway: the web console's WebSocket. The control node mounts `app` on its operator
+listener (cluster/control_node/server.py); it does not run on its own.
 """
 
 import atexit
@@ -12,7 +12,7 @@ from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from scenegems_tool.cluster.node.docker_subsystem_shutdown import shutdown_all_docker_subsystems
+from scenegems_tool.cluster.worker_node.docker_subsystem_shutdown import shutdown_all_docker_subsystems
 from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder
 from scenegems_tool.gateway.web_socket_session_manager import WebSocketSessionManager
 from utils.file_system_utils import ensure_directories
@@ -47,19 +47,19 @@ async def lifespan(_app: FastAPI):
         try:
             await recorder.stop_stranded_entries()
         except Exception:
-            logger.exception("Cannot stop the live session entries the last master process left running")
+            logger.exception("Cannot stop the live session entries the last control node process left running")
     yield
     websocket_session_manager.shutdown_all()
     shutdown_all_docker_subsystems()
 
 
 app = FastAPI(title="SceneGEMS Tool Backend", lifespan=lifespan)
-app.state.run_recorder = None  # the master sets its LiveRunRecorder (set_run_recorder); on its own the gateway records nothing
-app.state.live_sessions = True  # the master turns them off without the Docker socket (set_live_sessions)
+app.state.run_recorder = None  # the control node sets its LiveRunRecorder (set_run_recorder); on its own the gateway records nothing
+app.state.live_sessions = True  # the control node turns them off without the Docker socket (set_live_sessions)
 
 
 def set_run_recorder(recorder: Optional[LiveRunRecorder], gateway: FastAPI = app) -> None:
-    """Live sessions of this gateway's connections are recorded through the recorder from now on (the master's, cluster/master/server.py)."""
+    """Live sessions of this gateway's connections are recorded through the recorder from now on (the control node's, cluster/control_node/server.py)."""
     gateway.state.run_recorder = recorder
 
 
@@ -68,7 +68,7 @@ def run_recorder(gateway: FastAPI = app) -> Optional[LiveRunRecorder]:
 
 
 def set_live_sessions(enabled: bool, gateway: FastAPI = app) -> None:
-    """Whether this gateway's new connections may start live sessions (the master's SCENEGEMS_LIVE_SESSIONS); when off they are refused."""
+    """Whether this gateway's new connections may start live sessions (the control node's SCENEGEMS_LIVE_SESSIONS); when off they are refused."""
     gateway.state.live_sessions = enabled
 
 

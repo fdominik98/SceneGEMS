@@ -1,4 +1,4 @@
-# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+# Shipped with the control node image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
 format: 3
 name: "Design space exploration: every three-vessel FEC, one case each"
 description: >-
@@ -9,7 +9,7 @@ description: >-
   exploration finds.
 steps: [design_space_exploration, scene_generation, trajectory_generation, simulation]
 design_space_exploration:
-  # The specification is left out: the master's default (backend/assets/design_space/) is explored.
+  # The specification is left out: the control node's default (backend/assets/design_space/) is explored.
   scope: "TS = 2, StaticObstacle = 0"
   max_fecs: 1000
   timeout_s: 600

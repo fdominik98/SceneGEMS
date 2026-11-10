@@ -36,7 +36,7 @@ describe("the Trajectory generation page", () => {
     expect(latest().sceneMonitor).toBe("empty");
   });
 
-  it("shows the master's reason about the monitor under it", () => {
+  it("shows the control node's reason about the monitor under it", () => {
     setup(parseReasons(["trajectories.monitor: Value error, a generation step cannot be monitored live"]));
     expect(screen.getByText("a generation step cannot be monitored live")).toBeVisible();
   });

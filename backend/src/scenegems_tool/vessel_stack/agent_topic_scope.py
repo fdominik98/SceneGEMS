@@ -1,6 +1,6 @@
 """Which topic prefix the vessel agents of an instance use: the live session's, or none.
 
-A live session on the master's broker has a topic prefix (gateway/socket_session.py), and the
+A live session on the control node's broker has a topic prefix (gateway/socket_session.py), and the
 session's own clients (the gateway's, the scenario execution service, the monitor) use it. Its
 vessel agents use it only when every vessel is simulated: then the instance's ArduAgents, run
 by the session, publish and subscribe under it (deploy/images/arduagent/app/agent_topics.py).

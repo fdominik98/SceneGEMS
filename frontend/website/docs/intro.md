@@ -10,7 +10,7 @@ Complete reference for the browser-based console used to generate maritime ASV a
 
 **SceneGEMS** (Scenario Generation and Execution Framework for Simulation-Based Assurance of Maritime Autonomous Surface Vehicles) is a single-page web application that orchestrates the full lifecycle of a maritime scenario: from domain and functional specification, through the exploration of the design space, automated scene generation and trajectory planning, to simulation and the review of its results.
 
-The console has no backend of its own. It works on the cluster selected in the left pane: it talks to that cluster's master over the operator API and the workbench gateway, and the cluster's nodes run the jobs. Key capabilities include:
+The console has no backend of its own. It works on the cluster selected in the left pane: it talks to that cluster's control node over the operator API and the workbench gateway, and the cluster's worker nodes run the jobs. Key capabilities include:
 
 - Keeping the cluster's domain configuration: COLREGS constants, vessel types and obstacle types, as a form or as YAML
 - Authoring and loading functional scenario specifications (`.problem` files), each one a functional equivalence class (FEC)

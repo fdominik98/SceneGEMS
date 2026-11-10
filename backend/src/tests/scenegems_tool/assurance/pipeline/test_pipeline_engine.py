@@ -7,7 +7,7 @@ import pytest
 
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.case_machine import CaseMachine
-from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
+from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.fingerprints.comparison import by_repository
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
@@ -185,7 +185,7 @@ def test_verdicts_and_run_records_carry_what_the_runs_reported(make_harness):
     (case,) = _cases(harness, campaign)
     (record,) = harness.stores.results.list_run_records(campaign.campaign_id)
     sim_job = next(job for pipeline_job, job in _jobs_of(harness, case) if pipeline_job.stage == SIMULATE)
-    assert (record.job_id, record.node_id, record.steps, record.dt) == (sim_job.job_id, "fake-node", 10, 1.0)
+    assert (record.job_id, record.worker_node_id, record.steps, record.dt) == (sim_job.job_id, "fake-worker-node", 10, 1.0)
     assert record.state_digest == sim_job.result["state_digest"] and record.repeatability_tier == "exact"
     assert record.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
     assert set(record.durations_s) == {"queued_s", "running_s", "total_s"}
@@ -483,24 +483,24 @@ def test_a_campaign_keeps_the_fingerprints_it_was_created_with(harness):
     (case,) = _cases(harness, campaign)
     ((_, scene_job),) = _jobs_of(harness, case)
     assert scene_job.requirements.fingerprints == by_repository({SCENE_GENERATION_IMAGE: "fp-old"}), "a pin by full name holds by repository"
-    assert harness.executor.run() == 0  # the node runs the current release
+    assert harness.executor.run() == 0  # the worker node runs the current release
 
 
-def test_a_campaign_without_a_node_for_a_needed_job_type_is_stalled(harness):
+def test_a_campaign_without_a_worker_node_for_a_needed_job_type_is_stalled(harness):
     campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0))
-    node = harness.nodes[0]
-    harness.nodes[:] = []
+    worker_node = harness.worker_nodes[0]
+    harness.worker_nodes[:] = []
     harness.settle()
     assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.RUNNING
     harness.clock.advance(31)
     harness.settle()
     stalled = harness.campaign(campaign.campaign_id)
     assert stalled.actual_state == CampaignActualState.STALLED and "scene_generation" in stalled.state_reason
-    other_release = NodeAvailability(record=type(node.record)(**{**node.record.__dict__, "fingerprints": {image: "fp-other" for image in EXPECTED}}))
-    harness.nodes[:] = [other_release]
+    other_release = WorkerNodeAvailability(record=type(worker_node.record)(**{**worker_node.record.__dict__, "fingerprints": {image: "fp-other" for image in EXPECTED}}))
+    harness.worker_nodes[:] = [other_release]
     harness.settle()
     assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.STALLED
-    harness.nodes[:] = [node]
+    harness.worker_nodes[:] = [worker_node]
     harness.settle()
     assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.RUNNING
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
@@ -508,38 +508,38 @@ def test_a_campaign_without_a_node_for_a_needed_job_type_is_stalled(harness):
     assert kinds.index(CampaignEventKind.STALLED) < kinds.index(CampaignEventKind.RESUMED)
 
 
-def test_a_campaign_runs_only_on_its_selected_nodes(harness):
-    elsewhere = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, resources={"nodes": ["another-node"]}))
+def test_a_campaign_runs_only_on_its_selected_worker_nodes(harness):
+    elsewhere = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, resources={"worker_nodes": ["another-worker-node"]}))
     harness.settle()
-    assert harness.executor.run() == 0  # the only node is not selected
+    assert harness.executor.run() == 0  # the only worker node is not selected
     harness.clock.advance(31)
     harness.settle()
     stalled = harness.campaign(elsewhere.campaign_id)
-    assert stalled.actual_state == CampaignActualState.STALLED and stalled.state_reason.endswith("among its selected nodes")
-    nodes = [harness.executor.node_id, "another-node"]
-    selected = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, resources={"nodes": nodes}))
+    assert stalled.actual_state == CampaignActualState.STALLED and stalled.state_reason.endswith("among its selected worker nodes")
+    worker_nodes = [harness.executor.worker_node_id, "another-worker-node"]
+    selected = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, resources={"worker_nodes": worker_nodes}))
     assert harness.drive(selected.campaign_id).actual_state == CampaignActualState.COMPLETED
     (case,) = _cases(harness, selected)
-    assert [job.allowed_nodes for _, job in _jobs_of(harness, case)] and all(job.allowed_nodes == tuple(nodes) for _, job in _jobs_of(harness, case))
+    assert [job.allowed_worker_nodes for _, job in _jobs_of(harness, case)] and all(job.allowed_worker_nodes == tuple(worker_nodes) for _, job in _jobs_of(harness, case))
     assert harness.campaign(elsewhere.campaign_id).actual_state == CampaignActualState.STALLED
 
 
-def test_node_availability_honours_the_selected_nodes(harness):
-    (node,) = harness.nodes
+def test_worker_node_availability_honours_the_selected_worker_nodes(harness):
+    (worker_node,) = harness.worker_nodes
     scene = ("scene_generation",)
-    assert node.runs(JobType.SCENE_GENERATION, scene, {}, {}) and node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {harness.executor.node_id})
-    assert not node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {"another-node"})
+    assert worker_node.runs(JobType.SCENE_GENERATION, scene, {}, {}) and worker_node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {harness.executor.worker_node_id})
+    assert not worker_node.runs(JobType.SCENE_GENERATION, scene, {}, {}, {"another-worker-node"})
 
 
-def test_node_availability_needs_the_components_up_to_date(harness):
+def test_worker_node_availability_needs_the_components_up_to_date(harness):
     from dataclasses import replace
 
-    (node,) = harness.nodes
+    (worker_node,) = harness.worker_nodes
     gazebo = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
-    assert node.runs(JobType.SIMULATION, gazebo, {}, {})
-    assert not replace(node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SIMULATION, gazebo, {}, {})
-    assert replace(node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SCENE_GENERATION, ("scene_generation",), {}, {}), "the other components still work"
-    assert not replace(node, record=replace(node.record, components=("scene_generation",))).runs(JobType.SIMULATION, gazebo, {}, {})
+    assert worker_node.runs(JobType.SIMULATION, gazebo, {}, {})
+    assert not replace(worker_node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SIMULATION, gazebo, {}, {})
+    assert replace(worker_node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SCENE_GENERATION, ("scene_generation",), {}, {}), "the other components still work"
+    assert not replace(worker_node, record=replace(worker_node.record, components=("scene_generation",))).runs(JobType.SIMULATION, gazebo, {}, {})
 
 
 def test_a_stop_condition_drains_the_campaign(harness):

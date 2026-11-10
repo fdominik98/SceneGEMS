@@ -73,7 +73,7 @@ class CampaignActualState(str, Enum):
     RUNNING = "running"
     PAUSED = "paused"
     DRAINING = "draining"
-    STALLED = "stalled"  # wants to run, but no node runs the campaign's pinned release
+    STALLED = "stalled"  # wants to run, but no worker node runs the campaign's pinned release
     STOPPED = "stopped"  # final: stopped by the operator
     COMPLETED = "completed"  # final: every class complete or abandoned
 
@@ -347,7 +347,7 @@ class RunRecordRow(Base):
     state_digest: Mapped[Optional[str]] = mapped_column(String(128))
     artifacts: Mapped[Dict[str, str]] = mapped_column(JSONB)  # role (trajectories, state_log, frames) to sha256
     job_id: Mapped[Optional[str]] = mapped_column(ForeignKey("job.id"))  # the simulation job
-    node_id: Mapped[Optional[str]] = mapped_column(String(128))  # no foreign key: a node may be removed later
+    worker_node_id: Mapped[Optional[str]] = mapped_column(String(128))  # no foreign key: a worker node may be removed later
     fingerprints: Mapped[Dict[str, str]] = mapped_column(JSONB)  # image name to fingerprint the run used
     durations_s: Mapped[Dict[str, float]] = mapped_column(JSONB)  # seconds per stage and job phase
     created_at: Mapped[datetime] = mapped_column(utc_timestamp())

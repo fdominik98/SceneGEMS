@@ -5,8 +5,8 @@ from typing import Any, Callable, Dict, Optional, Protocol
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from scenegems_tool.cluster.node.instance_scope import InstanceScope
-from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import SimulationSessionStack
+from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_stack import SimulationSessionStack
 from scenegems_tool.gateway.protocol import ServerMessage, SimulationStatus, make_error_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenario_execution_client import MqttScenarioExecutionClient

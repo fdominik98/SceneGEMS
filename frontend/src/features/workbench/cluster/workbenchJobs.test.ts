@@ -12,7 +12,7 @@ function fakeCluster(overrides: Record<string, unknown> = {}): WorkbenchCluster 
     submitJob: vi.fn(async () => job({ job_id: "j1", state: "queued" })),
     getJob: vi.fn(async () => job({ job_id: "j1", state: "succeeded" })),
     cancelJob: vi.fn(async () => ({ cancelled: true, job: job() })),
-    artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}`,
+    artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}`,
     ...overrides,
   };
   return { client: client as unknown as WorkbenchCluster["client"], channel: null };
@@ -31,7 +31,7 @@ describe("job payloads", () => {
   });
 
   it("names the pool and request id a job's previews carry", () => {
-    expect(poolTopic("node-a", "scene_generation")).toBe("instance:node-a/scene_generation-0");
+    expect(poolTopic("worker-node-a", "scene_generation")).toBe("instance:worker-node-a/scene_generation-0");
     expect(poolRequestId({ job_id: "j9", attempt: 2 })).toBe("j9-2");
   });
 });

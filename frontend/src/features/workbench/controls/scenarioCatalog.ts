@@ -1,7 +1,7 @@
 import type { CatalogClass } from "../../../domain/cluster/campaignApi";
 
 /**
- * The functional scenarios the scene page offers: the master's class catalog
+ * The functional scenarios the scene page offers: the control node's class catalog
  * (`backend/assets/generated_functional_models/all/`), found by text and by vessel and obstacle counts.
  * A class id (`3vessel_0obstacle_scenarios/fec5`) is also the scenario's label.
  */
@@ -19,17 +19,7 @@ export function filterCatalogClasses(classes: readonly CatalogClass[], query: st
   });
 }
 
-/**
- * What the single scene list shows: the scenario loaded in the editor when it is among the listed ones, else
- * nothing (the placeholder). A list that showed a scenario it had not loaded, as a browser does when the
- * filters, the search or the page change its options, could never load that scenario: picking the option a
- * select already shows fires no change.
- */
-export function listedValue(listed: readonly CatalogClass[], loadedLabel: string | null): string {
-  return loadedLabel !== null && listed.some((entry) => entry.fec_id === loadedLabel) ? loadedLabel : "";
-}
-
-/** Batch selection: the listed classes join the selection; classes the filters hide stay selected. */
+/** The listed classes join the selection; classes the filters hide stay selected. */
 export function selectListed(selected: readonly string[], listed: readonly CatalogClass[]): string[] {
   return [...new Set([...selected, ...listed.map((entry) => entry.fec_id)])];
 }

@@ -40,7 +40,7 @@ export function normalizeSteps(steps: readonly unknown[] | undefined): CampaignS
   if (chosen.length === 0) {
     return [...IMPLIED_STEPS];
   }
-  // A gap would be refused by the master: close it
+  // A gap would be refused by the control node: close it
   return stepRange(chosen[0], chosen[chosen.length - 1]);
 }
 

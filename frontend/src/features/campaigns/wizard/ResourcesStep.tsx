@@ -1,8 +1,8 @@
 import { Disclosure } from "../../../components/Disclosure";
-import type { NodeView } from "../../../domain/cluster/schemas";
+import type { WorkerNodeView } from "../../../domain/cluster/schemas";
 import { formatMegabytes } from "../../cluster/clusterFormat";
 import { plural } from "../campaignFormat";
-import { capabilityLabel, fullUsageQueueDepth, needKey, needLabel, nodeProblems, simulationJobTypesOf, slotsByJobType, type CapabilityCoverage } from "../resourcePlan";
+import { capabilityLabel, fullUsageQueueDepth, needKey, needLabel, workerNodeProblems, simulationJobTypesOf, slotsByJobType, type CapabilityCoverage } from "../resourcePlan";
 import { requiredLabelsOf, stagesOf } from "./configBuilder";
 import { Field, FieldIssues, NumberField } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
@@ -14,7 +14,7 @@ export interface ResourcesStepProps extends StepProps {
 }
 
 function NeedRow({ entry }: { entry: CapabilityCoverage }) {
-  const covered = entry.nodes.length > 0;
+  const covered = entry.workerNodes.length > 0;
   return (
     <li className={`wiz-need wiz-need--${covered ? "ok" : "missing"}`}>
       <span className="wiz-need-mark" aria-hidden="true">
@@ -24,7 +24,7 @@ function NeedRow({ entry }: { entry: CapabilityCoverage }) {
         <strong>{capitalized(needLabel(entry.capability))}</strong>
         <span className="wiz-need-reason">{entry.capability.reason}</span>
       </span>
-      <span className="wiz-need-status">{covered ? `${plural(entry.nodes.length, "machine")}, ${plural(entry.slots, "slot")}` : "No machine"}</span>
+      <span className="wiz-need-status">{covered ? `${plural(entry.workerNodes.length, "machine")}, ${plural(entry.slots, "slot")}` : "No machine"}</span>
     </li>
   );
 }
@@ -34,8 +34,8 @@ function capitalized(text: string): string {
 }
 
 interface MachineProps {
-  node: NodeView;
-  /** Whether the campaign uses the node (always in full usage while it can take jobs). */
+  workerNode: WorkerNodeView;
+  /** Whether the campaign uses the worker node (always in full usage while it can take jobs). */
   used: boolean;
   fullUsage: boolean;
   problems: readonly string[];
@@ -43,21 +43,21 @@ interface MachineProps {
   onToggle: () => void;
 }
 
-function Machine({ node, used, fullUsage, problems, requiredJobTypes, onToggle }: MachineProps) {
-  const slots = Object.entries(node.slots).sort(([a], [b]) => Number(requiredJobTypes.has(b)) - Number(requiredJobTypes.has(a)) || a.localeCompare(b));
-  const title = node.machine ?? node.name;
+function Machine({ workerNode, used, fullUsage, problems, requiredJobTypes, onToggle }: MachineProps) {
+  const slots = Object.entries(workerNode.slots).sort(([a], [b]) => Number(requiredJobTypes.has(b)) - Number(requiredJobTypes.has(a)) || a.localeCompare(b));
+  const title = workerNode.machine ?? workerNode.name;
   return (
     <li className={`wiz-machine${used ? " wiz-machine--used" : ""}${problems.length > 0 ? " wiz-machine--unusable" : ""}`}>
       <label className="wiz-machine-head">
         <input type="checkbox" checked={used} disabled={fullUsage} onChange={onToggle} aria-label={`Use ${title} for the campaign`} />
         <span className="wiz-machine-title">
-          <strong title={node.node_id}>{title}</strong>
-          <span className="wiz-machine-sub">{node.machine ? `node ${node.name}` : "machine not reported"}</span>
+          <strong title={workerNode.worker_node_id}>{title}</strong>
+          <span className="wiz-machine-sub">{workerNode.machine ? `worker node ${workerNode.name}` : "machine not reported"}</span>
         </span>
-        <span className={`node-status node-status--${node.status}`}>{node.status}</span>
+        <span className={`worker-node-status worker-node-status--${workerNode.status}`}>{workerNode.status}</span>
       </label>
       <p className="wiz-machine-specs">
-        {plural(node.resources.cpus, "CPU")}, {formatMegabytes(node.resources.memory_mb)} memory
+        {plural(workerNode.resources.cpus, "CPU")}, {formatMegabytes(workerNode.resources.memory_mb)} memory
       </p>
       {slots.length === 0 ? (
         <p className="wiz-hint">Offers no job types.</p>
@@ -82,29 +82,29 @@ function Machine({ node, used, fullUsage, problems, requiredJobTypes, onToggle }
 /** Resources: what the campaign needs, the machines that give it, and which of them the campaign uses (every one at full capacity, or a choice). */
 export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStepProps) {
   const { resources } = draft;
-  const own = splitByField(reasonsOfEntry(reasons, null), ["nodes", "required_labels", "queue_depth", "priority"]);
+  const own = splitByField(reasonsOfEntry(reasons, null), ["worker_nodes", "required_labels", "queue_depth", "priority"]);
   const labels = requiredLabelsOf(draft);
   // Only the stages the campaign's steps use have a queue
   const used = new Set(stagesOf(draft));
   const queueStages = Object.entries(QUEUE_DEPTH_LABELS).filter(([stage]) => used.has(stage));
   const plan = cluster.plan;
   const requiredJobTypes = new Set(plan?.required.map((capability) => capability.jobType) ?? []);
-  const usableIds = cluster.nodes.filter((node) => nodeProblems(node, labels).length === 0).map((node) => node.node_id);
+  const usableIds = cluster.workerNodes.filter((workerNode) => workerNodeProblems(workerNode, labels).length === 0).map((workerNode) => workerNode.worker_node_id);
   const simulators = simulationJobTypesOf(plan?.required ?? []);
   const fullDepth = fullUsageQueueDepth(cluster.slots, simulators);
-  const selectedNodes = cluster.nodes.filter((node) => resources.nodes.includes(node.node_id));
+  const selectedWorkerNodes = cluster.workerNodes.filter((workerNode) => resources.workerNodes.includes(workerNode.worker_node_id));
 
   const setFullUsage = (fullUsage: boolean) =>
     update((next) => {
       next.resources.fullUsage = fullUsage;
       // Switching to a choice starts from what full usage used
-      if (!fullUsage && next.resources.nodes.length === 0) {
-        next.resources.nodes = [...usableIds];
+      if (!fullUsage && next.resources.workerNodes.length === 0) {
+        next.resources.workerNodes = [...usableIds];
       }
     });
-  const toggleNode = (nodeId: string) =>
+  const toggleWorkerNode = (workerNodeId: string) =>
     update((next) => {
-      next.resources.nodes = next.resources.nodes.includes(nodeId) ? next.resources.nodes.filter((id) => id !== nodeId) : [...next.resources.nodes, nodeId];
+      next.resources.workerNodes = next.resources.workerNodes.includes(workerNodeId) ? next.resources.workerNodes.filter((id) => id !== workerNodeId) : [...next.resources.workerNodes, workerNodeId];
     });
 
   let machines;
@@ -120,22 +120,22 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
         Reading the cluster's machines...
       </p>
     );
-  } else if (cluster.nodes.length === 0) {
-    machines = <p className="wiz-notice">The master lists no machines. Deploy a node and pair it with the master first.</p>;
+  } else if (cluster.workerNodes.length === 0) {
+    machines = <p className="wiz-notice">The control node lists no machines. Deploy a worker node and pair it with the control node first.</p>;
   } else {
     machines = (
       <ul className="wiz-machines">
-        {cluster.nodes.map((node) => {
-          const problems = nodeProblems(node, labels);
+        {cluster.workerNodes.map((workerNode) => {
+          const problems = workerNodeProblems(workerNode, labels);
           return (
             <Machine
-              key={node.node_id}
-              node={node}
-              used={resources.fullUsage ? problems.length === 0 : resources.nodes.includes(node.node_id)}
+              key={workerNode.worker_node_id}
+              workerNode={workerNode}
+              used={resources.fullUsage ? problems.length === 0 : resources.workerNodes.includes(workerNode.worker_node_id)}
               fullUsage={resources.fullUsage}
               problems={problems}
               requiredJobTypes={requiredJobTypes}
-              onToggle={() => toggleNode(node.node_id)}
+              onToggle={() => toggleWorkerNode(workerNode.worker_node_id)}
             />
           );
         })}
@@ -178,29 +178,29 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
         {!resources.fullUsage && cluster.loaded && (
           <div className="wiz-machine-tools">
             <span className="meta">
-              {plural(resources.nodes.length, "machine")} selected, {plan ? plural(plan.usable.length, "machine") : "none"} usable now
+              {plural(resources.workerNodes.length, "machine")} selected, {plan ? plural(plan.usable.length, "machine") : "none"} usable now
             </span>
-            <button type="button" onClick={() => update((next) => void (next.resources.nodes = [...usableIds]))} disabled={usableIds.length === 0}>
+            <button type="button" onClick={() => update((next) => void (next.resources.workerNodes = [...usableIds]))} disabled={usableIds.length === 0}>
               Select every usable machine
             </button>
-            <button type="button" onClick={() => update((next) => void (next.resources.nodes = []))} disabled={resources.nodes.length === 0}>
+            <button type="button" onClick={() => update((next) => void (next.resources.workerNodes = []))} disabled={resources.workerNodes.length === 0}>
               Clear the selection
             </button>
           </div>
         )}
-        {plan && plan.unknownNodes.length > 0 && !resources.fullUsage && (
+        {plan && plan.unknownWorkerNodes.length > 0 && !resources.fullUsage && (
           <p className="wiz-hint wiz-hint--warn">
-            {plural(plan.unknownNodes.length, "selected machine")} the master no longer lists.{" "}
+            {plural(plan.unknownWorkerNodes.length, "selected machine")} the control node no longer lists.{" "}
             <button
               type="button"
               className="camp-link"
-              onClick={() => update((next) => void (next.resources.nodes = next.resources.nodes.filter((id) => !plan.unknownNodes.includes(id))))}
+              onClick={() => update((next) => void (next.resources.workerNodes = next.resources.workerNodes.filter((id) => !plan.unknownWorkerNodes.includes(id))))}
             >
-              Remove {plan.unknownNodes.length === 1 ? "it" : "them"}
+              Remove {plan.unknownWorkerNodes.length === 1 ? "it" : "them"}
             </button>
           </p>
         )}
-        <FieldIssues reasons={own.byField.get("nodes")} />
+        <FieldIssues reasons={own.byField.get("worker_nodes")} />
         {machines}
       </section>
 
@@ -251,9 +251,9 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
               <div>
                 <button
                   type="button"
-                  disabled={selectedNodes.length === 0}
+                  disabled={selectedWorkerNodes.length === 0}
                   onClick={() => {
-                    const sized = fullUsageQueueDepth(slotsByJobType(selectedNodes, labels), simulators);
+                    const sized = fullUsageQueueDepth(slotsByJobType(selectedWorkerNodes, labels), simulators);
                     update((next) => void (next.resources.queueDepth = sized));
                   }}
                 >
@@ -272,7 +272,7 @@ export function ResourcesStep({ draft, update, reasons, cluster }: ResourcesStep
         </div>
 
         <div className="wiz-subsection">
-          <h5>Required node labels</h5>
+          <h5>Required worker node labels</h5>
           <p className="meta wiz-explain">Every job of the campaign runs only on machines that carry all of these labels (for example site: lab). A machine without them is not usable.</p>
           {resources.labels.map((label, index) => (
             <div key={index} className="wiz-map-row">

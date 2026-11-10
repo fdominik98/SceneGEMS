@@ -20,7 +20,7 @@ There is nothing to start or stop: every run is recorded as an entry of [Campaig
 |------|-------|--------|
 | A FEC specification | Scene Generation, **Files and editor tools**, **Export** | `.problem` |
 | The shown scene | Scene Generation, Result row | JSON |
-| The valid scenes of a batch | Scene Generation, Batch tab, **Export all valid** | ZIP of JSON files |
+| The valid scenes of a batch | Scene Generation, Batch results, **Export all valid** | ZIP of JSON files |
 | The planned trajectory | Trajectory Generation, Result row | JSON |
 | The frames of the shown stream | Monitoring panel, the export button beside the stream | JSON |
 | The canvas | Canvas toolbar, **Export**, **Screenshot (image)** | PNG, in the colors of the current mode |

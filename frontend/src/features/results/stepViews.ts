@@ -105,7 +105,7 @@ interface EntryLike {
 }
 
 /**
- * The steps an entry executed, in chain order. A master without Phase 6 sends no steps: every
+ * The steps an entry executed, in chain order. A control node without Phase 6 sends no steps: every
  * campaign it ran was the chain of then (scene generation to simulation).
  */
 export function executedSteps(entry: EntryLike | null | undefined): CampaignStep[] {
@@ -130,7 +130,7 @@ export function chooseStep(entry: EntryLike | null | undefined, chosen: Campaign
   return chosen !== null && isMonitoredStep(chosen) && steps.includes(chosen) ? chosen : steps[steps.length - 1];
 }
 
-/** Whether the master that sent the entry knows the step filter and the findings route. */
+/** Whether the control node that sent the entry knows the step filter and the findings route. */
 export function hasStepViews(entry: EntryLike | null | undefined): boolean {
   return entry?.steps !== undefined;
 }
@@ -145,7 +145,7 @@ export interface CountEntry {
   count: number;
 }
 
-/** The cases of a step by state, known states first, an unknown state (a newer master) after them; zero counts left out. */
+/** The cases of a step by state, known states first, an unknown state (a newer control node) after them; zero counts left out. */
 export function caseStateCounts(cases: Readonly<Record<string, number>>): CountEntry[] {
   const known = CASE_STATE_ORDER.filter((state) => (cases[state] ?? 0) > 0).map((state) => ({ label: state, count: cases[state] }));
   const unknown = Object.entries(cases)
@@ -179,7 +179,7 @@ export function rankFailedRules(rules: Findings["failed_rules"]): RankedRule[] {
     }));
 }
 
-/** The vessel pairs of a step by the first encounter type of each, most pairs first then by label, OTHER last among equals; empty counts and an older master's missing field give none. */
+/** The vessel pairs of a step by the first encounter type of each, most pairs first then by label, OTHER last among equals; empty counts and an older control node's missing field give none. */
 export function encounterTypeCounts(counts: Readonly<Record<string, number>> | undefined): CountEntry[] {
   return Object.entries(counts ?? {})
     .filter(([, count]) => count > 0)
@@ -216,7 +216,7 @@ export interface FindingsView {
   showComplete: boolean;
   verdicts: { passed: number; failed: number; unmonitored: number; judged: number } | null;
   failedRules: RankedRule[];
-  /** The vessel pairs by their first encounter type; empty when the step is unmonitored or the master predates them. */
+  /** The vessel pairs by their first encounter type; empty when the step is unmonitored or the control node predates them. */
   encounters: CountEntry[];
   classes: ClassRow[];
   duration: { median: string; p90: string } | null;
@@ -264,7 +264,7 @@ export interface CaseStepRow {
 
 function verdictsOfStep(verdicts: readonly Verdict[], step: MonitoredStep): Verdict[] {
   const name = verdictStepOf(step);
-  // A master before Phase 6 sends no step: all its verdicts are of the simulation.
+  // A control node before Phase 6 sends no step: all its verdicts are of the simulation.
   return verdicts.filter((verdict) => (verdict.step ?? "simulation") === name);
 }
 

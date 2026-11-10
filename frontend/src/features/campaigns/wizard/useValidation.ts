@@ -3,15 +3,15 @@ import { validateCampaignConfig, type ValidationResult } from "../../../domain/c
 import { describeOperatorError, OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import { parseReasons, type Reason } from "./reasons";
 
-/** The master's verdict on the config last sent to it. */
+/** The control node's verdict on the config last sent to it. */
 export interface ValidationState {
   /** The YAML text this state belongs to, or null before the first check. */
   yaml: string | null;
   status: "idle" | "checking" | "valid" | "invalid" | "error";
   result: ValidationResult | null;
-  /** The reasons the master gave, parsed. */
+  /** The reasons the control node gave, parsed. */
   reasons: Reason[];
-  /** A message when the check itself failed (the master is unreachable, the answer is unexpected). */
+  /** A message when the check itself failed (the control node is unreachable, the answer is unexpected). */
   message: string | null;
 }
 
@@ -26,7 +26,7 @@ export function validationFromError(yaml: string, error: unknown): ValidationSta
   return { yaml, status: "error", result: null, reasons: [], message: describeOperatorError(error) };
 }
 
-/** Checks configs on the master; an answer for an older text than the latest check is dropped. */
+/** Checks configs on the control node; an answer for an older text than the latest check is dropped. */
 export function useValidation(client: OperatorClient | null) {
   const [state, setState] = useState<ValidationState>(IDLE_VALIDATION);
   const latest = useRef(0);

@@ -8,7 +8,7 @@ import {
   fetchVerdictPage,
   fetchVerdictSummary,
   hasActiveFilters,
-  masterSorts,
+  controlNodeSorts,
   pageCount,
   pageWindow,
   runIndexesOf,
@@ -32,7 +32,7 @@ function verdict(id: number, overrides: Record<string, unknown> = {}): Verdict {
   });
 }
 
-/** A master holding `total` verdicts; answers limit and offset like the real route and counts the calls. */
+/** A control node holding `total` verdicts; answers limit and offset like the real route and counts the calls. */
 function fakeLister(total: number | null, build: (index: number) => Verdict = (index) => verdict(index)) {
   const calls: VerdictFilters[] = [];
   const listVerdicts = vi.fn(async (_campaignId: string, filters: VerdictFilters = {}) => {
@@ -107,7 +107,7 @@ describe("paging", () => {
     expect(page.items.map((item) => item.case_index)).toEqual(Array.from({ length: 50 }, (_, i) => 50 + i));
   });
 
-  it("fetches a descending page from the end and reverses it on a master that does not sort", async () => {
+  it("fetches a descending page from the end and reverses it on a control node that does not sort", async () => {
     const { client, calls } = fakeLister(120);
     const first = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "desc" });
     expect(calls).toEqual([
@@ -126,10 +126,10 @@ describe("paging", () => {
     const { client, listVerdicts } = fakeLister(0);
     const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "desc" });
     expect(page).toEqual({ items: [], total: 0 });
-    expect(listVerdicts).toHaveBeenCalledTimes(1); // an empty page says nothing about the master: no fallback
+    expect(listVerdicts).toHaveBeenCalledTimes(1); // an empty page says nothing about the control node: no fallback
   });
 
-  it("falls back to the first page, reversed, when the master sends no total", async () => {
+  it("falls back to the first page, reversed, when the control node sends no total", async () => {
     const { client } = fakeLister(null);
     const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 3, direction: "desc" });
     expect(page.total).toBeNull();
@@ -137,7 +137,7 @@ describe("paging", () => {
   });
 });
 
-/** A master of Phase 7: sorts like the route (a small subset of it) and sends `encounters` on every verdict. */
+/** A control node of Phase 7: sorts like the route (a small subset of it) and sends `encounters` on every verdict. */
 function sortingLister(total: number) {
   const calls: VerdictFilters[] = [];
   const listVerdicts = vi.fn(async (_campaignId: string, filters: VerdictFilters = {}) => {
@@ -156,7 +156,7 @@ function sortingLister(total: number) {
 }
 
 describe("verdict encounters", () => {
-  it("reads the encounter types of a verdict, null for an old one and nothing from an older master", () => {
+  it("reads the encounter types of a verdict, null for an old one and nothing from an older control node", () => {
     expect(verdict(1, { encounters: { "os - ts1": ["HEAD_ON", "OTHER"] } }).encounters).toEqual({ "os - ts1": ["HEAD_ON", "OTHER"] });
     expect(verdict(1, { encounters: null }).encounters).toBeNull();
     expect(verdict(1).encounters).toBeUndefined();
@@ -164,7 +164,7 @@ describe("verdict encounters", () => {
 });
 
 describe("verdict sort", () => {
-  it("asks a master of Phase 7 for the sorted page and takes it as it comes", async () => {
+  it("asks a control node of Phase 7 for the sorted page and takes it as it comes", async () => {
     const { client, calls } = sortingLister(120);
     const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 1, pageSize: 50, direction: "desc", sort: "first_failure_time_s" });
     expect(calls).toEqual([{ sort: "first_failure_time_s", order: "desc", limit: 50, offset: 50 }]);
@@ -175,7 +175,7 @@ describe("verdict sort", () => {
     expect(page.total).toBe(120);
   });
 
-  it("sends no sort for the default order and still learns that the master sorts", async () => {
+  it("sends no sort for the default order and still learns that the control node sorts", async () => {
     const { client, calls } = sortingLister(10);
     const page = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 5, direction: "asc" });
     expect(calls).toEqual([{ limit: 5, offset: 0 }]);
@@ -188,13 +188,13 @@ describe("verdict sort", () => {
     expect(calls).toEqual([{ sort: "fec_id", order: "desc", limit: 5, offset: 0 }]);
   });
 
-  it("keeps a verdict list with a null encounters value as a master that sorts", () => {
-    expect(masterSorts([verdict(1, { encounters: null })])).toBe(true);
-    expect(masterSorts([verdict(1)])).toBe(false);
-    expect(masterSorts([])).toBeNull();
+  it("keeps a verdict list with a null encounters value as a control node that sorts", () => {
+    expect(controlNodeSorts([verdict(1, { encounters: null })])).toBe(true);
+    expect(controlNodeSorts([verdict(1)])).toBe(false);
+    expect(controlNodeSorts([])).toBeNull();
   });
 
-  it("falls back to the FEC order on a master that ignores sort, and remembers it", async () => {
+  it("falls back to the FEC order on a control node that ignores sort, and remembers it", async () => {
     const { client, calls } = fakeLister(120);
     const first = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 0, pageSize: 50, direction: "asc", sort: "state" });
     expect(first.serverSort).toBe(false);
@@ -206,7 +206,7 @@ describe("verdict sort", () => {
     calls.length = 0;
     const second = await fetchVerdictPage(client, "c1", DEFAULT_VERDICT_FILTERS, { page: 1, pageSize: 50, direction: "asc", sort: "first_failure_time_s" });
     expect(second.serverSort).toBe(false);
-    expect(calls).toEqual([{ limit: 50, offset: 50 }]); // no second try with a sort the master ignored
+    expect(calls).toEqual([{ limit: 50, offset: 50 }]); // no second try with a sort the control node ignored
   });
 });
 
@@ -289,7 +289,7 @@ describe("fetchVerdictSummary", () => {
     expect(summary).toMatchObject({ analyzed: 2000, total: 5000, partial: true });
   });
 
-  it("summarizes a master that sends no totals from what it read", async () => {
+  it("summarizes a control node that sends no totals from what it read", async () => {
     const { client } = fakeLister(null, (i) => verdict(i));
     const summary = await fetchVerdictSummary(client, "c1", DEFAULT_VERDICT_FILTERS, undefined, 2500, 1000);
     expect(summary.analyzed).toBe(2500);

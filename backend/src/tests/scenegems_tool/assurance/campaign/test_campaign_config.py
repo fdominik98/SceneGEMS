@@ -12,6 +12,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     DEFAULT_OBSTACLE_TYPES_FILE,
     DEFAULT_STEPS,
     DEFAULT_VESSEL_TYPES_FILE,
+    HASHED_WORKER_NODES_KEY,
     MAX_SEED,
     CampaignConfig,
     CampaignConfigError,
@@ -25,12 +26,13 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     budget_limit,
     campaign_config_from_dict,
     case_seed,
+    hashed_form,
     load_campaign_config,
     parse_campaign_config,
     with_domain_defaults,
 )
-from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
-from scenegems_tool.persistence.canonical_json import canonical_json
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
+from scenegems_tool.persistence.canonical_json import canonical_json, canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
 
 DATA = Path(__file__).parent / "data"
@@ -63,7 +65,7 @@ def test_a_minimal_config_gets_the_defaults():
     assert (run.stack.simulation_layer, run.stack.mode, run.monitor, run.repeats, run.seed, run.early_stop) == ("kinematic", KinematicMode.REPLAY, MonitorImplementation.POST_HOC, 1, None, False)
     assert (config.policy.retention, config.policy.keep_frames, config.policy.seed) == (RetentionPolicy.ALL, False, 0)
     assert config.resources.queue_depth.cap(PipelineStage.SIMULATE) == 32 and config.resources.required_labels == {}
-    assert config.resources.nodes == ()  # every node
+    assert config.resources.worker_nodes == ()  # every worker node
     assert DEFAULT_VESSEL_TYPES_FILE.name == "vessel_types.yaml"
 
 
@@ -159,8 +161,8 @@ def test_an_absent_usv_navigation_horizon_leaves_the_stored_config_unchanged():
         (_with(policy={"seed": -1}), "policy.seed"),
         (_with(policy={"retention": "some"}), "policy.retention: Input should be 'all', 'failures' or 'verdicts_only'"),
         (_with(resources={"queue_depth": {"simulate": 0}}), "resources.queue_depth.simulate"),
-        (_with(resources={"nodes": ["node-a", "node-a"]}), "resources.nodes: Value error, node ids must be distinct"),
-        (_with(resources={"nodes": ["node-a", " "]}), "resources.nodes: Value error, a node id must not be empty"),
+        (_with(resources={"worker_nodes": ["worker-node-a", "worker-node-a"]}), "resources.worker_nodes: Value error, worker node ids must be distinct"),
+        (_with(resources={"worker_nodes": ["worker-node-a", " "]}), "resources.worker_nodes: Value error, a worker node id must not be empty"),
         (_with(domain={"vessel_types": "- just\n- a list\n"}), "domain.vessel_types: Value error, expected a YAML mapping"),
         (_with(domain={"colregs_constants": "a: [unclosed"}), "domain.colregs_constants: Value error, not valid YAML"),
         (_with(domain={"scene_generation_timeout_s": 0}), "domain.scene_generation_timeout_s"),
@@ -204,7 +206,12 @@ def test_yaml_is_loaded_safely_and_strictly(text, reason):
 
 def test_the_hash_is_the_sha256_of_canonical_json():
     config = campaign_config_from_dict(MINIMAL)
-    assert config.config_hash() == hashlib.sha256(canonical_json(config.to_json()).encode("utf-8")).hexdigest()
+    stored = config.to_json()
+    hashed = hashed_form(stored)
+    assert config.config_hash() == hashlib.sha256(canonical_json(hashed).encode("utf-8")).hexdigest()
+    # the hashed form is the stored JSON with one key under its first name
+    assert {key: value for key, value in hashed.items() if key != "resources"} == {key: value for key, value in stored.items() if key != "resources"}
+    assert hashed["resources"].pop(HASHED_WORKER_NODES_KEY) == stored["resources"].pop("worker_nodes") and hashed["resources"] == stored["resources"]
 
 
 def test_the_hash_does_not_depend_on_key_order_or_source():
@@ -282,7 +289,7 @@ def test_the_model_is_immutable():
 
 # A config that leaves its domain out takes the default presets, whose content is hashed: these are the hashes with the
 # presets of 2026-11-09 (READILY_APPARENT_COURSE_CHANGE_TIME and HEADING_PERSISTENCE_TIME 70 s). Campaigns stored before
-# keep their own hashes: the master stored them with the domain content filled in.
+# keep their own hashes: the control node stored them with the domain content filled in.
 EXIT_CAMPAIGN_HASH = "e4a01a35ebb9f7caebb5c7c60901b5cc473522faaa39078f9fca8546722bfec7"
 STORED_MINIMAL = {"name": "lab", "scope": [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 2}]}  # with the FEC id it was stored with
 MINIMAL_HASH = "b493ab3ac1ceb0431555b64851f5685d979496e52b88f9f096383ce3f59004c4"
@@ -452,3 +459,11 @@ def test_a_domain_section_that_is_no_mapping_is_left_for_validation_to_report():
     assert with_domain_defaults({"domain": "colregs"}, CLUSTER_DOMAIN) == {"domain": "colregs"}
     with pytest.raises(CampaignConfigError):
         parse_campaign_config("format: 2\nname: lab\ndomain: colregs\n", CLUSTER_DOMAIN)
+
+
+def test_the_hash_covers_the_selected_worker_nodes_under_the_name_stored_hashes_were_taken_with():
+    chosen = campaign_config_from_dict(dict(STORED_MINIMAL, resources={"worker_nodes": ["lab-1"]}))
+    stored = chosen.to_json()
+    assert stored["resources"]["worker_nodes"] == ["lab-1"] and "nodes" not in stored["resources"]
+    renamed = dict(stored, resources={("nodes" if key == "worker_nodes" else key): value for key, value in stored["resources"].items()})
+    assert chosen.config_hash() == canonical_json_sha256(renamed) != campaign_config_from_dict(STORED_MINIMAL).config_hash()

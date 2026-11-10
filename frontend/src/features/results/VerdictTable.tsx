@@ -11,7 +11,7 @@ interface VerdictTableProps {
   onOpenCase: (verdict: Verdict) => void;
   onPage: (page: number) => void;
   onPageSize: (pageSize: number) => void;
-  /** Whether the master sorts by any column; an older one has the FEC order only, which FEC, Case and Run flip together. */
+  /** Whether the control node sorts by any column; an older one has the FEC order only, which FEC, Case and Run flip together. */
   sortable: boolean;
   onSort: (sort: VerdictSort) => void;
 }
@@ -25,7 +25,7 @@ const SORT_LABEL: Record<VerdictSort, string> = {
   step: "step",
   created_at: "time",
 };
-/** The columns of the FEC order, the only order of a master before Phase 7. */
+/** The columns of the FEC order, the only order of a control node before Phase 7. */
 const FEC_ORDER: readonly VerdictSort[] = ["fec_id", "case_index", "run_index"];
 
 /** The failed rules by name (a rule that failed for several vessel pairs shows once); the full text is the tooltip. */
@@ -132,7 +132,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
       </div>
       <footer className="results-pager">
         <span className="meta" role="status">
-          {total === null ? `${verdicts.length} shown (the master sent no total)` : describeRange(total, paging, verdicts.length)}
+          {total === null ? `${verdicts.length} shown (the control node sent no total)` : describeRange(total, paging, verdicts.length)}
           {/* Not announced: every poll would; the table carries aria-busy instead */}
           {loading ? <span aria-hidden="true">, updating</span> : ""}
         </span>

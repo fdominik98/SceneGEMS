@@ -1,14 +1,14 @@
 import { describeComponents, isWhollyOutOfDate, JOB_TYPE_COMPONENTS, offersJob, runStackComponents, SIMULATION_JOB } from "../../domain/cluster/components";
-import type { NodeView } from "../../domain/cluster/schemas";
+import type { WorkerNodeView } from "../../domain/cluster/schemas";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
 /**
- * What a campaign needs from the cluster and which nodes give it. It reads a campaign config as
- * the wizard builds it or as the master stores it (`execution.runs`, `trajectories.generator`,
- * `resources.nodes` and `required_labels`), so the wizard and the campaign page judge the same
- * way. A node counts the way the master's stall check counts it (`NodeAvailability.runs`):
- * online, carrying every required label, selected when the campaign names nodes, with slots for
- * the job type and every component the job needs up to date (the campaign pins the master's
+ * What a campaign needs from the cluster and which worker nodes give it. It reads a campaign config as
+ * the wizard builds it or as the control node stores it (`execution.runs`, `trajectories.generator`,
+ * `resources.worker_nodes` and `required_labels`), so the wizard and the campaign page judge the same
+ * way. A worker node counts the way the control node's stall check counts it (`WorkerNodeAvailability.runs`):
+ * online, carrying every required label, selected when the campaign names worker nodes, with slots for
+ * the job type and every component the job needs up to date (the campaign pins the control node's
  * fingerprints). Every run is a simulation job; its components are the layers of its vessels' stacks.
  */
 
@@ -64,9 +64,9 @@ const DEFAULT_MONITOR = "post_hoc";
 const DEFAULT_REPEATS = 1;
 
 export interface RequiredCapability {
-  /** The job type a node must have slots for. */
+  /** The job type a worker node must have slots for. */
   jobType: string;
-  /** The components a node must have up to date: the subsystem's, or a run's vessel stack layers. */
+  /** The components a worker node must have up to date: the subsystem's, or a run's vessel stack layers. */
   components: string[];
   /** The queue depth stage of its jobs. */
   stage: string;
@@ -171,33 +171,33 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
   return required;
 }
 
-/** Why a node cannot take the campaign's jobs now, or an empty list when it can. */
-export function nodeProblems(node: NodeView, labels: Readonly<Record<string, string>>): string[] {
+/** Why a worker node cannot take the campaign's jobs now, or an empty list when it can. */
+export function workerNodeProblems(workerNode: WorkerNodeView, labels: Readonly<Record<string, string>>): string[] {
   const problems: string[] = [];
-  if (node.status !== "online") {
-    problems.push(node.status === "draining" ? "Draining: it takes no new jobs." : "Offline.");
+  if (workerNode.status !== "online") {
+    problems.push(workerNode.status === "draining" ? "Draining: it takes no new jobs." : "Offline.");
   }
-  if (isWhollyOutOfDate(node)) {
-    problems.push("Out of date: the images of all its components differ from the master's release.");
+  if (isWhollyOutOfDate(workerNode)) {
+    problems.push("Out of date: the images of all its components differ from the control node's release.");
   }
-  const missing = Object.entries(labels).filter(([key, value]) => node.labels[key] !== value);
+  const missing = Object.entries(labels).filter(([key, value]) => workerNode.labels[key] !== value);
   if (missing.length > 0) {
     problems.push(`Lacks the label${missing.length === 1 ? "" : "s"} ${missing.map(([key, value]) => `${key}=${value}`).join(", ")}.`);
   }
   return problems;
 }
 
-/** The nodes a campaign may use: every node, or the selected ones. */
-export interface NodeSelection {
-  /** Node ids, or null for every node (also those that join later). */
-  nodes: readonly string[] | null;
+/** The worker nodes a campaign may use: every worker node, or the selected ones. */
+export interface WorkerNodeSelection {
+  /** Worker node ids, or null for every worker node (also those that join later). */
+  workerNodes: readonly string[] | null;
   labels: Readonly<Record<string, string>>;
 }
 
 export interface CapabilityCoverage {
   capability: RequiredCapability;
-  /** The campaign's usable nodes with slots for its job type and its components up to date. */
-  nodes: NodeView[];
+  /** The campaign's usable worker nodes with slots for its job type and its components up to date. */
+  workerNodes: WorkerNodeView[];
   /** Their slots for the job type. */
   slots: number;
 }
@@ -205,42 +205,42 @@ export interface CapabilityCoverage {
 export interface ResourcePlan {
   required: RequiredCapability[];
   coverage: CapabilityCoverage[];
-  /** Required capabilities no usable node of the campaign offers: the campaign cannot start. */
+  /** Required capabilities no usable worker node of the campaign offers: the campaign cannot start. */
   missing: RequiredCapability[];
-  /** The campaign's nodes that can take jobs now. */
-  usable: NodeView[];
-  /** Selected node ids the master does not list. */
-  unknownNodes: string[];
+  /** The campaign's worker nodes that can take jobs now. */
+  usable: WorkerNodeView[];
+  /** Selected worker node ids the control node does not list. */
+  unknownWorkerNodes: string[];
 }
 
-export function isSelected(node: NodeView, selection: NodeSelection): boolean {
-  return selection.nodes === null || selection.nodes.includes(node.node_id);
+export function isSelected(workerNode: WorkerNodeView, selection: WorkerNodeSelection): boolean {
+  return selection.workerNodes === null || selection.workerNodes.includes(workerNode.worker_node_id);
 }
 
-export function planResources(required: readonly RequiredCapability[], nodes: readonly NodeView[], selection: NodeSelection): ResourcePlan {
-  const usable = nodes.filter((node) => isSelected(node, selection) && nodeProblems(node, selection.labels).length === 0);
+export function planResources(required: readonly RequiredCapability[], workerNodes: readonly WorkerNodeView[], selection: WorkerNodeSelection): ResourcePlan {
+  const usable = workerNodes.filter((workerNode) => isSelected(workerNode, selection) && workerNodeProblems(workerNode, selection.labels).length === 0);
   const coverage = required.map((capability) => {
-    const offering = usable.filter((node) => offersJob(node, capability.jobType, capability.components));
-    return { capability, nodes: offering, slots: offering.reduce((total, node) => total + node.slots[capability.jobType].slots, 0) };
+    const offering = usable.filter((workerNode) => offersJob(workerNode, capability.jobType, capability.components));
+    return { capability, workerNodes: offering, slots: offering.reduce((total, workerNode) => total + workerNode.slots[capability.jobType].slots, 0) };
   });
-  const known = new Set(nodes.map((node) => node.node_id));
+  const known = new Set(workerNodes.map((workerNode) => workerNode.worker_node_id));
   return {
     required: [...required],
     coverage,
-    missing: coverage.filter((entry) => entry.nodes.length === 0).map((entry) => entry.capability),
+    missing: coverage.filter((entry) => entry.workerNodes.length === 0).map((entry) => entry.capability),
     usable,
-    unknownNodes: selection.nodes === null ? [] : selection.nodes.filter((id) => !known.has(id)),
+    unknownWorkerNodes: selection.workerNodes === null ? [] : selection.workerNodes.filter((id) => !known.has(id)),
   };
 }
 
-/** Slots per job type over the nodes that can take the campaign's jobs now. */
-export function slotsByJobType(nodes: readonly NodeView[], labels: Readonly<Record<string, string>> = {}): Record<string, number> {
+/** Slots per job type over the worker nodes that can take the campaign's jobs now. */
+export function slotsByJobType(workerNodes: readonly WorkerNodeView[], labels: Readonly<Record<string, string>> = {}): Record<string, number> {
   const slots: Record<string, number> = {};
-  for (const node of nodes) {
-    if (nodeProblems(node, labels).length > 0) {
+  for (const workerNode of workerNodes) {
+    if (workerNodeProblems(workerNode, labels).length > 0) {
       continue;
     }
-    for (const [jobType, usage] of Object.entries(node.slots)) {
+    for (const [jobType, usage] of Object.entries(workerNode.slots)) {
       slots[jobType] = (slots[jobType] ?? 0) + usage.slots;
     }
   }
@@ -272,17 +272,17 @@ function stringsOf(value: unknown): Record<string, string> {
   return Object.fromEntries(Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"));
 }
 
-/** The plan of a stored campaign config: its runs, and the nodes and labels of its `resources` (no nodes: every node). */
-export function planOfConfig(config: Record<string, unknown>, nodes: readonly NodeView[]): ResourcePlan {
-  const resources = (config.resources ?? {}) as { nodes?: unknown; required_labels?: unknown };
-  const named = Array.isArray(resources.nodes) ? resources.nodes.filter((id): id is string => typeof id === "string") : [];
-  return planResources(requiredCapabilities(config), nodes, { nodes: named.length > 0 ? named : null, labels: stringsOf(resources.required_labels) });
+/** The plan of a stored campaign config: its runs, and the worker nodes and labels of its `resources` (no worker nodes: every worker node). */
+export function planOfConfig(config: Record<string, unknown>, workerNodes: readonly WorkerNodeView[]): ResourcePlan {
+  const resources = (config.resources ?? {}) as { worker_nodes?: unknown; required_labels?: unknown };
+  const named = Array.isArray(resources.worker_nodes) ? resources.worker_nodes.filter((id): id is string => typeof id === "string") : [];
+  return planResources(requiredCapabilities(config), workerNodes, { workerNodes: named.length > 0 ? named : null, labels: stringsOf(resources.required_labels) });
 }
 
 /**
- * What a plan says, as text: the needs, the ids of the nodes covering each with their slots, the
- * missing needs, the usable and the unknown nodes. Plans with the same key show the same, whatever
- * the nodes' heartbeats changed in their views (`last_seen_at`, slots in use). Null has "".
+ * What a plan says, as text: the needs, the ids of the worker nodes covering each with their slots, the
+ * missing needs, the usable and the unknown worker nodes. Plans with the same key show the same, whatever
+ * the worker nodes' heartbeats changed in their views (`last_seen_at`, slots in use). Null has "".
  */
 export function planKey(plan: ResourcePlan | null): string {
   if (plan === null) {
@@ -290,14 +290,14 @@ export function planKey(plan: ResourcePlan | null): string {
   }
   return JSON.stringify({
     required: plan.required,
-    coverage: plan.coverage.map((entry) => [needKey(entry.capability), entry.nodes.map((node) => node.node_id), entry.slots]),
+    coverage: plan.coverage.map((entry) => [needKey(entry.capability), entry.workerNodes.map((workerNode) => workerNode.worker_node_id), entry.slots]),
     missing: plan.missing.map(needKey),
-    usable: plan.usable.map((node) => node.node_id),
-    unknown: plan.unknownNodes,
+    usable: plan.usable.map((workerNode) => workerNode.worker_node_id),
+    unknown: plan.unknownWorkerNodes,
   });
 }
 
-/** Why the campaign cannot start, or null when every required capability has a usable node. */
+/** Why the campaign cannot start, or null when every required capability has a usable worker node. */
 export function startBlocker(plan: ResourcePlan | null): string | null {
   if (plan === null) {
     return "The cluster's machines are not known yet.";

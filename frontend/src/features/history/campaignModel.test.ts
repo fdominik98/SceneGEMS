@@ -118,7 +118,7 @@ describe("newerSummary", () => {
 });
 
 describe("event feed", () => {
-  it("names and colors the FEC events the master sends", () => {
+  it("names and colors the FEC events the control node sends", () => {
     expect([eventLabel("fec_complete"), eventTone("fec_complete")]).toEqual(["FEC complete", "ok"]);
     expect([eventLabel("fec_abandoned"), eventTone("fec_abandoned")]).toEqual(["FEC abandoned", "bad"]);
   });

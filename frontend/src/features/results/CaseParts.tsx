@@ -24,10 +24,10 @@ function JobLogs({ operatorUrl, jobId }: { operatorUrl: string; jobId: string })
     <div className="job-logs">
       {query.data.error && <p className="error">Error: {query.data.error}</p>}
       {lines.length === 0 ? (
-        <p className="meta">The master holds no log lines for this job. It keeps the last 200 lines in memory only, so a restart of the master clears them.</p>
+        <p className="meta">The control node holds no log lines for this job. It keeps the last 200 lines in memory only, so a restart of the control node clears them.</p>
       ) : (
         <>
-          <p className="meta">The last {lines.length} lines the master kept.</p>
+          <p className="meta">The last {lines.length} lines the control node kept.</p>
           <pre className="job-log-text" tabIndex={0}>
             {lines.map((line) => `${formatTime(line.timestamp).slice(11)} ${line.stream}${line.source ? ` ${line.source}` : ""}  ${line.text}`).join("\n")}
           </pre>
@@ -188,8 +188,8 @@ export function RunRecordCard({
           </dd>
         </div>
         <div>
-          <dt>Node</dt>
-          <dd>{record.node_id ?? "-"}</dd>
+          <dt>Worker node</dt>
+          <dd>{record.worker_node_id ?? "-"}</dd>
         </div>
         <div>
           <dt>Durations</dt>

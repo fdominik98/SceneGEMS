@@ -67,7 +67,7 @@ describe("the stack picker", () => {
     expect(drafts).toEqual([]);
   });
 
-  it("says why a stack the master cannot run cannot be picked", async () => {
+  it("says why a stack the control node cannot run cannot be picked", async () => {
     const stacks = { ...parsed, stacks: parsed.stacks.map((stack) => (stack.id === "gazebo_custom.replay" ? { ...stack, available: false, reasons: ["no Gazebo adapter here"] } : stack)) };
     const { user } = setup(undefined, catalogOf(stacks));
     await user.click(screen.getByRole("button", { name: /^Stack:/ }));
@@ -75,16 +75,16 @@ describe("the stack picker", () => {
     const card = within(dialog).getByRole("button", { name: /^Replay on the custom controller/ });
     expect(card).toBeDisabled();
     expect(card).toHaveTextContent("no Gazebo adapter here");
-    await user.click(within(dialog).getByRole("checkbox", { name: /Cannot run on this master/ }));
+    await user.click(within(dialog).getByRole("checkbox", { name: /Cannot run on this control node/ }));
     expect(within(dialog).getByRole("status")).toHaveTextContent("1 of 6 stacks");
   });
 
-  it("names a stack the master does not offer", () => {
+  it("names a stack the control node does not offer", () => {
     setup((run) => void (run.stackId = "somewhere.replay"));
     expect(screen.getByRole("button", { name: "Stack: somewhere.replay (not available)" })).toBeVisible();
   });
 
-  it("names a stack the master offers but cannot run", () => {
+  it("names a stack the control node offers but cannot run", () => {
     const stacks = { ...parsed, stacks: parsed.stacks.map((stack) => (stack.id === "kinematic.replay" ? { ...stack, available: false } : stack)) };
     setup(undefined, catalogOf(stacks));
     expect(screen.getByRole("button", { name: "Stack: Replay on the kinematic layer (not available)" })).toBeVisible();

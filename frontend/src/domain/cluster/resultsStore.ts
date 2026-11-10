@@ -30,7 +30,7 @@ export interface ResultsState {
   page: number;
   pageSize: number;
   direction: SortDirection;
-  /** The column the verdict table is sorted by (a master of Phase 7 sorts; an older one keeps the FEC order). */
+  /** The column the verdict table is sorted by (a control node of Phase 7 sorts; an older one keeps the FEC order). */
   sort: VerdictSort;
   /** Shows an entry's results with no filters, on `step` when given (the entry's last step otherwise). */
   openCampaign: (campaignId: string, step?: CampaignStep) => void;

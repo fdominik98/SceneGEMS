@@ -8,15 +8,15 @@ from scenegems_tool.gateway.stack_options import stack_options_message
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 # The messages that start a live session's containers on the gateway's Docker (the scenario execution
-# service, the monitor, the vessel stacks); a master without the Docker socket refuses them.
+# service, the monitor, the vessel stacks); a control node without the Docker socket refuses them.
 LIVE_SESSION_MESSAGES = frozenset({"connect_to_mqtt_broker", "initialize_simulation", "initialize_monitor"})
 
 
 def live_sessions_off_message(message_type: str) -> str:
     return (
-        f"Live sessions are off on this master, so {message_type} is refused: master-api has no Docker socket "
+        f"Live sessions are off on this control node, so {message_type} is refused: control-node-api has no Docker socket "
         "(SCENEGEMS_LIVE_SESSIONS=false; its COMPOSE_FILE leaves out docker-compose.live-sessions.yml). "
-        "Campaigns and cluster jobs still run; run live sessions on a master that has them on."
+        "Campaigns and cluster jobs still run; run live sessions on a control node that has them on."
     )
 
 
@@ -55,7 +55,7 @@ class SocketMessageProcessor:
                             longitude=float(geofence_msg["longitude"]),
                             radius_meters=float(geofence_msg["radius_meters"]),
                         )
-                        use_master_broker = bool(message.get("use_master_broker", False))
+                        use_control_node_broker = bool(message.get("use_control_node_broker", False))
                         try:
                             await self.session.connect_to_mqtt_broker(
                                 user=message["user"],
@@ -66,11 +66,11 @@ class SocketMessageProcessor:
                                 tls_connection=message["tls_connection"],
                                 allow_certificates=message["allow_certificates"],
                                 reference_geofence=geofence,
-                                use_master_broker=use_master_broker,
+                                use_control_node_broker=use_control_node_broker,
                             )
                         except Exception as exc:
                             detail = str(exc).strip() or exc.__class__.__name__
-                            requested = "the master broker" if use_master_broker else f"MQTT broker {message['client_broker']}:{message['port']}"
+                            requested = "the control node broker" if use_control_node_broker else f"MQTT broker {message['client_broker']}:{message['port']}"
                             self.session.send_runtime_error(f"Failed to connect to {requested}. {detail}")
                             print(f"Failed to connect to the MQTT broker: {traceback.format_exc()}")
                     case "disconnect_from_mqtt_broker":

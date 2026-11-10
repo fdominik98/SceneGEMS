@@ -39,10 +39,10 @@ const FORM = {
 };
 
 describe("connection form migration", () => {
-  it("moves the single-machine stack's profiles to the master broker", () => {
+  it("moves the single-machine stack's profiles to the control node broker", () => {
     for (const legacy of ["local_mqtt_connection", "host_mqtt_connection"]) {
       const migrated = migrate({ ...FORM, selectedPreset: legacy }, 2);
-      expect(migrated.selectedPreset).toBe("master_broker");
+      expect(migrated.selectedPreset).toBe("control_node_broker");
       expect(migrated.user).toBe("u");
       expect(migrated).not.toHaveProperty("state");
     }
@@ -65,10 +65,10 @@ describe("connection form migration", () => {
 });
 
 describe("connect message", () => {
-  it("names the master broker instead of an address", () => {
-    const message = connection.buildConnectMessage({ ...FORM, agentBroker: "", clientBroker: "", selectedPreset: "master_broker" });
-    expect(message).toMatchObject({ type: "connect_to_mqtt_broker", use_master_broker: true });
-    expect(connection.connectionFormIsValid({ ...FORM, agentBroker: "", clientBroker: "", selectedPreset: "master_broker" })).toBe(true);
+  it("names the control node broker instead of an address", () => {
+    const message = connection.buildConnectMessage({ ...FORM, agentBroker: "", clientBroker: "", selectedPreset: "control_node_broker" });
+    expect(message).toMatchObject({ type: "connect_to_mqtt_broker", use_control_node_broker: true });
+    expect(connection.connectionFormIsValid({ ...FORM, agentBroker: "", clientBroker: "", selectedPreset: "control_node_broker" })).toBe(true);
   });
 
   it("sends an external broker's address, trimmed", () => {
@@ -88,7 +88,7 @@ describe("connect message", () => {
       client_broker: "broker.waraps.org",
       port: 8883,
       tls_connection: true,
-      use_master_broker: false,
+      use_control_node_broker: false,
     });
   });
 

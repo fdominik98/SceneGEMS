@@ -6,6 +6,6 @@
     cli/        the campaign command line, `python -m scenegems_tool.assurance` (operator API client)
     pipeline/   the pipeline engine that runs a campaign's cases as jobs (P4.4)
 
-Campaign state lives in the master's database (persistence/stores); this package decides
+Campaign state lives in the control node's database (persistence/stores); this package decides
 what a campaign is and how it advances.
 """

@@ -7,8 +7,8 @@ from scenegems_tool.assurance.campaign.campaign_config import CampaignStep
 from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure
 from scenegems_tool.assurance.pipeline.payload_builder import PayloadBuilder, PayloadError
 from scenegems_tool.assurance.pipeline.stage_graph import EXPLORATION_STEP, JOB_STAGES, STAGE_PRIORITY_OFFSET, StageGraph, stage_priority_offsets
-from scenegems_tool.cluster.node.jobs.job_types import payload_components
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.jobs.job_types import payload_components
 from scenegems_tool.persistence.schema import PipelineStage
 from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict

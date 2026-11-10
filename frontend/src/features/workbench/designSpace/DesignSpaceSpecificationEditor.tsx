@@ -6,10 +6,13 @@ import { describeOperatorError } from "../../../domain/cluster/operatorApi";
 import { normalizeNewlines } from "../../../domain/cluster/presetsApi";
 import { useDesignSpaceDefault } from "../../campaigns/useCampaignData";
 import { ProblemEditor } from "../controls/ProblemEditor";
+import { MetamodelGraph } from "./graphs/MetamodelGraph";
+import { SPECIFICATION_VIEW_KEY, useTextOrGraph } from "./graphs/textOrGraph";
+import { ViewSwitch } from "./graphs/ViewSwitch";
 import "./designSpace.css";
 
-/** What the editor calls the master's default text. */
-export const DEFAULT_SPECIFICATION_LABEL = "the master's default";
+/** What the editor calls the control node's default text. */
+export const DEFAULT_SPECIFICATION_LABEL = "the control node's default";
 
 interface Props {
   value: string;
@@ -17,11 +20,11 @@ interface Props {
   label: string | null;
   /** The text as typed. */
   onEdit: (text: string) => void;
-  /** A loaded text (the master's default, a file) replaces the editor's. */
+  /** A loaded text (the control node's default, a file) replaces the editor's. */
   onLoad: (text: string, label: string) => void;
-  /** The scope the master ships with its default, for a caller whose scope is still empty. */
+  /** The scope the control node ships with its default, for a caller whose scope is still empty. */
   onDefaultScope?: (scope: string) => void;
-  /** Loads the master's default into an empty editor on its own. */
+  /** Loads the control node's default into an empty editor on its own. */
   autoLoadDefault?: boolean;
   disabled?: boolean;
   /** The file name of an export. */
@@ -30,8 +33,10 @@ interface Props {
 
 /**
  * The editor of a design space's specification: the metamodel and the well-formedness constraints
- * (the first part of a FEC specification), with the master's default, a file and an export. The
- * workbench's design space exploration page and the campaign wizard use the same one.
+ * (the first part of a FEC specification), with the control node's default, a file and an export. The
+ * workbench's design space exploration page and the campaign wizard use the same one. "Graph" shows
+ * the metamodel of the text as a class diagram instead of the editor (the choice is kept per browser);
+ * the editor stays mounted meanwhile, so its undo history survives the switch.
  */
 export function DesignSpaceSpecificationEditor({ value, label, onEdit, onLoad, onDefaultScope, autoLoadDefault = false, disabled = false, exportName = "design_space.problem" }: Props) {
   const fileInput = useRef<HTMLInputElement | null>(null);
@@ -39,20 +44,21 @@ export function DesignSpaceSpecificationEditor({ value, label, onEdit, onLoad, o
   const shipped = defaults.data ?? null;
   const missing = defaults.isSuccess && shipped === null;
   const empty = value.trim().length === 0;
+  const [view, setView] = useTextOrGraph(SPECIFICATION_VIEW_KEY, "text");
 
   const loadDefault = (ask: boolean) => {
     if (shipped === null) {
       return;
     }
     const unchanged = label === DEFAULT_SPECIFICATION_LABEL && normalizeNewlines(value) === normalizeNewlines(shipped.specification);
-    if (ask && !empty && !unchanged && !window.confirm("Replace the text in the editor with the master's default?")) {
+    if (ask && !empty && !unchanged && !window.confirm("Replace the text in the editor with the control node's default?")) {
       return;
     }
     onLoad(normalizeNewlines(shipped.specification), DEFAULT_SPECIFICATION_LABEL);
     onDefaultScope?.(shipped.scope);
   };
 
-  // An empty editor starts from the master's default, once it is known.
+  // An empty editor starts from the control node's default, once it is known.
   const autoLoaded = useRef(false);
   useEffect(() => {
     if (!autoLoadDefault || autoLoaded.current || shipped === null || !empty) {
@@ -66,10 +72,11 @@ export function DesignSpaceSpecificationEditor({ value, label, onEdit, onLoad, o
   return (
     <div className="design-space-editor">
       <div className="toolbar-row">
+        <ViewSwitch label="Show the specification as" value={view} onChange={setView} />
         <button
           type="button"
           disabled={disabled || shipped === null}
-          title={shipped === null ? (missing ? "This master ships no default design space" : "Reading the master's default...") : "Put the master's default metamodel, constraints and scope into the editor"}
+          title={shipped === null ? (missing ? "This control node ships no default design space" : "Reading the control node's default...") : "Put the control node's default metamodel, constraints and scope into the editor"}
           onClick={() => loadDefault(true)}
         >
           Load the default
@@ -99,16 +106,19 @@ export function DesignSpaceSpecificationEditor({ value, label, onEdit, onLoad, o
       </div>
       {missing && empty ? (
         <p className="meta" role="status">
-          This master ships no default design space (it is older than the design space exploration). Write the metamodel and the constraints here, or open a
+          This control node ships no default design space (it is older than the design space exploration). Write the metamodel and the constraints here, or open a
           .problem file.
         </p>
       ) : null}
       {defaults.isError ? (
         <p className="meta warning" role="status">
-          The master's default could not be read: {describeOperatorError(defaults.error)}
+          The control node's default could not be read: {describeOperatorError(defaults.error)}
         </p>
       ) : null}
-      <ProblemEditor value={value} onChange={disabled ? undefined : onEdit} readOnly={disabled} ariaLabel="Metamodel and well-formedness constraints" />
+      <div className="design-space-editor-body" hidden={view !== "text"}>
+        <ProblemEditor value={value} onChange={disabled ? undefined : onEdit} readOnly={disabled} ariaLabel="Metamodel and well-formedness constraints" />
+      </div>
+      {view === "graph" ? <MetamodelGraph text={value} /> : null}
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { useCampaignEvents } from "./useCampaignFeed";
 
 const { listEvents, client } = vi.hoisted(() => {
   const listEvents = vi.fn();
-  return { listEvents, client: { baseUrl: "http://master", listEvents } }; // one client for every render, as the real hook memoizes it
+  return { listEvents, client: { baseUrl: "http://control-node", listEvents } }; // one client for every render, as the real hook memoizes it
 });
 vi.mock("../campaigns/useCampaignData", () => ({
   useOperatorClient: () => client,
@@ -38,7 +38,7 @@ describe("useCampaignEvents", () => {
     expect(forward.every((filters) => filters.newest === undefined)).toBe(true);
   });
 
-  it("falls back to paging from event 0 when the master ignores newest", async () => {
+  it("falls back to paging from event 0 when the control node ignores newest", async () => {
     listEvents.mockReset();
     const everything = Array.from({ length: 250 }, (_, index) => event(index + 1));
     listEvents.mockImplementation(async (_id: string, filters: { after?: number; limit?: number }) => ({

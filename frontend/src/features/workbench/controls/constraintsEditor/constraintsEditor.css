@@ -148,7 +148,9 @@
 }
 
 .ce-number {
-  width: 12em;
+  /* A full precision value such as 0.03490658503988659 fits */
+  width: calc(20ch + 2 * var(--control-pad-x) + 2px);
+  max-width: 100%;
   text-align: right;
 }
 

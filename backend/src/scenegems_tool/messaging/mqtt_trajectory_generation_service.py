@@ -80,7 +80,7 @@ class MqttTrajectoryGenerationService(MqttClient):
             )
             with self._tasks_lock:
                 if self.max_workers == 1:
-                    # Single worker: a new request supersedes whatever the pool holds. On a node the slot
+                    # Single worker: a new request supersedes whatever the pool holds. On a worker node the slot
                     # table allows one lease at a time, so that is only ever a search whose job has ended.
                     for event in self._cancel_events.values():
                         event.set()

@@ -5,9 +5,9 @@ import { saveBlob } from "../components/saveBlob";
 import { usePlaybackTicker } from "../domain/playback/usePlaybackTicker";
 import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../domain/playback/playbackStore";
 import { PlaybackStoreContext } from "../domain/playback/playbackContext";
-import { useNodesStore } from "../domain/cluster/nodesStore";
+import { useWorkerNodesStore } from "../domain/cluster/workerNodesStore";
 import { getClassContent } from "../domain/cluster/presetsApi";
-import { useOperatorClient } from "../features/campaigns/useCampaignData";
+import { useCatalogClasses, useOperatorClient } from "../features/campaigns/useCampaignData";
 import { useClusterDomain } from "../features/domain/useClusterDomain";
 import { sceneInputSpecification } from "../features/workbench/pages/inputSpecification";
 import { useEditorLoads, type EditorLoad } from "../features/workbench/controls/useEditorLoads";
@@ -29,6 +29,8 @@ import { SceneGenerationControls } from "../features/workbench/controls/SceneGen
 import { SceneGenerationSidebar } from "../features/workbench/controls/SceneGenerationSidebar";
 import { SceneMonitorPreview } from "../features/workbench/controls/SceneMonitorPreview";
 import { runBatchGeneration } from "../features/workbench/controls/runBatchGeneration";
+import { catalogText } from "../features/workbench/controls/catalogTexts";
+import { placeOfInput } from "../features/workbench/controls/sceneSelection";
 import { TrajectoryGenerationControls } from "../features/workbench/controls/TrajectoryGenerationControls";
 import { TrajectoryMonitorSidebar } from "../features/workbench/controls/TrajectoryMonitorSidebar";
 import { MqttBrokerPanel } from "../features/workbench/connection/MqttBrokerPanel";
@@ -47,7 +49,7 @@ import { sendToScenePage, useSceneSpecificationHandoff } from "../features/workb
 import { useExplorationPageStore } from "../features/workbench/pages/pageStore";
 import { SceneCanvas } from "../features/workbench/scene/SceneCanvas";
 import { WorkbenchEncounterStrip } from "../features/workbench/monitor/WorkbenchEncounterPanels";
-import { useBatchGenerationStore } from "../domain/sceneGeneration/batchGenerationStore";
+import { sceneSelectionMode, useBatchGenerationStore } from "../domain/sceneGeneration/batchGenerationStore";
 import {
   formatScenarioJsonForExport,
   parseScenarioFile,
@@ -63,9 +65,9 @@ interface WorkbenchSectionProps {
 
 /**
  * The workbench section: scene and trajectory generation, simulation and connections over the
- * workbench gateway socket of the active cluster's master-api. Its view is the `workbenchView` of `uiStore`. The
+ * workbench gateway socket of the active cluster's control-node-api. Its view is the `workbenchView` of `uiStore`. The
  * domain configuration is the active cluster's (the Domain Configuration section edits it), and
- * the functional scenarios to start from are the master's catalog.
+ * the functional scenarios to start from are the control node's catalog.
  */
 export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const RIGHT_PANE_MIN_WIDTH = 300;
@@ -93,14 +95,17 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const setError = usePlaybackStore((s) => s.setError);
   const activeSceneGenerationRequestId = useScenePlaybackStore((s) => s.activeSceneGenerationRequestId);
   const batchGenerationRunning = useBatchGenerationStore((s) => s.running);
+  // The catalog FECs selected on the scene page: none runs the editor's text, one a single scene of it, several a batch.
   const selectedBatchClassIds = useBatchGenerationStore((s) => s.selectedClassIds);
-  const sceneGenerationTab = useUiStore((s) => s.sceneGenerationTab);
+  const sceneSelection = sceneSelectionMode(selectedBatchClassIds.length);
+  // The one selected FEC's text while it is read for its run.
+  const [singleFecLoading, setSingleFecLoading] = useState<string | null>(null);
   const sceneGenerationLivePreview = useUiStore((s) => s.sceneGenerationLivePreview);
   const setSceneGenerationLivePreview = useUiStore((s) => s.setSceneGenerationLivePreview);
   const sceneGenerationPaneView = useUiStore((s) => s.sceneGenerationPaneView);
   const setSceneGenerationPaneView = useUiStore((s) => s.setSceneGenerationPaneView);
   const isSceneGenerationBusy =
-    activeSceneGenerationRequestId !== null || batchGenerationRunning;
+    activeSceneGenerationRequestId !== null || batchGenerationRunning || singleFecLoading !== null;
   const latestGeneratedScene = useScenePlaybackStore((s) => s.latestGeneratedScene);
   const explorationStatus = useExplorationPageStore((s) => s.status);
   const explorationRunning = useExplorationStore((s) => s.running !== null);
@@ -128,12 +133,18 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const [isResizingBottomPanel, setIsResizingBottomPanel] = useState(false);
   const activeView = useUiStore((s) => s.workbenchView);
   const setActiveView = useUiStore((s) => s.setWorkbenchView);
-  // The cluster's domain configuration, global for the cluster and kept on the master.
+  // The cluster's domain configuration, global for the cluster and kept on the control node.
   const clusterDomain = useClusterDomain();
   const colregsConstraintsText = clusterDomain.data?.colregs_constants ?? "";
   const vesselTypesText = clusterDomain.data?.vessel_types ?? "";
   const obstacleTypesText = clusterDomain.data?.obstacle_types ?? "";
   const operatorClient = useOperatorClient();
+  // Which labels are catalog FECs, so an opened scene of one selects it rather than filling the editor.
+  const catalogClasses = useCatalogClasses();
+  const catalogIdsRef = useRef<ReadonlySet<string> | null>(null);
+  useEffect(() => {
+    catalogIdsRef.current = catalogClasses.data === undefined ? null : new Set(catalogClasses.data.items.map((entry) => entry.fec_id));
+  }, [catalogClasses.data]);
   const [functionalSpecText, setFunctionalSpecText] = usePersistedState("functional-spec-text", "");
   // What the scene page calls its functional scenario: the preset or file it came from.
   const [functionalSpecLabel, setFunctionalSpecLabel] = usePersistedState<string | null>("functional-spec-label", null);
@@ -150,11 +161,11 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const simulationCenterRef = useRef<HTMLDivElement | null>(null);
   const previousViewRef = useRef<WorkbenchView>("simulation");
 
-  /** A functional scenario of the master's catalog, by class id. */
+  /** A functional scenario of the control node's catalog, by class id. */
   const loadScenarioText = useCallback(
     async (classId: string): Promise<string> => {
       if (operatorClient === null) {
-        throw new Error("Select a cluster first: the functional scenarios come from its master.");
+        throw new Error("Select a cluster first: the functional scenarios come from its control node.");
       }
       return getClassContent(operatorClient, classId);
     },
@@ -173,7 +184,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     previousViewRef.current = activeView;
   }, [activeView, requestAutoFit]);
 
-  // Auto-connect to the configured MQTT broker (the master's by default) once the server
+  // Auto-connect to the configured MQTT broker (the control node's by default) once the server
   // socket connects, so a reconnect or refresh re-establishes the session hands-free.
   useEffect(() => {
     const attemptAutoConnect = () => {
@@ -218,36 +229,54 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   // again once the gateway is connected (the live session needs it) and the domain configuration
   // and the machines are known (the cluster's monitor judges the preview). Once per page load.
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
-  const nodesKnown = useNodesStore((s) => s.loaded || s.unreachable);
+  const workerNodesKnown = useWorkerNodesStore((s) => s.loaded || s.unreachable);
   const domainKnown = clusterDomain.data !== undefined || clusterDomain.isError;
   const inputRestoreTriedRef = useRef(false);
   useEffect(() => {
-    if (inputRestoreTriedRef.current || streamStatus !== "connected" || !nodesKnown || !domainKnown) {
+    if (inputRestoreTriedRef.current || streamStatus !== "connected" || !workerNodesKnown || !domainKnown) {
       return;
     }
     inputRestoreTriedRef.current = true;
     void streamControlsRef.current.restoreSimulationInput(colregsTextRef.current);
-  }, [domainKnown, nodesKnown, streamStatus]);
+  }, [domainKnown, workerNodesKnown, streamStatus]);
 
   // Only the latest load into the editor counts; while it runs the scenario list shows the pick and generating
   // waits, so a generation never pairs the old text with the new name (useEditorLoads.ts).
+  // A text put into the editor from outside (a file, a hand-off, a loaded scene's scenario) shows the editor: the selection is cleared.
   const applyEditorLoad = useCallback(
     (loaded: EditorLoad) => {
       setFunctionalSpecText(loaded.text);
       setFunctionalSpecLabel(loaded.label);
       setSceneGenerationError(null);
+      useBatchGenerationStore.getState().clearSelectedClassIds();
     },
     [setFunctionalSpecLabel, setFunctionalSpecText]
   );
   const { pending: pendingLoad, load: loadIntoEditor, cancel: cancelEditorLoads } = useEditorLoads(applyEditorLoad, setSceneGenerationError);
 
-  // A scene loaded on the scene page brings its functional scenario into the editor, so it can be generated again or changed.
+  // A scene loaded on the scene page brings its functional scenario along, so it can be generated again or changed: a catalog
+  // FEC is selected in the list, any other scenario goes into the editor (sceneSelection.placeOfInput).
   const loadInputSpecification = useCallback(
     (target: WorkbenchTarget) => {
       if (target.page !== "sceneGeneration" || operatorClient === null) {
         return;
       }
-      loadIntoEditor(null, () => sceneInputSpecification(operatorClient, target), "The scene's functional scenario could not be loaded");
+      loadIntoEditor(
+        null,
+        async () => {
+          const spec = await sceneInputSpecification(operatorClient, target);
+          if (spec === null) {
+            return null;
+          }
+          const place = placeOfInput(spec, catalogIdsRef.current);
+          if (place.kind === "select") {
+            useBatchGenerationStore.getState().setSelectedClassIds([place.classId]);
+            return null;
+          }
+          return spec;
+        },
+        "The scene's functional scenario could not be loaded"
+      );
     },
     [loadIntoEditor, operatorClient]
   );
@@ -301,13 +330,15 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
 
   // Outputs other sections open here (`openInWorkbench`), and the pages' loaded entries after a reload.
   const openTarget = useCallback(
-    (target: WorkbenchTarget) => {
+    (target: WorkbenchTarget, options: { keepInput?: boolean } = {}) => {
       if (target.page === "simulation") {
         usePlaybackStore.getState().requestAutoFit();
       }
       loadExplorationInput(target);
-      // A live entry's scenario is known before its scene is: it loads into the editor too
-      loadInputSpecification(target);
+      // A live entry's scenario is known before its scene is: it loads too. A batch row's scene keeps the selection of the batch.
+      if (!options.keepInput) {
+        loadInputSpecification(target);
+      }
       void streamControlsRef.current.openTarget(target, colregsTextRef.current);
     },
     [loadExplorationInput, loadInputSpecification]
@@ -464,7 +495,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   }, [scenarioSourceName, setActiveView]);
 
   const runSceneGeneration = useCallback(
-    async (specText: string) => {
+    async (specText: string, label: string) => {
       if (!domainReadyForGeneration) {
         return { ok: false, message: domainProblem };
       }
@@ -472,7 +503,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       setLoadedScenarioFileContent(null);
       const requestId = crypto.randomUUID();
       const outcome = await streamControls.generateScene(requestId, {
-        label: functionalSpecLabel ?? "functional scenario",
+        label,
         functionalScenarioContent: specText,
         colregsConstraintsContent: colregsConstraintsText,
         vesselTypesContent: vesselTypesText,
@@ -494,7 +525,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       domainProblem,
       domainReadyForGeneration,
       enforceLowTcpa,
-      functionalSpecLabel,
       obstacleTypesText,
       sceneGenerationTimeoutSeconds,
       streamControls,
@@ -655,17 +685,16 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                   <SceneGenerationControls
                     resources={sceneGenerationResources}
                     busy={isSceneGenerationBusy}
-                    batch={sceneGenerationTab === "batch"}
-                    batchCount={selectedBatchClassIds.length}
+                    selectedFecs={selectedBatchClassIds}
                     scenarioLabel={functionalSpecLabel}
                     hasScenario={functionalSpecText.trim().length > 0}
-                    loadingLabel={pendingLoad !== null ? (pendingLoad.label ?? "the scene's scenario") : null}
+                    loadingLabel={singleFecLoading ?? (pendingLoad !== null ? (pendingLoad.label ?? "the scene's scenario") : null)}
                     domainProblem={domainReadyForGeneration ? null : domainProblem}
                     specificationHidden={sceneGenerationPaneView === "monitor"}
                     onShowSpecification={() => setSceneGenerationPaneView("specification")}
                     onGenerate={() => {
                       setSceneGenerationError(null);
-                      if (sceneGenerationTab === "batch") {
+                      if (sceneSelection === "batch") {
                         void runBatchGeneration({
                           selectedClassIds: selectedBatchClassIds,
                           loadScenarioText,
@@ -676,7 +705,23 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                         return;
                       }
                       void (async () => {
-                        const outcome = await runSceneGeneration(functionalSpecText);
+                        // One selected FEC runs as a single scene under its id; none runs the editor's text.
+                        let specText = functionalSpecText;
+                        let label = functionalSpecLabel ?? "functional scenario";
+                        if (sceneSelection === "single") {
+                          const classId = selectedBatchClassIds[0];
+                          setSingleFecLoading(classId);
+                          try {
+                            specText = await catalogText(loadScenarioText, classId);
+                            label = classId;
+                          } catch (error) {
+                            setSceneGenerationError(`The FEC ${classId} could not be read: ${error instanceof Error ? error.message : String(error)}`);
+                            return;
+                          } finally {
+                            setSingleFecLoading(null);
+                          }
+                        }
+                        const outcome = await runSceneGeneration(specText, label);
                         if (!outcome.ok && !outcome.superseded) {
                           setSceneGenerationError(outcome.message ?? "Scene generation failed.");
                         } else if (outcome.ok) {
@@ -800,9 +845,13 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                   setFunctionalSpecText(text);
                   setFunctionalSpecLabel((label) => (label === null || label.endsWith(" (edited)") ? label : `${label} (edited)`));
                 }}
-                onLoadFunctionalSpecFromPreset={(classId) =>
-                  loadIntoEditor(classId, async () => ({ label: classId, text: await loadScenarioText(classId) }), "The functional scenario could not be loaded")
-                }
+                onEditCopy={(label, text) => {
+                  cancelEditorLoads();
+                  setFunctionalSpecText(text);
+                  setFunctionalSpecLabel(label);
+                  setSceneGenerationError(null);
+                  useBatchGenerationStore.getState().clearSelectedClassIds();
+                }}
                 loadScenarioText={loadScenarioText}
                 onLoadFunctionalSpecFromFile={(file) =>
                   loadIntoEditor(file.name, async () => ({ label: file.name, text: await readTextFile(file) }), "The file could not be read")
@@ -818,7 +867,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                     setLoadedScenarioFileContent(null);
                     setScenarioSourceName(null);
                     setSceneGenerationError(null);
-                    openTarget(target);
+                    openTarget(target, { keepInput: true });
                     return;
                   }
                   setVisualizedScenario({ scene, evaluationData, valid: true });

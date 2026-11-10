@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DomainSection } from "./DomainSection";
 import { useDomainDraftStore } from "./domainDraftStore";
 
-// The Domain Configuration section against a fake operator API: the cluster's configuration and the master's presets.
+// The Domain Configuration section against a fake operator API: the cluster's configuration and the control node's presets.
 
 const GENERAL = "SAFE_DISTANCE: 400\n";
 const WARA_PS = "SAFE_DISTANCE: 250\n";
@@ -80,13 +80,13 @@ afterEach(() => {
 describe("the Domain Configuration section", () => {
   it("shows the cluster's configuration with the preset it matches", async () => {
     renderSection();
-    expect(await screen.findByText(/Not saved yet: the master's default presets apply/)).toBeVisible();
+    expect(await screen.findByText(/Not saved yet: the control node's default presets apply/)).toBeVisible();
     const select = await screen.findByRole("combobox", { name: /Load a preset of the COLREGS constants/ });
     await waitFor(() => expect(select).toHaveValue("general_maritime_constants"));
     expect(screen.getByRole("button", { name: "Save to the cluster" })).toBeDisabled();
   });
 
-  it("saves a preset chosen from the master for the whole cluster", async () => {
+  it("saves a preset chosen from the control node for the whole cluster", async () => {
     const user = userEvent.setup();
     renderSection();
     const select = await screen.findByRole("combobox", { name: /Load a preset of the COLREGS constants/ });
@@ -96,11 +96,11 @@ describe("the Domain Configuration section", () => {
     await user.click(screen.getByRole("button", { name: "Save to the cluster" }));
     await waitFor(() => expect(posted).toHaveLength(1));
     expect(posted[0]).toEqual({ colregs_constants: WARA_PS, vessel_types: PRESETS.vessel_types[0].content, obstacle_types: PRESETS.obstacle_types[0].content });
-    expect(await screen.findByText(/Saved on the master/)).toBeVisible();
+    expect(await screen.findByText(/Saved on the control node/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Save to the cluster" })).toBeDisabled();
   });
 
-  it("keeps the draft and lists the reasons when the master refuses it", async () => {
+  it("keeps the draft and lists the reasons when the control node refuses it", async () => {
     saveStatus = 422;
     const user = userEvent.setup();
     renderSection();
@@ -128,7 +128,7 @@ describe("the Domain Configuration section", () => {
     const [clusterUrl, sent] = Object.entries(useDomainDraftStore.getState().drafts)[0];
     act(() => useDomainDraftStore.getState().setTexts(clusterUrl, { ...sent, vessel_types: "Tug: {}\n" }));
     release();
-    expect(await screen.findByText(/Saved on the master/)).toBeVisible();
+    expect(await screen.findByText(/Saved on the control node/)).toBeVisible();
     expect(useDomainDraftStore.getState().drafts[clusterUrl]?.vessel_types).toBe("Tug: {}\n");
     expect(screen.getByText(/You have unsaved changes/)).toBeVisible();
   });
@@ -157,7 +157,7 @@ describe("the Domain Configuration section", () => {
     await waitFor(() => expect(screen.getByRole("combobox", { name: /Load a preset of the Static obstacle types/ })).toHaveValue("static_obstacle_types"));
   });
 
-  it("says when the master keeps no configuration of its own", async () => {
+  it("says when the control node keeps no configuration of its own", async () => {
     domain = { ...domain, editable: false };
     renderSection();
     expect(await screen.findByText(/runs without its database/)).toBeVisible();

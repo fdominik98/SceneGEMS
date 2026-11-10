@@ -25,7 +25,7 @@ async function fetchOne(client: TextClient, fec: ExploredFec, fetchImpl?: typeof
     return known;
   }
   if (fec.artifact === null) {
-    store.textFailed(fec.fecId, "The master names no text for this FEC.");
+    store.textFailed(fec.fecId, "The control node names no text for this FEC.");
     return null;
   }
   const campaignId = store.campaignId;

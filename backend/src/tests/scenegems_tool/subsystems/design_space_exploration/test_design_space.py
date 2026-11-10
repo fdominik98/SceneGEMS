@@ -1,4 +1,4 @@
-"""The scope's syntax, the default specification and the counts of a generated model."""
+"""The scope's syntax, the default specification, and the counts and object names of a generated model."""
 
 from pathlib import Path
 
@@ -9,6 +9,7 @@ from scenegems_tool.assurance.campaign import class_catalog
 from scenegems_tool.subsystems.design_space_exploration.design_space import (
     DEFAULT_SCOPE,
     ScopeError,
+    catalog_object_names,
     count_instances,
     default_specification,
     exploration_hash,
@@ -75,6 +76,51 @@ def test_a_generated_model_counts_and_parses_as_a_catalog_fec_does():
     assert count_instances(model) == class_catalog.count_instances(model) == (3, 1)
     scenario = ModelParser.parse_problem(model)
     assert scenario.vessel_number == 3 and scenario.obstacle_number == 1
+
+
+def test_the_objects_the_generator_named_get_the_names_of_the_catalog():
+    model = (DATA / "generated_model.problem").read_text(encoding="utf-8")
+    specification, generated = model.split("declare", 1)
+    named = catalog_object_names(model)
+    assert named == specification + "declare" + generated.replace("tS1", "ts1").replace("tS2", "ts2").replace("staticObstacle1", "obst1")
+    assert "declare os.\ndeclare ts1, obst1, ts2.\n" in named
+    for line in ("TS(ts1).", "StaticObstacle(obst1).", "overtakingToPort(ts1, os).", "atDangerousHeadOnSectorOf(obst1, os).", "headOn(ts2, os).", "!exists(TS::new)."):
+        assert f"\n{line}\n" in named
+    # the same FEC as before, and nothing left to rename
+    assert count_instances(named) == (3, 1)
+    assert ModelParser.parse_problem(named).fec_shape_hash() == ModelParser.parse_problem(model).fec_shape_hash()
+    assert catalog_object_names(named) == named
+
+
+def test_the_specification_before_the_model_keeps_its_names():
+    model = "class TS.\npred near(TS tS1, TS tS2) <-> tS1 != tS2.\ndeclare tS1, tS2.\nTS(tS1).\nTS(tS2).\nnear(tS1, tS2).\n"
+    assert catalog_object_names(model) == "class TS.\npred near(TS tS1, TS tS2) <-> tS1 != tS2.\ndeclare ts1, ts2.\nTS(ts1).\nTS(ts2).\nnear(ts1, ts2).\n"
+
+
+def test_an_object_keeps_its_name_when_the_catalog_name_is_taken():
+    model = "class TS.\nclass StaticObstacle.\ndeclare ts1.\ndeclare tS1, tS2, staticObstacle1.\nTS(ts1).\nTS(tS1).\nTS(tS2).\nStaticObstacle(staticObstacle1).\n"
+    assert catalog_object_names(model) == "class TS.\nclass StaticObstacle.\ndeclare ts1.\ndeclare tS1, ts2, obst1.\nTS(ts1).\nTS(tS1).\nTS(ts2).\nStaticObstacle(obst1).\n"
+
+
+def test_only_names_the_generator_gives_an_object_of_a_class_of_the_text_change():
+    model = (
+        "abstract class Item.\nclass Buoy extends Item.\nclass OSPassenger.\nclass AIS.\n"
+        "declare alpha, tS1, buoy1, oSPassenger2, aIS1, tSx.\n"
+        "Buoy(alpha).\nTS(tS1).\nBuoy(buoy1).\nOSPassenger(oSPassenger2).\nAIS(aIS1).\nBuoy(tSx).\nnext(aIS1, oSPassenger2).\n"
+    )
+    assert catalog_object_names(model) == (
+        "abstract class Item.\nclass Buoy extends Item.\nclass OSPassenger.\nclass AIS.\n"
+        "declare alpha, tS1, buoy1, osPassenger2, ais1, tSx.\n"
+        "Buoy(alpha).\nTS(tS1).\nBuoy(buoy1).\nOSPassenger(osPassenger2).\nAIS(ais1).\nBuoy(tSx).\nnext(ais1, osPassenger2).\n"
+    )
+
+
+def test_a_text_without_a_model_and_a_catalog_fec_stay_as_they_are():
+    assert catalog_object_names("class TS.\nclass StaticObstacle.\n") == "class TS.\nclass StaticObstacle.\n"
+    assert catalog_object_names(default_specification()) == default_specification()
+    for scenario_class in {scenario_class.folder: scenario_class for scenario_class in class_catalog.ClassCatalog.default()}.values():
+        content = scenario_class.read_content()
+        assert catalog_object_names(content) == content, scenario_class.class_id
 
 
 def test_the_counts_agree_with_the_catalog_for_every_family():

@@ -53,7 +53,7 @@ def test_a_section_that_cannot_be_explored_is_refused_with_the_reason(section, r
     assert any(reason in found for found in refused.value.reasons), refused.value.reasons
 
 
-def test_a_section_without_a_specification_explores_the_one_the_master_ships():
+def test_a_section_without_a_specification_explores_the_one_the_control_node_ships():
     from scenegems_tool.subsystems.design_space_exploration.design_space import default_specification
 
     config = campaign_config_from_dict(exploring(section={"scope": "TS = 2"}))

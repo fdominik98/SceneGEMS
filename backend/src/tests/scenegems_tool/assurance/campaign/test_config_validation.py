@@ -5,7 +5,7 @@ import pytest
 
 from scenegems_tool.assurance.campaign import CampaignConfigRejected, ClassCatalog, campaign_config_from_dict, load_campaign_config, validate_campaign_config
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
-from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import AssuranceStores, ClassSpec
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry

@@ -52,9 +52,9 @@ def resolve_mqtt_broker_endpoints(
     *,
     tls_connection: bool,
 ) -> tuple[str, str, int]:
-    """Resolve a broker address the user typed into one master-api's container can dial.
+    """Resolve a broker address the user typed into one control-node-api's container can dial.
 
-    A loopback address means "the master's machine", which from inside the container is the
+    A loopback address means "the control node's machine", which from inside the container is the
     Docker host gateway, not the container itself. Rewriting it to `host.docker.internal`
     keeps brokers published on that machine's ports reachable, such as the OTG stack's. A
     TLS broker keeps its name, which its certificate is checked against. The port is
@@ -75,11 +75,11 @@ class MQttConnectionInfo:
 
     Plain MQTT is the default (the workbench). With `tls_connection` and a
     `ca_certificate_path`, the broker's certificate and host name are verified against that
-    CA, which is how cluster clients reach the master's broker. TLS without a CA keeps the
+    CA, which is how cluster clients reach the control node's broker. TLS without a CA keeps the
     workbench's behaviour for external brokers such as WARA-PS: the system trust store, or
     no verification when `allow_certificates` is set.
 
-    `topic_prefix` is the instance scope on a shared broker (cluster/node/instance_scope.py);
+    `topic_prefix` is the instance scope on a shared broker (cluster/worker_node/instance_scope.py);
     it is empty for the workbench.
     """
 

@@ -57,7 +57,7 @@ describe("sceneInputSpecification", () => {
     expect(paths).toEqual(["/cluster/campaigns/wb1/cases/3", `/cluster/artifacts/${SHA}`]);
   });
 
-  it("reads a catalog class's functional scenario from the master's catalog", async () => {
+  it("reads a catalog class's functional scenario from the control node's catalog", async () => {
     const { client, fetch, paths } = operator(caseView("3vessel_0obstacle_scenarios/fec5", null));
     expect(await sceneInputSpecification(client, { campaignId: "wb1", caseId: 3 }, { fetch })).toEqual({
       label: "3vessel_0obstacle_scenarios/fec5",
@@ -66,7 +66,7 @@ describe("sceneInputSpecification", () => {
     expect(paths[1]).toBe("/cluster/catalog/fecs/3vessel_0obstacle_scenarios/fec5");
   });
 
-  it("has none for an item class or a master that does not name the input", async () => {
+  it("has none for an item class or a control node that does not name the input", async () => {
     expect(await sceneInputSpecification(operator(caseView("item/0", SHA)).client, { campaignId: "wb1", caseId: 3 })).toBeNull();
     const older = caseView("scenario/head_on", null);
     delete (older as Partial<typeof older>).input_artifact;

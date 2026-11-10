@@ -1,9 +1,10 @@
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 import type { EvaluationData, GeneratedSceneData, SimulationFrame } from "../simulation/types";
 import { hasExceededEvaluationTimeout, evaluationTimeBaseline } from "./evaluationTime";
 
 export interface BatchRunResult {
-  /** The functional scenario's class in the master's catalog. */
+  /** The functional scenario's class in the control node's catalog. */
   classId: string;
   label: string;
   requestId: string;
@@ -33,7 +34,10 @@ const TERMINAL_STATUSES: BatchRunResult["status"][] = [
 
 interface BatchGenerationState {
   results: BatchRunResult[];
-  /** Class ids of the master's catalog to generate a scene for. */
+  /**
+   * The FECs of the control node's catalog the scene page generates: none (the editor's text), one (a single
+   * scene of it) or several (a batch, a case each). Kept per browser.
+   */
   selectedClassIds: string[];
   running: boolean;
   batchTimeoutSeconds: number | null;
@@ -42,6 +46,8 @@ interface BatchGenerationState {
   setSelectedClassIds: (classIds: string[]) => void;
   toggleSelectedClassId: (classId: string) => void;
   clearSelectedClassIds: () => void;
+  /** Drops the selected classes the catalog no longer has, once the catalog is known. */
+  keepKnownSelection: (known: ReadonlySet<string>) => void;
   setRunning: (running: boolean) => void;
   setBatchTimeoutSeconds: (seconds: number | null) => void;
   clearResults: () => void;
@@ -55,7 +61,12 @@ interface BatchGenerationState {
   markAllBatchStopped: () => void;
 }
 
-export const useBatchGenerationStore = create<BatchGenerationState>((set, get) => ({
+/** Where the selection is kept per browser. */
+export const SCENE_SELECTION_STORAGE_KEY = "scenegems:scene-generation-selection";
+
+export const useBatchGenerationStore = create<BatchGenerationState>()(
+  persist(
+    (set, get) => ({
   results: [],
   selectedClassIds: [],
   running: false,
@@ -73,7 +84,12 @@ export const useBatchGenerationStore = create<BatchGenerationState>((set, get) =
       else selected.add(classId);
       return { selectedClassIds: Array.from(selected) };
     }),
-  clearSelectedClassIds: () => set({ selectedClassIds: [] }),
+  clearSelectedClassIds: () => set((state) => (state.selectedClassIds.length === 0 ? state : { selectedClassIds: [] })),
+  keepKnownSelection: (known) =>
+    set((state) => {
+      const kept = state.selectedClassIds.filter((classId) => known.has(classId));
+      return kept.length === state.selectedClassIds.length ? state : { selectedClassIds: kept };
+    }),
   setRunning: (running) => set({ running }),
   setBatchTimeoutSeconds: (seconds) => set({ batchTimeoutSeconds: seconds }),
   clearResults: () => set({ results: [], batchRequestIds: new Set(), batchTimeoutSeconds: null }),
@@ -143,4 +159,23 @@ export const useBatchGenerationStore = create<BatchGenerationState>((set, get) =
           : r
       ),
     })),
-}));
+    }),
+    {
+      name: SCENE_SELECTION_STORAGE_KEY,
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ selectedClassIds: state.selectedClassIds }),
+      merge: (persisted, current) => {
+        const stored = (persisted as { selectedClassIds?: unknown } | undefined)?.selectedClassIds;
+        return { ...current, selectedClassIds: Array.isArray(stored) ? stored.filter((id): id is string => typeof id === "string") : current.selectedClassIds };
+      },
+    }
+  )
+);
+
+/** What a run of this many selected FECs does: the editor's text, one scene of the FEC, or a batch. */
+export type SceneSelectionMode = "editor" | "single" | "batch";
+
+export function sceneSelectionMode(selectedCount: number): SceneSelectionMode {
+  return selectedCount === 0 ? "editor" : selectedCount === 1 ? "single" : "batch";
+}

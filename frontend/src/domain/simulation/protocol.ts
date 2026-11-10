@@ -516,7 +516,7 @@ export type ParsedServerMessage =
       groundControlPortsByAgentId: Record<string, number>;
     }
   | { kind: "stack_options"; options: StackOptionsPayload }
-  | { kind: "mqtt_broker_status"; status: "connected" | "disconnected"; masterBroker: string | null }
+  | { kind: "mqtt_broker_status"; status: "connected" | "disconnected"; controlNodeBroker: string | null }
   | { kind: "monitor_status"; status: "connected" | "disconnected" }
   | {
       kind: "run_recording";
@@ -577,7 +577,7 @@ const ackSchema = z.object({
 const mqttBrokerStatusSchema = z.object({
   type: z.literal("mqtt_broker_status"),
   status: z.enum(["connected", "disconnected"]),
-  masterBroker: z.string().nullable().optional(),
+  controlNodeBroker: z.string().nullable().optional(),
 });
 
 const monitorStatusSchema = z.object({
@@ -799,7 +799,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
     return {
       kind: "mqtt_broker_status",
       status: parsed.status,
-      masterBroker: parsed.masterBroker ?? null,
+      controlNodeBroker: parsed.controlNodeBroker ?? null,
     };
   }
   if (msgType === "monitor_status") {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sampleNode } from "../../test/fixtures/clusterViews";
+import { sampleWorkerNode } from "../../test/fixtures/clusterViews";
 import {
   COMPONENTS,
   componentLabel,
@@ -13,14 +13,14 @@ import {
   simulationPayloadComponents,
   staleComponents,
 } from "./components";
-import { nodeViewSchema } from "./schemas";
+import { workerNodeViewSchema } from "./schemas";
 
 const GAZEBO = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
 const CUSTOM = ["asv_software/replay", "control_layer/custom", "simulation_layer/gazebo"];
 
-function nodeWith(components: [string, "usable" | "out_of_date"][], slots: Record<string, number> = { simulation: 2 }) {
-  return nodeViewSchema.parse(
-    sampleNode({
+function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots: Record<string, number> = { simulation: 2 }) {
+  return workerNodeViewSchema.parse(
+    sampleWorkerNode({
       slots: Object.fromEntries(Object.entries(slots).map(([jobType, count]) => [jobType, { slots: count, slots_in_use: 0 }])),
       components: components.map(([component, state]) => ({ component, images: [], state })),
     })
@@ -61,7 +61,7 @@ describe("the component catalog", () => {
     ]);
   });
 
-  it("derives a job's components from its payload as the master does", () => {
+  it("derives a job's components from its payload as the control node does", () => {
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo" })).toEqual(GAZEBO);
     expect(simulationPayloadComponents({ runner: "kinematic", mode: "replay" })).toEqual(runStackComponents({}));
     expect(simulationPayloadComponents({ runner: "gazebo_custom" })).toEqual(CUSTOM);
@@ -74,24 +74,24 @@ describe("the component catalog", () => {
   });
 });
 
-describe("a node's components", () => {
+describe("a worker node's components", () => {
   it("runs a job with slots for its type and every component usable", () => {
-    const node = nodeWith([
+    const workerNode = workerNodeWith([
       ["asv_software/replay", "usable"],
       ["control_layer/ardupilot", "usable"],
       ["simulation_layer/gazebo", "out_of_date"],
       ["simulation_layer/ardupilot_sim", "usable"],
     ]);
-    expect(staleComponents(node)).toEqual(["simulation_layer/gazebo"]);
-    expect(isWhollyOutOfDate(node)).toBe(false);
-    expect(listsJob(node, "simulation", GAZEBO)).toBe(true);
-    expect(offersJob(node, "simulation", GAZEBO)).toBe(false);
-    expect(offersJob(node, "simulation", ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"])).toBe(true);
-    expect(offersJob(node, "monitoring.post_hoc", [])).toBe(false);
+    expect(staleComponents(workerNode)).toEqual(["simulation_layer/gazebo"]);
+    expect(isWhollyOutOfDate(workerNode)).toBe(false);
+    expect(listsJob(workerNode, "simulation", GAZEBO)).toBe(true);
+    expect(offersJob(workerNode, "simulation", GAZEBO)).toBe(false);
+    expect(offersJob(workerNode, "simulation", ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"])).toBe(true);
+    expect(offersJob(workerNode, "monitoring.post_hoc", [])).toBe(false);
   });
 
   it("is wholly out of date once every component is", () => {
-    expect(isWhollyOutOfDate(nodeWith([["monitoring", "out_of_date"]]))).toBe(true);
-    expect(isWhollyOutOfDate(nodeWith([]))).toBe(false);
+    expect(isWhollyOutOfDate(workerNodeWith([["monitoring", "out_of_date"]]))).toBe(true);
+    expect(isWhollyOutOfDate(workerNodeWith([]))).toBe(false);
   });
 });

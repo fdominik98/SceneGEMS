@@ -5,11 +5,11 @@ succeeds for it, even before expire_leases has requeued the job, so the outcome 
 depends on when the sweep runs.
 
 A failed attempt is a lease that expired or reported a failure. Leases given back unused
-(rejected or released) are not failed attempts, so draining a node does not use up a
+(rejected or released) are not failed attempts, so draining a worker node does not use up a
 job's retries.
 
 A reported retryable failure puts the job back in the queue after an exponential backoff;
-an expired lease requeues it at once, since its node is gone and another may take it.
+an expired lease requeues it at once, since its worker node is gone and another may take it.
 """
 
 from datetime import datetime

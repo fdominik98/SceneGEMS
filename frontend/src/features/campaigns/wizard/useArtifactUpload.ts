@@ -3,7 +3,7 @@ import { describeOperatorError, type OperatorClient } from "../../../domain/clus
 import { uploadArtifact, type UploadKind } from "../../../domain/cluster/historyApi";
 import type { ArtifactRef } from "../../../domain/cluster/schemas";
 
-/** One file on its way to the master or refused. */
+/** One file on its way to the control node or refused. */
 export interface UploadAttempt {
   id: number;
   fileName: string;
@@ -38,7 +38,7 @@ export function contentTypeOf(kind: UploadKind): string {
 
 /**
  * Uploads picked files one after the other as artifacts of `kind` and hands each reference to
- * `onUploaded`. A file that is empty, not JSON where JSON is needed, or refused by the master stays
+ * `onUploaded`. A file that is empty, not JSON where JSON is needed, or refused by the control node stays
  * in `attempts` as failed, with the reason, until dismissed.
  */
 export function useArtifactUpload(client: OperatorClient | null, kind: UploadKind, onUploaded: (fileName: string, ref: ArtifactRef) => void) {

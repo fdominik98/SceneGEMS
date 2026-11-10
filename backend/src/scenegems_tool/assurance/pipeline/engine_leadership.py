@@ -2,7 +2,7 @@
 
 The engine that holds the session-level advisory lock ENGINE_LOCK on a connection of its
 own leads and ticks. Any other engine on the database stands by and tries again every tick,
-so a second master process takes over once the first one's connection ends (the process
+so a second control node process takes over once the first one's connection ends (the process
 died or lost its database). The connection runs in autocommit, so holding the lock never
 keeps a transaction open: an open transaction would hold back the cursor's snapshot horizon
 (persistence/stores/pipeline_store.py).

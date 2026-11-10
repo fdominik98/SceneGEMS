@@ -1,27 +1,27 @@
 import { Fragment } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
-import { useNodesFeed, useNodesStore } from "../../domain/cluster/nodesStore";
+import { useWorkerNodesFeed, useWorkerNodesStore } from "../../domain/cluster/workerNodesStore";
 import type { ArchitectureDocument } from "../../domain/cluster/architectureApi";
 import { capabilityLabel } from "../campaigns/resourcePlan";
-import { jobTypeResources, type NodesFeedState } from "../workbench/cluster/workbenchResources";
+import { jobTypeResources, type WorkerNodesFeedState } from "../workbench/cluster/workbenchResources";
 import { chainOf, describePartOffer, partCounts, type ChainPart, type JobOffer, type PartOffer } from "./capabilitiesModel";
 
 /** A simulation's components depend on its stack, so the overview counts the machines with simulation slots. */
 const ANY_COMPONENTS: readonly string[] = [];
 
-function offersOf(feed: NodesFeedState, document: ArchitectureDocument): JobOffer[] {
+function offersOf(feed: WorkerNodesFeedState, document: ArchitectureDocument): JobOffer[] {
   return document.job_types.map((jobType) => {
     const resources = jobType === "simulation" ? jobTypeResources(feed, jobType, ANY_COMPONENTS) : jobTypeResources(feed, jobType);
-    return { jobType, machines: resources.nodes, slots: resources.slots };
+    return { jobType, machines: resources.workerNodes, slots: resources.slots };
   });
 }
 
 function usePartOffers(documents: readonly ArchitectureDocument[]): Map<string, PartOffer> {
   const cluster = useSelectedCluster();
   const operatorUrl = cluster?.operatorUrl ?? null;
-  useNodesFeed(operatorUrl);
-  const feed = useNodesStore(useShallow((state) => ({ operatorUrl: state.operatorUrl, nodes: state.nodes, loaded: state.loaded, unreachable: state.unreachable })));
+  useWorkerNodesFeed(operatorUrl);
+  const feed = useWorkerNodesStore(useShallow((state) => ({ operatorUrl: state.operatorUrl, workerNodes: state.workerNodes, loaded: state.loaded, unreachable: state.unreachable })));
   // The store may still hold another cluster's machines right after the selection changed
   const current = feed.operatorUrl === operatorUrl;
   const state = { selected: operatorUrl !== null, loaded: current && feed.loaded, unreachable: current && feed.unreachable };
@@ -103,8 +103,8 @@ interface Props {
 
 /**
  * The page's first view: the chain from a specification to judged runs, one card per part in the order the
- * master lists them, with what each takes and gives, the job that runs it and whether the selected cluster
- * offers it now. Everything on the cards comes from the master's documents and the cluster's machines.
+ * control node lists them, with what each takes and gives, the job that runs it and whether the selected cluster
+ * offers it now. Everything on the cards comes from the control node's documents and the cluster's machines.
  */
 export function ChainOverview({ documents, onOpen }: Props) {
   const chain = chainOf(documents);
@@ -119,7 +119,7 @@ export function ChainOverview({ documents, onOpen }: Props) {
         <p className="cap-overview-lead">
           {chain.described
             ? "A scenario is made and run in steps. Each step is one part of the system: it takes what the step before gives. Open a part to see what implements it, what was measured, and what a new implementation has to provide."
-            : "The parts of the system, as this master describes them. Open a part to see what implements it, what was measured, and what a new implementation has to provide."}
+            : "The parts of the system, as this control node describes them. Open a part to see what implements it, what was measured, and what a new implementation has to provide."}
         </p>
         <ol className={`cap-chain${chain.described ? "" : " cap-chain--plain"}`}>
           {chain.steps.map((part, index) => (

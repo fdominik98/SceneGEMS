@@ -3,7 +3,7 @@
 A scoped client publishes and subscribes under its prefix and sees incoming topics with
 the prefix removed, so subsystem code keeps the topic names it uses on its own broker.
 The empty prefix (the workbench) leaves every topic unchanged. Who owns which prefix is
-decided by the cluster (`cluster/node/instance_scope.py`); this module only applies it.
+decided by the cluster (`cluster/worker_node/instance_scope.py`); this module only applies it.
 """
 
 from typing import Any, Optional

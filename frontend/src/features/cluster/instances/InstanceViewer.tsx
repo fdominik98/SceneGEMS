@@ -7,7 +7,7 @@ import { TrajectoryViewer } from "./TrajectoryViewer";
 /**
  * The viewer of one instance. Each viewer subscribes to its instance topic while it is
  * mounted; the section keys this component by topic, so changing or closing the view ends
- * the subscription and with it the master's observation.
+ * the subscription and with it the control node's observation.
  */
 export function InstanceViewer({ instance }: { instance: ObservableInstance }) {
   switch (viewerFor(instance)) {

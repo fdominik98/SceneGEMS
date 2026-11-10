@@ -13,7 +13,7 @@ function fakeClient(): OperatorClient {
       }
       return { data: [sampleSceneOutput()], total: 1 };
     }),
-    artifactUrl: (sha256: string) => `http://master/cluster/artifacts/${sha256}`,
+    artifactUrl: (sha256: string) => `http://control-node/cluster/artifacts/${sha256}`,
   } as unknown as OperatorClient;
 }
 

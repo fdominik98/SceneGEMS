@@ -22,7 +22,7 @@ describe("architecture schema", () => {
     expect([parsed.role, parsed.step, parsed.takes, parsed.gives, parsed.job_types]).toEqual(["step", "Stacking", "parts", "a stack", ["simulation"]]);
   });
 
-  it("gives a document of a master from before the overview an empty place in the chain", () => {
+  it("gives a document of a control node from before the overview an empty place in the chain", () => {
     const parsed = architectureSchema.parse({ schema_version: 1, documents: [sampleStackDocumentWithoutChain()] }).documents[0];
     expect([parsed.role, parsed.step, parsed.takes, parsed.gives, parsed.job_types]).toEqual(["step", "", "", "", []]);
   });

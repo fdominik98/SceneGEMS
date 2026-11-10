@@ -14,7 +14,7 @@ export function DesignSpaceSidebar({ disabled = false }: { disabled?: boolean })
   const editSpecification = useExplorationInputStore((s) => s.editSpecification);
   const loadSpecification = useExplorationInputStore((s) => s.loadSpecification);
   const setScope = useExplorationInputStore((s) => s.setScope);
-  // The master's scope comes with its default only where no scope was entered yet.
+  // The control node's scope comes with its default only where no scope was entered yet.
   const takeDefaultScope = useCallback(
     (scope: string) => {
       if (useExplorationInputStore.getState().scope.trim().length === 0) {

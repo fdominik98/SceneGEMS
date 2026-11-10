@@ -5,8 +5,8 @@ from pathlib import Path
 from scenegems_tool.architecture.architecture_model import ROLE_STEP
 from scenegems_tool.assurance.campaign.campaign_config import DesignSpaceExplorationConfig
 from scenegems_tool.cluster.fingerprints.components import DESIGN_SPACE_EXPLORATION_IMAGE
-from scenegems_tool.cluster.node.jobs import design_space_exploration_job
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.jobs import design_space_exploration_job
 from scenegems_tool.subsystems.design_space_exploration import design_space
 from scenegems_tool.subsystems.design_space_exploration import design_space_exploration_specs as specs
 from scenegems_tool.subsystems.design_space_exploration.design_space_exploration_specs import design_space_exploration_document

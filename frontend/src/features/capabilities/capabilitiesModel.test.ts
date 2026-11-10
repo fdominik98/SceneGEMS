@@ -126,7 +126,7 @@ describe("cluster jobs", () => {
     expect(clusterJobOf(document.combinations[4])).toBeUndefined();
   });
 
-  it("counts the stacks a cluster job runs, and nothing for a document of an older master", () => {
+  it("counts the stacks a cluster job runs, and nothing for a document of an older control node", () => {
     expect(stacksRunAsJobs(document)).toBe(2);
     const older = { ...document, combinations: document.combinations.map((combination) => ({ ...combination, facts: combination.facts.filter((fact) => fact.key !== CLUSTER_JOB_FACT) })) };
     expect(stacksRunAsJobs(older)).toBeNull();
@@ -155,7 +155,7 @@ describe("the chain of parts", () => {
     part("Monitoring", { role: "support" as const, step: "", takes: "scenes, trajectories and runs", gives: "rule outcomes" }),
   ];
 
-  it("numbers the step parts in the order the master lists them and keeps the supporting parts apart", () => {
+  it("numbers the step parts in the order the control node lists them and keeps the supporting parts apart", () => {
     const chain = chainOf(documents);
     expect(chain.steps.map((step) => [step.number, step.name, step.partName])).toEqual([
       [1, "Design space exploration", "Exploration"],
@@ -166,7 +166,7 @@ describe("the chain of parts", () => {
     expect(chain.described).toBe(true);
   });
 
-  it("names a part by its title and states no chain for a master from before the overview", () => {
+  it("names a part by its title and states no chain for a control node from before the overview", () => {
     const older = documents.map((document) => ({ ...document, role: "step" as const, step: "", takes: "", gives: "" }));
     const chain = chainOf(older);
     expect(chain.described).toBe(false);
@@ -198,7 +198,7 @@ describe("what the cluster offers of a part", () => {
     expect(describePartOffer({ selected: false, loaded: false, unreachable: false }, [])).toMatchObject({ known: false, text: "no cluster selected", tone: "neutral" });
     expect(describePartOffer({ selected: true, loaded: false, unreachable: true }, [offer("simulation", 0, 0)])).toMatchObject({ known: false, text: "the cluster cannot be reached", tone: "warn" });
     expect(describePartOffer({ selected: true, loaded: false, unreachable: false }, [offer("simulation", 0, 0)])).toMatchObject({ known: false, text: "reading the machines" });
-    // a master from before the overview names no job type for the part
-    expect(describePartOffer(ready, [])).toMatchObject({ known: false, text: "not stated by this master", tone: "neutral" });
+    // a control node from before the overview names no job type for the part
+    expect(describePartOffer(ready, [])).toMatchObject({ known: false, text: "not stated by this control node", tone: "neutral" });
   });
 });

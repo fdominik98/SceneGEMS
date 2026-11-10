@@ -1,11 +1,11 @@
 /**
- * Sample operator API payloads, shaped as `cluster/master/api/views.py` and
+ * Sample operator API payloads, shaped as `cluster/control_node/api/views.py` and
  * `campaign_views.py` build them (FastAPI serializes datetimes as ISO strings).
  */
 
-export function sampleNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+export function sampleWorkerNode(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    node_id: "node-a1",
+    worker_node_id: "worker-node-a1",
     name: "worker-a",
     machine: "lab-gpu-1",
     status: "online",
@@ -32,14 +32,14 @@ export function sampleNode(overrides: Record<string, unknown> = {}): Record<stri
   };
 }
 
-export const sampleMasterStatus = {
-  master_id: "master-1",
+export const sampleControlNodeStatus = {
+  control_node_id: "control-node-1",
   expected_fingerprints: {
     state: "ready",
     error: null,
-    images: { "scenegems-node": "sha256:aaaa", "scenegems-scene-generation": "sha256:bbbb" },
+    images: { "scenegems-worker-node": "sha256:aaaa", "scenegems-scene-generation": "sha256:bbbb" },
   },
-  connected_nodes: ["node-a1"],
+  connected_worker_nodes: ["worker-node-a1"],
   live_sessions: true,
 };
 
@@ -53,8 +53,8 @@ export function sampleJob(overrides: Record<string, unknown> = {}): Record<strin
     failed_attempts: 0,
     max_attempts: 3,
     idempotency_key: "campaign:c1:case:1:generate_scene",
-    requirements: { labels: {}, components: ["scene_generation"], fingerprints: { "scenegems-node": "sha256:aaaa" }, min_memory_mb: 0, min_cpus: 0 },
-    lease_owner: "node-a1",
+    requirements: { labels: {}, components: ["scene_generation"], fingerprints: { "scenegems-worker-node": "sha256:aaaa" }, min_memory_mb: 0, min_cpus: 0 },
+    lease_owner: "worker-node-a1",
     lease_expires_at: "2026-10-26T10:05:00+00:00",
     submitted_at: "2026-10-26T09:58:00+00:00",
     available_at: "2026-10-26T09:58:00+00:00",
@@ -103,7 +103,7 @@ export const sampleCampaignSummary = {
   actual_state: "running",
   state_reason: null,
   config_version: 1,
-  pinned_fingerprints: { "scenegems-node": "sha256:aaaa" },
+  pinned_fingerprints: { "scenegems-worker-node": "sha256:aaaa" },
   created_at: "2026-10-26T09:00:00+00:00",
   updated_at: "2026-10-26T09:00:10+00:00",
   started_at: "2026-10-26T09:00:10+00:00",
@@ -154,8 +154,8 @@ export const sampleRunRecord = {
   state_digest: "abcd",
   artifacts: { state_log: "sha256:cccc" },
   job_id: "job-9",
-  node_id: "node-a1",
-  fingerprints: { "scenegems-node": "sha256:aaaa" },
+  worker_node_id: "worker-node-a1",
+  fingerprints: { "scenegems-worker-node": "sha256:aaaa" },
   durations_s: { simulate: 12.5 },
   created_at: "2026-10-26T09:30:00+00:00",
 };

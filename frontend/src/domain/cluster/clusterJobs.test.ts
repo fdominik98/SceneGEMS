@@ -26,7 +26,7 @@ describe("following a job", () => {
     expect(seen).toEqual(["queued", "running", "succeeded"]);
   });
 
-  it("waits out an unreachable master", async () => {
+  it("waits out an unreachable control node", async () => {
     vi.useFakeTimers();
     let calls = 0;
     const client = {
@@ -43,7 +43,7 @@ describe("following a job", () => {
     expect((await ended).state).toBe("failed");
   });
 
-  it("rejects a job the master does not know", async () => {
+  it("rejects a job the control node does not know", async () => {
     const client = { getJob: vi.fn(async () => Promise.reject(new OperatorApiError("http", "no job", "/cluster/jobs/x", 404))) };
     await expect(followJob(client, "x")).rejects.toThrow("no job");
   });
@@ -57,16 +57,16 @@ describe("following a job", () => {
 
 describe("job results", () => {
   it("keeps an inline field and downloads a referenced one", async () => {
-    const client = { artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` };
+    const client = { artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` };
     expect(await readResultField(client, { inline: true })).toEqual({ inline: true });
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ trajectories: { scene_list: [1] } }), { status: 200 }));
     const value = await readResultField(client, { sha256: SHA, size_bytes: 10, kind: "trajectory_data", pointer: "/trajectories" }, { fetch: fetchImpl as unknown as typeof fetch });
     expect(value).toEqual({ scene_list: [1] });
-    expect(fetchImpl).toHaveBeenCalledWith(`http://master/cluster/artifacts/${SHA}`, expect.anything());
+    expect(fetchImpl).toHaveBeenCalledWith(`http://control-node/cluster/artifacts/${SHA}`, expect.anything());
   });
 
   it("reports a failed download", async () => {
-    const client = { artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` };
+    const client = { artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` };
     const fetchImpl = vi.fn(async () => new Response("gone", { status: 404 }));
     await expect(readResultField(client, { sha256: SHA }, { fetch: fetchImpl as unknown as typeof fetch })).rejects.toThrow("HTTP 404");
   });

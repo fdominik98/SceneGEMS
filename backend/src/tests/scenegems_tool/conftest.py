@@ -1,7 +1,7 @@
-"""Postgres for the tests of persistence/ and of the master (cluster/master/), which share one server.
+"""Postgres for the tests of persistence/ and of the control node (cluster/control_node/), which share one server.
 
 The server is SCENEGEMS_TEST_DATABASE_URL when set (its role needs CREATEDB), otherwise a
-throwaway container started from the image the master compose file uses. Every test gets
+throwaway container started from the image the control node compose file uses. Every test gets
 its own database: empty for the migration tests, or a copy of a template migrated once.
 Without either server the postgres tests are skipped.
 """
@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
-from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE  # the image of deploy/master/docker-compose.yml
+from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE  # the image of deploy/control_node/docker-compose.yml
 from scenegems_tool.persistence.database import create_database_engine, create_session_factory, normalize_database_url
 from scenegems_tool.persistence.migrate import upgrade_database
 

@@ -31,7 +31,7 @@ export function TrajectoryViewer({ instance }: { instance: ObservableInstance })
             )}
             {preview.final && preview.complete !== null && preview.complete !== undefined && (
               <span className={`instances-flag ${preview.complete ? "instances-flag--ok" : "instances-flag--warn"}`}>
-                {preview.complete ? "complete path" : "partial path"}
+                {preview.complete ? "complete path" : "incomplete path"}
               </span>
             )}
             <span className="meta">

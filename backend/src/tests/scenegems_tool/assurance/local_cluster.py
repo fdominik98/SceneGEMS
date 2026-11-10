@@ -1,11 +1,11 @@
-"""A master and a node of one cluster on this host, deployed from a release bundle the way the
+"""A control node and a worker node of one cluster on this host, deployed from a release bundle the way the
 deployment tool deploys them (cluster/release/roles.py).
 
 Each role gets a folder of its own with its stack and release.json, and a .env made of the
-role's values, its parameters and secrets generated here. There is no pairing: the node's .env
-holds the master's address and ports ({master.vpn_ip} and {master.<parameter>} of its role),
+role's values, its parameters and secrets generated here. There is no pairing: the worker node's .env
+holds the control node's address and ports ({control-node.vpn_ip} and {control-node.<parameter>} of its role),
 and each compose project is started and waited for until the role's ready services are up.
-Nodes reach the master through host.docker.internal, which stands in for the master's VPN address.
+Worker nodes reach the control node through host.docker.internal, which stands in for the control node's VPN address.
 """
 
 import json
@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Mapping, Optional
 
 from scenegems_tool.cluster.release.manifest import Release
 
-MASTER_ADDRESS = "host.docker.internal"
+CONTROL_NODE_ADDRESS = "host.docker.internal"
 
 
 def render(text: str, context: Mapping[str, str]) -> str:
@@ -90,46 +90,46 @@ def _role_env(role: Mapping[str, Any], context: Mapping[str, str], parameters: O
     return values
 
 
-def deploy_master(release_dir: Path, release: Release, work_dir: Path, cluster: str, parameters: Optional[Mapping[str, str]] = None) -> LocalRole:
-    role = release.roles["master"]
-    context = {"cluster": cluster, "name": cluster, "machine.vpn_ip": MASTER_ADDRESS, "machine.name": "local", "release.revision": release.revision}
-    folder = work_dir / f"master-{cluster}"
+def deploy_control_node(release_dir: Path, release: Release, work_dir: Path, cluster: str, parameters: Optional[Mapping[str, str]] = None) -> LocalRole:
+    role = release.roles["control-node"]
+    context = {"cluster": cluster, "name": cluster, "machine.vpn_ip": CONTROL_NODE_ADDRESS, "machine.name": "local", "release.revision": release.revision}
+    folder = work_dir / f"control node-{cluster}"
     _install(release_dir, role, folder)
     _write_env(folder, _role_env(role, context, parameters))
-    master = LocalRole(name=f"master {cluster}", folder=folder, ready=role["ready"])
+    control_node = LocalRole(name=f"control node {cluster}", folder=folder, ready=role["ready"])
     for command in role["setup"]:
         run([render(part, context) for part in command], folder)
-    master.compose("up", "--detach")
-    master.wait_ready()
-    return master
+    control_node.compose("up", "--detach")
+    control_node.wait_ready()
+    return control_node
 
 
-def deploy_node(
+def deploy_worker_node(
     release_dir: Path,
     release: Release,
     work_dir: Path,
     cluster: str,
     name: str,
     parameters: Optional[Mapping[str, str]] = None,
-    master_parameters: Optional[Mapping[str, str]] = None,
+    control_node_parameters: Optional[Mapping[str, str]] = None,
 ) -> LocalRole:
-    """A node of the cluster. It needs no deployed master, only the master's address and parameters, as Machine Hub passes them."""
-    role = release.roles["node"]
-    master_values = {key: definition["default"] for key, definition in release.roles["master"]["parameters"].items()}
-    master_values.update(master_parameters or {})
-    context = {"cluster": cluster, "name": name, "machine.vpn_ip": MASTER_ADDRESS, "machine.name": "local", "release.revision": release.revision, "master.vpn_ip": MASTER_ADDRESS}
-    context.update({f"master.{key}": value for key, value in master_values.items()})
-    folder = work_dir / f"node-{cluster}-{name}"
+    """A worker node of the cluster. It needs no deployed control node, only the control node's address and parameters, as Machine Hub passes them."""
+    role = release.roles["worker-node"]
+    control_node_values = {key: definition["default"] for key, definition in release.roles["control-node"]["parameters"].items()}
+    control_node_values.update(control_node_parameters or {})
+    context = {"cluster": cluster, "name": name, "machine.vpn_ip": CONTROL_NODE_ADDRESS, "machine.name": "local", "release.revision": release.revision, "control-node.vpn_ip": CONTROL_NODE_ADDRESS}
+    context.update({f"control-node.{key}": value for key, value in control_node_values.items()})
+    folder = work_dir / f"worker node-{cluster}-{name}"
     _install(release_dir, role, folder)
     _write_env(folder, _role_env(role, context, parameters))
-    node = LocalRole(name=f"node {name}", folder=folder, ready=role["ready"])
-    node.compose("up", "--detach")
-    node.wait_ready()
-    return node
+    worker_node = LocalRole(name=f"worker node {name}", folder=folder, ready=role["ready"])
+    worker_node.compose("up", "--detach")
+    worker_node.wait_ready()
+    return worker_node
 
 
 def remove_cluster_containers(cluster: str) -> None:
-    """Subsystem containers a node started for this cluster and left behind."""
+    """Subsystem containers a worker node started for this cluster and left behind."""
     names = subprocess.run(["docker", "ps", "--all", "--quiet", "--filter", f"name=scenegems-{cluster}-"], capture_output=True, text=True).stdout.split()
     if names:
         subprocess.run(["docker", "rm", "--force", *names], capture_output=True)

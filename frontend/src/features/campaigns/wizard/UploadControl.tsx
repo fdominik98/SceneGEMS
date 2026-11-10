@@ -14,7 +14,7 @@ export interface UploadControlProps {
   onUploaded: (fileName: string, ref: ArtifactRef) => void;
 }
 
-/** A file picker that uploads each chosen file to the master as an artifact and lists the ones that failed. */
+/** A file picker that uploads each chosen file to the control node as an artifact and lists the ones that failed. */
 export function UploadControl({ client, kind, label, accept, onUploaded }: UploadControlProps) {
   const inputId = useId();
   const { attempts, upload, dismiss } = useArtifactUpload(client, kind, onUploaded);

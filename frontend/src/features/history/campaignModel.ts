@@ -129,7 +129,7 @@ export interface ControlAvailability {
   reason: string | null;
 }
 
-/** Which controls apply to a campaign in its state; the master refuses the others with a 409 as well. */
+/** Which controls apply to a campaign in its state; the control node refuses the others with a 409 as well. */
 /** What each control may do now; a start blocker (no machine for a needed capability) keeps Start and Resume off. */
 export function controlAvailability(
   summary: Pick<CampaignSummary, "desired_state" | "actual_state" | "started_at">,
@@ -288,7 +288,7 @@ export function runIndexes(classes: readonly ClassView[], runCount = 0): number[
 }
 
 /**
- * A FEC the design space exploration found in a campaign that runs no step after it: the master closes it
+ * A FEC the design space exploration found in a campaign that runs no step after it: the control node closes it
  * complete at once, with no cases. It is done, not unfinished.
  */
 export function closedWithoutCases(entry: Pick<ClassView, "state" | "complete" | "dropped" | "in_flight">): boolean {
@@ -370,7 +370,7 @@ export function baseSeed(config: CampaignConfig | null | undefined): number | nu
 }
 
 /**
- * Whether the current config version monitors a step, or null without a config. As the master reads
+ * Whether the current config version monitors a step, or null without a config. As the control node reads
  * it: a generation step when its monitor is not empty (a format 1 config stores none), the simulation
  * when any run's is (a run without one is monitored post hoc), never the design space exploration.
  */

@@ -1,16 +1,16 @@
-"""Transactional primitives the master's node registry, scheduler, lease manager and pipeline engine call.
+"""Transactional primitives the control node's worker node registry, scheduler, lease manager and pipeline engine call.
 
-Every store method returns detached snapshots (records), never ORM rows. Which node gets
+Every store method returns detached snapshots (records), never ORM rows. Which worker node gets
 which job, and when, is the scheduler's policy (P3.3), and how cases advance is the pipeline
 engine's (P4.4); the stores only guarantee that each step is atomic and safe under
-concurrency. The node and job stores run each method in its own transaction; the campaign
+concurrency. The worker node and job stores run each method in its own transaction; the campaign
 stores take an optional session, so several calls commit together (store_session).
 
-    node_records.py       snapshots of a node and its capabilities
-    node_store.py         register from Hello, heartbeats, status, silent nodes offline
+    worker_node_records.py       snapshots of a worker node and its capabilities
+    worker_node_store.py         register from Hello, heartbeats, status, silent worker nodes offline
     job_records.py        snapshots of a job, a lease and the outcome of each primitive
     job_lifecycle.py      pure rules: when a lease is current, retries and their backoff, result idempotency
-    job_claim.py          what a node can take, and the SKIP LOCKED query that finds it
+    job_claim.py          what a worker node can take, and the SKIP LOCKED query that finds it
     job_event_log.py      the append-only history of each job
     job_store.py          submit, claim, accept, renew, release, result, cancel, expire, hold
     store_session.py      the caller's session or a transaction of the method's own
@@ -53,13 +53,13 @@ from scenegems_tool.persistence.stores.campaign_records import (
 from scenegems_tool.persistence.stores.campaign_store import CampaignStateConflict, CampaignStore, UnknownCampaign
 from scenegems_tool.persistence.stores.case_store import UNSET, CaseConflict, CaseStore, ClassStateConflict, UnknownCase, UnknownClass
 from scenegems_tool.persistence.stores.job_records import CancelOutcome, ExpiredLease, JobEventRecord, JobRecord, Lease, ResultReport, ResultStatus, SubmitOutcome
-from scenegems_tool.persistence.stores.job_store import IdempotencyKeyMismatch, JobStore, UnknownJob, UnknownNode
-from scenegems_tool.persistence.stores.node_records import NodeRecord, SlotState
-from scenegems_tool.persistence.stores.node_store import NodeStore
+from scenegems_tool.persistence.stores.job_store import IdempotencyKeyMismatch, JobStore, UnknownJob, UnknownWorkerNode
 from scenegems_tool.persistence.stores.pipeline_store import ENGINE_CURSOR, TERMINAL_EVENT_KINDS, CursorConflict, PipelineJobConflict, PipelineStore, UnknownPipelineJob
 from scenegems_tool.persistence.stores.result_records import ClassCoverage, ClassFindings, NewRunRecord, NewVerdict, RuleFindings, RunRecord, StepFindings, VerdictRecord
 from scenegems_tool.persistence.stores.result_store import ResultStore
 from scenegems_tool.persistence.stores.setting_stores import CampaignPresetStore, ClusterDomain, DomainStore, PresetNameTaken, SavedPreset, UnknownPreset
+from scenegems_tool.persistence.stores.worker_node_records import SlotState, WorkerNodeRecord
+from scenegems_tool.persistence.stores.worker_node_store import WorkerNodeStore
 
 __all__ = [
     "ENGINE_CURSOR",
@@ -111,8 +111,8 @@ __all__ = [
     "NewCase",
     "NewRunRecord",
     "NewVerdict",
-    "NodeRecord",
-    "NodeStore",
+    "WorkerNodeRecord",
+    "WorkerNodeStore",
     "OutputArtifact",
     "OutputRecord",
     "PipelineJobConflict",
@@ -133,7 +133,7 @@ __all__ = [
     "UnknownCase",
     "UnknownClass",
     "UnknownJob",
-    "UnknownNode",
+    "UnknownWorkerNode",
     "UnknownPipelineJob",
     "UnknownPreset",
     "VerdictRecord",

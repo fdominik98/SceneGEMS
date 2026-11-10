@@ -1,7 +1,7 @@
 """The cluster's settings: its domain configuration and the campaign presets operators saved.
 
 The domain store holds one domain configuration per cluster (the cluster_domain row). Until
-it is saved once, current() is None and the master's default domain files apply. The preset
+it is saved once, current() is None and the control node's default domain files apply. The preset
 store keeps campaign configs under unique names; it knows nothing of the presets shipped as
 files, which the operator API lists beside these.
 

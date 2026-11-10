@@ -7,7 +7,7 @@ import { normalizeSteps } from "./stepPlan";
 
 /**
  * The state of the create wizard. It holds what the operator entered, in plain JSON, and leaves
- * out everything the master derives: `configBuilder.ts` turns it into the campaign config, and the
+ * out everything the control node derives: `configBuilder.ts` turns it into the campaign config, and the
  * stored draft survives a reload (one per browser).
  */
 
@@ -46,7 +46,7 @@ export interface ScopeEntryDraft {
   failureBudget: FailureBudgetDraft;
 }
 
-/** How long an uploaded file stays on the master unless a campaign uses it (`artifact_reference.expires_at` of an upload). */
+/** How long an uploaded file stays on the control node unless a campaign uses it (`artifact_reference.expires_at` of an upload). */
 export const UPLOAD_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 /** A functional scenario file uploaded for scene generation: a class of its own, `scenario/<name>`. */
@@ -69,7 +69,7 @@ export interface InputItemDraft {
   name: string;
   ref: ConfigArtifactRef;
   source: InputItemSource;
-  /** Set for an uploaded file; null for an output of Campaign History, which the master keeps. */
+  /** Set for an uploaded file; null for an output of Campaign History, which the control node keeps. */
   uploadedAt: number | null;
 }
 
@@ -82,7 +82,7 @@ export interface InputDraft {
 export interface ExplorationDraft {
   /** The metamodel and the well-formedness constraints (the first part of a FEC specification). */
   specification: string;
-  /** Where the text came from (the master's default, a file), null for one written here. Not written to the config. */
+  /** Where the text came from (the control node's default, a file), null for one written here. Not written to the config. */
   specificationLabel: string | null;
   scope: string;
   /** Null for every FEC. */
@@ -94,7 +94,7 @@ export interface ExplorationDraft {
 }
 
 export interface DomainDraft {
-  /** False: the fields stay out of the config and the master's defaults apply. */
+  /** False: the fields stay out of the config and the control node's defaults apply. */
   custom: boolean;
   colregsConstants: string;
   vesselTypes: string;
@@ -127,10 +127,10 @@ export interface RunDraft {
 }
 
 export interface ResourcesDraft {
-  /** Every node of the cluster, also nodes that join later, with the queue caps sized to its slots. */
+  /** Every worker node of the cluster, also worker nodes that join later, with the queue caps sized to its slots. */
   fullUsage: boolean;
-  /** Node ids the campaign may use when it does not use every node. */
-  nodes: string[];
+  /** Worker node ids the campaign may use when it does not use every worker node. */
+  workerNodes: string[];
   labels: { key: string; value: string }[];
   queueDepth: Record<string, number | null>;
   priority: number | null;
@@ -251,7 +251,7 @@ export function emptyDraft(): WizardDraft {
     },
     trajectories: { generator: "monitor_driven_rrt", parameters: {}, timeoutS: DEFAULT_TRAJECTORY_TIMEOUT_S },
     runs: [emptyRun()],
-    resources: { fullUsage: true, nodes: [], labels: [], queueDepth: { ...QUEUE_DEPTH_DEFAULTS }, priority: 0 },
+    resources: { fullUsage: true, workerNodes: [], labels: [], queueDepth: { ...QUEUE_DEPTH_DEFAULTS }, priority: 0 },
     policy: { retention: "all", keepFrames: false, seed: DEFAULT_CAMPAIGN_SEED, maxCases: null, maxFailedVerdicts: null, maxDurationS: null },
   };
 }

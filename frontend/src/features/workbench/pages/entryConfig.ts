@@ -37,7 +37,7 @@ export function scenarioInputName(label: string, taken: ReadonlySet<string> = ne
   return name;
 }
 
-/** The class id the master gives a functional scenario of the input. */
+/** The class id the control node gives a functional scenario of the input. */
 export function scenarioClassId(name: string): string {
   return `scenario/${name}`;
 }
@@ -117,7 +117,7 @@ export interface SceneEntryInput {
   timeoutSeconds: number;
   enforceLowTcpa: boolean;
   seed: number;
-  /** Post-hoc gives the page the monitored scene; none when no node monitors, so the case does not wait for it. */
+  /** Post-hoc gives the page the monitored scene; none when no worker node monitors, so the case does not wait for it. */
   monitor?: StepMonitor;
 }
 

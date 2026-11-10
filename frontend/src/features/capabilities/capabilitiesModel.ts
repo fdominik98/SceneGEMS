@@ -8,7 +8,7 @@ export type DocumentView = GraphView | "matrix";
 export type Tone = "ok" | "warn" | "bad" | "neutral";
 
 export const UNBOUNDED = "unbounded";
-/** The fact of an available stack that names the job and runner running it on a node ("simulation, runner kinematic"), null when it runs on the workbench only (vessel_stack_description.CLUSTER_JOB_FACT). */
+/** The fact of an available stack that names the job and runner running it on a worker node ("simulation, runner kinematic"), null when it runs on the workbench only (vessel_stack_description.CLUSTER_JOB_FACT). */
 export const CLUSTER_JOB_FACT = "cluster_job";
 
 /** How good a capability value is: green for what a run can rely on, amber for what is limited or unconfirmed, red for what is missing. */
@@ -151,7 +151,7 @@ export function stacksThrough(document: ArchitectureDocument, nodeId: string | n
   return document.combinations.filter((combination) => combination.status === "available" && (nodeId === null || combination.path.includes(nodeId)));
 }
 
-/** The cluster job fact of a stack; undefined when the document does not say (an older master, or a stack that is not available). */
+/** The cluster job fact of a stack; undefined when the document does not say (an older control node, or a stack that is not available). */
 export function clusterJobOf(combination: Combination): Fact | undefined {
   return combination.facts.find((fact) => fact.key === CLUSTER_JOB_FACT);
 }
@@ -225,18 +225,18 @@ export interface ChainPart {
   document: ArchitectureDocument;
   /** The step's place in the chain, from 1; null for a supporting part. */
   number: number | null;
-  /** The step it performs ("Simulation"), or the part's title when the master names none. */
+  /** The step it performs ("Simulation"), or the part's title when the control node names none. */
   name: string;
   /** The part's own title when it differs from the step ("Vessel stack" performs "Simulation"); null otherwise. */
   partName: string | null;
 }
 
 export interface Chain {
-  /** The parts that each perform one step, in the order the master lists them: the order of the chain. */
+  /** The parts that each perform one step, in the order the control node lists them: the order of the chain. */
   steps: ChainPart[];
   /** The parts that serve the steps (monitoring). */
   support: ChainPart[];
-  /** Whether the master says what the steps hand to each other; false for a master from before the overview. */
+  /** Whether the control node says what the steps hand to each other; false for a control node from before the overview. */
   described: boolean;
 }
 
@@ -286,7 +286,7 @@ export function describePartOffer(state: { selected: boolean; loaded: boolean; u
     return { known: false, text: "reading the machines", tone: "neutral", offers: [] };
   }
   if (offers.length === 0) {
-    return { known: false, text: "not stated by this master", tone: "neutral", offers: [] };
+    return { known: false, text: "not stated by this control node", tone: "neutral", offers: [] };
   }
   const machines = Math.max(...offers.map((offer) => offer.machines));
   const slots = offers.reduce((sum, offer) => sum + offer.slots, 0);

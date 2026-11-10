@@ -5,7 +5,7 @@ import type { EntryItem } from "./entryConfig";
 import type { PageInput } from "./pageStore";
 
 /**
- * The input of a run as its entry's config names it. An input that is on the master already (a
+ * The input of a run as its entry's config names it. An input that is on the control node already (a
  * history output, or an output of the previous page that came from an entry) is used as it is;
  * otherwise its content is uploaded (`POST /cluster/artifacts`) and the entry takes the upload.
  */
@@ -47,7 +47,7 @@ export async function resolveInputItem(
     return { name: input.label.slice(0, 256), ref: input.ref, source: input.source };
   }
   if (content === null) {
-    throw new InputMissingError("The input is not on the master and its file is not loaded any more: choose it again.");
+    throw new InputMissingError("The input is not on the control node and its file is not loaded any more: choose it again.");
   }
   return { name: input.label.slice(0, 256), ref: await uploadedRef(client, content, kind, "application/json", signal), source: input.source };
 }

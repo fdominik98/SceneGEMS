@@ -5,7 +5,7 @@ from typing import Mapping, Optional, Tuple, Union
 
 from fastapi import WebSocket
 
-from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import new_live_session_scope
+from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_stack import new_live_session_scope
 from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder, LiveRunSetup, LiveSessionRecording
 from scenegems_tool.gateway.protocol import ClientMessage, ServerMessage, make_error_message, make_monitor_status_message, make_mqtt_broker_status_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
@@ -22,12 +22,12 @@ from scenegems_tool.workbench.scenario_session import ScenarioSession
 from scenegems_tool.workbench.subsystem_integration_session import SubsystemIntegrationSession
 
 NO_TRAJECTORIES_MESSAGE = "Cannot simulate without trajectories: generate trajectories first (monitor-guided planner or straight). The simulation never invents trajectories."
-NO_MASTER_BROKER_MESSAGE = "This server has no master broker (SCENEGEMS_BROKER_HOST is not set): choose another MQTT broker."
+NO_CONTROL_NODE_BROKER_MESSAGE = "This server has no control node broker (SCENEGEMS_BROKER_HOST is not set): choose another MQTT broker."
 DEFAULT_BROKER_PORT = 1883
 
 
-def master_broker(environ: Optional[Mapping[str, str]] = None) -> Optional[Tuple[str, int]]:
-    """The master's own cluster broker as this server dials it, from the master's settings
+def control_node_broker(environ: Optional[Mapping[str, str]] = None) -> Optional[Tuple[str, int]]:
+    """The control node's own cluster broker as this server dials it, from the control node's settings
     (SCENEGEMS_BROKER_HOST, SCENEGEMS_BROKER_PORT); None when the server runs without one."""
     environ = os.environ if environ is None else environ
     host = environ.get("SCENEGEMS_BROKER_HOST", "").strip()
@@ -36,8 +36,8 @@ def master_broker(environ: Optional[Mapping[str, str]] = None) -> Optional[Tuple
     return host, int(environ.get("SCENEGEMS_BROKER_PORT", "").strip() or DEFAULT_BROKER_PORT)
 
 
-def master_broker_label(environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
-    broker = master_broker(environ)
+def control_node_broker_label(environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    broker = control_node_broker(environ)
     return None if broker is None else f"{broker[0]}:{broker[1]}"
 
 
@@ -45,7 +45,7 @@ class SocketSession:
 
     def __init__(self, websocket: WebSocket, run_recorder: Optional[LiveRunRecorder] = None):
         self.websocket: WebSocket = websocket
-        # Records the live session's runs as workbench entries on the master; None when the gateway runs on its own.
+        # Records the live session's runs as workbench entries on the control node; None when the gateway runs on its own.
         self.run_recorder: Optional[LiveRunRecorder] = run_recorder
         self.loop = asyncio.get_running_loop()
 
@@ -64,7 +64,7 @@ class SocketSession:
     def mqtt_broker_status_message(self, status: Optional[str] = None) -> ServerMessage:
         if status is None:
             status = "connected" if self.subsystem_integration_session.is_connected else "disconnected"
-        return make_mqtt_broker_status_message(status=status, master_broker=master_broker_label())
+        return make_mqtt_broker_status_message(status=status, control_node_broker=control_node_broker_label())
 
     async def _mqtt_broker_status_loop(self) -> None:
         while True:
@@ -103,22 +103,22 @@ class SocketSession:
         tls_connection: bool,
         allow_certificates: bool,
         reference_geofence: Geofence,
-        use_master_broker: bool = False,
+        use_control_node_broker: bool = False,
     ):
-        """Connect the interactive simulation to a broker: the master's own (plain, anonymous, on the
+        """Connect the interactive simulation to a broker: the control node's own (plain, anonymous, on the
         compose network the session's containers join) or any other, resolved for this container.
 
         Every connection is a live session with its own scope, which names its simulation stack. On
-        the master's broker its topics are scoped too, so several live sessions share that broker; on
+        the control node's broker its topics are scoped too, so several live sessions share that broker; on
         any other broker (WARA-PS, a lab broker) they stay the unscoped WARA-PS topics that real
         vessels, the WARA-PS map and external monitors use. Real vessels keep the unscoped topics
-        on the master's broker as well (vessel_stack/agent_topic_scope.py)."""
+        on the control node's broker as well (vessel_stack/agent_topic_scope.py)."""
         session_scope = new_live_session_scope()
         topic_prefix = ""
-        if use_master_broker:
-            broker = master_broker()
+        if use_control_node_broker:
+            broker = control_node_broker()
             if broker is None:
-                raise ValueError(NO_MASTER_BROKER_MESSAGE)
+                raise ValueError(NO_CONTROL_NODE_BROKER_MESSAGE)
             agent_broker = client_broker = broker[0]
             port = broker[1]
             user, password, tls_connection, allow_certificates = "", "", False, False

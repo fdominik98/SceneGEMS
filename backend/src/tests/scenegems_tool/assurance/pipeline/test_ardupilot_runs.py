@@ -5,7 +5,7 @@ import json
 import pytest
 
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
-from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
+from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
 from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
@@ -64,7 +64,7 @@ def test_run_records_and_verdicts_of_an_ardupilot_run(make_harness):
     sitl_record, world_record = harness.stores.results.list_run_records(campaign.campaign_id)
     for record, run, layer in ((sitl_record, 0, "ardupilot_sim"), (world_record, 1, "gazebo")):
         job = jobs[(SIMULATE, run, 0)]
-        assert (record.repeatability_tier, record.job_id, record.node_id, record.dt, record.steps) == ("bounded", job.job_id, "fake-node", 1.0, 10)
+        assert (record.repeatability_tier, record.job_id, record.worker_node_id, record.dt, record.steps) == ("bounded", job.job_id, "fake-worker-node", 1.0, 10)
         assert record.state_digest == job.result["state_digest"] and len(record.state_digest) == 64
         assert (record.stack["config"]["simulation_layer"], record.stack["config"]["mode"], record.stack["config"]["geofence"]["radius_meters"]) == (layer, "replay", 20.0)
         assert record.stack["run_record"]["speedup"] == record.stack["config"]["speedup"] and record.seed == job.payload["seed"]
@@ -127,7 +127,7 @@ def test_a_simulation_campaign_over_items_runs_on_ardupilot(make_harness):
 # Stalling
 
 
-def test_a_campaign_with_an_ardupilot_run_stalls_without_a_node_with_its_components(make_harness):
+def test_a_campaign_with_an_ardupilot_run_stalls_without_a_worker_node_with_its_components(make_harness):
     harness = make_harness(components=NO_ARDUPILOT)
     campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=0, runs=[SITL_RUN]))
     kinematic = create_campaign(harness.stores, config_dict(classes=(CLASS_A,), quota=1, failure_budget=0, runs=[{"monitor": "post_hoc"}]))
@@ -140,7 +140,7 @@ def test_a_campaign_with_an_ardupilot_run_stalls_without_a_node_with_its_compone
     assert harness.campaign(kinematic.campaign_id).actual_state != CampaignActualState.STALLED
     stall = next(event for event in harness.stores.campaigns.list_events(campaign.campaign_id) if event.kind == CampaignEventKind.STALLED)
     assert (stall.detail["job_types"], stall.detail["components"]) == (["simulation"], ON_SITL)
-    harness.nodes[:] = [NodeAvailability(harness.executor.node)]
+    harness.worker_nodes[:] = [WorkerNodeAvailability(harness.executor.worker_node)]
 
 
 def test_a_gazebo_run_needs_the_gazebo_image_of_the_pinned_release(make_harness):

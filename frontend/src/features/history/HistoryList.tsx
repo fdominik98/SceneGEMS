@@ -94,7 +94,7 @@ export function HistoryList({ onOpen, clusterName, operatorUrl }: HistoryListPro
         {unreachable && (
           <>
             <p className="meta">
-              Check that the master runs and that its operator API is reachable at <code>{operatorUrl}</code>. For a remote master, open the tunnel first:
+              Check that the control node runs and that its operator API is reachable at <code>{operatorUrl}</code>. For a remote control node, open the tunnel first:
             </p>
             <code className="cluster-hint-command">{SSH_TUNNEL_COMMAND}</code>
           </>

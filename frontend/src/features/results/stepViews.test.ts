@@ -69,10 +69,10 @@ describe("steps of an entry", () => {
 
 describe("findings of a step", () => {
   it("counts cases known states first and leaves out zero counts", () => {
-    expect(caseStateCounts({ dropped: 1, complete: 5, active: 0, paused_by_newer_master: 2 })).toEqual([
+    expect(caseStateCounts({ dropped: 1, complete: 5, active: 0, paused_by_newer_control_node: 2 })).toEqual([
       { label: "complete", count: 5 },
       { label: "dropped", count: 1 },
-      { label: "paused_by_newer_master", count: 2 },
+      { label: "paused_by_newer_control_node", count: 2 },
     ]);
   });
 
@@ -130,7 +130,7 @@ describe("findings of a step", () => {
     expect(encounterTypeCounts(undefined)).toEqual([]);
   });
 
-  it("shows no encounter types for an older master or an unmonitored step", () => {
+  it("shows no encounter types for an older control node or an unmonitored step", () => {
     const older = sampleFindings();
     delete older.encounter_types;
     expect(describeFindings(findingsSchema.parse(older)).encounters).toEqual([]);
@@ -150,7 +150,7 @@ describe("findings of a step", () => {
     expect(view.duration).toBeNull();
   });
 
-  it("never lists failed rules for an unmonitored step even when the master sent some", () => {
+  it("never lists failed rules for an unmonitored step even when the control node sent some", () => {
     const view = describeFindings(findingsSchema.parse(sampleFindings({ monitored: false })));
     expect(view.failedRules).toEqual([]);
     expect(view.verdicts).toBeNull();
@@ -183,7 +183,7 @@ describe("steps of a case", () => {
     expect(rows[1].output).toBe("no trajectories");
   });
 
-  it("reads the verdicts of a master before Phase 6 as the simulation's", () => {
+  it("reads the verdicts of a control node before Phase 6 as the simulation's", () => {
     const rows = caseStepRows(caseOf({ verdicts: [sampleVerdict] }), ["scene_generation", "trajectory_generation", "simulation"]);
     expect(rows[0].verdicts).toEqual({ passed: 0, failed: 0, unmonitored: 0 });
     expect(rows[2].verdicts).toEqual({ passed: 0, failed: 1, unmonitored: 0 });

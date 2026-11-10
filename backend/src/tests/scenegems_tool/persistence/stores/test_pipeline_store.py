@@ -88,15 +88,15 @@ def test_an_intent_links_one_job(stores, campaign, case, job_store):
         stores.pipeline.link_job("missing", other.job_id)
 
 
-def test_job_ids_and_queue_depth_of_a_campaign(stores, campaign, case, job_store, node_store):
-    node_store.register(make_hello("node-a", slots={SCENE: 4}))
+def test_job_ids_and_queue_depth_of_a_campaign(stores, campaign, case, job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={SCENE: 4}))
     scene = _submit_for(stores, job_store, campaign, case, "c1/0/scene")
     trajectories = _submit_for(stores, job_store, campaign, case, "c1/0/trajectories", stage=PipelineStage.GENERATE_TRAJECTORIES)
     stores.pipeline.add_intent(campaign.campaign_id, case.case_id, PipelineStage.SIMULATE, "c1/0/run0", run_index=0)
     job_store.submit(make_submission(idempotency_key="not-a-pipeline-job"))
     assert stores.pipeline.job_ids_of_campaign(campaign.campaign_id) == sorted([scene.job_id, trajectories.job_id])
     assert stores.pipeline.queued_jobs_by_stage(campaign.campaign_id) == {PipelineStage.GENERATE_SCENE: 1, PipelineStage.GENERATE_TRAJECTORIES: 1, PipelineStage.SIMULATE: 1}
-    lease = job_store.claim_next("node-a", LEASE_S)
+    lease = job_store.claim_next("worker-node-a", LEASE_S)
     assert lease.job.job_id == scene.job_id
     assert stores.pipeline.job_ids_of_campaign(campaign.campaign_id, [JobState.QUEUED]) == [trajectories.job_id]
     assert stores.pipeline.queued_jobs_by_stage(campaign.campaign_id) == {PipelineStage.GENERATE_TRAJECTORIES: 1, PipelineStage.SIMULATE: 1}
@@ -110,12 +110,12 @@ def test_a_new_cursor_starts_at_the_beginning(stores):
     assert stores.pipeline.read_cursor("other") == START_OF_EVENTS
 
 
-def test_events_after_the_cursor_are_terminal_events_of_pipeline_jobs(stores, campaign, case, job_store, node_store):
-    node_store.register(make_hello("node-a", slots={SCENE: 4}))
+def test_events_after_the_cursor_are_terminal_events_of_pipeline_jobs(stores, campaign, case, job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={SCENE: 4}))
     scene = _submit_for(stores, job_store, campaign, case, "c1/0/scene")
     plain = job_store.submit(make_submission(idempotency_key="not-a-pipeline-job")).job
     trajectories = _submit_for(stores, job_store, campaign, case, "c1/0/trajectories", stage=PipelineStage.GENERATE_TRAJECTORIES)
-    leases = {lease.job.job_id: lease for lease in (job_store.claim_next("node-a", LEASE_S) for _ in range(3))}
+    leases = {lease.job.job_id: lease for lease in (job_store.claim_next("worker-node-a", LEASE_S) for _ in range(3))}
     _succeed(job_store, leases[scene.job_id])
     _succeed(job_store, leases[plain.job_id])
     job_store.cancel(trajectories.job_id, "campaign stopped")
@@ -123,12 +123,12 @@ def test_events_after_the_cursor_are_terminal_events_of_pipeline_jobs(stores, ca
     batch = stores.pipeline.events_after(START_OF_EVENTS)
     assert [(event.job_id, event.kind) for event in batch.events] == [(scene.job_id, JobEventKind.SUCCEEDED), (trajectories.job_id, JobEventKind.CANCELLED)]
     first = batch.events[0]
-    assert (first.pipeline_job.idempotency_key, first.pipeline_job.case_id, first.job_state, first.job_result, first.node_id) == (
+    assert (first.pipeline_job.idempotency_key, first.pipeline_job.case_id, first.job_state, first.job_result, first.worker_node_id) == (
         "c1/0/scene",
         case.case_id,
         JobState.SUCCEEDED,
         {"valid": True},
-        "node-a",
+        "worker-node-a",
     )
     assert batch.events[1].detail == {"reason": "campaign stopped"}
     # the batch's position passes the last event, whichever job or kind it has
@@ -186,7 +186,7 @@ def test_advancing_the_cursor_commits_with_the_case_update(stores, campaign, cas
                 stores.cases.move_case(current.case_id, current.version, state=CaseState.CANCELLED, reason=event.detail["reason"], session=session)
             stores.pipeline.advance_cursor(ENGINE_CURSOR, position, batch.position, session=session)
             if fail:
-                raise RuntimeError("the master died mid-step")
+                raise RuntimeError("the control node died mid-step")
             return batch
 
     with pytest.raises(RuntimeError):

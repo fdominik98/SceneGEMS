@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogClass } from "../../../domain/cluster/campaignApi";
-import { ANY_COUNT, countOptions, filterCatalogClasses, hiddenSelections, listedValue, selectListed } from "./scenarioCatalog";
+import { ANY_COUNT, countOptions, filterCatalogClasses, hiddenSelections, selectListed } from "./scenarioCatalog";
 
 function catalogClass(classId: string, vessels: number, obstacles: number): CatalogClass {
   return { fec_id: classId, folder: classId.split("/")[0], vessel_count: vessels, obstacle_count: obstacles, content_hash: "a".repeat(64) };
@@ -24,21 +24,6 @@ describe("filterCatalogClasses", () => {
       "3vessel_0obstacle_scenarios/fec10",
     ]);
     expect(filterCatalogClasses(classes, "", ANY_COUNT, ANY_COUNT)).toEqual(classes);
-  });
-});
-
-describe("listedValue", () => {
-  const oneVessel = [catalogClass("1vessel_0obstacle_scenarios/fec0", 1, 0)];
-
-  it("shows the loaded scenario only while it is listed", () => {
-    expect(listedValue(classes, "3vessel_1obstacle_scenarios/fec1")).toBe("3vessel_1obstacle_scenarios/fec1");
-    expect(listedValue(classes, null)).toBe("");
-  });
-
-  it("shows the placeholder over a list of one scenario that is not loaded, so picking it loads it", () => {
-    expect(listedValue(oneVessel, "2vessel_0obstacle_scenarios/fec0")).toBe("");
-    expect(listedValue(oneVessel, "1vessel_0obstacle_scenarios/fec0 (edited)")).toBe("");
-    expect(listedValue(oneVessel, "head_on.problem")).toBe("");
   });
 });
 

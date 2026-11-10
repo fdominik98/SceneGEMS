@@ -220,8 +220,8 @@ export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry 
   if (query.error && !query.data) {
     const missing = query.error instanceof OperatorApiError && query.error.status === 404;
     return (
-      <EmptyState title={missing ? "This master lists no outputs" : `The ${nouns.many} did not load`} tone="error">
-        <p className="meta">{missing ? "The outputs route is new in Phase 6; update the master to browse the outputs of each step." : describeOperatorError(query.error)}</p>
+      <EmptyState title={missing ? "This control node lists no outputs" : `The ${nouns.many} did not load`} tone="error">
+        <p className="meta">{missing ? "The outputs route is new in Phase 6; update the control node to browse the outputs of each step." : describeOperatorError(query.error)}</p>
         <div>
           <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
             Try again

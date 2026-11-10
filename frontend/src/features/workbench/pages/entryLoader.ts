@@ -14,7 +14,7 @@ import type { WorkbenchTarget } from "./workbenchTarget";
 
 /**
  * Loads the output of an entry for its workbench page: the scene, the planned trajectories or the
- * simulated run of one case, with the monitor's frames, fetched from the master (artifacts through
+ * simulated run of one case, with the monitor's frames, fetched from the control node (artifacts through
  * `/cluster/artifacts/<sha>`, a run's frames through the frames route). A 404 means the entry (or
  * its output) was deleted: the loader rejects with an `EntryEndedError` that is `gone`, and the
  * page clears itself.
@@ -81,7 +81,7 @@ export interface LoadedRun {
 
 export interface LoadedExploration {
   step: "design_space_exploration";
-  /** The exploration job's result, null when the master reports none (the job did not end). */
+  /** The exploration job's result, null when the control node reports none (the job did not end). */
   result: ExplorationResult | null;
   /** The explored FECs in index order. */
   fecs: ExploredFec[];
@@ -151,7 +151,7 @@ export async function stageMonitorFrames(client: LoaderClient, detail: CaseDetai
   return parseFrames(await readResultField(client, result.frames, { signal: options.signal, fetch: options.fetch }));
 }
 
-/** A run's frames through the frames route: the master's post-hoc job over the stored state log. */
+/** A run's frames through the frames route: the control node's post-hoc job over the stored state log. */
 export async function framesOfRun(client: LoaderClient, campaignId: string, runRecordId: number, signal?: AbortSignal): Promise<SimulationFrame[]> {
   const phase = await runFramesFlow(createFramesApi(client, campaignId, runRecordId), { signal });
   if (phase.phase === "done") {

@@ -1,4 +1,4 @@
-"""The master's artifacts: the store's files and their Postgres records, kept in step.
+"""The control node's artifacts: the store's files and their Postgres records, kept in step.
 
     commit(writer, kind, media_type, holder)  file first, then the record (and the holder's reference)
     open(sha256)                              marks the record used, then opens the file
@@ -10,12 +10,12 @@ never names a missing file. Orphans come from a crash between a file's rename an
 record, or from a sweep that deleted a record but could not delete its file; sweep_orphans
 collects them. All paths take a lock per hash, so a sweep cannot delete the file a
 concurrent upload of the same content just recorded. The locks are in this process, which
-is enough because a cluster has one master process; a store shared by several processes
+is enough because a cluster has one control node process; a store shared by several processes
 would need the lock in the database.
 
 One writer records outside the lock: the pipeline engine repairs a missing record inside
 its own transaction (assurance/pipeline/verdicts.py record_references). Its file is a job
-result the node uploaded just before reporting the result, so the grace period, counted
+result the worker node uploaded just before reporting the result, so the grace period, counted
 from the file's first write, keeps the orphan sweep away from it unless the engine falls
 that far behind the results.
 

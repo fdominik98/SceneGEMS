@@ -6,8 +6,8 @@ import {
   sampleEvent,
   sampleJob,
   sampleLogLine,
-  sampleMasterStatus,
-  sampleNode,
+  sampleControlNodeStatus,
+  sampleWorkerNode,
   sampleRunRecord,
   sampleVerdict,
 } from "../../test/fixtures/clusterViews";
@@ -31,51 +31,51 @@ import {
   caseViewSchema,
   jobDetailSchema,
   jobViewSchema,
-  masterStatusSchema,
-  nodeListSchema,
-  nodeViewSchema,
+  controlNodeStatusSchema,
+  workerNodeListSchema,
+  workerNodeViewSchema,
   runRecordSchema,
   verdictSchema,
 } from "./schemas";
 
 describe("operator API schemas", () => {
-  it("parses a node view with and without the machine", () => {
-    const node = nodeViewSchema.parse(sampleNode());
-    expect(node.machine).toBe("lab-gpu-1");
-    expect(node.slots.simulation).toEqual({ slots: 8, slots_in_use: 8 });
-    expect(node, "no capabilities alias of the slots").not.toHaveProperty("capabilities");
-    expect(node.components[2]).toEqual({ component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" });
+  it("parses a worker node view with and without the machine", () => {
+    const workerNode = workerNodeViewSchema.parse(sampleWorkerNode());
+    expect(workerNode.machine).toBe("lab-gpu-1");
+    expect(workerNode.slots.simulation).toEqual({ slots: 8, slots_in_use: 8 });
+    expect(workerNode, "no capabilities alias of the slots").not.toHaveProperty("capabilities");
+    expect(workerNode.components[2]).toEqual({ component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" });
 
-    const { machine: _machine, ...withoutMachine } = sampleNode();
+    const { machine: _machine, ...withoutMachine } = sampleWorkerNode();
     void _machine;
-    expect(nodeViewSchema.parse(withoutMachine).machine).toBeUndefined();
-    expect(nodeViewSchema.parse(sampleNode({ machine: null })).machine).toBeNull();
+    expect(workerNodeViewSchema.parse(withoutMachine).machine).toBeUndefined();
+    expect(workerNodeViewSchema.parse(sampleWorkerNode({ machine: null })).machine).toBeNull();
   });
 
-  it("parses an out-of-date node with its mismatching images", () => {
-    const node = nodeViewSchema.parse(
-      sampleNode({
+  it("parses an out-of-date worker node with its mismatching images", () => {
+    const workerNode = workerNodeViewSchema.parse(
+      sampleWorkerNode({
         out_of_date: true,
         fingerprint_mismatches: [
-          { image: "scenegems-node", required: "sha256:aaaa", actual: "sha256:9999" },
+          { image: "scenegems-worker-node", required: "sha256:aaaa", actual: "sha256:9999" },
           { image: "scenegems-monitoring", required: "sha256:bbbb", actual: null },
         ],
       })
     );
-    expect(node.fingerprint_mismatches[1].actual).toBeNull();
+    expect(workerNode.fingerprint_mismatches[1].actual).toBeNull();
   });
 
-  it("refuses a node with an unknown status or a missing field", () => {
-    expect(nodeViewSchema.safeParse(sampleNode({ status: "sleeping" })).success).toBe(false);
-    const { leases: _leases, ...withoutLeases } = sampleNode();
+  it("refuses a worker node with an unknown status or a missing field", () => {
+    expect(workerNodeViewSchema.safeParse(sampleWorkerNode({ status: "sleeping" })).success).toBe(false);
+    const { leases: _leases, ...withoutLeases } = sampleWorkerNode();
     void _leases;
-    expect(nodeViewSchema.safeParse(withoutLeases).success).toBe(false);
-    expect(nodeListSchema.parse([sampleNode(), sampleNode({ node_id: "node-b", name: "worker-b" })])).toHaveLength(2);
+    expect(workerNodeViewSchema.safeParse(withoutLeases).success).toBe(false);
+    expect(workerNodeListSchema.parse([sampleWorkerNode(), sampleWorkerNode({ worker_node_id: "worker-node-b", name: "worker-b" })])).toHaveLength(2);
   });
 
-  it("parses the master status", () => {
-    const status = masterStatusSchema.parse(sampleMasterStatus);
-    expect(status.expected_fingerprints.images["scenegems-node"]).toBe("sha256:aaaa");
+  it("parses the control node status", () => {
+    const status = controlNodeStatusSchema.parse(sampleControlNodeStatus);
+    expect(status.expected_fingerprints.images["scenegems-worker-node"]).toBe("sha256:aaaa");
   });
 
   it("parses jobs with available_at, progress and log lines", () => {
@@ -88,7 +88,7 @@ describe("operator API schemas", () => {
       ...sampleJob(),
       payload: { request_id: "r1" },
       events: [
-        { at: "2026-10-26T09:58:00+00:00", kind: "submitted", from_state: null, to_state: "queued", attempt: 0, lease_id: null, node_id: null, detail: {} },
+        { at: "2026-10-26T09:58:00+00:00", kind: "submitted", from_state: null, to_state: "queued", attempt: 0, lease_id: null, worker_node_id: null, detail: {} },
       ],
       log_lines: [sampleLogLine],
     });
@@ -162,7 +162,7 @@ describe("operator API schemas", () => {
 });
 
 describe("Phase 6 views", () => {
-  it("reads a campaign row of a master without Phase 6 and one with it", () => {
+  it("reads a campaign row of a control node without Phase 6 and one with it", () => {
     const old = campaignSummarySchema.parse(samplePreSixCampaignRow);
     expect(old.kind).toBeUndefined();
     expect(old.made_from).toBeUndefined();

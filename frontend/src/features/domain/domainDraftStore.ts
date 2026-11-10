@@ -4,7 +4,7 @@ import { DOMAIN_KEYS, normalizeNewlines, type DomainKey, type DomainPresets, typ
 /**
  * Unsaved edits of the domain configuration, per cluster (operator URL). They live as long as the
  * page is open, so leaving the Domain Configuration section and coming back keeps them; a reload
- * drops them, and the master's saved configuration shows again.
+ * drops them, and the control node's saved configuration shows again.
  */
 
 interface DomainDraftState {
@@ -40,7 +40,7 @@ export const useDomainDraftStore = create<DomainDraftState>((set) => ({
     }),
 }));
 
-/** Whether two domain configurations hold the same texts (line endings aside, as the master stores LF). */
+/** Whether two domain configurations hold the same texts (line endings aside, as the control node stores LF). */
 export function sameTexts(a: DomainTexts, b: DomainTexts): boolean {
   return DOMAIN_KEYS.every((key) => normalizeNewlines(a[key]) === normalizeNewlines(b[key]));
 }

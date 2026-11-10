@@ -111,7 +111,7 @@ export interface ExplorationEntryRequest {
 
 export interface TrajectoryEntryRequest {
   input: PageInput;
-  /** The input scene as a scenario file holds it, uploaded when the input is not on the master. */
+  /** The input scene as a scenario file holds it, uploaded when the input is not on the control node. */
   scenarioContent: string | null;
   colregsConstraintsContent: string;
   params: TrajectoryGenerationParamsWire;
@@ -119,7 +119,7 @@ export interface TrajectoryEntryRequest {
 
 export interface SimulationEntryRequest {
   input: PageInput;
-  /** The input trajectories as a full scenario file, uploaded when the input is not on the master. */
+  /** The input trajectories as a full scenario file, uploaded when the input is not on the control node. */
   scenarioContent: string | null;
   colregsConstraintsContent: string;
   /** The reference area an ArduPilot run places the local frame with (the Connections page's). */
@@ -150,7 +150,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const NO_CLUSTER: ClusterAccess = {
   cluster: null,
-  resources: (jobType, components = []) => ({ jobType, components: [...components], nodes: 0, slots: 0, freeSlots: 0, blocker: "No cluster is selected." }),
+  resources: (jobType, components = []) => ({ jobType, components: [...components], workerNodes: 0, slots: 0, freeSlots: 0, blocker: "No cluster is selected." }),
 };
 
 const NO_HOOKS: SimulationPageHooks = {
@@ -212,7 +212,7 @@ export class WorkbenchJobDriver {
     return cluster === null ? blocker ?? "No cluster is selected." : blocker;
   }
 
-  /** The step monitor of an entry: post-hoc when a node monitors, else none, so the case does not wait for a job no node takes. */
+  /** The step monitor of an entry: post-hoc when a worker node monitors, else none, so the case does not wait for a job no worker node takes. */
   private stepMonitor(): "post_hoc" | "empty" {
     return this.blocker(MONITORING_JOB) === null ? "post_hoc" : "empty";
   }
@@ -580,7 +580,7 @@ export class WorkbenchJobDriver {
 
   /**
    * Monitors one scene loaded from a file with the cluster's post-hoc monitor and merges the
-   * verdicts into the shown scene. Without a node that monitors, the scene stays as it is.
+   * verdicts into the shown scene. Without a worker node that monitors, the scene stays as it is.
    */
   async monitorScene(requestId: string, scenario: Record<string, unknown>, colregsConstraintsContent: string): Promise<void> {
     const cluster = this.access().cluster;
@@ -601,7 +601,7 @@ export class WorkbenchJobDriver {
         }
       }
     } catch {
-      // The scene stays unmonitored, as with no node that monitors.
+      // The scene stays unmonitored, as with no worker node that monitors.
     }
   }
 
@@ -665,7 +665,7 @@ export class WorkbenchJobDriver {
   async generateTrajectories(requestId: string, request: TrajectoryEntryRequest): Promise<void> {
     this.abortTask(this.trajectoryJob);
     this.cancelLoad("trajectoryGeneration");
-    // The input scene stays on the canvas until the first preview replaces it, so the canvas is not empty while the job waits for a node.
+    // The input scene stays on the canvas until the first preview replaces it, so the canvas is not empty while the job waits for a worker node.
     const playback = useTrajectoryPlaybackStore.getState();
     const inputScene = useTrajectoryGenerationStore.getState().handoffScene?.scene;
     playback.clearPreviewFrames();
@@ -758,7 +758,7 @@ export class WorkbenchJobDriver {
 
   /**
    * Runs the page's input trajectories as a workbench entry on the plan's stack (kinematic, or
-   * ArduPilot SITL or Gazebo); its frames fill the simulation stream as the node sends them.
+   * ArduPilot SITL or Gazebo); its frames fill the simulation stream as the worker node sends them.
    */
   async runSimulationEntry(plan: ClusterRunPlan, request: SimulationEntryRequest): Promise<void> {
     this.abortTask(this.simulationJob);
@@ -767,14 +767,14 @@ export class WorkbenchJobDriver {
     const cluster = this.access().cluster;
     const blocker = this.blocker(plan.jobType, plan.components);
     if (cluster === null || blocker !== null) {
-      run.update({ status: "failed", jobId: null, nodeId: null, message: blocker ?? "No cluster is selected." });
+      run.update({ status: "failed", jobId: null, workerNodeId: null, message: blocker ?? "No cluster is selected." });
       return;
     }
     const task = this.newTask(true);
     this.simulationJob = task;
     const signal = task.controller.signal;
     usePlaybackStore.getState().clearSimulationTrajectories();
-    run.update({ status: "queued", jobId: null, nodeId: null, message: "Creating the workbench entry..." });
+    run.update({ status: "queued", jobId: null, workerNodeId: null, message: "Creating the workbench entry..." });
     try {
       const item = await resolveInputItem(cluster.client, request.input, request.scenarioContent, "trajectories", signal);
       const config = simulationEntryConfig({
@@ -811,7 +811,7 @@ export class WorkbenchJobDriver {
 
   /**
    * Follows the simulation of an entry's case: the run is watched at the run store's speed as the
-   * node sends its frames; when it ended before the observation reached its node, the frames come
+   * worker node sends its frames; when it ended before the observation reached its worker node, the frames come
    * from the entry's run record (the frames route).
    */
   private async followSimulationCase(cluster: WorkbenchCluster, entry: { campaignId: string; caseId: number }, task: PageTask): Promise<void> {
@@ -883,7 +883,7 @@ export class WorkbenchJobDriver {
         const running = job.state === "leased" || job.state === "running";
         useClusterRunStore.getState().update({
           jobId: job.job_id,
-          nodeId: job.lease_owner,
+          workerNodeId: job.lease_owner,
           ...(job.state === "queued" ? { status: "queued" } : running ? { status: "running", message: status?.message ?? "Running on the cluster" } : {}),
         });
         const key = running && job.lease_owner ? `${job.lease_owner}/${jobInstanceName(job.job_id, job.attempt)}` : null;
@@ -918,7 +918,7 @@ export class WorkbenchJobDriver {
 
   /**
    * Runs a simulation as one direct job, for trajectories the page has no input for (the entry
-   * route needs one). A run that ended before the observation reached its node is monitored
+   * route needs one). A run that ended before the observation reached its worker node is monitored
    * over its result trajectories.
    */
   async runSimulation(submission: JobSubmission, colregsConstraintsContent: string): Promise<void> {
@@ -928,7 +928,7 @@ export class WorkbenchJobDriver {
     const cluster = this.access().cluster;
     const blocker = this.blocker(submission.job_type, jobComponents(submission.job_type, submission.payload));
     if (cluster === null || blocker !== null) {
-      run.update({ status: "failed", jobId: null, nodeId: null, message: blocker ?? "No cluster is selected." });
+      run.update({ status: "failed", jobId: null, workerNodeId: null, message: blocker ?? "No cluster is selected." });
       return;
     }
     const task = this.newTask(false);
@@ -936,7 +936,7 @@ export class WorkbenchJobDriver {
     const signal = task.controller.signal;
     usePlaybackStore.getState().clearSimulationTrajectories();
     PAGE_STORES.simulation.getState().setStatus("running", null, null);
-    run.update({ status: "queued", jobId: null, nodeId: null, message: "Waiting for a free slot on the cluster..." });
+    run.update({ status: "queued", jobId: null, workerNodeId: null, message: "Waiting for a free slot on the cluster..." });
     try {
       const job = await this.watchSimulation(cluster, task, (onProgress) => runClusterJob(cluster, submission, { signal, onProgress }));
       if (job === null) {
@@ -1075,7 +1075,7 @@ export class WorkbenchJobDriver {
         this.abortTask(this.simulationJob);
         this.simulationJob = task;
         usePlaybackStore.getState().clearSimulationTrajectories();
-        useClusterRunStore.getState().update({ status: "queued", jobId: null, nodeId: null, message: "Following the running entry..." });
+        useClusterRunStore.getState().update({ status: "queued", jobId: null, workerNodeId: null, message: "Following the running entry..." });
         try {
           await this.followSimulationCase(cluster, entry, task);
         } catch (error) {
@@ -1184,7 +1184,7 @@ export class WorkbenchJobDriver {
   clearPage(page: WorkbenchPage, message: string | null): void {
     clearPageOutput(page);
     if (page === "simulation") {
-      useClusterRunStore.getState().update({ status: "idle", jobId: null, nodeId: null, message: null });
+      useClusterRunStore.getState().update({ status: "idle", jobId: null, workerNodeId: null, message: null });
     }
     PAGE_STORES[page].getState().clearLoaded(message);
   }
@@ -1210,7 +1210,7 @@ export class WorkbenchJobDriver {
 }
 
 
-/** Follows the previews of a job on the pool of whichever node holds it, switching nodes on a retry. */
+/** Follows the previews of a job on the pool of whichever worker node holds it, switching worker nodes on a retry. */
 class PreviewFollower {
   private readonly cluster: WorkbenchCluster;
   private readonly kind: PoolKind;

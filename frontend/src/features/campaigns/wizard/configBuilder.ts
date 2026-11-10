@@ -8,7 +8,7 @@ import { QUEUE_DEPTH_DEFAULTS, type InputItemDraft, type ParamValues, type RunDr
  * The wizard's draft as a campaign config (`campaign_config.CampaignConfig`): an object in the
  * config's key order, and the YAML text of it. Only what the operator set is written, plus the
  * fields the exit campaign states explicitly (repeats, monitor, priority, retention, seed);
- * everything else keeps the config model's defaults on the master.
+ * everything else keeps the config model's defaults on the control node.
  */
 
 export type ConfigObject = Record<string, unknown>;
@@ -17,13 +17,13 @@ export type ConfigObject = Record<string, unknown>;
 export interface BuilderCatalog {
   stacks: readonly CatalogStack[];
   generators: readonly CatalogGenerator[];
-  /** Slots per job type of the nodes that can take the campaign's jobs, for full usage's queue caps; absent while the nodes are not known. */
+  /** Slots per job type of the worker nodes that can take the campaign's jobs, for full usage's queue caps; absent while the worker nodes are not known. */
   slots?: Readonly<Record<string, number>>;
 }
 
 export const CONFIG_FORMAT = 3;
 
-/** The media type the master assumes for a reference that states none. */
+/** The media type the control node assumes for a reference that states none. */
 const DEFAULT_MEDIA_TYPE = "application/json";
 
 export function isSet(value: unknown): boolean {
@@ -127,7 +127,7 @@ function buildItem(item: InputItemDraft): ConfigObject {
  */
 function buildExploration(draft: WizardDraft): ConfigObject {
   const exploration = draft.exploration;
-  // An empty specification is left out: the master then explores its default (a preset may name none)
+  // An empty specification is left out: the control node then explores its default (a preset may name none)
   const section: ConfigObject = {};
   if (exploration.specification.trim().length > 0) {
     section.specification = normalizeNewlines(exploration.specification);
@@ -267,8 +267,8 @@ export function stagesOf(draft: WizardDraft): string[] {
 
 function buildResources(draft: WizardDraft, catalog: BuilderCatalog): ConfigObject {
   const resources: ConfigObject = {};
-  if (!draft.resources.fullUsage && draft.resources.nodes.length > 0) {
-    resources.nodes = [...draft.resources.nodes].sort();
+  if (!draft.resources.fullUsage && draft.resources.workerNodes.length > 0) {
+    resources.worker_nodes = [...draft.resources.workerNodes].sort();
   }
   const labels = requiredLabelsOf(draft);
   if (Object.keys(labels).length > 0) {

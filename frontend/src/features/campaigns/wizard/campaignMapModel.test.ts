@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { catalogStacksSchema, type CatalogClass } from "../../../domain/cluster/campaignApi";
-import { nodeViewSchema } from "../../../domain/cluster/schemas";
+import { workerNodeViewSchema } from "../../../domain/cluster/schemas";
 import { sampleCatalogClasses, sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
-import { sampleNode } from "../../../test/fixtures/clusterViews";
+import { sampleWorkerNode } from "../../../test/fixtures/clusterViews";
 import { needLabel, type RequiredCapability, type ResourcePlan } from "../resourcePlan";
 import { buildCampaignMap, CARD_WIDTH, drawingOffset, plannedCases, reviewStatusOf, STAGE_HEIGHT, type MapContext, type MapFact } from "./campaignMapModel";
 import { emptyDraft, emptyRun, WIZARD_STEPS, type InputItemDraft, type WizardDraft, type WizardStepId } from "./wizardState";
@@ -175,7 +175,7 @@ describe("what the cards say", () => {
     expect(runs[1].facts[0].tone).toBe("warn");
   });
 
-  it("states the master's check and the work planned on the review card", () => {
+  it("states the control node's check and the work planned on the review card", () => {
     const draft = draftOf((next) => {
       next.scope = [{ id: "s", classes: ["3vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 3, failureBudget: 0 }];
       next.runs = [
@@ -185,11 +185,11 @@ describe("what the cards say", () => {
     });
     const review = buildCampaignMap(draft, context({ review: "accepted" })).cards.find((card) => card.id === "review");
     expect(review?.facts).toEqual([
-      { text: "Accepted by the master", tone: "ok" },
+      { text: "Accepted by the control node", tone: "ok" },
       { text: "3 cases, 9 simulations", tone: "muted" },
     ]);
     const scenesOnly = buildCampaignMap({ ...draft, steps: ["scene_generation"] }, context({ review: "refused" })).cards.find((card) => card.id === "review");
-    expect(texts(scenesOnly?.facts ?? [])).toEqual(["Refused by the master", "3 cases planned"]);
+    expect(texts(scenesOnly?.facts ?? [])).toEqual(["Refused by the control node", "3 cases planned"]);
   });
 });
 
@@ -200,8 +200,8 @@ describe("the settings of the whole campaign", () => {
     required: [],
     coverage: [],
     missing,
-    usable: [nodeViewSchema.parse(sampleNode())],
-    unknownNodes: [],
+    usable: [workerNodeViewSchema.parse(sampleWorkerNode())],
+    unknownWorkerNodes: [],
   });
 
   it("says the name and the chain, the domain, the machines and the policy", () => {
@@ -244,7 +244,7 @@ describe("the settings of the whole campaign", () => {
     const map = buildCampaignMap(
       draftOf((draft) => {
         draft.resources.fullUsage = false;
-        draft.resources.nodes = ["a", "b"];
+        draft.resources.workerNodes = ["a", "b"];
       }),
       context()
     );
@@ -255,7 +255,7 @@ describe("the settings of the whole campaign", () => {
 describe("reviewStatusOf", () => {
   const yaml = "format: 3\n";
 
-  it("waits for the browser's own problems, then follows the master's answer to the current config", () => {
+  it("waits for the browser's own problems, then follows the control node's answer to the current config", () => {
     expect(reviewStatusOf(2, { status: "valid", yaml }, yaml)).toBe("incomplete");
     expect(reviewStatusOf(0, { status: "idle", yaml: null }, yaml)).toBe("unchecked");
     expect(reviewStatusOf(0, { status: "checking", yaml }, yaml)).toBe("checking");
@@ -321,7 +321,7 @@ describe("a campaign that explores the design space", () => {
     const card = (id: string) => map.cards.find((entry) => entry.id === id) as (typeof map.cards)[number];
     expect(texts(card("design_space_exploration").facts)).toEqual(["Scope TS = 2, StaticObstacle = 0", "At most 1000 FECs"]);
     expect(texts(card("input").facts)).toEqual(["None: the FECs come from the exploration"]);
-    expect(texts(card("review").facts)).toEqual(["Not checked on the master", "2 cases per explored FEC"]);
+    expect(texts(card("review").facts)).toEqual(["Not checked on the control node", "2 cases per explored FEC"]);
     expect(plannedCases(explores(), classes)).toBeNull();
   });
 

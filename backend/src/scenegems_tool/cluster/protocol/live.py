@@ -1,6 +1,6 @@
-"""The live channel between the master and a browser: messages and topics, version 1.
+"""The live channel between the control node and a browser: messages and topics, version 1.
 
-A WebSocket at LIVE_PATH on the master's operator listener (cluster/master/live/), with JSON
+A WebSocket at LIVE_PATH on the control node's operator listener (cluster/control_node/live/), with JSON
 text frames that each carry "version": 1. The browser client (frontend/src/domain/cluster/)
 mirrors these models; design doc 5.3 ("Live channel contract") describes them in prose.
 
@@ -10,8 +10,8 @@ mirrors these models; design doc 5.3 ("Live channel contract") describes them in
 
 Topics and what they carry:
 
-    nodes                          snapshot: node views (as GET /cluster/nodes)
-                                   data: NodeChanged | NodeRemoved
+    worker nodes                          snapshot: worker node views (as GET /cluster/worker-nodes)
+                                   data: WorkerNodeChanged | WorkerNodeRemoved
     campaigns                      snapshot: {} (the list is read with GET /cluster/campaigns); data: CampaignRowChanged on a
                                    create and on every change of a campaign (state, totals), CampaignDeleted when one is deleted
     campaign:<campaign id>         snapshot: the campaign detail view (as GET /cluster/campaigns/<id>) with
@@ -20,7 +20,7 @@ Topics and what they carry:
     job:<job id>                   snapshot: the job view (as GET /cluster/jobs lists it, with progress) and
                                    logs, its recent log lines
                                    data: JobStatusChanged | JobLogsAdded | JobChanged
-    instance:<node id>/<instance>  snapshot: InstanceSnapshot
+    instance:<worker node id>/<instance>  snapshot: InstanceSnapshot
                                    data: SceneSample | TrajectoryPreview | SimulationFrames | InstanceStatus
 
 Options of a job instance topic (live simulations): subscribe may carry {"speed": <multiple of real
@@ -51,15 +51,15 @@ from scenegems_tool.cluster.protocol.routes import LIVE_PATH  # noqa: F401 (the 
 
 LIVE_VERSION = 1
 
-NODES_TOPIC = "nodes"
+WORKER_NODES_TOPIC = "worker_nodes"
 CAMPAIGNS_TOPIC = "campaigns"
 CAMPAIGN_PREFIX = "campaign:"
 JOB_PREFIX = "job:"
 INSTANCE_PREFIX = "instance:"
-JOB_INSTANCE_PREFIX = "job-"  # a job's instance id: job-<job id>-<attempt> (cluster/node/node_context.py)
+JOB_INSTANCE_PREFIX = "job-"  # a job's instance id: job-<job id>-<attempt> (cluster/worker_node/worker_node_context.py)
 
 _KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$")  # campaign and job ids
-_SCOPE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")  # node and instance ids (cluster/node/instance_scope.py)
+_SCOPE_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")  # worker node and instance ids (cluster/worker_node/instance_scope.py)
 
 
 class LiveModel(BaseModel):
@@ -142,12 +142,12 @@ ServerMessage = Annotated[Union[Subscribed, Update, Unsubscribed, Error, Pong], 
 # Update data: the `data` of an update, per topic
 
 
-class NodeChanged(LiveModel):
-    node: Dict[str, Any]  # the node view, as GET /cluster/nodes/<id>
+class WorkerNodeChanged(LiveModel):
+    worker_node: Dict[str, Any]  # the worker node view, as GET /cluster/worker-nodes/<id>
 
 
-class NodeRemoved(LiveModel):
-    removed: str  # node id
+class WorkerNodeRemoved(LiveModel):
+    removed: str  # worker node id
 
 
 class CampaignRowChanged(LiveModel):
@@ -208,12 +208,12 @@ POOL_INSTANCE_KINDS = (InstanceKind.SCENE_GENERATION, InstanceKind.TRAJECTORY_GE
 
 
 class InstanceSnapshot(LiveModel):
-    """The snapshot of instance:<node>/<instance>.
+    """The snapshot of instance:<worker node>/<instance>.
 
-    state: the job's state for a job instance; the node's status (online, draining, offline) for a pool.
+    state: the job's state for a job instance; the worker node's status (online, draining, offline) for a pool.
     """
 
-    node_id: str
+    worker_node_id: str
     instance: str
     kind: InstanceKind
     state: str
@@ -275,7 +275,7 @@ def is_rated(update: Union[SceneSample, TrajectoryPreview, SimulationFrames, Ins
 
 
 class TopicKind(str, Enum):
-    NODES = "nodes"
+    WORKER_NODES = "worker_nodes"
     CAMPAIGNS = "campaigns"
     CAMPAIGN = "campaign"
     JOB = "job"
@@ -291,14 +291,14 @@ class Topic:
     """A parsed topic name."""
 
     kind: TopicKind
-    key: str = ""  # the campaign or job id; for an instance, <node id>/<instance>
-    node_id: str = ""
+    key: str = ""  # the campaign or job id; for an instance, <worker node id>/<instance>
+    worker_node_id: str = ""
     instance: str = ""
 
     @property
     def name(self) -> str:
-        if self.kind == TopicKind.NODES:
-            return NODES_TOPIC
+        if self.kind == TopicKind.WORKER_NODES:
+            return WORKER_NODES_TOPIC
         if self.kind == TopicKind.CAMPAIGNS:
             return CAMPAIGNS_TOPIC
         return f"{self.kind.value}:{self.key}"
@@ -329,19 +329,19 @@ def job_topic(job_id: str) -> str:
     return f"{JOB_PREFIX}{job_id}"
 
 
-def instance_topic(node_id: str, instance: str) -> str:
-    return f"{INSTANCE_PREFIX}{node_id}/{instance}"
+def instance_topic(worker_node_id: str, instance: str) -> str:
+    return f"{INSTANCE_PREFIX}{worker_node_id}/{instance}"
 
 
 def job_instance(job_id: str, attempt: int) -> str:
-    """The instance id of a job's attempt, as the node names its scope."""
+    """The instance id of a job's attempt, as the worker node names its scope."""
     return f"{JOB_INSTANCE_PREFIX}{job_id.lower()}-{attempt}"
 
 
 def parse_topic(text: str) -> Topic:
     """The topic a name stands for; InvalidTopic for anything else."""
-    if text == NODES_TOPIC:
-        return Topic(TopicKind.NODES)
+    if text == WORKER_NODES_TOPIC:
+        return Topic(TopicKind.WORKER_NODES)
     if text == CAMPAIGNS_TOPIC:
         return Topic(TopicKind.CAMPAIGNS)
     for prefix, kind in ((CAMPAIGN_PREFIX, TopicKind.CAMPAIGN), (JOB_PREFIX, TopicKind.JOB)):
@@ -351,12 +351,12 @@ def parse_topic(text: str) -> Topic:
                 raise InvalidTopic(f"invalid {kind.value} id in topic {text!r}")
             return Topic(kind, key)
     if text.startswith(INSTANCE_PREFIX):
-        node_id, separator, instance = text[len(INSTANCE_PREFIX) :].partition("/")
-        if not separator or not _SCOPE_ID_PATTERN.match(node_id) or not _SCOPE_ID_PATTERN.match(instance):
-            raise InvalidTopic(f"an instance topic is instance:<node id>/<instance>, got {text!r}")
+        worker_node_id, separator, instance = text[len(INSTANCE_PREFIX) :].partition("/")
+        if not separator or not _SCOPE_ID_PATTERN.match(worker_node_id) or not _SCOPE_ID_PATTERN.match(instance):
+            raise InvalidTopic(f"an instance topic is instance:<worker node id>/<instance>, got {text!r}")
         parse_instance(instance)
-        return Topic(TopicKind.INSTANCE, f"{node_id}/{instance}", node_id, instance)
-    raise InvalidTopic(f"unknown topic {text!r}: use nodes, campaigns, campaign:<id>, job:<id> or instance:<node id>/<instance>")
+        return Topic(TopicKind.INSTANCE, f"{worker_node_id}/{instance}", worker_node_id, instance)
+    raise InvalidTopic(f"unknown topic {text!r}: use worker nodes, campaigns, campaign:<id>, job:<id> or instance:<worker node id>/<instance>")
 
 
 def parse_instance(instance: str) -> InstanceName:
@@ -400,7 +400,7 @@ def _decode(text: Union[str, bytes], adapter: TypeAdapter) -> Any:
     if not isinstance(data, dict):
         raise InvalidLiveMessage(f"a message is a JSON object, got {type(data).__name__}")
     if data.get("version") != LIVE_VERSION:
-        raise InvalidLiveMessage(f"unsupported live channel version {data.get('version')!r}; this master speaks {LIVE_VERSION}")
+        raise InvalidLiveMessage(f"unsupported live channel version {data.get('version')!r}; this control node speaks {LIVE_VERSION}")
     try:
         return adapter.validate_python(data)
     except ValidationError as error:

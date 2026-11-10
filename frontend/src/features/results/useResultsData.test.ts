@@ -9,7 +9,7 @@ describe("pollUntilFinal", () => {
     expect(pollUntilFinal({ data: { actual_state: "draining" }, dataUpdatedAt: 100 }, 200, 10_000)).toBe(10_000);
   });
 
-  it("stops once the entry is final and the query was read after the master said so", () => {
+  it("stops once the entry is final and the query was read after the control node said so", () => {
     expect(pollUntilFinal({ data: { actual_state: "completed" }, dataUpdatedAt: 100 }, 200, 10_000)).toBe(false);
     expect(pollUntilFinal({ data: { actual_state: "stopped" }, dataUpdatedAt: 100 }, 100, 10_000)).toBe(false);
     // read before the entry turned final: one more read picks up what the last cases recorded

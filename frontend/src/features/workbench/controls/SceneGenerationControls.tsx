@@ -7,19 +7,23 @@ import { EntrySeedField } from "../pages/EntrySeedField";
 import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { useScenePageStore } from "../pages/pageStore";
 import { NumberSetting, StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
+import { sceneSelectionMode } from "../../../domain/sceneGeneration/batchGenerationStore";
+import { runButtonLabel } from "./sceneSelection";
 
 interface SceneGenerationControlsProps {
   resources: JobTypeResources;
   /** A generation (one scene or a batch) is running. */
   busy: boolean;
-  /** The right pane's Batch tab is shown: the run generates the selected presets. */
-  batch: boolean;
-  batchCount: number;
-  /** What the scenario of a single run is: the preset or file it came from, or null. */
+  /**
+   * The catalog FECs selected in the right pane: none (the run generates the editor's text), one (a
+   * single scene of it) or several (a batch, a case each).
+   */
+  selectedFecs: readonly string[];
+  /** What the editor's scenario is: the preset or file it came from, or null. */
   scenarioLabel: string | null;
   /** The editor holds a scenario (written or loaded). */
   hasScenario: boolean;
-  /** A scenario is loading into the editor. */
+  /** A scenario is loading (into the editor, or the one selected FEC's text before its run). */
   loadingLabel: string | null;
   /** Why the cluster's domain configuration does not allow generating, or null. */
   domainProblem: string | null;
@@ -43,20 +47,28 @@ interface SceneGenerationControlsProps {
   onNext: () => void;
   /** The FEC the design space exploration page would hand over (its selected one, or its first), null when it shows none. */
   explorationFec?: string | null;
-  /** Puts that FEC into the specification editor. */
+  /** Puts that FEC into the specification editor (which clears the selection). */
   onTakeExploration?: () => void;
 }
 
+/** Why the run waits for its input, for the disabled button's tooltip; null when it has one. */
+function missingInput(mode: "editor" | "single" | "batch", hasScenario: boolean, loadingLabel: string | null): string | null {
+  if (loadingLabel !== null) {
+    return `Waiting for ${loadingLabel} to load`;
+  }
+  return mode === "editor" && !hasScenario ? "Choose a FEC or write one in the specification pane first" : null;
+}
+
 /**
- * The scene page's panel: the functional scenario (edited in the right pane), the generation
- * settings, and the scene the page shows with the way on to the trajectory page.
+ * The scene page's panel: what the run takes (the editor's text, the one FEC selected, or the batch
+ * of the FECs selected), the generation settings, and the scene the page shows with the way on to
+ * the trajectory page.
  */
 export function SceneGenerationControls(props: SceneGenerationControlsProps) {
   const {
     resources,
     busy,
-    batch,
-    batchCount,
+    selectedFecs,
     scenarioLabel,
     hasScenario,
     loadingLabel,
@@ -79,8 +91,28 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
     notices.push({ text: domainProblem });
   }
   // The Input row says what the scenario lacks; the notices are what blocks the run elsewhere.
-  const hasInput = batch ? batchCount > 0 : hasScenario;
-  const canGenerate = notices.length === 0 && hasInput && !busy && loadingLabel === null;
+  const mode = sceneSelectionMode(selectedFecs.length);
+  const batch = mode === "batch";
+  const missing = missingInput(mode, hasScenario, loadingLabel);
+  const canGenerate = notices.length === 0 && missing === null && !busy;
+  const disabledReason = missing ?? (notices.length > 0 ? notices[0].text : undefined);
+  const inputName = batch ? "Batch" : "FEC";
+  const inputText =
+    mode === "batch"
+      ? `${selectedFecs.length} FECs selected`
+      : mode === "single"
+        ? selectedFecs[0]
+        : loadingLabel !== null
+          ? `loading ${loadingLabel}...`
+          : (scenarioLabel ?? (hasScenario ? "written in the editor" : "none chosen"));
+  const inputNote =
+    mode === "batch"
+      ? "in the specification pane, a scene of each"
+      : mode === "single"
+        ? loadingLabel !== null
+          ? "selected in the specification pane, loading..."
+          : "selected in the specification pane"
+        : "the editor's text in the specification pane";
   const status: StepStatus = busy
     ? { label: batch ? "Generating the batch" : "Generating", tone: "busy" }
     : scene
@@ -106,38 +138,36 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
             className="primary-btn accent"
             type="button"
             disabled={!canGenerate}
-            title={hasInput ? undefined : batch ? "Select the FECs of the batch in the specification pane first" : "Choose a FEC or write one in the specification pane first"}
+            title={canGenerate ? undefined : disabledReason}
             onClick={onGenerate}
           >
-            {batch ? (batchCount === 1 ? "Generate 1 scene" : `Generate ${batchCount} scenes`) : "Generate scene"}
+            {runButtonLabel(selectedFecs.length)}
           </button>
         )
       }
     >
       <StepRow label="Input">
         <span className="step-value" role="status">
-          <span className="step-value-name">{batch ? "Batch" : "FEC"}</span>{" "}
-          <span className={`step-value-text${(batch ? batchCount > 0 : hasScenario || loadingLabel !== null) ? "" : " is-empty"}`} title={scenarioLabel ?? undefined}>
-            {batch
-              ? batchCount === 0
-                ? "no FECs selected"
-                : `${batchCount} FEC${batchCount === 1 ? "" : "s"} selected`
-              : loadingLabel !== null
-                ? `loading ${loadingLabel}...`
-                : (scenarioLabel ?? (hasScenario ? "written in the editor" : "none chosen"))}
+          <span className="step-value-name">{inputName}</span>{" "}
+          <span className={`step-value-text${mode !== "editor" || hasScenario || loadingLabel !== null ? "" : " is-empty"}`} title={inputText}>
+            {inputText}
           </span>{" "}
-          <span className="step-value-note">{batch ? "in the batch list of the specification pane" : "in the specification pane"}</span>
+          <span className="step-value-note">{inputNote}</span>
         </span>
         {specificationHidden ? (
           <button type="button" className="link-btn" onClick={onShowSpecification}>
             Show the specification
           </button>
         ) : null}
-        {!batch && props.onTakeExploration ? (
+        {props.onTakeExploration ? (
           <button
             type="button"
             disabled={busy || !props.explorationFec}
-            title={props.explorationFec ? `Put ${props.explorationFec} of the Design Space Exploration page into the editor` : "The Design Space Exploration page shows no FEC"}
+            title={
+              props.explorationFec
+                ? `Put ${props.explorationFec} of the Design Space Exploration page into the editor${mode === "editor" ? "" : " (this clears the FECs selected)"}`
+                : "The Design Space Exploration page shows no FEC"
+            }
             onClick={props.onTakeExploration}
           >
             Exploration page

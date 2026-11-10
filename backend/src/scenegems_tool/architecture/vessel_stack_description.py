@@ -73,9 +73,9 @@ _CAPABILITY_LABELS = {
 }
 _UNIT_BY_FIELD = {"exact_up_to_speedup": "x", "max_speedup": "x"}
 
-CLUSTER_JOB_FACT = "cluster_job"  # the job and runner that run an available combination on a node ("simulation, runner kinematic"), None when none does
+CLUSTER_JOB_FACT = "cluster_job"  # the job and runner that run an available combination on a worker node ("simulation, runner kinematic"), None when none does
 _CLUSTER_JOB_NOTES = {
-    "job": "campaigns and workbench simulations run it as this job, with this runner, on a node",
+    "job": "campaigns and workbench simulations run it as this job, with this runner, on a worker node",
     "none": "no simulation runner runs it yet, so campaigns cannot use it; the workbench runs it as a live session",
     "workbench_only": "workbench only: an operator or a physical vessel is in the loop, so it runs as a live session",
 }
@@ -192,7 +192,7 @@ def _adapter_edge(registry: AdapterRegistry, spec: AdapterSpec) -> ArchitectureE
 
 
 def cluster_job_fact(chain: ChainResolution) -> Fact:
-    """Which job and runner run the available combination on a node; None, with the reason, when it runs on the workbench only."""
+    """Which job and runner run the available combination on a worker node; None, with the reason, when it runs on the workbench only."""
     runner = runner_of_stack(chain.stack)
     if runner is not None:
         return Fact(CLUSTER_JOB_FACT, "Cluster job", f"{JobType.SIMULATION.value}, runner {runner.value}", GROUP_PROPERTY, note=_CLUSTER_JOB_NOTES["job"])
@@ -381,7 +381,7 @@ def vessel_stack_document(registry: Optional[AdapterRegistry] = None, resolver: 
         combinations=tuple(combination for combination in combinations if registered.issuperset(combination.path)),
         notes=(
             "The capabilities of a path are the weakest link over its three layers and two adapters. Values marked measured come from vessel_stack/registry/measured_capabilities.yaml.",
-            "A stack runs in campaigns only when a runner of the simulation job runs it on a node (Cluster job); the other available stacks run on the workbench as live sessions. Workbench only stacks (Mission Planner, real vessels) never run in a campaign: an operator or a physical vessel is in the loop.",
+            "A stack runs in campaigns only when a runner of the simulation job runs it on a worker node (Cluster job); the other available stacks run on the workbench as live sessions. Workbench only stacks (Mission Planner, real vessels) never run in a campaign: an operator or a physical vessel is in the loop.",
             "Ports that adapters connect: " + "; ".join(_port_members()) + ".",
         ),
         role=ROLE_STEP,

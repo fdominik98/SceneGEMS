@@ -1,7 +1,7 @@
 import base64
 import os
 
-from scenegems_tool.cluster.node.launchers.container_environment import geofence_from_environment
+from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.subsystems.monitoring.monitoring_worker import MonitoringWorker
 from utils.colregs_approximations import COLREGSConstraints

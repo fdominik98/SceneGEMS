@@ -20,7 +20,7 @@ function UnavailableStacks({ catalog }: { catalog: CatalogStacks }) {
   return (
     <details className="wiz-unavailable">
       <summary>
-        {count} stacks the master cannot run in a campaign <span className="meta">(why, collapsed)</span>
+        {count} stacks the control node cannot run in a campaign <span className="meta">(why, collapsed)</span>
       </summary>
       <p className="meta">{catalog.note}</p>
       <ul className="wiz-unavailable-list">
@@ -108,7 +108,7 @@ function RunCard({
         <Field label="Name" htmlFor={`run-name-${run.id}`} hint="Labels the run in the results. Optional." issues={byField.get("name")}>
           <input id={`run-name-${run.id}`} type="text" value={run.name} onChange={(event) => onChange((item) => void (item.name = event.target.value))} />
         </Field>
-        <Field label="Stack" htmlFor={`run-stack-${run.id}`} hint={stack ? <>{stack.description} Repeatability: {stack.repeatability_tier ?? "unknown"}.</> : "Browse the stacks the master offers, by layer, software and what they support."} issues={byField.get("stack")}>
+        <Field label="Stack" htmlFor={`run-stack-${run.id}`} hint={stack ? <>{stack.description} Repeatability: {stack.repeatability_tier ?? "unknown"}.</> : "Browse the stacks the control node offers, by layer, software and what they support."} issues={byField.get("stack")}>
           <StackPicker
             id={`run-stack-${run.id}`}
             stacks={stacks}
@@ -316,12 +316,12 @@ function WavesInput({ waves, onChange, issues }: { waves: Record<string, unknown
 /** Runs: one or more, each with a stack, a monitor, a seed, repeats and the stack's own parameters. */
 export function RunsStep({ draft, update, reasons, catalog }: StepProps & { catalog: CatalogState }) {
   if (catalog.stacksLoading) {
-    return <p className="meta" role="status">Loading the stacks the master offers...</p>;
+    return <p className="meta" role="status">Loading the stacks the control node offers...</p>;
   }
   if (catalog.stacksError || !catalog.stacks) {
     return (
       <div className="wiz-error" role="alert">
-        <p>The master's stacks did not load: {describeOperatorError(catalog.stacksError)}</p>
+        <p>The control node's stacks did not load: {describeOperatorError(catalog.stacksError)}</p>
         <button type="button" onClick={catalog.retry}>
           Try again
         </button>

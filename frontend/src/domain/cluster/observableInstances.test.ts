@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { sampleJob, sampleNode } from "../../test/fixtures/clusterViews";
-import { fetchNodeJobs, jobInstanceKind, jobInstances, nodeInstances, poolInstances, viewerFor } from "./observableInstances";
+import { sampleJob, sampleWorkerNode } from "../../test/fixtures/clusterViews";
+import { fetchWorkerNodeJobs, jobInstanceKind, jobInstances, workerNodeInstances, poolInstances, viewerFor } from "./observableInstances";
 import type { OperatorClient } from "./operatorApi";
-import { jobViewSchema, nodeViewSchema } from "./schemas";
+import { jobViewSchema, workerNodeViewSchema } from "./schemas";
 
-const node = nodeViewSchema.parse(
-  sampleNode({
+const workerNode = workerNodeViewSchema.parse(
+  sampleWorkerNode({
     slots: {
       scene_generation: { slots: 3, slots_in_use: 1 },
       trajectory_generation: { slots: 2, slots_in_use: 0 },
@@ -20,7 +20,7 @@ function job(overrides: Record<string, unknown>) {
 
 describe("poolInstances", () => {
   it("gives one instance per slot of the pooled subsystems and none for other capabilities", () => {
-    const pools = poolInstances(node);
+    const pools = poolInstances(workerNode);
     expect(pools.map((entry) => entry.instance)).toEqual([
       "scene_generation-0",
       "scene_generation-1",
@@ -29,8 +29,8 @@ describe("poolInstances", () => {
       "trajectory_generation-1",
     ]);
     expect(pools[0]).toMatchObject({
-      nodeId: "node-a1",
-      topic: "instance:node-a1/scene_generation-0",
+      workerNodeId: "worker-node-a1",
+      topic: "instance:worker-node-a1/scene_generation-0",
       kind: "scene_generation",
       origin: "pool",
       job: null,
@@ -38,25 +38,25 @@ describe("poolInstances", () => {
     });
   });
 
-  it("gives nothing for a node without pooled capabilities", () => {
-    const simulationOnly = nodeViewSchema.parse(sampleNode({ slots: { simulation: { slots: 4, slots_in_use: 0 } } }));
+  it("gives nothing for a worker node without pooled capabilities", () => {
+    const simulationOnly = workerNodeViewSchema.parse(sampleWorkerNode({ slots: { simulation: { slots: 4, slots_in_use: 0 } } }));
     expect(poolInstances(simulationOnly)).toEqual([]);
   });
 });
 
 describe("jobInstances", () => {
-  it("names the leased and running jobs this node owns by job id and attempt", () => {
+  it("names the leased and running jobs this worker node owns by job id and attempt", () => {
     const jobs = [
       job({ job_id: "aaaa1111bbbb2222", job_type: "simulation", state: "running", attempt: 2 }),
       job({ job_id: "cccc3333dddd4444", job_type: "monitoring.post_hoc", state: "leased", attempt: 1 }),
-      job({ job_id: "other", job_type: "simulation", state: "running", lease_owner: "node-b2" }),
+      job({ job_id: "other", job_type: "simulation", state: "running", lease_owner: "worker-node-b2" }),
       job({ job_id: "done", job_type: "simulation", state: "succeeded" }),
       job({ job_id: "waiting", job_type: "simulation", state: "queued", lease_owner: null }),
     ];
-    const instances = jobInstances(node, jobs);
+    const instances = jobInstances(workerNode, jobs);
     expect(instances.map((entry) => entry.instance)).toEqual(["job-aaaa1111bbbb2222-2", "job-cccc3333dddd4444-1"]);
     expect(instances[0]).toMatchObject({
-      topic: "instance:node-a1/job-aaaa1111bbbb2222-2",
+      topic: "instance:worker-node-a1/job-aaaa1111bbbb2222-2",
       kind: "simulation",
       origin: "job",
       state: "running",
@@ -67,17 +67,17 @@ describe("jobInstances", () => {
 
   it("lists a job once even when two lists both carry it", () => {
     const same = job({ job_id: "x1", state: "running" });
-    expect(jobInstances(node, [same, same])).toHaveLength(1);
+    expect(jobInstances(workerNode, [same, same])).toHaveLength(1);
   });
 
   it("puts the pools before the jobs", () => {
-    const all = nodeInstances(node, [job({ job_id: "x1", job_type: "simulation" })]);
+    const all = workerNodeInstances(workerNode, [job({ job_id: "x1", job_type: "simulation" })]);
     expect(all.map((entry) => entry.origin)).toEqual(["pool", "pool", "pool", "pool", "pool", "job"]);
   });
 });
 
 describe("kinds and viewers", () => {
-  it("maps job types to the kinds the master reports", () => {
+  it("maps job types to the kinds the control node reports", () => {
     expect(jobInstanceKind("scene_generation")).toBe("scene_generation");
     expect(jobInstanceKind("trajectory_generation")).toBe("trajectory_generation");
     expect(jobInstanceKind("simulation")).toBe("simulation");
@@ -95,16 +95,16 @@ describe("kinds and viewers", () => {
   });
 });
 
-describe("fetchNodeJobs", () => {
-  it("asks for leased and running jobs and keeps those owned by the node", async () => {
+describe("fetchWorkerNodeJobs", () => {
+  it("asks for leased and running jobs and keeps those owned by the worker node", async () => {
     const listJobs = vi.fn(async (filters: { state?: string }) => ({
       items:
         filters.state === "leased"
-          ? [job({ job_id: "l1", state: "leased" }), job({ job_id: "l2", state: "leased", lease_owner: "node-b2" })]
+          ? [job({ job_id: "l1", state: "leased" }), job({ job_id: "l2", state: "leased", lease_owner: "worker-node-b2" })]
           : [job({ job_id: "r1", state: "running" })],
       total: null,
     }));
-    const jobs = await fetchNodeJobs({ listJobs } as unknown as OperatorClient, "node-a1");
+    const jobs = await fetchWorkerNodeJobs({ listJobs } as unknown as OperatorClient, "worker-node-a1");
     expect(listJobs.mock.calls.map(([filters]) => filters.state)).toEqual(["leased", "running"]);
     expect(jobs.map((entry) => entry.job_id).sort()).toEqual(["l1", "r1"]);
   });

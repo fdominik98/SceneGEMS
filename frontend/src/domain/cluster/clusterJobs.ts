@@ -9,7 +9,7 @@ import type { JobState, JobView } from "./schemas";
 /**
  * Jobs one browser runs on a cluster, outside a campaign (the workbench): follow a submitted
  * job until it ends, on the live channel's `job:<id>` topic with a REST poll beside it, and
- * read its result, whose large fields a node stores as artifacts (`ArtifactRef` of
+ * read its result, whose large fields a worker node stores as artifacts (`ArtifactRef` of
  * `cluster/protocol/artifacts.py`) and the browser downloads from the operator API.
  */
 
@@ -25,7 +25,7 @@ export const JOB_POLL_INTERVAL_LIVE_MS = 10_000;
 
 export interface JobProgressEvent {
   job: JobView;
-  /** The latest status message and progress the node reported, if any. */
+  /** The latest status message and progress the worker node reported, if any. */
   status: LiveJobStatus | null;
 }
 
@@ -48,8 +48,8 @@ function statusOf(job: JobView): LiveJobStatus | null {
 }
 
 /**
- * Resolves with the job once it ended (succeeded, failed or cancelled). A master that cannot
- * be reached for a while is waited out; a job the master does not know (404) rejects.
+ * Resolves with the job once it ended (succeeded, failed or cancelled). A control node that cannot
+ * be reached for a while is waited out; a job the control node does not know (404) rejects.
  */
 export function followJob(client: Pick<OperatorClient, "getJob">, jobId: string, options: FollowJobOptions = {}): Promise<JobView> {
   const pollIntervalMs = options.pollIntervalMs ?? JOB_POLL_INTERVAL_MS;
@@ -98,7 +98,7 @@ export function followJob(client: Pick<OperatorClient, "getJob">, jobId: string,
           finish(() => reject(error));
           return;
         }
-        // The master may be restarting or the tunnel down for a moment: keep asking.
+        // The control node may be restarting or the tunnel down for a moment: keep asking.
       }
       if (!done) {
         timer = setTimeout(() => void poll(), live ? livePollIntervalMs : pollIntervalMs);
@@ -132,7 +132,7 @@ export function jobFailureMessage(job: JobView): string {
   return job.error ? `The job failed: ${job.error}` : `The job ended ${job.state}.`;
 }
 
-/** The artifact a result field references, or null for a field the node kept inline. */
+/** The artifact a result field references, or null for a field the worker node kept inline. */
 export function artifactRefOf(value: unknown) {
   const parsed = artifactRefSchema.safeParse(value);
   if (!parsed.success || !/^[0-9a-f]{64}$/.test(parsed.data.sha256)) {

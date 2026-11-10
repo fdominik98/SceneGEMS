@@ -96,7 +96,7 @@ export function TrajectoryGenerationControls({
   const straight = generator === "straight";
   const timespanValid = Number.isFinite(timespan) && timespan > 0;
   const connected = streamStatus === "connected";
-  // Trajectories are planned by a job on the active cluster: without a node that plans, nothing runs.
+  // Trajectories are planned by a job on the active cluster: without a worker node that plans, nothing runs.
   const trajectoryResources = streamControls.clusterResources(TRAJECTORY_GENERATION_JOB);
   const hasInput = input !== null && handoffScene?.valid === true;
   const canGenerate = trajectoryResources.blocker === null && !running && hasInput && (!straight || timespanValid);
@@ -142,8 +142,8 @@ export function TrajectoryGenerationControls({
   }, [resultScenarioJson, running]);
 
   const runWarning = runSummary ? warnAboutTrajectoryRun(runSummary) : null;
-  // The search reports a partial best path as a result too; only an explicit false says so.
-  const partialPlan = resultComplete === false;
+  // The planner reports its best path as a result too, when it ends early or still fails a rule; only an explicit false says so.
+  const incompletePlan = resultComplete === false;
   // The straight generator takes the time step only; the rest of the form is the search's.
   const paramFields = straight ? PARAM_FIELDS.filter(({ key }) => key === "timeStep") : PARAM_FIELDS;
 
@@ -194,8 +194,8 @@ export function TrajectoryGenerationControls({
     ? { label: straight ? "Generating" : `Planning, seed step ${iteration}`, tone: "busy" }
     : status === "done"
       ? resultValid
-        ? partialPlan || runWarning
-          ? { label: "Partial trajectory", tone: "warn" }
+        ? incompletePlan || runWarning
+          ? { label: "Incomplete trajectory", tone: "warn" }
           : { label: "Trajectory ready", tone: "ok" }
         : { label: "No usable trajectory", tone: "error" }
       : status === "error"
@@ -333,8 +333,8 @@ export function TrajectoryGenerationControls({
                 ? "being generated"
                 : `best so far, seed step ${iteration}`
               : runSummary
-                ? partialPlan
-                  ? "partial plan"
+                ? incompletePlan
+                  ? "incomplete plan"
                   : resultComplete === true
                     ? "complete plan"
                     : "planned"
@@ -343,9 +343,9 @@ export function TrajectoryGenerationControls({
         </span>
         {runSummary && status === "done" ? <p className="step-line">{describeTrajectoryRun(runSummary)}</p> : null}
         <PageEntryStatus store={useTrajectoryPageStore} />
-        {partialPlan && status === "done" ? (
+        {incompletePlan && status === "done" ? (
           <p className="step-line warning step-row-full" role="alert">
-            The search ended without a complete trajectory, so this is the best path it found. It can still be simulated and exported.
+            The planner found no complete plan, so this is the best path it found: it ends early or still fails a COLREGS rule. It can still be simulated and exported.
           </p>
         ) : null}
         {runWarning ? (

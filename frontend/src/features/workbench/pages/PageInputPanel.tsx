@@ -28,7 +28,7 @@ interface Props {
   historyStep: CampaignStep;
   /** The active cluster's operator client, null without one (no history then). */
   client: OperatorClient | null;
-  /** A history output was picked: its input and its content as the master stores it. */
+  /** A history output was picked: its input and its content as the control node stores it. */
   onPickHistory: (input: PageInput, document: unknown) => void | Promise<void>;
   onPickFile: (file: File) => void | Promise<void>;
   disabled?: boolean;

@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 
-from scenegems_tool.cluster.node.instance_scope import InstanceScope
-from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import claim_stack_ownership, schedule_force_destroy_session_stack, schedule_leftover_sweep
+from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_stack import claim_stack_ownership, schedule_force_destroy_session_stack, schedule_leftover_sweep
 from scenegems_tool.gateway.protocol import ServerMessage, SimulationStatus, make_error_message
 from scenegems_tool.subsystems.scenario_execution.simulation_session import SimulationSession
 

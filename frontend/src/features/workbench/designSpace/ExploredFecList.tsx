@@ -7,6 +7,9 @@ import { ProblemEditor } from "../controls/ProblemEditor";
 import { FEC_ROW_HEIGHT, fecCounts, visibleRange } from "./explorationModel";
 import { useExplorationStore } from "./explorationStore";
 import { loadFecTexts, type TextClient } from "./fecTexts";
+import { ModelGraph } from "./graphs/ModelGraph";
+import { FEC_VIEW_KEY, useTextOrGraph } from "./graphs/textOrGraph";
+import { ViewSwitch } from "./graphs/ViewSwitch";
 import "./designSpace.css";
 
 /** The list's height before it is measured (and where nothing measures, as in tests). */
@@ -19,7 +22,7 @@ interface Props {
 /**
  * The centre of the design space exploration page: how many FECs the exploration found and what
  * that means, the list of them (id, vessels, obstacles and, once its text is read, its relations in
- * words), and the selected FEC's whole text, read only. Texts are read for the rows in view and the
+ * words), and the selected FEC: its model graph or its whole text, read only (kept per browser). Texts are read for the rows in view and the
  * selected row only.
  */
 export function ExploredFecList({ client }: Props) {
@@ -34,6 +37,7 @@ export function ExploredFecList({ client }: Props) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState({ top: 0, height: FALLBACK_HEIGHT });
   const hasRows = fecs.length > 0;
+  const [detailView, setDetailView] = useTextOrGraph(FEC_VIEW_KEY, "graph");
 
   useLayoutEffect(() => {
     const element = listRef.current;
@@ -166,11 +170,18 @@ export function ExploredFecList({ client }: Props) {
           </EmptyState>
         ) : (
           <>
-            <h4 className="fec-detail-title">
-              {selected.fecId} <span className="meta">{fecCounts(selected)}</span>
-            </h4>
+            <div className="fec-detail-head">
+              <h4 className="fec-detail-title">
+                {selected.fecId} <span className="meta">{fecCounts(selected)}</span>
+              </h4>
+              <ViewSwitch label="Show the FEC as" value={detailView} onChange={setDetailView} order={["graph", "text"]} />
+            </div>
             {texts[selected.fecId] !== undefined ? (
-              <ProblemEditor value={texts[selected.fecId]} readOnly ariaLabel={`Specification of ${selected.fecId}`} />
+              detailView === "graph" ? (
+                <ModelGraph text={texts[selected.fecId]} label={`Model graph of ${selected.fecId}`} />
+              ) : (
+                <ProblemEditor value={texts[selected.fecId]} readOnly ariaLabel={`Specification of ${selected.fecId}`} />
+              )
             ) : textErrors[selected.fecId] !== undefined ? (
               <p className="error">{textErrors[selected.fecId]}</p>
             ) : (

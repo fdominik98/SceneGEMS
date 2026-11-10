@@ -46,10 +46,10 @@ class JobRow(Base):
     # JobRequirements, one column each so the claim filters on them in SQL
     required_labels: Mapped[Dict[str, str]] = mapped_column(JSONB)
     required_fingerprints: Mapped[Dict[str, str]] = mapped_column(JSONB)
-    required_components: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # contained in the claiming node's usable components
+    required_components: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # contained in the claiming worker node's usable components
     min_memory_mb: Mapped[int] = mapped_column(Integer)
     min_cpus: Mapped[float] = mapped_column(Float)
-    allowed_nodes: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # node ids that may claim the job, empty for any
+    allowed_worker_nodes: Mapped[List[str]] = mapped_column(JSONB, server_default=text("'[]'::jsonb"))  # worker node ids that may claim the job, empty for any
     priority: Mapped[int] = mapped_column(Integer)  # higher runs first
     max_attempts: Mapped[int] = mapped_column(Integer)
     idempotency_key: Mapped[str] = mapped_column(String(256), unique=True)
@@ -58,7 +58,7 @@ class JobRow(Base):
     attempt: Mapped[int] = mapped_column(Integer)
     failed_attempts: Mapped[int] = mapped_column(Integer)
     lease_id: Mapped[Optional[str]] = mapped_column(String(36), unique=True)
-    lease_owner: Mapped[Optional[str]] = mapped_column(ForeignKey("node.id"))
+    lease_owner: Mapped[Optional[str]] = mapped_column(ForeignKey("worker_node.id"))
     lease_expires_at: Mapped[Optional[datetime]] = mapped_column(utc_timestamp())
 
     submitted_at: Mapped[datetime] = mapped_column(utc_timestamp())
@@ -74,10 +74,10 @@ class JobRow(Base):
 
 class JobEventKind(str, Enum):
     SUBMITTED = "submitted"
-    LEASED = "leased"  # claimed for a node and offered
+    LEASED = "leased"  # claimed for a worker node and offered
     ACCEPTED = "accepted"
-    REJECTED = "rejected"  # the node refused the offer; back to the queue, no failed attempt
-    RELEASED = "released"  # the node gave the job back unfinished; back to the queue, no failed attempt
+    REJECTED = "rejected"  # the worker node refused the offer; back to the queue, no failed attempt
+    RELEASED = "released"  # the worker node gave the job back unfinished; back to the queue, no failed attempt
     EXPIRED = "expired"  # the lease ran out; a failed attempt
     ATTEMPT_FAILED = "attempt_failed"  # a retryable failure; back to the queue
     SUCCEEDED = "succeeded"
@@ -109,5 +109,5 @@ class JobEventRow(Base):
     to_state: Mapped[JobState] = mapped_column(enum_column(JobState, "to_state"))
     attempt: Mapped[int] = mapped_column(Integer)
     lease_id: Mapped[Optional[str]] = mapped_column(String(36))
-    node_id: Mapped[Optional[str]] = mapped_column(String(128))
+    worker_node_id: Mapped[Optional[str]] = mapped_column(String(128))
     detail: Mapped[Dict[str, Any]] = mapped_column(JSONB)

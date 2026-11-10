@@ -22,7 +22,7 @@ export interface WorkbenchTarget {
   runRecordId?: number;
   /** The explored FEC to select on the design space exploration page (`explored/00003`); the case is the exploration's. */
   fecId?: string;
-  /** The case's index in its class (0-based), for labels; `caseId` is the master's database id. Absent on targets stored before it. */
+  /** The case's index in its class (0-based), for labels; `caseId` is the control node's database id. Absent on targets stored before it. */
   caseIndex?: number;
   /** Follow the running job instead of loading the finished output. */
   live?: boolean;

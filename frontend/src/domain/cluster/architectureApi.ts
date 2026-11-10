@@ -113,9 +113,9 @@ export const architectureDocumentSchema = z.object({
   unsupported: z.array(unsupportedLinkSchema),
   combinations: z.array(combinationSchema),
   notes: z.array(z.string()),
-  /** The part's place in the chain; a master from before the overview states none, so every field has a default. */
+  /** The part's place in the chain; a control node from before the overview states none, so every field has a default. */
   role: documentRoleSchema.default("step"),
-  /** The chain step the part performs, as the console names it; empty for a supporting part and from an older master. */
+  /** The chain step the part performs, as the console names it; empty for a supporting part and from an older control node. */
   step: z.string().default(""),
   takes: z.string().default(""),
   gives: z.string().default(""),

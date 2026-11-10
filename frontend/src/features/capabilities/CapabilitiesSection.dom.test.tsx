@@ -4,24 +4,24 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ArchitectureDocument } from "../../domain/cluster/architectureApi";
 import { resetLiveChannels } from "../../domain/cluster/liveChannels";
-import { useNodesStore } from "../../domain/cluster/nodesStore";
+import { useWorkerNodesStore } from "../../domain/cluster/workerNodesStore";
 import { sampleStackDocument, sampleStackDocumentWithoutChain } from "../../test/fixtures/architectureDocuments";
-import { sampleNode } from "../../test/fixtures/clusterViews";
+import { sampleWorkerNode } from "../../test/fixtures/clusterViews";
 import { MockWebSocket } from "../../test/mockWebSocket";
 import { CapabilitiesSection } from "./CapabilitiesSection";
 
 // The Capabilities section against a fake operator API that serves architecture documents and the cluster's machines.
 
-/** Reading the architecture fails while set: "http" with an answer of the master, "network" without one. */
+/** Reading the architecture fails while set: "http" with an answer of the control node, "network" without one. */
 let failure: "http" | "network" | null = null;
-/** The documents the fake master serves. */
+/** The documents the fake control node serves. */
 let documents: unknown[] = [];
 
 function part(id: string, title: string, overrides: Partial<ArchitectureDocument> = {}): ArchitectureDocument {
   return { ...sampleStackDocument(), id, title, summary: `${title} in a sentence.`, ...overrides };
 }
 
-/** The chain as a master states it: two steps and a supporting part. The sample machine has scene generation and simulation slots only. */
+/** The chain as a control node states it: two steps and a supporting part. The sample machine has scene generation and simulation slots only. */
 function chainDocuments(): ArchitectureDocument[] {
   return [
     part("exploration", "Design space exploration", { step: "Design space exploration", takes: "a specification and a scope", gives: "FECs", job_types: ["design_space_exploration"], combinations: [] }),
@@ -32,8 +32,8 @@ function chainDocuments(): ArchitectureDocument[] {
 
 async function fakeFetch(input: RequestInfo | URL): Promise<Response> {
   const url = new URL(String(input));
-  if (url.pathname === "/cluster/nodes") {
-    return new Response(JSON.stringify([sampleNode()]), { status: 200, headers: { "Content-Type": "application/json", "X-Total-Count": "1" } });
+  if (url.pathname === "/cluster/worker-nodes") {
+    return new Response(JSON.stringify([sampleWorkerNode()]), { status: 200, headers: { "Content-Type": "application/json", "X-Total-Count": "1" } });
   }
   if (url.pathname !== "/cluster/catalog/architecture") {
     return new Response(JSON.stringify({ detail: "not found" }), { status: 404 });
@@ -65,7 +65,7 @@ beforeEach(() => {
   documents = [sampleStackDocument()];
   MockWebSocket.reset();
   resetLiveChannels({ createSocket: MockWebSocket.factory });
-  useNodesStore.setState({ operatorUrl: null, nodes: [], loaded: false, source: null, error: null, unreachable: false, updatedAt: null });
+  useWorkerNodesStore.setState({ operatorUrl: null, workerNodes: [], loaded: false, source: null, error: null, unreachable: false, updatedAt: null });
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
 });
 
@@ -117,12 +117,12 @@ describe("the Capabilities section", () => {
     expect(screen.getByRole("heading", { name: "The chain" })).toBeVisible();
   });
 
-  it("shows the parts without a chain when the master states none", async () => {
+  it("shows the parts without a chain when the control node states none", async () => {
     documents = [sampleStackDocumentWithoutChain()];
     renderSection();
     expect(await screen.findByRole("heading", { name: "The parts" })).toBeVisible();
     const card = screen.getByRole("article", { name: "Stack" });
-    expect(within(card).getByText("not stated by this master")).toBeVisible();
+    expect(within(card).getByText("not stated by this control node")).toBeVisible();
     expect(within(card).queryByText("Takes")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "The chain" })).not.toBeInTheDocument();
   });
@@ -135,10 +135,10 @@ describe("the Capabilities section", () => {
     expect(await screen.findByText(/may be out of date/)).toHaveTextContent("cannot reach");
     expect(screen.getByRole("tab", { name: "Stack" })).toBeVisible();
     expect(screen.getAllByText("A stack of three layers.").length).toBeGreaterThan(0);
-    expect(screen.queryByText("The master cannot be reached")).not.toBeInTheDocument();
+    expect(screen.queryByText("The control node cannot be reached")).not.toBeInTheDocument();
   });
 
-  it("shows the master's reasons when the first read fails", async () => {
+  it("shows the control node's reasons when the first read fails", async () => {
     failure = "http";
     renderSection();
     expect(await screen.findByText("The architecture could not be read")).toBeVisible();

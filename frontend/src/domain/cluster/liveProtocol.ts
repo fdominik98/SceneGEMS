@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Wire format of the master's live channel (`/cluster/live` on the operator listener),
+ * Wire format of the control node's live channel (`/cluster/live` on the operator listener),
  * version 1 of the contract in design doc section 5.3, which the server implements in
  * `backend/src/scenegems_tool/cluster/protocol/live.py`. JSON text frames; every message
  * carries `"version": 1`.
@@ -9,7 +9,7 @@ import { z } from "zod";
 
 export const LIVE_PROTOCOL_VERSION = 1;
 
-export const NODES_TOPIC = "nodes";
+export const WORKER_NODES_TOPIC = "worker_nodes";
 
 /** Every entry of Campaign History (design doc 6.5): the snapshot is `{}`, updates carry a changed list row or a deleted id. */
 export const CAMPAIGNS_TOPIC = "campaigns";
@@ -22,24 +22,24 @@ export function jobTopic(jobId: string): string {
   return `job:${jobId}`;
 }
 
-export function instanceTopic(nodeId: string, instance: string): string {
-  return `instance:${nodeId}/${instance}`;
+export function instanceTopic(workerNodeId: string, instance: string): string {
+  return `instance:${workerNodeId}/${instance}`;
 }
 
-/** The instance name of a job's attempt, as the node runs it. */
+/** The instance name of a job's attempt, as the worker node runs it. */
 export function jobInstanceName(jobId: string, attempt: number): string {
   return `job-${jobId}-${attempt}`;
 }
 
 export type ParsedTopic =
-  | { kind: "nodes" }
+  | { kind: "worker_nodes" }
   | { kind: "campaign"; campaignId: string }
   | { kind: "job"; jobId: string }
-  | { kind: "instance"; nodeId: string; instance: string };
+  | { kind: "instance"; workerNodeId: string; instance: string };
 
 export function parseTopic(topic: string): ParsedTopic | null {
-  if (topic === NODES_TOPIC) {
-    return { kind: "nodes" };
+  if (topic === WORKER_NODES_TOPIC) {
+    return { kind: "worker_nodes" };
   }
   const colon = topic.indexOf(":");
   if (colon <= 0) {
@@ -61,7 +61,7 @@ export function parseTopic(topic: string): ParsedTopic | null {
     if (slash <= 0 || slash === rest.length - 1) {
       return null;
     }
-    return { kind: "instance", nodeId: rest.slice(0, slash), instance: rest.slice(slash + 1) };
+    return { kind: "instance", workerNodeId: rest.slice(0, slash), instance: rest.slice(slash + 1) };
   }
   return null;
 }
@@ -70,7 +70,7 @@ export function parseTopic(topic: string): ParsedTopic | null {
 
 /**
  * Options of an observed job instance topic (live simulations, design doc 5.3 "Wave 2 contracts"):
- * `speed` is the multiple of real time an observed run is paced to (the master's default is 10).
+ * `speed` is the multiple of real time an observed run is paced to (the control node's default is 10).
  */
 export interface SubscribeOptions {
   speed?: number;

@@ -27,7 +27,7 @@ def attach_broker_network_to_service(service: dict) -> None:
 
 
 def attach_broker_network_to_compose(compose: dict, network_name: Optional[str] = None) -> dict:
-    """Attach every service to the external network of the broker (the node's network when one is named)."""
+    """Attach every service to the external network of the broker (the worker node's network when one is named)."""
     compose.setdefault("networks", {}).update(scenegems_broker_network_definition(network_name))
     for service in compose.get("services", {}).values():
         attach_broker_network_to_service(service)

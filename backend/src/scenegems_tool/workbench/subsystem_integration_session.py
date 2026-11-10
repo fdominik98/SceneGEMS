@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Optional
 
-from scenegems_tool.cluster.node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.gateway.protocol import ServerMessage
 from scenegems_tool.subsystems.monitoring.empty_monitor_session import EmptyMonitorSession
 from scenegems_tool.subsystems.monitoring.monitor_session import MonitorSession

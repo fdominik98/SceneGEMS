@@ -22,7 +22,7 @@ def append_job_event(session: Session, job: JobRow, kind: JobEventKind, from_sta
             to_state=job.state,
             attempt=job.attempt,
             lease_id=job.lease_id,
-            node_id=job.lease_owner,
+            worker_node_id=job.lease_owner,
             detail=detail or {},
         )
     )
@@ -34,11 +34,11 @@ def job_events(session: Session, job_id: str) -> List[JobEventRecord]:
 
 
 def rejections_since(session: Session, since: datetime, unfinished_states: Sequence[JobState]) -> List[JobEventRecord]:
-    """The reject events since `since` of jobs in unfinished_states that name their node, oldest first."""
+    """The reject events since `since` of jobs in unfinished_states that name their worker node, oldest first."""
     query = (
         select(JobEventRow)
         .join(JobRow, JobRow.id == JobEventRow.job_id)
-        .where(JobEventRow.kind == JobEventKind.REJECTED, JobEventRow.at >= since, JobEventRow.node_id.is_not(None), JobRow.state.in_(unfinished_states))
+        .where(JobEventRow.kind == JobEventKind.REJECTED, JobEventRow.at >= since, JobEventRow.worker_node_id.is_not(None), JobRow.state.in_(unfinished_states))
         .order_by(JobEventRow.at, JobEventRow.id)
     )
     return [JobEventRecord.from_row(row) for row in session.execute(query).scalars()]

@@ -81,7 +81,7 @@ function fakeClient(detail: CaseDetail | "gone", artifacts: Record<string, unkno
       return detail;
     },
     getJob: async (jobId: string) => jobDetail(jobResults[jobId] ?? {}),
-    artifactUrl: (sha256: string) => `http://master/cluster/artifacts/${sha256}`,
+    artifactUrl: (sha256: string) => `http://control-node/cluster/artifacts/${sha256}`,
     request: async () => {
       throw new Error("not used");
     },

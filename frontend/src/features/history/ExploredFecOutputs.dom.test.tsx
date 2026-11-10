@@ -9,7 +9,7 @@ import { ExploredFecOutputs } from "./ExploredFecOutputs";
 const mocks = vi.hoisted(() => ({ outputs: { data: undefined as unknown, isLoading: false, error: null as unknown, isFetching: false, refetch: () => Promise.resolve() } }));
 
 vi.mock("./useHistoryData", () => ({ useStepOutputs: () => mocks.outputs }));
-vi.mock("../campaigns/useCampaignData", () => ({ useOperatorClient: () => ({ artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` }) }));
+vi.mock("../campaigns/useCampaignData", () => ({ useOperatorClient: () => ({ artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` }) }));
 
 function row(index: number) {
   return {

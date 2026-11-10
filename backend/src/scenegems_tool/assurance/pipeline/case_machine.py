@@ -28,7 +28,7 @@ It leaves the pipeline early as
     dropped    the scene is invalid, or the trajectory generator found no trajectory, or no
                complete one while a simulation follows (the reason is recorded;
                trajectories_complete says which); when trajectory generation is the last
-               step, a valid but incomplete trajectory set (the best partial path) completes
+               step, a valid but incomplete trajectory set (the best path found) completes
                the case with trajectories_complete false
     failed     a job ended failed (out of attempts, or a failure that is not retryable), was
                cancelled by someone else, or returned a result its stage cannot use; the case
@@ -107,7 +107,7 @@ class ExternalRun:
     """A simulation that ran outside the cluster (a live session), as record_external_run stores it.
 
     state_log is the reference (wire form or ArtifactRef) of the stored state log, a
-    Trajectories document in the master's artifact store; stack is the run's stack as the
+    Trajectories document in the control node's artifact store; stack is the run's stack as the
     session configured it (per vessel), environment its environment.
     """
 
@@ -120,7 +120,7 @@ class ExternalRun:
     state_digest: Optional[str] = None
     seed: Optional[int] = None  # the run seed of the case seed when None
     trajectories_complete: bool = True
-    node_id: Optional[str] = None
+    worker_node_id: Optional[str] = None
     fingerprints: Mapping[str, str] = field(default_factory=dict)
     durations_s: Mapping[str, float] = field(default_factory=dict)
 
@@ -280,7 +280,7 @@ class CaseMachine:
         specs = []
         for index, (scenario, counts) in enumerate(zip(scenarios, fecs)):
             if not is_reference(scenario):
-                raise ResultError("the exploration's FECs were not stored as artifacts (the node has no artifact transport)")
+                raise ResultError("the exploration's FECs were not stored as artifacts (the worker node has no artifact transport)")
             reference = scenario if isinstance(scenario, ArtifactRef) else ArtifactRef.model_validate(scenario)
             vessels, obstacles = int(counts.get("vessel_count", 0)), int(counts.get("obstacle_count", 0))
             if vessels < 1:
@@ -325,7 +325,7 @@ class CaseMachine:
                 context,
                 case,
                 CaseState.DROPPED,
-                "the trajectory generator found no complete trajectories (only the best partial path)",
+                "the trajectory generator found no complete trajectories (its best path ends early or still fails a COLREGS rule)",
                 progress,
                 trajectories_artifact=trajectories,
                 trajectories_complete=False,
@@ -336,7 +336,7 @@ class CaseMachine:
             due.append((TRAJECTORIES_MONITOR_STEP, context.builder.trajectory_monitoring(f"{context.scenario_name(case)}#trajectories", result)))
         if simulates:
             due += [(simulate, context.builder.simulation(case.seed, simulate.run_index, result)) for simulate in context.graph.simulate_steps()]
-        # The last step keeps a trajectory set that is not complete (the best partial path), flagged
+        # The last step keeps a trajectory set that is not complete (the best path found), flagged
         case = self._save(context, case, progress, trajectories_artifact=trajectories, trajectories_complete=complete)
         self._intents(context, case, due)
 
@@ -368,7 +368,7 @@ class CaseMachine:
                 simulation_result=result,
                 input_trajectories_hash=self._input_trajectories(context, case),
                 job_id=event.job_id,
-                node_id=facts.lease_owner if facts is not None else event.node_id,
+                worker_node_id=facts.lease_owner if facts is not None else event.worker_node_id,
                 fingerprints=facts.required_fingerprints if facts is not None else {},
                 durations_s=facts.durations_s() if facts is not None else {},
                 tier=tier,
@@ -520,7 +520,7 @@ class CaseMachine:
                 simulation_result=result,
                 input_trajectories_hash=case.input_artifact,
                 job_id=None,
-                node_id=run.node_id,
+                worker_node_id=run.worker_node_id,
                 fingerprints=run.fingerprints,
                 durations_s=run.durations_s,
                 tier=run.repeatability_tier,

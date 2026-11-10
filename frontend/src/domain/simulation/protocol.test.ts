@@ -215,22 +215,22 @@ describe("parseServerMessage", () => {
     }
   });
 
-  it("parses mqtt_broker_status with the master broker", () => {
+  it("parses mqtt_broker_status with the control node broker", () => {
     const msg = parseServerMessage({
       type: "mqtt_broker_status",
       status: "connected",
-      masterBroker: "cluster-broker:1883",
+      controlNodeBroker: "cluster-broker:1883",
     });
     expect(msg.kind).toBe("mqtt_broker_status");
     if (msg.kind === "mqtt_broker_status") {
       expect(msg.status).toBe("connected");
-      expect(msg.masterBroker).toBe("cluster-broker:1883");
+      expect(msg.controlNodeBroker).toBe("cluster-broker:1883");
     }
   });
 
-  it("parses mqtt_broker_status from a server without a master broker", () => {
+  it("parses mqtt_broker_status from a server without a control node broker", () => {
     const msg = parseServerMessage({ type: "mqtt_broker_status", status: "disconnected" });
-    expect(msg.kind === "mqtt_broker_status" && msg.masterBroker).toBe(null);
+    expect(msg.kind === "mqtt_broker_status" && msg.controlNodeBroker).toBe(null);
   });
 
   it("parses monitor_status", () => {
@@ -259,7 +259,7 @@ describe("parseServerMessage", () => {
       status: "unavailable",
       campaignId: null,
       caseId: null,
-      message: "the gateway runs without a master",
+      message: "the gateway runs without a control node",
     });
   });
 

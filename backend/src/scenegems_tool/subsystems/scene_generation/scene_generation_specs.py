@@ -237,8 +237,8 @@ def scene_generation_document(measurements: Optional[Mapping[str, MeasuredFacts]
         (
             "cluster_job",
             "Cluster job",
-            "The scene_generation job: dispatched to a node's scene generation pool, which runs as many generations at once as the node has slots. With a seed the scene is reproducible unless the timeout ended the search.",
-            "scenegems_tool/cluster/node/jobs/scene_generation_job.py",
+            "The scene_generation job: dispatched to a worker node's scene generation pool, which runs as many generations at once as the worker node has slots. With a seed the scene is reproducible unless the timeout ended the search.",
+            "scenegems_tool/cluster/worker_node/jobs/scene_generation_job.py",
             "cluster",
         ),
         (

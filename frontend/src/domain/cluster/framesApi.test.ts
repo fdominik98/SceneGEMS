@@ -89,7 +89,7 @@ describe("frames request flow", () => {
     expect(isFramesBusy({ phase: "error", message: "x", unreachable: false })).toBe(false);
   });
 
-  it("answers a 409 as unavailable with the master's reason", async () => {
+  it("answers a 409 as unavailable with the control node's reason", async () => {
     const api = fakeApi({
       submit: async () => {
         throw httpError(409, "run record 11 has no state log: the campaign's retention removed it or the run kept none");
@@ -115,7 +115,7 @@ describe("frames request flow", () => {
     expect(final).toMatchObject({ phase: "failed", message: "the monitoring job was cancelled" });
   });
 
-  it("asks the master to resubmit only when the flow is told to retry", async () => {
+  it("asks the control node to resubmit only when the flow is told to retry", async () => {
     const plain = fakeApi({ submit: async () => view("failed", { error: "boom" }) });
     await run(plain);
     expect(plain.submit).toHaveBeenCalledWith(undefined, undefined);
@@ -133,7 +133,7 @@ describe("frames request flow", () => {
     expect(final).toMatchObject({ phase: "error", message: expect.stringContaining("without a frames artifact") });
   });
 
-  it("reports an unreachable master as an error that says so", async () => {
+  it("reports an unreachable control node as an error that says so", async () => {
     const api = fakeApi({
       submit: async () => view("queued"),
       polls: [new OperatorApiError("network", "cannot reach http://127.0.0.1:5174 (Failed to fetch)", "/frames")],

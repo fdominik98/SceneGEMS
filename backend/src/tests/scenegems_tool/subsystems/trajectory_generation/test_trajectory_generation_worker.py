@@ -75,8 +75,8 @@ class _Path(list):
 class _Search:
     """Stands in for MonitorGuidedPlanner at the end of a search."""
 
-    def __init__(self, plan=None, partial=None):
-        self.plan, self.partial, self.iteration_count = plan, partial, 7
+    def __init__(self, plan=None, partial=None, first_failed_step=None):
+        self.plan, self.partial, self.iteration_count, self.first_failed_step = plan, partial, 7, first_failed_step
 
     def plan_trajectory(self):
         if self.plan is None:
@@ -94,6 +94,7 @@ class _Search:
     "search, expected",
     [
         (_Search(plan=_Path()), (True, True, None)),
+        (_Search(plan=_Path(), first_failed_step=25), (True, False, None)),  # a plan that still fails a COLREGS rule
         (_Search(partial=_Path()), (True, False, None)),  # valid for the workbench, not complete
         (_Search(), (False, False, "No trajectory could be planned: no complete plan")),
     ],
@@ -105,3 +106,32 @@ def test_a_partial_path_is_valid_but_not_complete(search, expected, monkeypatch)
     trajectory_generation_worker._emit_result(results, task, search, lambda trajectories, iteration: SimpleNamespace(trajectories=trajectories))
     [(_, payload, valid, complete, error)] = results.items
     assert (valid, complete, error) == expected
+
+
+def test_previews_are_spaced_from_the_end_of_the_last_one(monkeypatch):
+    """Building a preview of a long path can take longer than the interval. Timed from its start, every
+    step then published one; the planner is told about a dropped preview so it can offer it again."""
+    clock = [100.0]
+    captured = {}
+
+    def slow_payload(data, monitored):
+        clock[0] += 5.0
+        return {"trajectories": data}
+
+    def build_planner(task, scene, others, constants, observer, termination_signal):
+        captured["observer"] = observer
+
+    monkeypatch.setattr(trajectory_generation_worker, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(trajectory_generation_worker, "_trajectory_payload", slow_payload)
+    monkeypatch.setattr(trajectory_generation_worker, "_make_trajectory_data_factory", lambda content, start, seed: lambda trajectories, iteration: (trajectories, iteration))
+    monkeypatch.setattr(trajectory_generation_worker, "_build_planner", build_planner)
+    monkeypatch.setattr(trajectory_generation_worker, "_emit_result", lambda *args: None)
+    previews, _ = _run(_task(seed=1))
+    observer = captured["observer"]
+
+    assert observer("path", None, 1) is True  # built from 100 to 105
+    clock[0] += 0.5
+    assert observer("path", None, 2) is False  # half a second after the last one was out
+    clock[0] += 0.6
+    assert observer("path", None, 3) is True
+    assert [payload["trajectories"] for _, payload in previews] == [("path", 1), ("path", 3)]

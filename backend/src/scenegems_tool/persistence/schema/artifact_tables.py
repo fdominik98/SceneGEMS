@@ -1,6 +1,6 @@
 """Artifact records, their references, and calibration results.
 
-An artifact is a content-addressed file in the master's artifact store (P4.3); its row
+An artifact is a content-addressed file in the control node's artifact store (P4.3); its row
 records what the store holds. A reference names who needs the artifact (a case, a run, a
 job, a calibration, an upload that expires), so retention can delete what nothing references
 any more. Hashes are

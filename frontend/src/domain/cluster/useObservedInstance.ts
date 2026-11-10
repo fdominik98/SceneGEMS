@@ -16,7 +16,7 @@ export interface ObservedInstance {
 
 /**
  * Follows one `instance:` topic of the selected cluster and keeps it subscribed only while
- * the component is mounted with a topic, so the master observes the instance only while it
+ * the component is mounted with a topic, so the control node observes the instance only while it
  * is viewed. `options` are sent with the `subscribe` of the topic as it was when the topic
  * was chosen; later changes go through `configure`. A null topic follows nothing.
  */

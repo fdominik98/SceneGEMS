@@ -10,7 +10,7 @@ import { DEFAULT_EXPLORATION_TIMEOUT_S, DEFAULT_MAX_FECS } from "../../../domain
 
 export interface ExplorationInput {
   specification: string;
-  /** Where the text came from ("the master's default", a file name), with " (edited)" once changed; null for a text written here. */
+  /** Where the text came from ("the control node's default", a file name), with " (edited)" once changed; null for a text written here. */
   specificationLabel: string | null;
   scope: string;
   /** Null for every FEC. */

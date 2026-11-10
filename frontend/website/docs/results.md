@@ -13,7 +13,7 @@ The header holds three controls:
 
 - **Show** limits the list to campaigns only or to workbench runs only.
 - **Name** keeps the entries whose name contains the text you type.
-- **Entry** chooses the entry. Each option shows its name, its kind, its state and its creation time. The newest entry is shown until you choose another one. When the list is cut short, the page says how many entries the master has.
+- **Entry** chooses the entry. Each option shows its name, its kind, its state and its creation time. The newest entry is shown until you choose another one. When the list is cut short, the page says how many entries the control node has.
 
 Other pages open Results on an entry for you, for example **Open the results** on an entry of Campaign History. If someone deleted the entry meanwhile, the page says so and offers the newest entry instead.
 
@@ -51,4 +51,4 @@ For a simulated run, **Show the run** fetches the frames of the run with the mon
 
 ## Campaigns made before partial campaigns
 
-A campaign that a master created before this release has no step list. Results then shows its simulation monitor result summaries as before, without step tabs and findings.
+A campaign that a control node created before this release has no step list. Results then shows its simulation monitor result summaries as before, without step tabs and findings.

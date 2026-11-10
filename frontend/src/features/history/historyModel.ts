@@ -64,7 +64,7 @@ export const VERDICT_STEP_OF: Record<CampaignStep, VerdictStep | null> = {
   simulation: "simulation",
 };
 
-/** The kind of an entry; a master without Phase 6 sends none, and then every entry is a campaign. */
+/** The kind of an entry; a control node without Phase 6 sends none, and then every entry is a campaign. */
 export function entryKind(entry: Pick<CampaignSummary, "kind">): CampaignKind {
   return entry.kind ?? "campaign";
 }
@@ -79,7 +79,7 @@ export function madeByLabel(origin: CampaignOrigin | null | undefined): string {
   return origin ? `from the ${ORIGIN_LABELS[origin]}` : "origin not recorded";
 }
 
-/** The executed steps in chain order; an entry without `steps` (format 1, or a master without Phase 6) runs the chain of then. */
+/** The executed steps in chain order; an entry without `steps` (format 1, or a control node without Phase 6) runs the chain of then. */
 export function entrySteps(entry: Pick<CampaignSummary, "steps">): CampaignStep[] {
   const steps = entry.steps ?? [];
   return steps.length === 0 ? [...IMPLIED_STEPS] : CAMPAIGN_STEPS.filter((step) => steps.includes(step));
@@ -181,14 +181,14 @@ export function canDelete(entry: Pick<CampaignSummary, "actual_state">): boolean
   return isFinalState(entry.actual_state);
 }
 
-/** Why the master refused a delete, in words the operator can act on. */
+/** Why the control node refused a delete, in words the operator can act on. */
 export function deleteRefusal(error: unknown): string {
   if (error instanceof OperatorApiError) {
     if (error.status === 409) {
       return "The entry is not finished. Stop it first, then delete it.";
     }
     if (error.status === 404) {
-      return "The entry is not on this master any more.";
+      return "The entry is not on this control node any more.";
     }
   }
   return describeOperatorError(error);
@@ -228,7 +228,7 @@ export interface OutputFlag {
   title: string;
 }
 
-/** The valid and complete flags of an output; a flag the master leaves null is not shown. */
+/** The valid and complete flags of an output; a flag the control node leaves null is not shown. */
 export function outputFlags(row: OutputRow): OutputFlag[] {
   const flags: OutputFlag[] = [];
   if (row.valid === true) {
@@ -237,9 +237,9 @@ export function outputFlags(row: OutputRow): OutputFlag[] {
     flags.push({ label: "not valid", tone: "bad", title: "The case dropped at this step, so a later step cannot use the output." });
   }
   if (row.complete === true) {
-    flags.push({ label: "complete", tone: "ok", title: "Every vessel reached its goal." });
+    flags.push({ label: "complete", tone: "ok", title: "A complete plan: it covers the planned stretch and fails no COLREGS rule." });
   } else if (row.complete === false) {
-    flags.push({ label: "partial", tone: "warn", title: "The best path found so far: not every vessel reached its goal." });
+    flags.push({ label: "incomplete", tone: "warn", title: "Not a complete plan, the best path the planner found: it ends early or still fails a COLREGS rule." });
   }
   return flags;
 }

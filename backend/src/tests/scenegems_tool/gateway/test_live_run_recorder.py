@@ -132,7 +132,7 @@ class TestRecordedRuns:
         assert sent[-1]["type"] == "run_recording" and sent[-1]["message"] == "6 states (completed); the post-hoc monitor judges it"
         ((campaign_id, run, class_id),) = world.engine.runs
         assert (campaign_id, class_id) == ("entry-1", "item/0")
-        assert (run.dt, run.steps, run.repeatability_tier, run.state_digest, run.node_id) == (1.0, 5, "bounded", None, None)
+        assert (run.dt, run.steps, run.repeatability_tier, run.state_digest, run.worker_node_id) == (1.0, 5, "bounded", None, None)
         assert run.state_log["kind"] == "trajectories" and run.state_log["pointer"] is None
         log = stored_trajectories(world, run.state_log)
         assert (len(log), log.time_step) == (6, 1) and log.scene_list[5].to_dict() == setup.trajectories.scene_list[5].to_dict()
@@ -264,7 +264,7 @@ class TestRecordedRuns:
 
 
 class StrandedCampaigns(FakeCampaigns):
-    """Campaigns a previous master process left: list_campaigns answers them, a conflict id refuses the stop."""
+    """Campaigns a previous control node process left: list_campaigns answers them, a conflict id refuses the stop."""
 
     def __init__(self, listed, conflict=None):
         super().__init__()
@@ -339,12 +339,12 @@ class TestSetup:
         assert setup.stack()["vessels"]["1"]["context"] == "real" and setup.stack()["vessels"]["1"]["simulation_layer"] == "real_vessel"
 
 
-# On the master: Postgres stores and the real pipeline engine
+# On the control node: Postgres stores and the real pipeline engine
 
 from tests.scenegems_tool.assurance.pipeline.conftest import clock, loop, make_harness  # noqa: E402,F401 (fixtures)
 
 
-def master_world(make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
+def control_node_world(make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
     from scenegems_tool.persistence.stores import ArtifactRecordStore
 
     harness = make_harness(references=True)
@@ -372,9 +372,9 @@ def record(harness, recorder, setup, scenes, end):
 
 
 @pytest.mark.postgres
-class TestOnTheMaster:
+class TestOnTheControlNode:
     def test_a_recorded_live_run_is_judged_by_the_post_hoc_monitor(self, make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
-        harness, artifacts, recorder = master_world(make_harness, session_factory, tmp_path)
+        harness, artifacts, recorder = control_node_world(make_harness, session_factory, tmp_path)
         setup = live_setup()
         _, sent = record(harness, recorder, setup, setup.trajectories.scene_list[:10], lambda session: session.run_ended())
         saved = sent[-1]
@@ -394,9 +394,9 @@ class TestOnTheMaster:
         assert (ArtifactHolderKind.CAMPAIGN, INPUT_ROLE) in references
 
     def test_a_restart_stops_the_live_entries_left_without_a_run(self, make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
-        harness, _, recorder = master_world(make_harness, session_factory, tmp_path)
+        harness, _, recorder = control_node_world(make_harness, session_factory, tmp_path)
         setup = live_setup()
-        stranded = recorder._open(setup).campaign_id  # opened, then the master process stopped before its run ended
+        stranded = recorder._open(setup).campaign_id  # opened, then the control node process stopped before its run ended
         _, sent = record(harness, recorder, setup, setup.trajectories.scene_list[:5], lambda session: session.run_ended())
         recorded = sent[-1]["campaignId"]
         assert harness.run(recorder.stop_stranded_entries()) == [stranded]
@@ -406,7 +406,7 @@ class TestOnTheMaster:
         assert harness.run(recorder.stop_stranded_entries()) == []
 
     def test_a_live_run_without_a_state_leaves_a_stopped_entry(self, make_harness, session_factory, tmp_path):  # noqa: F811 (the fixture)
-        harness, _, recorder = master_world(make_harness, session_factory, tmp_path)
+        harness, _, recorder = control_node_world(make_harness, session_factory, tmp_path)
         _, sent = record(harness, recorder, live_setup(), [], lambda session: session.session_ended("disconnected"))
         assert sent[-1]["status"] == "failed"
         campaign_id = sent[-1]["campaignId"]

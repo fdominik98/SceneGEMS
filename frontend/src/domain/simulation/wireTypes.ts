@@ -145,8 +145,8 @@ export type ClientToServerMessage =
    */
   | {
       /**
-       * Connect the interactive simulation to an MQTT broker. With `use_master_broker` the
-       * broker is the master's own (named in `mqtt_broker_status.masterBroker`) and the
+       * Connect the interactive simulation to an MQTT broker. With `use_control_node_broker` the
+       * broker is the control node's own (named in `mqtt_broker_status.controlNodeBroker`) and the
        * address, user and TLS fields are ignored.
        */
       type: "connect_to_mqtt_broker";
@@ -162,7 +162,7 @@ export type ClientToServerMessage =
         longitude: number;
         radius_meters: number;
       };
-      use_master_broker?: boolean;
+      use_control_node_broker?: boolean;
     }
   | { type: "disconnect_from_mqtt_broker" };
 

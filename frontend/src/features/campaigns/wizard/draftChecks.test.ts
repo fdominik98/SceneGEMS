@@ -124,8 +124,8 @@ describe("checkDraft", () => {
   it("asks for a machine when the machines are chosen by hand", () => {
     const draft = validDraft();
     draft.resources.fullUsage = false;
-    expect(messages(draft)).toEqual(["resources/-/nodes"]);
-    draft.resources.nodes = ["node-a"];
+    expect(messages(draft)).toEqual(["resources/-/worker_nodes"]);
+    draft.resources.workerNodes = ["worker-node-a"];
     expect(messages(draft)).toEqual([]);
   });
 });
@@ -213,7 +213,7 @@ describe("checkDraft for partial campaigns", () => {
     expect(checks(draft)).toEqual([]);
   });
 
-  it("reports an upload the master has deleted by now, for a scenario file and an item", () => {
+  it("reports an upload the control node has deleted by now, for a scenario file and an item", () => {
     const draft = validDraft();
     draft.steps = ["scene_generation"];
     draft.input.scenarios = [scenario({ uploadedAt: NOW - UPLOAD_LIFETIME_MS })];

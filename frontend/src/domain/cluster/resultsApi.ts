@@ -3,10 +3,10 @@ import type { CampaignDetail, Verdict, VerdictState, VerdictStep } from "./schem
 
 /**
  * Verdict table logic of the Results section: filter and paging state, how a page is read
- * from the master, and the summary over a filtered set. A master of Phase 7 sorts verdicts
+ * from the control node, and the summary over a filtered set. A control node of Phase 7 sorts verdicts
  * (`sort`, `order`); an older one orders them by class, case index and run, ascending, and
  * ignores both, so a descending page is read from the end of the set and the other sorts are
- * not offered (`VerdictPage.serverSort` says which master answered).
+ * not offered (`VerdictPage.serverSort` says which control node answered).
  */
 
 export type { VerdictSort };
@@ -28,7 +28,7 @@ export interface VerdictPaging {
   page: number;
   pageSize: number;
   direction: SortDirection;
-  /** The column the master sorts by; `fec_id` (the default) is FEC, case, step and run. */
+  /** The column the control node sorts by; `fec_id` (the default) is FEC, case, step and run. */
   sort?: VerdictSort;
 }
 
@@ -106,19 +106,19 @@ export function describeRange(total: number, paging: VerdictPaging, shown: numbe
 
 export interface VerdictPage {
   items: Verdict[];
-  /** The number of verdicts the filters match; null when the master does not send `X-Total-Count`. */
+  /** The number of verdicts the filters match; null when the control node does not send `X-Total-Count`. */
   total: number | null;
-  /** Whether the master sorts (true) or only has the FEC order (false); left out while the page is empty and nothing was learned yet. */
+  /** Whether the control node sorts (true) or only has the FEC order (false); left out while the page is empty and nothing was learned yet. */
   serverSort?: boolean;
 }
 
 type VerdictLister = Pick<OperatorClient, "listVerdicts">;
 
-/** Per client: whether its master sorts verdicts, learned from the first non-empty page. */
+/** Per client: whether its control node sorts verdicts, learned from the first non-empty page. */
 const sortSupport = new WeakMap<object, boolean>();
 
-/** A master of Phase 7 sends `encounters` on every verdict (null when there are none) and sorts; null when the page is empty and says nothing. */
-export function masterSorts(items: readonly Verdict[]): boolean | null {
+/** A control node of Phase 7 sends `encounters` on every verdict (null when there are none) and sorts; null when the page is empty and says nothing. */
+export function controlNodeSorts(items: readonly Verdict[]): boolean | null {
   return items.length === 0 ? null : items.every((item) => item.encounters !== undefined);
 }
 
@@ -137,7 +137,7 @@ export async function fetchVerdictPage(
   if (sortSupport.get(client) !== false) {
     const request = plain ? query : { ...query, sort, order: paging.direction };
     const page = await client.listVerdicts(campaignId, { ...request, limit: paging.pageSize, offset: paging.page * paging.pageSize }, signal);
-    const sorts = masterSorts(page.items);
+    const sorts = controlNodeSorts(page.items);
     if (sorts !== null) {
       sortSupport.set(client, sorts);
     }
@@ -145,7 +145,7 @@ export async function fetchVerdictPage(
       return { items: page.items, total: page.total, ...(sorts === null ? {} : { serverSort: sorts }) };
     }
   }
-  // An older master: the FEC order only, a descending page read from the end.
+  // An older control node: the FEC order only, a descending page read from the end.
   const page = await fetchInFecOrder(client, campaignId, query, paging, signal);
   return { ...page, serverSort: false };
 }
@@ -192,7 +192,7 @@ export interface RuleFailure {
 export interface VerdictSummary {
   /** Verdicts read for the summary. */
   analyzed: number;
-  /** Verdicts the filters match, when the master said; the summary is partial when it is larger than `analyzed`. */
+  /** Verdicts the filters match, when the control node said; the summary is partial when it is larger than `analyzed`. */
   total: number | null;
   partial: boolean;
   byState: Record<VerdictState, number>;

@@ -99,7 +99,7 @@ export function ItemInput({ draft, update, reasons, client, now }: StepProps & {
         <div className="wiz-column">
           <h4 className="wiz-subhead">From files</h4>
           <p className="meta wiz-explain">
-            A file is uploaded to the master as soon as you pick it and used as one {first === "trajectory_generation" ? "scene" : "trajectory set"}. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
+            A file is uploaded to the control node as soon as you pick it and used as one {first === "trajectory_generation" ? "scene" : "trajectory set"}. Uploaded files are kept for 24 hours; a campaign created with them keeps them.
           </p>
           <UploadControl client={client} kind={uploadKind} label={first === "trajectory_generation" ? "Add scene files (JSON)" : "Add trajectory files (JSON)"} accept=".json,application/json" onUploaded={onUploaded} />
         </div>

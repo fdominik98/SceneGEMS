@@ -82,6 +82,15 @@ describe("uiStore sections", () => {
     expect(ui.APP_SECTIONS).toContain("domain");
   });
 
+  it("drops the scene page's old Single and Batch tab in v8 and keeps the rest", () => {
+    expect(migrate({ section: "workbench", workbenchView: "sceneGeneration", sceneGenerationTab: "batch", sceneGenerationLivePreview: false }, 7)).toEqual({
+      section: "workbench",
+      workbenchView: "sceneGeneration",
+      sceneGenerationLivePreview: false,
+    });
+    expect(migrate({ section: "workbench", sceneGenerationTab: "single" }, 3)).not.toHaveProperty("sceneGenerationTab");
+  });
+
   it("lists history among the sections and not observe", () => {
     expect(ui.APP_SECTIONS).toContain("history");
     expect(ui.APP_SECTIONS as readonly string[]).not.toContain("observe");
@@ -105,7 +114,8 @@ describe("uiStore sections", () => {
     const persisted = partialize(ui.useUiStore.getState()) as Record<string, unknown>;
     expect(persisted.section).toBe("history");
     expect(persisted.workbenchView).toBe("trajectoryGeneration");
-    expect(ui.useUiStore.persist.getOptions().version).toBe(7);
+    expect(ui.useUiStore.persist.getOptions().version).toBe(8);
+    expect(persisted).not.toHaveProperty("sceneGenerationTab");
   });
 });
 

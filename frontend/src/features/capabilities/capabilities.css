@@ -963,7 +963,7 @@
   min-width: 196px;
 }
 
-/* A master that states no chain: the parts side by side, without arrows or numbers */
+/* A control node that states no chain: the parts side by side, without arrows or numbers */
 .cap-chain--plain {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

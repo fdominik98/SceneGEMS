@@ -74,7 +74,7 @@ export function setupRequestOf(run: LoadedRun) {
 /**
  * The workbench's backend: scene generation, trajectory generation and monitoring run as jobs
  * on the active cluster (`WorkbenchJobDriver`); the interactive simulation runs through the
- * gateway WebSocket of the same cluster's master, over the MQTT broker of the Connections page.
+ * gateway WebSocket of the same cluster's control node, over the MQTT broker of the Connections page.
  */
 export function useSimulationWorkflow() {
   const ingestFrames = usePlaybackStore((s) => s.ingestFrames);
@@ -105,7 +105,7 @@ export function useSimulationWorkflow() {
   }, [driver, workbenchCluster]);
   useEffect(() => () => driver.stopAll(), [driver]);
   // The trajectories of the loaded scenario, which a simulation on the cluster replays, and the
-  // scenario file itself, uploaded as the entry's input when it is not on the master.
+  // scenario file itself, uploaded as the entry's input when it is not on the control node.
   const loadedTrajectoriesRef = useRef<Record<string, unknown> | null>(null);
   const loadedScenarioContentRef = useRef<string | null>(null);
   // A loaded run's frames, waiting for the gateway's initial state of its scenario.
@@ -285,7 +285,7 @@ export function useSimulationWorkflow() {
           setError(null);
           break;
         case "mqtt_broker_status": {
-          setMqttBrokerStatus(message.status, message.masterBroker);
+          setMqttBrokerStatus(message.status, message.controlNodeBroker);
           const connection = useConnectionStore.getState();
           if (message.status === "connected" && connection.connectionAttempt !== "connected") {
             connection.markConnectionSucceeded();
@@ -359,7 +359,7 @@ export function useSimulationWorkflow() {
   const gatewayUrl = gatewayWsUrl(workbenchCluster.operatorUrl);
   useEffect(() => {
     if (gatewayUrl === null) {
-      // No cluster is selected, so there is no master-api whose gateway the workbench could use.
+      // No cluster is selected, so there is no control-node-api whose gateway the workbench could use.
       setStreamStatus("disconnected");
       setMqttBrokerStatus("disconnected");
       setMonitorStatus("disconnected");
@@ -453,8 +453,8 @@ export function useSimulationWorkflow() {
 
   /**
    * After a reload the simulation page keeps its input's name and artifact but not its
-   * trajectories: reads them again from the master and loads them as taking the input did. A file
-   * that never reached the master cannot be read again, so the page drops it and says so. Does
+   * trajectories: reads them again from the control node and loads them as taking the input did. A file
+   * that never reached the control node cannot be read again, so the page drops it and says so. Does
    * nothing while the page shows a loaded run (its refresh loads the run's input) or has
    * trajectories already.
    */
@@ -498,7 +498,7 @@ export function useSimulationWorkflow() {
         page.setStatus(
           "idle",
           gone
-            ? "The input trajectories were deleted from the master: take them again."
+            ? "The input trajectories were deleted from the control node: take them again."
             : `The input trajectories could not be read again: ${error instanceof Error ? error.message : String(error)}`
         );
       }
@@ -626,7 +626,7 @@ export function useSimulationWorkflow() {
       colregsRef.current = colregsConstraintsContent;
       return driver.openTarget(target);
     },
-    /** Refreshes a page's loaded entry from the master (after a reload); a deleted entry clears the page. */
+    /** Refreshes a page's loaded entry from the control node (after a reload); a deleted entry clears the page. */
     refreshLoaded: (target: WorkbenchTarget, colregsConstraintsContent: string) => {
       colregsRef.current = colregsConstraintsContent;
       return driver.loadTarget(target, { quiet: true });

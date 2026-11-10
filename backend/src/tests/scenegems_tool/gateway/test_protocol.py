@@ -63,8 +63,12 @@ class TestMessageBuilders:
         assert "groundControlPortsByAgentId" not in make_simulation_status_message(SimulationStatus.RUNNING, {})
 
     def test_mqtt_broker_and_monitor_status_messages(self):
-        assert make_mqtt_broker_status_message(status="connected", master_broker="cluster-broker:1883") == {"type": "mqtt_broker_status", "status": "connected", "masterBroker": "cluster-broker:1883"}
-        assert make_mqtt_broker_status_message(status="disconnected", master_broker=None)["masterBroker"] is None
+        assert make_mqtt_broker_status_message(status="connected", control_node_broker="cluster-broker:1883") == {
+            "type": "mqtt_broker_status",
+            "status": "connected",
+            "controlNodeBroker": "cluster-broker:1883",
+        }
+        assert make_mqtt_broker_status_message(status="disconnected", control_node_broker=None)["controlNodeBroker"] is None
         assert make_monitor_status_message(status="disconnected") == {"type": "monitor_status", "status": "disconnected"}
 
     def test_error_message_carries_the_text(self, capsys):

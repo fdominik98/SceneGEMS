@@ -3,12 +3,12 @@ from datetime import datetime, timezone
 import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSpec, JobType
-from scenegems_tool.cluster.protocol.node_description import NodeResources
+from scenegems_tool.cluster.protocol.worker_node_description import WorkerNodeResources
 
 
 @pytest.fixture
-def resources() -> NodeResources:
-    return NodeResources(cpus=8.0, memory_mb=16000, free_memory_mb=9000, free_disk_mb=50000, load_average=0.25)
+def resources() -> WorkerNodeResources:
+    return WorkerNodeResources(cpus=8.0, memory_mb=16000, free_memory_mb=9000, free_disk_mb=50000, load_average=0.25)
 
 
 @pytest.fixture

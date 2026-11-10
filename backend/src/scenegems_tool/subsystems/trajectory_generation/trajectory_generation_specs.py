@@ -196,9 +196,9 @@ def trajectory_generation_document(measurements: Optional[Mapping[str, MeasuredF
             "cluster_job",
             LANE_ENTRY,
             "Cluster job",
-            "The trajectory_generation job: dispatched to a node's trajectory generation pool, which queues requests for its workers (one per slot).",
+            "The trajectory_generation job: dispatched to a worker node's trajectory generation pool, which queues requests for its workers (one per slot).",
             META_REQUEST,
-            "scenegems_tool/cluster/node/jobs/trajectory_generation_job.py",
+            "scenegems_tool/cluster/worker_node/jobs/trajectory_generation_job.py",
             ("cluster",),
         ),
         node(

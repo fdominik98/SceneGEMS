@@ -8,7 +8,7 @@ A document has two graphs over the same lanes (the stages of the part, left to r
 
 Every node and edge carries facts: declared values (what the spec states), measured values (what a measurement
 produced, with its evidence) and properties. Documents are built from the specs in code, written to
-backend/assets/architecture at master startup (architecture_files.py) and served by the operator API. Measured
+backend/assets/architecture at control node startup (architecture_files.py) and served by the operator API. Measured
 values are never written here: they come from the measured capability files and are merged in when a document is built.
 """
 
@@ -151,7 +151,7 @@ class ArchitectureDocument:
     step: str = ""  # the chain step the part performs (a step part), as the console names it
     takes: str = ""  # what it takes, in a few words
     gives: str = ""  # what it gives
-    job_types: Tuple[str, ...] = ()  # the cluster job types that run it, so the console can say which nodes offer it
+    job_types: Tuple[str, ...] = ()  # the cluster job types that run it, so the console can say which worker nodes offer it
     schema_version: int = field(default=SCHEMA_VERSION)
 
     def validate(self) -> "ArchitectureDocument":

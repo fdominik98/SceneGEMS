@@ -2,7 +2,7 @@
 
 The bundle records each image's ID and fingerprint label as Docker reports them here, so
 the deployment tool can tell whether a machine already has the same image, and the
-master can tell whether a node runs the images of this release.
+control node can tell whether a worker node runs the images of this release.
 
 ./build.sh builds every image as :latest (its stale check reads the label of that tag); the
 bundle tags each one with the release's image tag (roles.release_image_tag) and lists it under
@@ -18,15 +18,15 @@ from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
 from scenegems_tool.cluster.release.manifest import FINGERPRINT_LABEL, RELEASE_FILE, Release, ReleaseError, ReleaseImage, write_release
-from scenegems_tool.cluster.release.roles import LIVE_SESSIONS_COMPOSE_FILE, MASTER_COMPOSE_FILE, NAME_PATTERN, POSTGRES_IMAGE, PULLED_IMAGES, release_image_tag, role_images, scenegems_roles
+from scenegems_tool.cluster.release.roles import CONTROL_NODE_COMPOSE_FILE, LIVE_SESSIONS_COMPOSE_FILE, NAME_PATTERN, POSTGRES_IMAGE, PULLED_IMAGES, release_image_tag, role_images, scenegems_roles
 from utils.image_names import DEFAULT_IMAGE_TAG, with_tag
 
 RELEASE_NAME = "scenegems"
 STACKS_FOLDER = "stacks"
 # The compose files each role's stack is made of, relative to the repository root; they keep their names in the stack
 STACK_COMPOSE_FILES: Dict[str, Tuple[str, ...]] = {
-    "master": (f"deploy/master/{MASTER_COMPOSE_FILE}", f"deploy/master/{LIVE_SESSIONS_COMPOSE_FILE}"),
-    "node": ("deploy/node/docker-compose.yml",),
+    "control-node": (f"deploy/control_node/{CONTROL_NODE_COMPOSE_FILE}", f"deploy/control_node/{LIVE_SESSIONS_COMPOSE_FILE}"),
+    "worker-node": ("deploy/worker_node/docker-compose.yml",),
 }
 
 

@@ -48,7 +48,7 @@ const SESSION_STATUS: Record<string, StepStatus> = {
 
 /**
  * The simulation page's panel. The setup decides where the run happens: on the cluster as one
- * job (Run on the cluster), or as a live session on the master over the MQTT broker
+ * job (Run on the cluster), or as a live session on the control node over the MQTT broker
  * (Initialize, then Start). Playback is in the bar under the canvas; the frames export from
  * the monitoring panel and every run is kept as an entry of Campaign History.
  */
@@ -101,7 +101,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const sessionBusy = sessionStarted || simulationStatus === "initializing" || simulationStatus === "agents are preparing";
   const locked = clusterActive || sessionBusy;
   // SITL runs free, so the watch speed of an ArduPilot run is the speed it plays at in the browser
-  const pacedOnNode = plan?.where === "cluster" ? isPacedByWatchSpeed(plan) : true;
+  const pacedOnWorkerNode = plan?.where === "cluster" ? isPacedByWatchSpeed(plan) : true;
 
   useEffect(() => {
     if (!clusterActive) {
@@ -130,19 +130,19 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
       ? "Take the input trajectories to set up the vessels."
       : plan.where === "cluster"
         ? `${describeClusterPlan(plan)} Cluster: ${describeResources(resources)}.`
-        : `Runs as a live session on the master over the MQTT broker. ${plan.reason}`;
+        : `Runs as a live session on the control node over the MQTT broker. ${plan.reason}`;
 
   const actions = onCluster ? (
     clusterActive ? (
       <>
         {plan?.where === "cluster" ? (
-          <label className="step-setting" title={pacedOnNode ? "The pace the node runs the simulation at while you watch" : "SITL runs free at the job's speedup, so this is the speed the arriving run plays at here, as the playback bar's"}>
+          <label className="step-setting" title={pacedOnWorkerNode ? "The pace the worker node runs the simulation at while you watch" : "SITL runs free at the job's speedup, so this is the speed the arriving run plays at here, as the playback bar's"}>
             <span className="step-setting-label">Watch at</span>
             <select
-              value={pacedOnNode ? run.speed : playbackSpeed}
-              onChange={(e) => (pacedOnNode ? streamControls.setClusterRunSpeed(Number(e.target.value)) : streamControls.setSpeed(Number(e.target.value)))}
+              value={pacedOnWorkerNode ? run.speed : playbackSpeed}
+              onChange={(e) => (pacedOnWorkerNode ? streamControls.setClusterRunSpeed(Number(e.target.value)) : streamControls.setSpeed(Number(e.target.value)))}
             >
-              {(pacedOnNode || (RUN_SPEEDS as readonly number[]).includes(playbackSpeed) ? RUN_SPEEDS : [...RUN_SPEEDS, playbackSpeed].sort((a, b) => a - b)).map((speed) => (
+              {(pacedOnWorkerNode || (RUN_SPEEDS as readonly number[]).includes(playbackSpeed) ? RUN_SPEEDS : [...RUN_SPEEDS, playbackSpeed].sort((a, b) => a - b)).map((speed) => (
                 <option key={speed} value={speed}>
                   {speed}x real time
                 </option>

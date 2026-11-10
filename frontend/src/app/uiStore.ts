@@ -20,8 +20,6 @@ export type TrajectoryStream = "animation" | "simulation";
 /** Right-hand monitoring panel view mode. */
 export type MonitorPanelView = "runtime_data" | "overall_analysis";
 export type SceneViewMode = "cartesian" | "nautical";
-/** Scene generation panel mode: single editor-driven generation or batch over presets. */
-export type SceneGenerationTab = "single" | "batch";
 /** Scene generation right pane: the specification editor or the monitor preview of the displayed scene. */
 export type SceneGenerationPaneView = "specification" | "monitor";
 /** Top-level sections of the left pane. */
@@ -138,9 +136,6 @@ interface UiState {
   /** Main scene view mode: legacy cartesian canvas or nautical GPS map. */
   sceneViewMode: SceneViewMode;
   setSceneViewMode: (mode: SceneViewMode) => void;
-  /** Scene generation panel tab (single vs batch). */
-  sceneGenerationTab: SceneGenerationTab;
-  setSceneGenerationTab: (tab: SceneGenerationTab) => void;
   sceneGenerationPaneView: SceneGenerationPaneView;
   setSceneGenerationPaneView: (view: SceneGenerationPaneView) => void;
   /** When true, every incoming generated scene is shown; when false, only final valid (single) or user-selected (batch) scenes. */
@@ -192,8 +187,6 @@ export const useUiStore = create<UiState>()(
   setSelectedMetricsRelationId: (id) => set({ selectedMetricsRelationId: id }),
   sceneViewMode: "cartesian",
   setSceneViewMode: (mode) => set({ sceneViewMode: mode }),
-  sceneGenerationTab: "single",
-  setSceneGenerationTab: (tab) => set({ sceneGenerationTab: tab }),
   sceneGenerationPaneView: "specification",
   setSceneGenerationPaneView: (view) => set({ sceneGenerationPaneView: view }),
   sceneGenerationLivePreview: true,
@@ -201,15 +194,17 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "scenegems:ui",
-      version: 7,
+      version: 8,
       // v2: the monitor tab moved to the Connections page (the control panel mode it touched is gone).
       // v3: persist monitor section collapse and preview/simulation column visibility.
       // v4: sections; the workbench view moved here from its own "active-view" key.
       // v5: the Connections view's id is "connections" (was "waraps").
       // v6: the section "observe" is "history" (Campaign History).
       // v7: the domain configuration is the cluster's section "domain", no longer the workbench view "domainConfig".
+      // v8: the scene page has no Single and Batch tabs any more (the FECs selected decide); the tab is dropped.
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as {
+          sceneGenerationTab?: unknown;
           section?: AppSection | typeof LEGACY_OBSERVE_SECTION;
           workbenchView?: WorkbenchView | typeof LEGACY_CONNECTIONS_VIEW | typeof LEGACY_DOMAIN_CONFIG_VIEW;
         };
@@ -229,13 +224,15 @@ export const useUiStore = create<UiState>()(
             state.section = "domain";
           }
         }
+        if (version < 8) {
+          delete state.sceneGenerationTab;
+        }
         return state as UiState;
       },
       partialize: (state) => ({
         section: state.section,
         workbenchView: state.workbenchView,
         sceneViewMode: state.sceneViewMode,
-        sceneGenerationTab: state.sceneGenerationTab,
         sceneGenerationPaneView: state.sceneGenerationPaneView,
         sceneGenerationLivePreview: state.sceneGenerationLivePreview,
         rightTrajectoryPreviewVisible: state.rightTrajectoryPreviewVisible,

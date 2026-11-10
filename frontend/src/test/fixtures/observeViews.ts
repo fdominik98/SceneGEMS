@@ -8,7 +8,7 @@ import { sampleFrames } from "./sampleFrames";
 
 export function poolSnapshot(instance = "scene_generation-0", overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    node_id: "node-a1",
+    worker_node_id: "worker-node-a1",
     instance,
     kind: instance.startsWith("scene") ? "scene_generation" : "trajectory_generation",
     state: "online",
@@ -20,7 +20,7 @@ export function poolSnapshot(instance = "scene_generation-0", overrides: Record<
 
 export function jobInstanceSnapshot(jobId = "job-1", attempt = 1, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    node_id: "node-a1",
+    worker_node_id: "worker-node-a1",
     instance: `job-${jobId}-${attempt}`,
     kind: "simulation",
     state: "running",

@@ -1,9 +1,9 @@
-"""SQLAlchemy tables of the master's database.
+"""SQLAlchemy tables of the control node's database.
 
 The migrations create exactly these tables; a test compares them.
 
     base.py             declarative base with constraint names, enum and timestamp columns
-    node_tables.py      node, node_capability, node_fingerprint and the node status
+    worker_node_tables.py      worker node, worker_node_capability, worker_node_fingerprint and the worker node status
     job_tables.py       job, job_event and the job event kinds
     campaign_tables.py  campaign, campaign_config_version, campaign_class, scenario_case, pipeline_job,
                         pipeline_cursor, run_record, verdict, campaign_event, their states, kinds and steps
@@ -38,8 +38,8 @@ from scenegems_tool.persistence.schema.campaign_tables import (
     VerdictState,
 )
 from scenegems_tool.persistence.schema.job_tables import HELD_UNTIL, JobEventKind, JobEventRow, JobRow
-from scenegems_tool.persistence.schema.node_tables import NodeCapabilityRow, NodeComponentRow, NodeFingerprintRow, NodeRow, NodeStatus
 from scenegems_tool.persistence.schema.setting_tables import CLUSTER_DOMAIN_ROW_ID, CampaignPresetRow, ClusterDomainRow
+from scenegems_tool.persistence.schema.worker_node_tables import WorkerNodeCapabilityRow, WorkerNodeComponentRow, WorkerNodeFingerprintRow, WorkerNodeRow, WorkerNodeStatus
 
 __all__ = [
     "CLUSTER_DOMAIN_ROW_ID",
@@ -66,11 +66,11 @@ __all__ = [
     "JobEventRow",
     "JobRow",
     "MonitorImplementation",
-    "NodeCapabilityRow",
-    "NodeComponentRow",
-    "NodeFingerprintRow",
-    "NodeRow",
-    "NodeStatus",
+    "WorkerNodeCapabilityRow",
+    "WorkerNodeComponentRow",
+    "WorkerNodeFingerprintRow",
+    "WorkerNodeRow",
+    "WorkerNodeStatus",
     "PipelineCursorRow",
     "PipelineJobRow",
     "PipelineStage",

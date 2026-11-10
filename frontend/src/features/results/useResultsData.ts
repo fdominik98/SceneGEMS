@@ -23,7 +23,7 @@ export function useResultsClient(operatorUrl: string | null) {
 
 /**
  * How often a query of an entry polls: every `ms` until the entry is final (stopped or completed)
- * and the query has been read since the master said so, then never again, since nothing it shows
+ * and the query has been read since the control node said so, then never again, since nothing it shows
  * changes any more.
  */
 export function pollUntilFinal(detail: { data?: Pick<CampaignDetail, "actual_state">; dataUpdatedAt: number } | undefined, readAt: number, ms: number): number | false {
@@ -39,7 +39,7 @@ function untilFinal(queryClient: QueryClient, operatorUrl: string | null, campai
   return (query: { state: { dataUpdatedAt: number } }) => pollUntilFinal(queryClient.getQueryState<CampaignDetail>(campaignKey(operatorUrl, campaignId)), query.state.dataUpdatedAt, ms);
 }
 
-/** Retry only what can recover: not an unreachable master, not an answer the master gave. */
+/** Retry only what can recover: not an unreachable control node, not an answer the control node gave. */
 function retryOnce(failureCount: number, error: unknown): boolean {
   return !(error instanceof OperatorApiError && (error.unreachable || error.kind === "http")) && failureCount < 2;
 }
@@ -57,7 +57,7 @@ export function useHistoryList(operatorUrl: string | null, filters: Pick<History
   });
 }
 
-/** The findings of one executed step of an entry; `enabled` is false for a master without the route. */
+/** The findings of one executed step of an entry; `enabled` is false for a control node without the route. */
 export function useFindings(operatorUrl: string | null, campaignId: string | null, step: CampaignStep | null, enabled = true) {
   const client = useResultsClient(operatorUrl);
   const queryClient = useQueryClient();

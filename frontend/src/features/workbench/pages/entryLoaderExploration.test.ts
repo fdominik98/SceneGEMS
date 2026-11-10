@@ -68,7 +68,7 @@ function client(state: string, result: Record<string, unknown> | null, rows: unk
   const loader = {
     getCase: async () => detail(state),
     getJob: async () => job(result),
-    artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}`,
+    artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}`,
     request,
   };
   return { loader: loader as unknown as LoaderClient, request };
@@ -98,7 +98,7 @@ describe("the specification of a scene of an explored FEC", () => {
     const fetchImpl = vi.fn(async () => new Response("declare os.\r\nOS(os).\r\n"));
     const specClient = {
       getCase: async () => ({ ...detail("complete"), fec_id: "explored/00003", input_artifact: "e".repeat(64) }),
-      artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}`,
+      artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}`,
       request: vi.fn(),
     };
     const spec = await sceneInputSpecification(specClient as never, { campaignId: "c1", caseId: 9 }, { fetch: fetchImpl as unknown as typeof fetch });

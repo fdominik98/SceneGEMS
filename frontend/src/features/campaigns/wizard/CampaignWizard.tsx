@@ -3,9 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { createCampaign } from "../../../domain/cluster/campaignApi";
 import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
-import { useNodesFeed, useNodesStore } from "../../../domain/cluster/nodesStore";
+import { useWorkerNodesFeed, useWorkerNodesStore } from "../../../domain/cluster/workerNodesStore";
 import { describeOperatorError, OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
-import type { NodeView } from "../../../domain/cluster/schemas";
+import type { WorkerNodeView } from "../../../domain/cluster/schemas";
 import { planKey, planResources, requiredCapabilities, slotsByJobType, startBlocker, type ResourcePlan } from "../resourcePlan";
 import { useCatalogClasses, useCatalogStacks, useOperatorClient } from "../useCampaignData";
 import { buildCampaignMap, casesPerExploredFec, reviewStatusOf } from "./campaignMapModel";
@@ -34,7 +34,7 @@ const AUTO_CHECK_DELAY_MS = 700;
 /** How often the check of uploaded files' expiry looks at the clock. */
 const CLOCK_MS = 60_000;
 const EMPTY_BUILDER: BuilderCatalog = { stacks: [], generators: [] };
-const NO_NODES: readonly NodeView[] = [];
+const NO_WORKER_NODES: readonly WorkerNodeView[] = [];
 
 /** The plan as the previous render had it while it says the same (`planKey`): the map and the problem counts built from it are kept then. */
 function useSamePlan(plan: ResourcePlan | null): ResourcePlan | null {
@@ -58,11 +58,11 @@ export interface CampaignWizardProps {
 
 function describeCreateFailure(error: unknown): string {
   if (error instanceof OperatorApiError && error.status === 422) {
-    return "The master refused the config. The reasons are listed above.";
+    return "The control node refused the config. The reasons are listed above.";
   }
   if (error instanceof OperatorApiError && error.kind === "timeout") {
     // No answer is no refusal: the campaign may exist, and the message says to look in Campaign History first
-    return `The master did not confirm the campaign: ${describeOperatorError(error)}.`;
+    return `The control node did not confirm the campaign: ${describeOperatorError(error)}.`;
   }
   return `The campaign was not created: ${describeOperatorError(error)}`;
 }
@@ -75,7 +75,7 @@ function scrollToRun(runId: string) {
 /**
  * The create wizard: the steps of the chain to run, their input, the domain, a page per step the campaign runs
  * (scene generation, trajectory generation, the simulation runs), resources and policy, then a review that validates
- * the config on the master. The campaign map above the pages draws the draft as a graph and opens the page of the box
+ * the config on the control node. The campaign map above the pages draws the draft as a graph and opens the page of the box
  * clicked; the list of pages replaces it on request.
  */
 export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
@@ -109,23 +109,23 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
     },
   };
 
-  // The cluster's nodes: what the campaign needs is checked against them, and full usage sizes its queues to their slots
+  // The cluster's worker nodes: what the campaign needs is checked against them, and full usage sizes its queues to their slots
   const operatorUrl = useSelectedCluster()?.operatorUrl ?? null;
-  useNodesFeed(operatorUrl);
-  const nodesUrl = useNodesStore((state) => state.operatorUrl);
-  const nodesReady = useNodesStore((state) => state.loaded);
-  const storeNodes = useNodesStore((state) => state.nodes);
-  const nodesError = useNodesStore((state) => state.error);
-  const nodesLoaded = operatorUrl !== null && nodesUrl === operatorUrl && nodesReady;
-  const nodes = nodesLoaded ? storeNodes : NO_NODES;
+  useWorkerNodesFeed(operatorUrl);
+  const workerNodesUrl = useWorkerNodesStore((state) => state.operatorUrl);
+  const workerNodesReady = useWorkerNodesStore((state) => state.loaded);
+  const storeWorkerNodes = useWorkerNodesStore((state) => state.workerNodes);
+  const workerNodesError = useWorkerNodesStore((state) => state.error);
+  const workerNodesLoaded = operatorUrl !== null && workerNodesUrl === operatorUrl && workerNodesReady;
+  const workerNodes = workerNodesLoaded ? storeWorkerNodes : NO_WORKER_NODES;
   const labels = useMemo(() => requiredLabelsOf(draft), [draft]);
-  // Kept by content: heartbeats replace the node list every few seconds, the slots rarely change
-  const slotsKey = JSON.stringify(slotsByJobType(nodes, labels));
+  // Kept by content: heartbeats replace the worker node list every few seconds, the slots rarely change
+  const slotsKey = JSON.stringify(slotsByJobType(workerNodes, labels));
   const slots = useMemo(() => JSON.parse(slotsKey) as Record<string, number>, [slotsKey]);
 
   const builderCatalog = useMemo<BuilderCatalog>(
-    () => (stacks.data ? { stacks: stacks.data.stacks, generators: stacks.data.trajectory_generators, slots: nodesLoaded ? slots : undefined } : EMPTY_BUILDER),
-    [stacks.data, nodesLoaded, slots]
+    () => (stacks.data ? { stacks: stacks.data.stacks, generators: stacks.data.trajectory_generators, slots: workerNodesLoaded ? slots : undefined } : EMPTY_BUILDER),
+    [stacks.data, workerNodesLoaded, slots]
   );
   const config = useMemo(() => buildCampaignConfig(draft, builderCatalog), [draft, builderCatalog]);
   const yaml = useMemo(() => configToYaml(config), [config]);
@@ -138,16 +138,16 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const localReasons = useMemo(() => checkDraft(draft, stacks.data ? builderCatalog : null, now), [draft, builderCatalog, stacks.data, now]);
 
   const freshPlan = useMemo(
-    () => (nodesLoaded ? planResources(requiredCapabilities(config), nodes, { nodes: draft.resources.fullUsage ? null : draft.resources.nodes, labels }) : null),
-    [nodesLoaded, config, nodes, draft.resources.fullUsage, draft.resources.nodes, labels]
+    () => (workerNodesLoaded ? planResources(requiredCapabilities(config), workerNodes, { workerNodes: draft.resources.fullUsage ? null : draft.resources.workerNodes, labels }) : null),
+    [workerNodesLoaded, config, workerNodes, draft.resources.fullUsage, draft.resources.workerNodes, labels]
   );
-  // Kept by content: heartbeats replace the node views every few seconds, what the plan says rarely changes
+  // Kept by content: heartbeats replace the worker node views every few seconds, what the plan says rarely changes
   const plan = useSamePlan(freshPlan);
   const cluster: ClusterResources = {
     selected: operatorUrl !== null,
-    loaded: nodesLoaded,
-    error: nodesUrl === operatorUrl ? nodesError : null,
-    nodes,
+    loaded: workerNodesLoaded,
+    error: workerNodesUrl === operatorUrl ? workerNodesError : null,
+    workerNodes,
     plan,
     slots,
     startBlocker: startBlocker(plan),
@@ -156,7 +156,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const { state: validation, check, adopt, reset: resetValidation } = useValidation(client);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
 
-  // A run without a stack takes the first one the master can run
+  // A run without a stack takes the first one the control node can run
   useEffect(() => {
     const first = stacks.data?.stacks.find((entry) => entry.available);
     if (first && draft.runs.some((run) => run.stackId === "")) {
@@ -170,7 +170,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
     }
   }, [stacks.data, draft.runs, update]);
 
-  // On the review step the master checks the config as soon as it is complete and has stopped changing
+  // On the review step the control node checks the config as soon as it is complete and has stopped changing
   useEffect(() => {
     if (step !== "review" || localReasons.length > 0 || !client || validation.yaml === yaml) {
       return undefined;
@@ -196,7 +196,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const serverReasons: Reason[] = validation.reasons;
   const allReasons = useMemo(() => [...localReasons, ...serverReasons], [localReasons, serverReasons]);
   const byStep = useMemo(() => reasonsByStep(allReasons), [allReasons]);
-  // What the browser finds wrong shows on a step once the operator has been through it; the master's reasons always show
+  // What the browser finds wrong shows on a step once the operator has been through it; the control node's reasons always show
   const shownReasons = useCallback((id: WizardStepId) => byStep[id].filter((reason) => reason.source === "server" || visited.includes(id)), [byStep, visited]);
   const stepReasons = shownReasons(step);
   const index = pages.indexOf(step);

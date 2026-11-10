@@ -1,4 +1,4 @@
-"""The domain presets the master offers: the YAML files under backend/assets/domain_config/.
+"""The domain presets the control node offers: the YAML files under backend/assets/domain_config/.
 
 A domain configuration is three texts, named by their campaign config keys:
 colregs_constants (domain_config/colregs_constants/), vessel_types (domain_config/vessel_types/)

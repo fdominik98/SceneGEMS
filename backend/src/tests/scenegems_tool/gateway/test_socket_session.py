@@ -15,7 +15,7 @@ from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
 from scenegems_tool.assurance.pipeline.case_machine import RecordedRun
 from scenegems_tool.gateway.live_run_recorder import OpenedEntry
 from scenegems_tool.gateway.protocol import SimulationStatus
-from scenegems_tool.gateway.socket_session import NO_TRAJECTORIES_MESSAGE, SocketSession, master_broker, master_broker_label
+from scenegems_tool.gateway.socket_session import NO_TRAJECTORIES_MESSAGE, SocketSession, control_node_broker, control_node_broker_label
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselStackConfig
@@ -83,7 +83,7 @@ class TestOfflineBehaviour:
     async def test_disconnect_reports_disconnected_and_keeps_an_empty_session(self, session, websocket):
         session.disconnect_from_mqtt_broker()
         await settle()
-        assert {"type": "mqtt_broker_status", "status": "disconnected", "masterBroker": None} in websocket.sent
+        assert {"type": "mqtt_broker_status", "status": "disconnected", "controlNodeBroker": None} in websocket.sent
         assert isinstance(session.subsystem_integration_session, EmptySubsystemIntegrationSession)
 
     async def test_initializing_the_monitor_while_offline_is_an_error(self, session, websocket):
@@ -102,27 +102,27 @@ class TestOfflineBehaviour:
         await settle()
         assert [payload["message"] for payload in websocket.sent if payload["type"] == "error"] == ["No scenario loaded", "No scenario loaded"]
 
-    async def test_the_master_broker_is_refused_when_the_server_has_none(self, session, monkeypatch):
+    async def test_the_control_node_broker_is_refused_when_the_server_has_none(self, session, monkeypatch):
         monkeypatch.delenv("SCENEGEMS_BROKER_HOST", raising=False)
-        with pytest.raises(ValueError, match="no master broker"):
-            await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+        with pytest.raises(ValueError, match="no control node broker"):
+            await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_control_node_broker=True)
         assert isinstance(session.subsystem_integration_session, EmptySubsystemIntegrationSession)
 
-    async def test_the_status_names_the_master_broker(self, session, monkeypatch):
+    async def test_the_status_names_the_control_node_broker(self, session, monkeypatch):
         monkeypatch.setenv("SCENEGEMS_BROKER_HOST", "cluster-broker")
         monkeypatch.setenv("SCENEGEMS_BROKER_PORT", "1884")
-        assert session.mqtt_broker_status_message() == {"type": "mqtt_broker_status", "status": "disconnected", "masterBroker": "cluster-broker:1884"}
+        assert session.mqtt_broker_status_message() == {"type": "mqtt_broker_status", "status": "disconnected", "controlNodeBroker": "cluster-broker:1884"}
 
 
-class TestMasterBroker:
-    def test_the_master_broker_comes_from_the_master_settings(self):
-        assert master_broker({"SCENEGEMS_BROKER_HOST": "cluster-broker"}) == ("cluster-broker", 1883)
-        assert master_broker({"SCENEGEMS_BROKER_HOST": " cluster-broker ", "SCENEGEMS_BROKER_PORT": "1999"}) == ("cluster-broker", 1999)
+class TestControlNodeBroker:
+    def test_the_control_node_broker_comes_from_the_control_node_settings(self):
+        assert control_node_broker({"SCENEGEMS_BROKER_HOST": "cluster-broker"}) == ("cluster-broker", 1883)
+        assert control_node_broker({"SCENEGEMS_BROKER_HOST": " cluster-broker ", "SCENEGEMS_BROKER_PORT": "1999"}) == ("cluster-broker", 1999)
 
-    def test_without_a_host_there_is_no_master_broker(self):
-        assert master_broker({}) is None
-        assert master_broker({"SCENEGEMS_BROKER_HOST": "  ", "SCENEGEMS_BROKER_PORT": "1883"}) is None
-        assert master_broker_label({}) is None
+    def test_without_a_host_there_is_no_control_node_broker(self):
+        assert control_node_broker({}) is None
+        assert control_node_broker({"SCENEGEMS_BROKER_HOST": "  ", "SCENEGEMS_BROKER_PORT": "1883"}) is None
+        assert control_node_broker_label({}) is None
 
 
 class FakeIntegrationSession:
@@ -150,13 +150,13 @@ class TestLiveSessionScope:
 
         FakeIntegrationSession.created = []
         monkeypatch.setattr(socket_session, "LiveSubsystemIntegrationSession", FakeIntegrationSession)
-        monkeypatch.setenv("SCENEGEMS_MASTER_ID", "m1")
+        monkeypatch.setenv("SCENEGEMS_CONTROL_NODE_ID", "m1")
         monkeypatch.setenv("SCENEGEMS_BROKER_HOST", "cluster-broker")
 
-    async def test_on_the_master_broker_the_session_topics_carry_its_scope(self, session):
-        await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+    async def test_on_the_control_node_broker_the_session_topics_carry_its_scope(self, session):
+        await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_control_node_broker=True)
         (live,) = FakeIntegrationSession.created
-        assert live.session_scope.master_id == "m1" and live.session_scope.node_id == "workbench"
+        assert live.session_scope.control_node_id == "m1" and live.session_scope.worker_node_id == "workbench"
         assert live.mqtt_connection.topic_prefix == live.session_scope.topic_prefix
         assert live.mqtt_connection.topic_prefix.startswith("scenegems/m1/workbench/live-")
 
@@ -169,8 +169,8 @@ class TestLiveSessionScope:
     async def test_every_connection_is_a_session_of_its_own(self, session, websocket):
         other = SocketSession(websocket)
         try:
-            await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
-            await other.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_master_broker=True)
+            await session.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_control_node_broker=True)
+            await other.connect_to_mqtt_broker("", "", "", "", 1883, False, False, Geofence(57.7, 11.9, 1000.0), use_control_node_broker=True)
             first, second = FakeIntegrationSession.created
             assert first.session_scope != second.session_scope
             assert first.mqtt_connection.topic_prefix != second.mqtt_connection.topic_prefix
@@ -367,14 +367,14 @@ class TestLiveRunRecording:
         assert (setup.scenario_name, setup.trajectories, setup.simulation_config, setup.time_step) == ("head_on.json", session.scenario_session.trajectories, config, 1)
         assert live.listener.loop is session.loop
 
-    async def test_without_the_master_a_run_is_reported_unavailable(self, session, live, websocket):
+    async def test_without_the_control_node_a_run_is_reported_unavailable(self, session, live, websocket):
         session.set_simulation_session(self.config())
         live.listener.run_started()
         await settle()
         (message,) = self.recordings(websocket)
         assert (message["status"], message["campaignId"], message["caseId"]) == ("unavailable", None, None)
 
-    async def test_with_the_master_a_run_is_recorded_and_saved(self, session, live, websocket):
+    async def test_with_the_control_node_a_run_is_recorded_and_saved(self, session, live, websocket):
         session.run_recorder = FakeRunRecorder()
         session.set_simulation_session(self.config())
         live.listener.run_started()

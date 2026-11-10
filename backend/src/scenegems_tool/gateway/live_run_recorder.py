@@ -1,7 +1,7 @@
 """Live sessions of the workbench recorded as workbench entries (design doc 6.4).
 
-The gateway runs inside master-api, whose build_master hands it a LiveRunRecorder on the master's
-assurance stores, artifact store and pipeline engine (cluster/master/server.py). When a live
+The gateway runs inside control-node-api, whose build_control_node hands it a LiveRunRecorder on the control node's
+assurance stores, artifact store and pipeline engine (cluster/control_node/server.py). When a live
 simulation starts, the recorder stores the loaded trajectories and creates a workbench entry
 (origin live_session, steps [simulation], one run of one repeat judged post_hoc, frames kept) with
 them as its one input item, item/0. When the run ends (completed, stopped, torn down,
@@ -13,7 +13,7 @@ entry, which would otherwise stay running without a case. The browser follows al
 
 Threads: the live session reports from the event loop and from its MQTT client's thread.
 LiveSessionRecording and LiveRunRecording only collect states under a lock and hand everything
-else to the master's event loop (the gateway's own loop: both listeners of the master share it),
+else to the control node's event loop (the gateway's own loop: both listeners of the control node share it),
 where the database and file work runs in worker threads and record_external_run takes the
 engine's turn.
 """
@@ -47,7 +47,7 @@ INPUT_ROLE = "input:0"  # the entry's reference to its input item (design doc 6.
 JSON_MEDIA_TYPE = "application/json"
 MAX_SEED = 2**31 - 1
 MAX_NAME_LENGTH = 256
-UNAVAILABLE_MESSAGE = "this gateway runs without a master, so it has nowhere to save the run"
+UNAVAILABLE_MESSAGE = "this gateway runs without a control node, so it has nowhere to save the run"
 NO_STATE_MESSAGE = "the run ended before it simulated a state"
 
 Report = Callable[[RunRecordingMessage], None]
@@ -110,7 +110,7 @@ class OpenedEntry:
 
 
 class LiveRunRecorder:
-    """Creates the workbench entries of live runs and records their runs; its coroutines run on the master's event loop."""
+    """Creates the workbench entries of live runs and records their runs; its coroutines run on the control node's event loop."""
 
     def __init__(
         self,
@@ -164,7 +164,7 @@ class LiveRunRecorder:
         self.pipeline.wake()
 
     async def stop_stranded_entries(self) -> List[str]:
-        """Stops the live session entries a stopped master left without a run; returns their ids.
+        """Stops the live session entries a stopped control node left without a run; returns their ids.
 
         The gateway calls it as it starts, before any connection: no live session runs then,
         so an entry of origin live_session that still wants to run and has no case lost its
@@ -175,7 +175,7 @@ class LiveRunRecorder:
         for campaign_id in stopped:
             self._changed(campaign_id)
         if stopped:
-            logger.info("Stopped %d live session entries left without a run by the previous master process", len(stopped))
+            logger.info("Stopped %d live session entries left without a run by the previous control node process", len(stopped))
             self.pipeline.wake()
         return stopped
 
@@ -289,7 +289,7 @@ class LiveRunRecording:
             self._ended_at = time.monotonic()
         try:
             self.loop.call_soon_threadsafe(self._ended.set)
-        except RuntimeError:  # the loop is closed: the master stops
+        except RuntimeError:  # the loop is closed: the control node stops
             logger.warning("The live run ended (%s) after the event loop closed; it is not recorded", reason)
 
     async def _record(self) -> Optional["RecordedRun"]:

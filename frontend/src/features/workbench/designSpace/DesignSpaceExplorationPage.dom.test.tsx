@@ -9,7 +9,7 @@ import { ExploredFecList } from "./ExploredFecList";
 import { INITIAL_EXPLORATION_INPUT, useExplorationInputStore } from "./explorationInputStore";
 import { useExplorationStore } from "./explorationStore";
 
-/** The design space exploration page with the master's default mocked: a current master, and one that predates the route (404, so null). */
+/** The design space exploration page with the control node's default mocked: a current control node, and one that predates the route (404, so null). */
 
 const mocks = vi.hoisted(() => ({ designSpace: { data: undefined as unknown, isSuccess: false, isError: false, error: null as unknown } }));
 
@@ -21,7 +21,7 @@ vi.mock("@uiw/react-codemirror", () => ({
 }));
 
 const DEFAULT = { specification: "abstract class Vessel.\n", scope: "TS = 2, StaticObstacle = 0" };
-const RESOURCES = { jobType: "design_space_exploration", components: ["design_space_exploration"], nodes: 1, slots: 2, freeSlots: 2, blocker: null };
+const RESOURCES = { jobType: "design_space_exploration", components: ["design_space_exploration"], workerNodes: 1, slots: 2, freeSlots: 2, blocker: null };
 
 function shipped(data: unknown) {
   mocks.designSpace = { data, isSuccess: true, isError: false, error: null };
@@ -47,18 +47,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("the specification pane", () => {
-  it("starts an empty editor from the master's default, with its scope", async () => {
+  it("starts an empty editor from the control node's default, with its scope", async () => {
     shipped(DEFAULT);
     render(<DesignSpaceSidebar />);
     expect(screen.getByRole("heading", { name: "Metamodel and well-formedness constraints" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Specification text")).toHaveValue(DEFAULT.specification));
-    expect(useExplorationInputStore.getState()).toMatchObject({ specificationLabel: "the master's default", scope: DEFAULT.scope });
+    expect(useExplorationInputStore.getState()).toMatchObject({ specificationLabel: "the control node's default", scope: DEFAULT.scope });
   });
 
-  it("says so in plain words when an older master ships no default, and leaves the editor empty", () => {
+  it("says so in plain words when an older control node ships no default, and leaves the editor empty", () => {
     shipped(null);
     render(<DesignSpaceSidebar />);
-    expect(screen.getByRole("status")).toHaveTextContent("This master ships no default design space");
+    expect(screen.getByRole("status")).toHaveTextContent("This control node ships no default design space");
     expect(screen.getByLabelText("Specification text")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Load the default" })).toBeDisabled();
   });
@@ -103,7 +103,7 @@ describe("the step panel", () => {
 
   it("says why it cannot run when no machine offers the exploration", () => {
     useExplorationInputStore.setState({ specification: "class OS.\n", scope: "TS = 2" });
-    renderControls({ resources: { ...RESOURCES, nodes: 0, blocker: "No machine of the active cluster offers design space exploration." } });
+    renderControls({ resources: { ...RESOURCES, workerNodes: 0, blocker: "No machine of the active cluster offers design space exploration." } });
     expect(screen.getByRole("list", { name: "Before it can run" })).toHaveTextContent("No machine of the active cluster offers design space exploration.");
     expect(screen.getByRole("button", { name: "Explore" })).toBeDisabled();
   });
@@ -140,7 +140,7 @@ describe("the list of explored FECs", () => {
     const user = userEvent.setup();
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => new Response(String(input).endsWith("1".repeat(64)) ? "declare os, ts1.\nheadOn(os, ts1).\nheadOn(ts1, os).\n" : "declare os.\n"));
     vi.stubGlobal("fetch", fetchImpl);
-    const client = { artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` };
+    const client = { artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` };
     const many = Array.from({ length: 200 }, (_value, index) => ({ ...fec(index), fecId: `explored/${String(index).padStart(5, "0")}` }));
     useExplorationStore.getState().show({ campaignId: "c1", result: { stop_reason: "exhausted", models_found: 200 }, fecs: many });
     render(<ExploredFecList client={client} />);
@@ -148,11 +148,14 @@ describe("the list of explored FECs", () => {
     const list = screen.getByRole("listbox", { name: "Explored FECs" });
     // Only the rows in view are drawn and read
     expect(within(list).getAllByRole("option").length).toBeLessThan(30);
-    await waitFor(() => expect(within(list).getByText("os and ts1 head-on")).toBeInTheDocument());
+    await waitFor(() => expect(within(list).getByText("os and ts1 head on")).toBeInTheDocument());
     expect(fetchImpl.mock.calls.length).toBeLessThan(30);
 
     await user.click(within(list).getByRole("option", { name: /explored\/00001/ }));
     expect(useExplorationStore.getState().selectedFecId).toBe("explored/00001");
+    // The graph first, the text one click away
+    expect(await screen.findByRole("region", { name: "Model graph of explored/00001" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Text" }));
     expect(screen.getByLabelText("FEC text")).toHaveValue("declare os, ts1.\nheadOn(os, ts1).\nheadOn(ts1, os).\n");
   });
 

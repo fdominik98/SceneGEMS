@@ -1,4 +1,4 @@
-/* The instances of a node on the Cluster page: the list of pools and jobs, and the viewers. */
+/* The instances of a worker node on the Cluster page: the list of pools and jobs, and the viewers. */
 
 .instances-layout {
   display: grid;

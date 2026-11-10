@@ -3,7 +3,7 @@ import type { OperatorClient } from "../../../domain/cluster/operatorApi";
 import { deleteCampaignPreset, listCampaignPresets, saveCampaignPreset, type SavePresetRequest } from "../../../domain/cluster/presetsApi";
 import { retryUnlessUnreachable, useOperatorClient } from "../useCampaignData";
 
-/** The campaign presets of the active cluster's master: the ones its image ships and the ones operators saved on it. */
+/** The campaign presets of the active cluster's control node: the ones its image ships and the ones operators saved on it. */
 
 function presetsKey(baseUrl: string | undefined) {
   return ["cluster-settings", baseUrl, "campaign-presets"] as const;

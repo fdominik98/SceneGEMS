@@ -51,18 +51,18 @@ export const catalogStackSchema = z.object({
   label: z.string(),
   description: z.string(),
   simulation_layer: z.string(),
-  /** The control layer of the run's vessels; an older master leaves it out. */
+  /** The control layer of the run's vessels; an older control node leaves it out. */
   control_layer: z.string().nullish(),
   mode: z.string(),
   /**
    * The fields of a run's stack section that pick this option, as the config writes them
-   * (simulation_layer and mode, and control_layer for the custom controller); an older master leaves it out.
+   * (simulation_layer and mode, and control_layer for the custom controller); an older control node leaves it out.
    */
   stack_section: z.record(z.string(), z.string()).nullish(),
   available: z.boolean(),
   reasons: z.array(z.string()),
   repeatability_tier: z.string().nullable(),
-  /** Whether the live monitor can stop a run on this stack early; an older master leaves it out (the kinematic stacks can). */
+  /** Whether the live monitor can stop a run on this stack early; an older control node leaves it out (the kinematic stacks can). */
   supports_early_stop: z.boolean().default(true),
   vessels: z.record(z.string(), stackTripleSchema),
   /** wind and waves: `supported`, `unmeasured` or `unsupported`. */
@@ -160,7 +160,7 @@ export type ValidationResult = z.infer<typeof validationResultSchema>;
 const CAMPAIGNS_PATH = "/cluster/campaigns";
 const CATALOG_PATH = "/cluster/catalog";
 
-/** How long a create may take: the master checks and expands the config and stores its cases first. */
+/** How long a create may take: the control node checks and expands the config and stores its cases first. */
 export const CREATE_TIMEOUT_MS = 60_000;
 
 /** The largest page the catalog route serves. */
@@ -206,14 +206,14 @@ export async function validateCampaignConfig(client: OperatorClient, yamlText: s
 export interface CreateCampaignOptions {
   name?: string;
   start?: boolean;
-  /** `campaign` (the master's default) or `workbench`. Travels in the request, not in the config, so the config hash does not change. */
+  /** `campaign` (the control node's default) or `workbench`. Travels in the request, not in the config, so the config hash does not change. */
   kind?: CampaignKind;
-  /** Who made the entry (`wizard` for the master's default of a campaign, or the workbench page's subsystem). */
+  /** Who made the entry (`wizard` for the control node's default of a campaign, or the workbench page's subsystem). */
   origin?: CampaignOrigin;
 }
 
 /**
- * Creates the campaign from a config (YAML text): paused, or running at once with `start`. A master
+ * Creates the campaign from a config (YAML text): paused, or running at once with `start`. A control node
  * with Phase 6 wakes its engine on create, so a workbench entry starts without waiting for a tick.
  */
 export async function createCampaign(client: OperatorClient, yamlText: string, options: CreateCampaignOptions = {}) {
@@ -233,11 +233,11 @@ export async function createCampaign(client: OperatorClient, yamlText: string, o
   try {
     return (await client.request("POST", CAMPAIGNS_PATH, campaignDetailSchema, { body, timeoutMs: CREATE_TIMEOUT_MS })).data;
   } catch (error) {
-    // The master may have stored it before the answer was lost: creating it again would make a second one
+    // The control node may have stored it before the answer was lost: creating it again would make a second one
     if (error instanceof OperatorApiError && error.kind === "timeout") {
       throw new OperatorApiError(
         "timeout",
-        `${error.message}; the master may have created it anyway, so check Campaign History before you create it again`,
+        `${error.message}; the control node may have created it anyway, so check Campaign History before you create it again`,
         error.path
       );
     }
@@ -245,13 +245,13 @@ export async function createCampaign(client: OperatorClient, yamlText: string, o
   }
 }
 
-// Config format 2 (Phase 6, design doc 6.3). Format 1 still loads on the master, read as the full chain.
+// Config format 2 (Phase 6, design doc 6.3). Format 1 still loads on the control node, read as the full chain.
 
 /** The monitor of a step that is not the simulation: a post-hoc judgment, or none (the default). */
 export const stepMonitorSchema = z.enum(["post_hoc", "empty"]);
 export type StepMonitor = z.infer<typeof stepMonitorSchema>;
 
-/** An artifact reference as the config writes it (`size_bytes` and `media_type` are filled in by the master). */
+/** An artifact reference as the config writes it (`size_bytes` and `media_type` are filled in by the control node). */
 export const configArtifactRefSchema = z.object({
   sha256: z.string(),
   kind: z.string(),

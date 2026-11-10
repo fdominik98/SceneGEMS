@@ -3,10 +3,10 @@ import { OperatorApiError, type OperatorClient } from "./operatorApi";
 import { campaignStepSchema } from "./schemas";
 
 /**
- * What the master offers to start from, and the cluster's own settings (`setting_routes.py`,
+ * What the control node offers to start from, and the cluster's own settings (`setting_routes.py`,
  * `catalog_routes.py`): the functional scenarios of its class catalog as text, the domain presets
- * of `backend/assets/domain_config/`, the default design space to explore, the cluster's domain configuration (saved on the master,
- * global for the cluster), and the campaign presets (shipped with the master image, or saved by
+ * of `backend/assets/domain_config/`, the default design space to explore, the cluster's domain configuration (saved on the control node,
+ * global for the cluster), and the campaign presets (shipped with the control node image, or saved by
  * operators). The frontend keeps no presets of its own.
  */
 
@@ -33,10 +33,10 @@ const domainTextsShape = {
 
 export const clusterDomainSchema = z.object({
   ...domainTextsShape,
-  /** False while the cluster never saved one: the texts are the master's default presets. */
+  /** False while the cluster never saved one: the texts are the control node's default presets. */
   saved: z.boolean(),
   updated_at: z.string().nullable(),
-  /** False on a master without its database, which serves the defaults read-only. */
+  /** False on a control node without its database, which serves the defaults read-only. */
   editable: z.boolean(),
 });
 export type ClusterDomain = z.infer<typeof clusterDomainSchema>;
@@ -55,7 +55,7 @@ export const campaignPresetSchema = z.object({
   preset_id: z.string(),
   name: z.string(),
   description: z.string(),
-  /** Shipped with the master image (read-only), or saved by an operator. */
+  /** Shipped with the control node image (read-only), or saved by an operator. */
   builtin: z.boolean(),
   steps: z.array(campaignStepSchema),
   /** The campaign config as the preset states it, defaults left out and without an input section. */
@@ -65,13 +65,13 @@ export const campaignPresetSchema = z.object({
 });
 export type CampaignPreset = z.infer<typeof campaignPresetSchema>;
 
-/** The default input of a design space exploration the master ships: the metamodel and well-formedness constraints, and a scope. */
+/** The default input of a design space exploration the control node ships: the metamodel and well-formedness constraints, and a scope. */
 export const designSpaceDefaultSchema = z.object({ specification: z.string(), scope: z.string() });
 export type DesignSpaceDefault = z.infer<typeof designSpaceDefaultSchema>;
 
 /**
- * The master's default design space (`GET /cluster/catalog/design-space`), or null when the master
- * has none to offer (a master before the design space exploration answers 404).
+ * The control node's default design space (`GET /cluster/catalog/design-space`), or null when the control node
+ * has none to offer (a control node before the design space exploration answers 404).
  */
 export async function getDesignSpaceDefault(client: Pick<OperatorClient, "request">, signal?: AbortSignal): Promise<DesignSpaceDefault | null> {
   try {
@@ -117,7 +117,7 @@ export interface SavePresetRequest {
   replace?: boolean;
 }
 
-/** Saves a preset on the master. A taken name rejects with status 409, a config that is not valid with 422 and its reasons. */
+/** Saves a preset on the control node. A taken name rejects with status 409, a config that is not valid with 422 and its reasons. */
 export async function saveCampaignPreset(client: OperatorClient, preset: SavePresetRequest): Promise<CampaignPreset> {
   const body = { name: preset.name, description: preset.description, config: preset.config, replace: preset.replace ?? false };
   return (await client.request("POST", CAMPAIGN_PRESETS_PATH, campaignPresetSchema, { body })).data;
@@ -127,7 +127,7 @@ export async function deleteCampaignPreset(client: OperatorClient, presetId: str
   await client.request("DELETE", `${CAMPAIGN_PRESETS_PATH}/${encodeURIComponent(presetId)}`, z.null());
 }
 
-/** Text with LF line endings, as the master stores domain contents (so an edit that only changed line endings is no change). */
+/** Text with LF line endings, as the control node stores domain contents (so an edit that only changed line endings is no change). */
 export function normalizeNewlines(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }

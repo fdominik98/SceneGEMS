@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ClientToServerMessage } from "../../../domain/simulation/wireTypes";
-import { MASTER_BROKER_PRESET, type MqttConnectionInfo, type MqttConnectionPresetKey } from "./connectionLibrary";
+import { CONTROL_NODE_BROKER_PRESET, type MqttConnectionInfo, type MqttConnectionPresetKey } from "./connectionLibrary";
 import { defaultReferenceGeofence, type ReferenceGeofence } from "./referenceGeofence";
 
 export type MqttConnectionAttempt = "idle" | "connecting" | "connected" | "failed";
@@ -64,9 +64,9 @@ export type ConnectionPersisted = Pick<
 
 /** Profiles saved before v3, when the page was named after WARA-PS, and the profile each one is now. */
 const LEGACY_PRESETS: Record<string, MqttConnectionPresetKey> = {
-  // The compose broker and a host-published broker of the single-machine stack: the master's broker took their place.
-  local_mqtt_connection: "master_broker",
-  host_mqtt_connection: "master_broker",
+  // The compose broker and a host-published broker of the single-machine stack: the control node's broker took their place.
+  local_mqtt_connection: "control_node_broker",
+  host_mqtt_connection: "control_node_broker",
   live_mqtt_connection: "waraps_tls_broker",
 };
 
@@ -84,7 +84,7 @@ export const useConnectionStore = create<ConnectionFormState>()(
       port: 1883,
       tlsConnection: false,
       allowCertificates: false,
-      selectedPreset: MASTER_BROKER_PRESET,
+      selectedPreset: CONTROL_NODE_BROKER_PRESET,
       geofence: defaultReferenceGeofence,
       userDisconnected: false,
       setUserDisconnected: (userDisconnected) => set({ userDisconnected }),
@@ -119,7 +119,7 @@ export const useConnectionStore = create<ConnectionFormState>()(
       version: 3,
       // Zustand calls this with the stored state object (already unwrapped) and merges
       // the return value onto the store. v3: the profiles of the single-machine stack are
-      // gone; the master's own broker replaces them and is the default. A hand-typed
+      // gone; the control node's own broker replaces them and is the default. A hand-typed
       // address ("" profile) always survives.
       migrate: (persistedState, version): ConnectionPersisted => {
         if (version >= 3 || !persistedState || typeof persistedState !== "object") {
@@ -127,7 +127,7 @@ export const useConnectionStore = create<ConnectionFormState>()(
         }
         const state = persistedState as Omit<ConnectionPersisted, "selectedPreset"> & { selectedPreset?: string };
         const preset = state.selectedPreset ?? "";
-        return { ...state, selectedPreset: preset === "" ? "" : (LEGACY_PRESETS[preset] ?? MASTER_BROKER_PRESET) };
+        return { ...state, selectedPreset: preset === "" ? "" : (LEGACY_PRESETS[preset] ?? CONTROL_NODE_BROKER_PRESET) };
       },
       partialize: (state): ConnectionPersisted => ({
         user: state.user,
@@ -149,9 +149,9 @@ type ConnectionFields = Pick<
   "user" | "password" | "agentBroker" | "clientBroker" | "port" | "tlsConnection" | "allowCertificates" | "selectedPreset" | "geofence"
 >;
 
-/** Whether the form has enough to attempt a connection: the master broker always does. */
+/** Whether the form has enough to attempt a connection: the control node broker always does. */
 export function connectionFormIsValid(state: ConnectionFields): boolean {
-  if (state.selectedPreset === MASTER_BROKER_PRESET) {
+  if (state.selectedPreset === CONTROL_NODE_BROKER_PRESET) {
     return true;
   }
   return (
@@ -163,7 +163,7 @@ export function connectionFormIsValid(state: ConnectionFields): boolean {
   );
 }
 
-/** The connect message for the form: the master broker by name, any other by its address. */
+/** The connect message for the form: the control node broker by name, any other by its address. */
 export function buildConnectMessage(state: ConnectionFields): ClientToServerMessage {
   return {
     type: "connect_to_mqtt_broker",
@@ -175,6 +175,6 @@ export function buildConnectMessage(state: ConnectionFields): ClientToServerMess
     tls_connection: state.tlsConnection,
     allow_certificates: state.allowCertificates,
     geofence: state.geofence,
-    use_master_broker: state.selectedPreset === MASTER_BROKER_PRESET,
+    use_control_node_broker: state.selectedPreset === CONTROL_NODE_BROKER_PRESET,
   };
 }

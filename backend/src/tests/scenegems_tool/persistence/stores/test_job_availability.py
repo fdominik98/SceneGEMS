@@ -1,6 +1,6 @@
 """Job availability: retry backoff, the claim's available_at filter, and holds.
 
-Each test runs on the in-memory job store the master's tests use (default run) and on
+Each test runs on the in-memory job store the control node's tests use (default run) and on
 Postgres (`-m postgres`), so the two stay consistent.
 """
 
@@ -12,8 +12,8 @@ from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.database import transaction
 from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind
-from scenegems_tool.persistence.stores import JobStore, NodeStore
-from tests.scenegems_tool.cluster.master.fake_stores import InMemoryJobStore, InMemoryNodeStore
+from scenegems_tool.persistence.stores import JobStore, WorkerNodeStore
+from tests.scenegems_tool.cluster.control_node.fake_stores import InMemoryJobStore, InMemoryWorkerNodeStore
 from tests.scenegems_tool.persistence.stores.builders import START, make_hello, make_submission
 
 SCENE = JobType.SCENE_GENERATION
@@ -24,14 +24,14 @@ BASE_S, CAP_S = 5.0, 40.0
 @pytest.fixture(params=["memory", pytest.param("postgres", marks=pytest.mark.postgres)])
 def job_stores(request, clock):
     if request.param == "memory":
-        nodes = InMemoryNodeStore(clock)
-        jobs = InMemoryJobStore(nodes, clock, retry_backoff_base_s=BASE_S, retry_backoff_cap_s=CAP_S)
+        worker_nodes = InMemoryWorkerNodeStore(clock)
+        jobs = InMemoryJobStore(worker_nodes, clock, retry_backoff_base_s=BASE_S, retry_backoff_cap_s=CAP_S)
     else:
         session_factory = request.getfixturevalue("session_factory")
-        nodes = NodeStore(session_factory, clock)
+        worker_nodes = WorkerNodeStore(session_factory, clock)
         jobs = JobStore(session_factory, clock, retry_backoff_base_s=BASE_S, retry_backoff_cap_s=CAP_S)
-    nodes.register(make_hello("node-a", slots={SCENE: 4}))
-    return nodes, jobs
+    worker_nodes.register(make_hello("worker-node-a", slots={SCENE: 4}))
+    return worker_nodes, jobs
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def _failure(lease, retryable=True) -> JobResult:
 
 
 def _claim(jobs):
-    return jobs.claim_next("node-a", LEASE_S)
+    return jobs.claim_next("worker-node-a", LEASE_S)
 
 
 def test_a_submitted_job_is_available_at_once(jobs):
@@ -71,8 +71,8 @@ def test_retryable_failures_back_off_exponentially_up_to_the_cap(jobs, clock):
 
 
 @pytest.mark.postgres
-def test_the_backoff_is_in_the_failure_event(job_store, node_store):
-    node_store.register(make_hello("node-a", slots={SCENE: 1}))
+def test_the_backoff_is_in_the_failure_event(job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={SCENE: 1}))
     job_store.submit(make_submission())
     failed = job_store.report_result(_failure(_claim(job_store))).job
     event = job_store.events(failed.job_id)[-1]

@@ -226,7 +226,7 @@ class PipelineStore:
                     at=event.at,
                     kind=event.kind,
                     attempt=event.attempt,
-                    node_id=event.node_id,
+                    worker_node_id=event.worker_node_id,
                     detail=dict(event.detail),
                     pipeline_job=PipelineJobRecord.from_row(pipeline_job),
                     job_state=job_state,

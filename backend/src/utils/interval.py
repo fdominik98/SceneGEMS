@@ -9,17 +9,20 @@ class Interval(P.Interval):
         return Interval(P.closed(lower, upper))
 
     def crop(self, value: float) -> float:
-        # find the closest interval to that value if the current one does not contain it
+        """``value`` itself when it lies inside, otherwise the nearest bound of any part.
+
+        The earlier ``min(closest lower bound, closest upper bound)`` picked the far side of
+        a part for a value just above it: 2.2 against [-2, 2] gave -2, so a heading that was
+        still 2.2 degrees short of its target stepped away from it and never settled.
+        """
         if self.contains(value):
             return value
 
         if self.empty:
             raise ValueError("Interval is empty")
 
-        # find the closest interval to that value
-        closest_lower_bound = min(self._intervals, key=lambda interval: abs(interval.lower - value)).lower
-        closest_upper_bound = min(self._intervals, key=lambda interval: abs(interval.upper - value)).upper
-        return min(closest_lower_bound, closest_upper_bound)
+        bounds = [bound for part in self._intervals for bound in (part.lower, part.upper)]
+        return min(bounds, key=lambda bound: abs(bound - value))
 
     def sample(self) -> float:
         # For simplicity, sample uniformly from each sub-interval in the union

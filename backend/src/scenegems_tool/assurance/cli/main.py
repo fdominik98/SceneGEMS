@@ -25,13 +25,13 @@ CAMPAIGN_STEPS = ("design_space_exploration",) + MONITORED_STEPS
 CASE_STATES = ("active", "complete", "dropped", "failed", "cancelled")
 CASE_STAGES = ("explore_design_space", "generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate", "verdict")
 VERDICT_STATES = ("passed", "failed", "unmonitored")
-VERDICT_SORTS = ("fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at")  # the master's whitelist
+VERDICT_SORTS = ("fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at")  # the control node's whitelist
 
-DESCRIPTION = """Create and watch assurance campaigns on a SceneGEMS master through its operator API.
+DESCRIPTION = """Create and watch assurance campaigns on a SceneGEMS control node through its operator API.
 
-The operator API has no authentication yet, so a master serves it on its loopback address
+The operator API has no authentication yet, so a control node serves it on its loopback address
 only (127.0.0.1:5174). From another machine reach it over SSH, for example
-`ssh -L 5174:127.0.0.1:5174 <master>`, and keep the default --api.
+`ssh -L 5174:127.0.0.1:5174 <control node>`, and keep the default --api.
 """
 
 CONTROL_HELP = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sampleCampaignDetail, sampleClass, sampleCampaignSummary, sampleEvent, sampleJob, sampleLogLine, sampleNode } from "../../test/fixtures/clusterViews";
+import { sampleCampaignDetail, sampleClass, sampleCampaignSummary, sampleEvent, sampleJob, sampleLogLine, sampleWorkerNode } from "../../test/fixtures/clusterViews";
 import { sampleCampaignRow, sampleWorkbenchRow } from "../../test/fixtures/historyViews";
 import {
   campaignReducer,
@@ -7,7 +7,7 @@ import {
   instanceReducer,
   JOB_LOG_LINES_KEPT,
   jobReducer,
-  nodesReducer,
+  workerNodesReducer,
   rawTopicReducer,
 } from "./liveTopics";
 
@@ -32,16 +32,16 @@ describe("live topic reducers", () => {
     expect(() => campaignsReducer.update(state, { campaign: { campaign_id: "x" } }, 5)).toThrow();
   });
 
-  it("nodes: snapshot sorted by name, changed nodes replaced or added, removed nodes dropped", () => {
-    let nodes = nodesReducer.snapshot([sampleNode({ node_id: "b", name: "worker-b" }), sampleNode({ node_id: "a", name: "worker-a" })]);
-    expect(nodes.map((node) => node.node_id)).toEqual(["a", "b"]);
-    nodes = nodesReducer.update(nodes, { node: sampleNode({ node_id: "b", name: "worker-b", status: "draining" }) }, 1);
-    expect(nodes.find((node) => node.node_id === "b")?.status).toBe("draining");
-    nodes = nodesReducer.update(nodes, { node: sampleNode({ node_id: "c", name: "aaa" }) }, 2);
-    expect(nodes.map((node) => node.node_id)).toEqual(["c", "a", "b"]);
-    nodes = nodesReducer.update(nodes, { removed: "a" }, 3);
-    expect(nodes.map((node) => node.node_id)).toEqual(["c", "b"]);
-    expect(() => nodesReducer.update(nodes, { node: { node_id: "x" } }, 4)).toThrow();
+  it("nodes: snapshot sorted by name, changed worker nodes replaced or added, removed worker nodes dropped", () => {
+    let workerNodes = workerNodesReducer.snapshot([sampleWorkerNode({ worker_node_id: "b", name: "worker-b" }), sampleWorkerNode({ worker_node_id: "a", name: "worker-a" })]);
+    expect(workerNodes.map((workerNode) => workerNode.worker_node_id)).toEqual(["a", "b"]);
+    workerNodes = workerNodesReducer.update(workerNodes, { worker_node: sampleWorkerNode({ worker_node_id: "b", name: "worker-b", status: "draining" }) }, 1);
+    expect(workerNodes.find((workerNode) => workerNode.worker_node_id === "b")?.status).toBe("draining");
+    workerNodes = workerNodesReducer.update(workerNodes, { worker_node: sampleWorkerNode({ worker_node_id: "c", name: "aaa" }) }, 2);
+    expect(workerNodes.map((workerNode) => workerNode.worker_node_id)).toEqual(["c", "a", "b"]);
+    workerNodes = workerNodesReducer.update(workerNodes, { removed: "a" }, 3);
+    expect(workerNodes.map((workerNode) => workerNode.worker_node_id)).toEqual(["c", "b"]);
+    expect(() => workerNodesReducer.update(workerNodes, { worker_node: { worker_node_id: "x" } }, 4)).toThrow();
   });
 
   it("campaign: events appended once, summary merged, classes replaced with totals recomputed", () => {
@@ -109,7 +109,7 @@ describe("live topic reducers", () => {
   });
 
   it("instance: previews, frames and status", () => {
-    let state = instanceReducer.snapshot({ node_id: "n", instance: "job-j-1", kind: "simulation", state: "running" });
+    let state = instanceReducer.snapshot({ worker_node_id: "n", instance: "job-j-1", kind: "simulation", state: "running" });
     state = instanceReducer.update(state, { kind: "simulation_frames", job_id: "j", frames: [{ t: 0 }, { t: 1 }] }, 1);
     state = instanceReducer.update(state, { kind: "simulation_frames", job_id: "j", frames: [{ t: 2 }] }, 2);
     expect(state.frames).toEqual([{ t: 0 }, { t: 1 }, { t: 2 }]);
@@ -121,7 +121,7 @@ describe("live topic reducers", () => {
     expect(state.trajectoryPreview?.request_id).toBe("r");
     state = instanceReducer.update(state, { kind: "status", state: "finished", message: "done", progress: 1 }, 5);
     expect([state.state, state.message, state.progress]).toEqual(["finished", "done", 1]);
-    expect(instanceReducer.snapshot({ node_id: "n", instance: "job-j-2", kind: "simulation", state: "running", job_id: "j", attempt: 2 }).info.attempt).toBe(2);
+    expect(instanceReducer.snapshot({ worker_node_id: "n", instance: "job-j-2", kind: "simulation", state: "running", job_id: "j", attempt: 2 }).info.attempt).toBe(2);
     expect(() => instanceReducer.update(state, { kind: "weather" }, 6)).toThrow();
   });
 

@@ -1,4 +1,4 @@
-# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+# Shipped with the control node image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
 format: 3
 name: "Trajectory planning check without simulation"
 description: >-

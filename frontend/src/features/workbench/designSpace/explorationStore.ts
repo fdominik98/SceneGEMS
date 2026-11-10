@@ -19,7 +19,7 @@ export interface ExplorationState {
   running: ExplorationProgress | null;
   /** The entry the shown FECs belong to, null while nothing is shown. */
   campaignId: string | null;
-  /** The job's result, null when the master did not report one. */
+  /** The job's result, null when the control node did not report one. */
   result: ExplorationResult | null;
   fecs: ExploredFec[];
   /** Texts fetched so far, by FEC id. */

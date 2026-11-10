@@ -38,8 +38,8 @@ export function ExploredFecOutputs({ campaignId, running }: { campaignId: string
   if (query.error && !query.data) {
     const missing = query.error instanceof OperatorApiError && query.error.status === 404;
     return (
-      <EmptyState title={missing ? "This master lists no outputs" : "The FECs did not load"} tone="error">
-        <p className="meta">{missing ? "Update the master to browse the FECs of an exploration." : describeOperatorError(query.error)}</p>
+      <EmptyState title={missing ? "This control node lists no outputs" : "The FECs did not load"} tone="error">
+        <p className="meta">{missing ? "Update the control node to browse the FECs of an exploration." : describeOperatorError(query.error)}</p>
         <div>
           <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
             Try again

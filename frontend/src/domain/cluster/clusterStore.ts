@@ -1,11 +1,11 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-/** A cluster the UI knows: a master's operator API, reached directly or over an SSH tunnel. */
+/** A cluster the UI knows: a control node's operator API, reached directly or over an SSH tunnel. */
 export interface ClusterEntry {
   id: string;
   name: string;
-  /** Base URL of the master's operator listener, without a trailing slash. */
+  /** Base URL of the control node's operator listener, without a trailing slash. */
   operatorUrl: string;
 }
 
@@ -20,7 +20,7 @@ export const CLUSTERS_STORAGE_KEY = "scenegems:clusters";
 
 const DEFAULT_CLUSTER: ClusterEntry = {
   id: "local",
-  name: "Local master",
+  name: "Local control node",
   operatorUrl: DEFAULT_OPERATOR_URL,
 };
 

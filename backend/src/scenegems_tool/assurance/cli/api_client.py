@@ -1,4 +1,4 @@
-"""A thin httpx client for the master's operator API, with the server's reasons in its errors."""
+"""A thin httpx client for the control node's operator API, with the server's reasons in its errors."""
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional

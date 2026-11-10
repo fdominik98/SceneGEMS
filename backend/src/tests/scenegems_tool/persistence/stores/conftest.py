@@ -4,7 +4,7 @@ from typing import Dict, Optional, Tuple
 import pytest
 
 from scenegems_tool.persistence.schema import CaseState, MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation, VerdictState
-from scenegems_tool.persistence.stores import AssuranceStores, CaseRecord, JobStore, NewCase, NewRunRecord, NewVerdict, NodeStore, RunRecord
+from scenegems_tool.persistence.stores import AssuranceStores, CaseRecord, JobStore, NewCase, NewRunRecord, NewVerdict, RunRecord, WorkerNodeStore
 from tests.scenegems_tool.persistence.stores.builders import CONFIG_HASH, ManualClock, make_class_spec, sha256_of
 
 
@@ -14,8 +14,8 @@ def clock() -> ManualClock:
 
 
 @pytest.fixture
-def node_store(session_factory, clock) -> NodeStore:
-    return NodeStore(session_factory, clock)
+def worker_node_store(session_factory, clock) -> WorkerNodeStore:
+    return WorkerNodeStore(session_factory, clock)
 
 
 @pytest.fixture

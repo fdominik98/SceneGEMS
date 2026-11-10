@@ -23,7 +23,7 @@ describe("validationFromError", () => {
     expect(state.reasons[0].message).toBe("the request is not valid");
   });
 
-  it("reports an unreachable master or another status as a failed check, not as reasons", () => {
+  it("reports an unreachable control node or another status as a failed check, not as reasons", () => {
     const unreachable = validationFromError("x", new OperatorApiError("network", "cannot reach http://127.0.0.1:5174 (Failed to fetch)", "/p"));
     expect(unreachable).toMatchObject({ status: "error", reasons: [] });
     expect(unreachable.message).toContain("cannot reach");

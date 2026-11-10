@@ -3,7 +3,7 @@ import { entryOption, stateBadgeClass, type KindFilter } from "./stepViews";
 
 interface EntryPickerProps {
   entries: readonly CampaignSummary[];
-  /** The entries the master has for the filters; more than `entries` when the list is cut short. */
+  /** The entries the control node has for the filters; more than `entries` when the list is cut short. */
   total: number | null;
   loading: boolean;
   /** The shown entry, which may not be among `entries` (another filter, or a list that is still loading). */
@@ -35,7 +35,7 @@ export function EntryPicker({ entries, total, loading, selectedId, selected, kin
         <span>Name</span>
         <input type="search" value={name} onChange={(event) => onName(event.target.value)} placeholder="contains" aria-label="Name contains" />
       </label>
-      <label>
+      <label className="results-picker-entry">
         <span>Entry</span>
         <select value={selectedId ?? ""} onChange={(event) => onPick(event.target.value)} disabled={empty && selectedId === null} aria-label="Entry">
           {selectedId !== null && !listed && <option value={selectedId}>{selected ? entryOption(selected) : selectedId}</option>}

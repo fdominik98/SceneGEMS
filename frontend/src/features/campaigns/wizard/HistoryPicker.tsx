@@ -31,7 +31,7 @@ export interface HistoryPickerProps {
 }
 
 function stepsOfRow(row: CampaignRow): readonly CampaignStep[] {
-  // A row of a master without Phase 6 has no steps: it ran the whole chain
+  // A row of a control node without Phase 6 has no steps: it ran the whole chain
   return row.steps ?? IMPLIED_STEPS;
 }
 
@@ -41,7 +41,7 @@ function flagsOf(output: OutputRow): string {
     flags.push("valid");
   }
   if (output.complete === false) {
-    flags.push("partial");
+    flags.push("incomplete");
   }
   return flags.join(", ");
 }

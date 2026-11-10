@@ -8,9 +8,9 @@ FINGERPRINT_LABEL = "org.scenegems.fingerprint"
 
 
 def read_image_fingerprints(client: Optional[Any] = None, tag: Optional[str] = None) -> Dict[str, str]:
-    """Image repository to fingerprint for every local image with the label; this is the node's Hello.fingerprints.
+    """Image repository to fingerprint for every local image with the label; this is the worker node's Hello.fingerprints.
 
-    The node runs its images under one tag (SCENEGEMS_IMAGE_TAG, or tag), so a repository it has
+    The worker node runs its images under one tag (SCENEGEMS_IMAGE_TAG, or tag), so a repository it has
     under that tag reports that image; a repository it has only under other tags reports one of them,
     the first by name, so a tag change alone never drops a fingerprint.
     """

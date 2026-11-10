@@ -1,11 +1,11 @@
-import type { NodeView } from "./schemas";
+import type { WorkerNodeView } from "./schemas";
 
 /**
- * The component catalog as the console reads it (`cluster/fingerprints/components.py`). A node
+ * The component catalog as the console reads it (`cluster/fingerprints/components.py`). A worker node
  * offers components: the vessel stack layers campaigns run and the subsystems. A job needs
  * components: a simulation every layer of every vessel's stack, any other job type its subsystem
- * component. A node runs a job when it has slots for the job type and every component the job
- * needs is usable there (its images match the master's release).
+ * component. A worker node runs a job when it has slots for the job type and every component the job
+ * needs is usable there (its images match the control node's release).
  */
 
 export const SIMULATION_JOB = "simulation";
@@ -114,31 +114,31 @@ export function jobComponents(jobType: string, payload?: unknown): string[] {
   return subsystem === undefined ? [] : [subsystem];
 }
 
-/** The node's components whose images match the master's release. */
-export function usableComponents(node: NodeView): Set<string> {
-  return new Set(node.components.filter((entry) => entry.state === "usable").map((entry) => entry.component));
+/** The worker node's components whose images match the control node's release. */
+export function usableComponents(workerNode: WorkerNodeView): Set<string> {
+  return new Set(workerNode.components.filter((entry) => entry.state === "usable").map((entry) => entry.component));
 }
 
-/** The node's components whose images differ from the release: unusable until the node is updated. */
-export function staleComponents(node: NodeView): string[] {
-  return node.components.filter((entry) => entry.state === "out_of_date").map((entry) => entry.component);
+/** The worker node's components whose images differ from the release: unusable until the worker node is updated. */
+export function staleComponents(workerNode: WorkerNodeView): string[] {
+  return workerNode.components.filter((entry) => entry.state === "out_of_date").map((entry) => entry.component);
 }
 
-/** Every component of the node is out of date, so the master leases it nothing. */
-export function isWhollyOutOfDate(node: NodeView): boolean {
-  return node.components.length > 0 && node.components.every((entry) => entry.state === "out_of_date");
+/** Every component of the worker node is out of date, so the control node leases it nothing. */
+export function isWhollyOutOfDate(workerNode: WorkerNodeView): boolean {
+  return workerNode.components.length > 0 && workerNode.components.every((entry) => entry.state === "out_of_date");
 }
 
-/** The node has slots for the job type and lists every component (usable or not). */
-export function listsJob(node: NodeView, jobType: string, components: readonly string[]): boolean {
-  const listed = new Set(node.components.map((entry) => entry.component));
-  return (node.slots[jobType]?.slots ?? 0) > 0 && components.every((component) => listed.has(component));
+/** The worker node has slots for the job type and lists every component (usable or not). */
+export function listsJob(workerNode: WorkerNodeView, jobType: string, components: readonly string[]): boolean {
+  const listed = new Set(workerNode.components.map((entry) => entry.component));
+  return (workerNode.slots[jobType]?.slots ?? 0) > 0 && components.every((component) => listed.has(component));
 }
 
-/** The node has slots for the job type and every component usable, as the master's claim matches it. */
-export function offersJob(node: NodeView, jobType: string, components: readonly string[]): boolean {
-  const usable = usableComponents(node);
-  return (node.slots[jobType]?.slots ?? 0) > 0 && components.every((component) => usable.has(component));
+/** The worker node has slots for the job type and every component usable, as the control node's claim matches it. */
+export function offersJob(workerNode: WorkerNodeView, jobType: string, components: readonly string[]): boolean {
+  const usable = usableComponents(workerNode);
+  return (workerNode.slots[jobType]?.slots ?? 0) > 0 && components.every((component) => usable.has(component));
 }
 
 /** Components in a sentence: "Replay, ArduPilot and Gazebo". */

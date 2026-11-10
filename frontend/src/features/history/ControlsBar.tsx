@@ -6,19 +6,19 @@ import type { CampaignSummary } from "../../domain/cluster/schemas";
 import { CONTROL_SPECS, controlAvailability, isFinalState, type ControlSpec } from "./campaignModel";
 import { useCampaignControl } from "./useCampaignFeed";
 
-/** The message of a refused control, with what the master said. */
+/** The message of a refused control, with what the control node said. */
 function refusal(error: unknown): { title: string; detail: string } {
   if (error instanceof OperatorApiError) {
     if (error.status === 409) {
-      return { title: "The master refused this change", detail: error.message };
+      return { title: "The control node refused this change", detail: error.message };
     }
     if (error.status === 404) {
-      return { title: "The campaign is not on this master", detail: error.message };
+      return { title: "The campaign is not on this control node", detail: error.message };
     }
     if (error.unreachable) {
-      return { title: "The master did not answer", detail: error.message };
+      return { title: "The control node did not answer", detail: error.message };
     }
-    return { title: `The master answered ${error.status ?? "with an error"}`, detail: error.message };
+    return { title: `The control node answered ${error.status ?? "with an error"}`, detail: error.message };
   }
   return { title: "The change failed", detail: error instanceof Error ? error.message : String(error) };
 }
@@ -122,7 +122,7 @@ export function ControlsBar({ campaign, onChanged, startBlocker = null }: Contro
           </div>
         </div>
       )}
-      {mutation.isPending && <p className="meta" role="status">Sending to the master...</p>}
+      {mutation.isPending && <p className="meta" role="status">Sending to the control node...</p>}
       {failure && (
         <div className="camp-refusal" role="alert">
           <strong>{failure.title}.</strong> <span>{failure.detail}</span>

@@ -7,11 +7,11 @@ export function describeFramesPhase(phase: FramesPhase): string {
     case "idle":
       return "";
     case "submitting":
-      return "Asking the master for the monitor frames.";
+      return "Asking the control node for the monitor frames.";
     case "submitted":
-      return phase.job.state === "leased" ? "A node has taken the monitoring job and is starting it." : "The monitoring job is waiting for a free node.";
+      return phase.job.state === "leased" ? "A worker node has taken the monitoring job and is starting it." : "The monitoring job is waiting for a free worker node.";
     case "running":
-      return phase.job.progress?.message ? `Monitoring the run: ${phase.job.progress.message}.` : "Monitoring the run on a node.";
+      return phase.job.progress?.message ? `Monitoring the run: ${phase.job.progress.message}.` : "Monitoring the run on a worker node.";
     case "downloading":
       return `Downloading the frames${phase.sizeBytes ? ` (${formatBytes(phase.sizeBytes)})` : ""}.`;
     case "done":

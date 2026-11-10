@@ -15,7 +15,7 @@ Sections:
     input           format 2: functional scenarios given as content (a campaign that starts with scene
                     generation) or items, outputs of earlier steps or uploaded files (one that starts later)
     domain          COLREGS constants, vessel types and obstacle types as content (defaults: the
-                    cluster's domain configuration when the master fills them in, else the default
+                    cluster's domain configuration when the control node fills them in, else the default
                     presets of backend/assets/domain_config/), the scene generation timeout, enforce_low_tcpa
     scene_generation  format 2: the monitor of the generated scenes (post_hoc or empty)
     trajectories    the generator: monitor_driven_rrt with its search parameters (the wire keys of
@@ -24,7 +24,7 @@ Sections:
     execution       the runs of every case: a stack (the kinematic layer, ArduPilot on SITL or Gazebo, or
                     the custom controller on Gazebo, each with replay or USV Navigation on the own
                     ship), an environment, a seed, repeats, the monitor
-    resources       the nodes it may use (all when none are named), required node labels, queue depth
+    resources       the worker nodes it may use (all when none are named), required worker node labels, queue depth
                     caps per stage, priority
     policy          retention, whether to keep frames, the campaign seed, stop conditions
 
@@ -66,10 +66,10 @@ from pydantic import (
 )
 
 from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
-from scenegems_tool.cluster.node.daemon.configuration.node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
-from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEYS, without_retired_params
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
+from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import DEFAULT_REFERENCE_GEOFENCE
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
+from scenegems_tool.cluster.worker_node.jobs.trajectory_generation_job import PARAM_KEYS, without_retired_params
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
 from scenegems_tool.subsystems.design_space_exploration.design_space import ScopeError, default_specification
@@ -184,7 +184,7 @@ class InputArtifactKind(str, Enum):
 
 
 class InputRef(ConfigModel):
-    """An artifact in the master's store, in the wire form of cluster/protocol/artifacts.ArtifactRef.
+    """An artifact in the control node's store, in the wire form of cluster/protocol/artifacts.ArtifactRef.
 
     Its own model because the protocol's artifact kinds have no functional scenario yet.
     """
@@ -271,7 +271,7 @@ class DesignSpaceExplorationConfig(ConfigModel):
     Every FEC found becomes a class explored/<index> with this quota and failure budget.
     """
 
-    # The metamodel and the well-formedness constraints, and whatever the family fixes; the specification the master ships when left out
+    # The metamodel and the well-formedness constraints, and whatever the family fixes; the specification the control node ships when left out
     specification: str = Field(default_factory=default_specification, min_length=1)
     scope: str = Field(min_length=1)  # how many instances of a class a FEC has, such as "TS = 2, StaticObstacle = 0"
     max_fecs: Optional[int] = Field(default=1000, ge=1)  # the exploration stops at this many FECs; None: every FEC
@@ -573,19 +573,19 @@ class QueueDepthCaps(ConfigModel):
 
 
 class ResourcesConfig(ConfigModel):
-    nodes: Tuple[str, ...] = ()  # node ids the campaign's jobs may run on; empty: every node, also those that join later
-    required_labels: Dict[str, str] = Field(default_factory=dict)  # every job of the campaign needs these node labels
+    worker_nodes: Tuple[str, ...] = ()  # worker node ids the campaign's jobs may run on; empty: every worker node, also those that join later
+    required_labels: Dict[str, str] = Field(default_factory=dict)  # every job of the campaign needs these worker node labels
     queue_depth: QueueDepthCaps = Field(default_factory=QueueDepthCaps)
     priority: int = 0  # base priority of the campaign's jobs; later stages run above it
 
-    @field_validator("nodes")
+    @field_validator("worker_nodes")
     @classmethod
-    def _distinct_node_ids(cls, nodes: Tuple[str, ...]) -> Tuple[str, ...]:
-        if any(not node.strip() for node in nodes):
-            raise ValueError("a node id must not be empty")
-        if len(set(nodes)) != len(nodes):
-            raise ValueError("node ids must be distinct")
-        return nodes
+    def _distinct_worker_node_ids(cls, worker_nodes: Tuple[str, ...]) -> Tuple[str, ...]:
+        if any(not worker_node.strip() for worker_node in worker_nodes):
+            raise ValueError("a worker node id must not be empty")
+        if len(set(worker_nodes)) != len(worker_nodes):
+            raise ValueError("worker node ids must be distinct")
+        return worker_nodes
 
 
 # Policy
@@ -617,6 +617,20 @@ class PolicyConfig(ConfigModel):
 FEC_KEY = "fecs"
 LEGACY_FEC_KEY = "classes"
 LEGACY_FORMATS = (1, 2)
+
+
+# The key resources.worker_nodes has in the hashed form of a config: its name before the worker node terminology
+HASHED_WORKER_NODES_KEY = "nodes"
+
+
+def hashed_form(data: Dict[str, Any]) -> Dict[str, Any]:
+    """The config JSON as the hash covers it: resources.worker_nodes under HASHED_WORKER_NODES_KEY."""
+    resources = data.get("resources")
+    if not isinstance(resources, dict) or "worker_nodes" not in resources:
+        return data
+    hashed = {key: value for key, value in resources.items() if key != "worker_nodes"}
+    hashed[HASHED_WORKER_NODES_KEY] = resources["worker_nodes"]
+    return {**data, "resources": hashed}
 
 
 def _renamed_scope(scope: Any, old: str, new: str) -> Any:
@@ -709,7 +723,8 @@ class CampaignConfig(ConfigModel):
         return data
 
     def config_hash(self) -> str:
-        return canonical_json_sha256(self.to_json())
+        """The hash of the config. It covers to_json() with resources.worker_nodes under the name the key had when the first hashes were stored, so they stay valid."""
+        return canonical_json_sha256(hashed_form(self.to_json()))
 
     def case_seed(self, class_id: str, case_index: int) -> int:
         return case_seed(self.policy.seed, class_id, case_index)

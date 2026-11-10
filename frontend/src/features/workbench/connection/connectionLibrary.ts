@@ -9,13 +9,13 @@ export interface MqttConnectionInfo {
 }
 
 /**
- * The broker profiles of the Connections page. The master's own broker is the default: the
- * server knows its address (`mqtt_broker_status.masterBroker`), so the form sends
- * `use_master_broker` instead of an address. Any other broker is an external one.
+ * The broker profiles of the Connections page. The control node's own broker is the default: the
+ * server knows its address (`mqtt_broker_status.controlNodeBroker`), so the form sends
+ * `use_control_node_broker` instead of an address. Any other broker is an external one.
  */
-export type MqttConnectionPresetKey = "master_broker" | "waraps_tls_broker";
+export type MqttConnectionPresetKey = "control_node_broker" | "waraps_tls_broker";
 
-export const MASTER_BROKER_PRESET = "master_broker" satisfies MqttConnectionPresetKey;
+export const CONTROL_NODE_BROKER_PRESET = "control_node_broker" satisfies MqttConnectionPresetKey;
 
 /** The public broker of broker.waraps.org, over TLS, where real vessels and external agents meet. */
 export const waraps_tls_broker: MqttConnectionInfo = {
@@ -27,13 +27,13 @@ export const waraps_tls_broker: MqttConnectionInfo = {
   tls_connection: true,
 };
 
-/** The fields a profile fills in; the master broker has none of its own. */
-export const mqttConnectionLibrary: Record<Exclude<MqttConnectionPresetKey, "master_broker">, MqttConnectionInfo> = {
+/** The fields a profile fills in; the control node broker has none of its own. */
+export const mqttConnectionLibrary: Record<Exclude<MqttConnectionPresetKey, "control_node_broker">, MqttConnectionInfo> = {
   waraps_tls_broker,
 };
 
 export const PRESET_LABELS: Record<MqttConnectionPresetKey | "", string> = {
-  master_broker: "Master broker (default)",
+  control_node_broker: "Control node broker (default)",
   waraps_tls_broker: "broker.waraps.org over TLS",
   "": "Other broker",
 };

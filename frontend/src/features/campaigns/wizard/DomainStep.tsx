@@ -37,7 +37,7 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
       next.domain.vesselTypes = current.vessel_types;
       next.domain.obstacleTypes = current.obstacle_types;
     });
-    setSource(current.saved ? "the cluster's domain configuration" : "the master's default presets (the cluster has saved no domain configuration)");
+    setSource(current.saved ? "the cluster's domain configuration" : "the control node's default presets (the cluster has saved no domain configuration)");
   };
 
   const chooseCustom = (custom: boolean) => {
@@ -57,7 +57,7 @@ export function DomainStep({ draft, update, reasons }: StepProps) {
           <input type="radio" name="wiz-domain" checked={!domain.custom} onChange={() => chooseCustom(false)} />
           <span>
             <strong>Use the cluster's domain configuration</strong>
-            <span className="wiz-hint">The three texts are left out of the config. The master fills them from the cluster's domain configuration (the Domain Configuration page) when the campaign is created, and the campaign keeps what it filled in.</span>
+            <span className="wiz-hint">The three texts are left out of the config. The control node fills them from the cluster's domain configuration (the Domain Configuration page) when the campaign is created, and the campaign keeps what it filled in.</span>
           </span>
         </label>
         <label className={`wiz-option${domain.custom ? " wiz-option--on" : ""}`}>

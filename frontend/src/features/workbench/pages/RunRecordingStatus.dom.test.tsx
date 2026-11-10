@@ -41,9 +41,9 @@ describe("RunRecordingStatus in the DOM", () => {
   it("says why a recording failed or is not made", () => {
     report(2);
     const { rerender } = render(<RunRecordingStatus />);
-    expect(screen.getByRole("alert")).toHaveTextContent("the master refused the run record");
+    expect(screen.getByRole("alert")).toHaveTextContent("the control node refused the run record");
     report(3);
     rerender(<RunRecordingStatus />);
-    expect(screen.getByRole("status")).toHaveTextContent("Live sessions are not recorded here: the gateway runs without a master");
+    expect(screen.getByRole("status")).toHaveTextContent("Live sessions are not recorded here: the gateway runs without a control node");
   });
 });

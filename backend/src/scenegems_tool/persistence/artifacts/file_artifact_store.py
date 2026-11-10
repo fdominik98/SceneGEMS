@@ -1,4 +1,4 @@
-"""The artifact store on a local folder (the master's artifact volume): one gzip file per artifact.
+"""The artifact store on a local folder (the control node's artifact volume): one gzip file per artifact.
 
     <root>/<aa>/<bb>/<sha256>.gz   the content, gzip compressed; aa and bb are the hash's first two bytes
     <root>/.incoming/              writes in progress, on the same file system as their targets

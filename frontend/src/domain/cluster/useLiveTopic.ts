@@ -11,7 +11,7 @@ const idleState = () => IDLE_TOPIC_STATE;
 /**
  * Follows a topic of the selected cluster's live channel. Components that follow the same
  * topic share one subscription. Pass a module-level reducer from `liveTopics.ts`
- * (`nodesReducer`, `campaignReducer`, `jobReducer`, `instanceReducer`); without one the
+ * (`workerNodesReducer`, `campaignReducer`, `jobReducer`, `instanceReducer`); without one the
  * state is the raw snapshot and the latest updates. A null topic follows nothing.
  */
 export function useLiveTopic(topic: string | null): LiveTopicState<RawTopicState>;

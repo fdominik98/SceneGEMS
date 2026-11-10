@@ -3,6 +3,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 
 from concrete_level.colregs_monitoring.colregs_monitor import COLREGSMonitor
+from concrete_level.colregs_monitoring.colregs_rules.conditions.stand_on_course_persistence_condition import StandOnCoursePersistenceCondition
 from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults
 from concrete_level.colregs_monitoring.situation_context import COLREGSType, SituationContext
 from concrete_level.models.actor_state import ActorState
@@ -117,19 +118,36 @@ def clipped_heading(actor: ConcreteActor, state: ActorState, desired: float, tim
     return rotate_heading(state.heading, legal.crop(delta))
 
 
+def stand_on_bound_actors(monitored: MonitoredSceneWithResults, colregs_constants: COLREGSConstraints) -> Set[ConcreteActor]:
+    """Vessels that Rule 17 holds on their course at this scene.
+
+    A corridor only knows the encounters its ship gives way in. A ship that stands on in
+    another one as well (overtaken while it gives way head-on) is bound again as soon as
+    its own give-way encounters are over, and a turn onto the next corridor leg then fails
+    Rule 17. The monitor's own condition decides, so the seed and the monitor agree.
+    """
+    scene = monitored.monitored_scene
+    return {actor for actor in scene.scene.vessels if StandOnCoursePersistenceCondition(Relation(actor, actor), actor, colregs_constants).is_bound(scene)}
+
+
 def follow_step(
     scene: ConcreteScene,
     domains: Dict[ConcreteActor, ManeuveringDomain],
     original_headings: Dict[ConcreteActor, float],
     time_step: int,
     colregs_constants: COLREGSConstraints,
+    held_actors: Optional[Set[ConcreteActor]] = None,
 ) -> Tuple[ConcreteScene, Dict[ConcreteActor, float]]:
+    """One seed step: every vessel steers for its corridor, ``held_actors`` keep the heading they have."""
     builder = SceneBuilder(scene)
     changes: Dict[ConcreteActor, float] = {}
     for actor in scene.vessels:
         state = scene[actor]
-        desired = seed_desired_heading(state, domains.get(actor), original_headings[actor])
-        heading = clipped_heading(actor, state, desired, time_step, colregs_constants)
+        if held_actors and actor in held_actors:
+            heading = state.heading
+        else:
+            desired = seed_desired_heading(state, domains.get(actor), original_headings[actor])
+            heading = clipped_heading(actor, state, desired, time_step, colregs_constants)
         changes[actor] = heading_diff(heading, state.heading)
         builder.set_state(actor, actor.simulate(state, (heading, state.speed), time_step))
     return builder.build(), changes
@@ -189,7 +207,8 @@ def _append_seed_step(
     latched: LatchedGiveWayStore,
 ) -> SceneNode:
     latched.update(current.monitored_scene_with_results)
-    next_scene, changes = follow_step(current.scene, latched.domains(), original_headings, time_step, monitor.colregs_constants)
+    held = stand_on_bound_actors(current.monitored_scene_with_results, monitor.colregs_constants)
+    next_scene, changes = follow_step(current.scene, latched.domains(), original_headings, time_step, monitor.colregs_constants, held)
     monitored = monitor.step(current.monitored_scene_with_results, next_scene, time_step)
     node = SceneNode(monitored_scene_with_results=monitored)
     node.heading_steps = changes
@@ -226,9 +245,19 @@ def first_failure_index(nodes: Sequence[SceneNode]) -> Optional[int]:
 
 
 def failure_give_way_actors(node: SceneNode) -> Set[ConcreteActor]:
+    """The vessels a repair of this failed node may steer.
+
+    A rule kept per vessel (keyed by the vessel with itself, such as Rule 17) was broken by
+    that vessel, so it is the one to steer: it has no situation context of its own, and
+    falling back to the live give-way vessels freed nobody once the encounter was over.
+    A rule of an encounter frees the give-way vessels of that encounter.
+    """
     free: Set[ConcreteActor] = set()
     for relation, rules in node.monitor_result_map_set.get_failed_rules().items():
         if not rules:
+            continue
+        if relation.actor1 == relation.actor2:
+            free.add(relation.actor1)
             continue
         context = node.monitored_scene_with_results.situation_context_set.get(relation)
         if context is None:

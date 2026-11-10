@@ -1,11 +1,11 @@
-"""The Phase 4 exit test on one host (design doc 5.4, P4.7): a master and a node from the release
-bundle, campaigns through every stage implementation, and a master restart in the middle.
+"""The Phase 4 exit test on one host (design doc 5.4, P4.7): a control node and a worker node from the release
+bundle, campaigns through every stage implementation, and a control node restart in the middle.
 
 The cluster is deployed as the deployment tool deploys it (local_cluster.py). One campaign
 has 20 cases (five two-vessel classes at quota 4) with straight trajectories and three runs:
 replay with the post-hoc monitor, USV Navigation with the live monitor, replay with the empty
 monitor. A second, small campaign uses the monitor-driven RRT. Once some cases are complete
-the master-api container stops until every lease has expired, then starts again; both
+the control-node-api container stops until every lease has expired, then starts again; both
 campaigns must finish with their books in order.
 
 Needs Docker with Compose v2 and the cluster's images built from this checkout
@@ -24,18 +24,18 @@ import pytest
 
 from scenegems_tool.cluster.release.__main__ import checkout_revision
 from scenegems_tool.cluster.release.bundle import build_bundle
-from tests.scenegems_tool.assurance.local_cluster import LocalRole, deploy_master, deploy_node, remove_cluster_containers
+from tests.scenegems_tool.assurance.local_cluster import LocalRole, deploy_control_node, deploy_worker_node, remove_cluster_containers
 
 pytestmark = [pytest.mark.docker, pytest.mark.slow]
 
 REPO_ROOT = Path(__file__).resolve().parents[5]
 CLUSTER = "p4-rehearsal"
-NODE = "local"
+WORKER_NODE = "local"
 OPERATOR_PORT = 15174
-MASTER_PARAMETERS = {"SCENEGEMS_API_PORT": "18443", "SCENEGEMS_BROKER_PORT": "18883", "SCENEGEMS_OPERATOR_PORT": str(OPERATOR_PORT), "POSTGRES_HOST_PORT": "15432"}
-NODE_PARAMETERS = {
-    "SCENEGEMS_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
-    "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
+CONTROL_NODE_PARAMETERS = {"SCENEGEMS_API_PORT": "18443", "SCENEGEMS_BROKER_PORT": "18883", "SCENEGEMS_OPERATOR_PORT": str(OPERATOR_PORT), "POSTGRES_HOST_PORT": "15432"}
+WORKER_NODE_PARAMETERS = {
+    "SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
+    "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
 }
 STRAIGHT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in range(5)]
 RRT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in (5, 6)]
@@ -116,10 +116,10 @@ def cluster(tmp_path_factory):
     remove_cluster_containers(CLUSTER)
     roles: List[LocalRole] = []
     try:
-        master = deploy_master(work / "release", release, work, CLUSTER, MASTER_PARAMETERS)
-        roles.append(master)
-        roles.append(deploy_node(work / "release", release, work, CLUSTER, NODE, NODE_PARAMETERS, MASTER_PARAMETERS))
-        yield master
+        control_node = deploy_control_node(work / "release", release, work, CLUSTER, CONTROL_NODE_PARAMETERS)
+        roles.append(control_node)
+        roles.append(deploy_worker_node(work / "release", release, work, CLUSTER, WORKER_NODE, WORKER_NODE_PARAMETERS, CONTROL_NODE_PARAMETERS))
+        yield control_node
     finally:
         for role in reversed(roles):
             role.down()
@@ -153,25 +153,31 @@ def _all(api: httpx.Client, path: str, **params: Any) -> List[Dict[str, Any]]:
             return items
 
 
-def _live_leases(master: LocalRole) -> int:
-    count = master.compose("exec", "-T", "postgres", "psql", "-U", "scenegems", "-d", "scenegems", "-tAc", "SELECT count(*) FROM job WHERE state IN ('leased', 'running') AND lease_expires_at > now()")
+def _live_leases(control_node: LocalRole) -> int:
+    count = control_node.compose(
+        "exec", "-T", "postgres", "psql", "-U", "scenegems", "-d", "scenegems", "-tAc", "SELECT count(*) FROM job WHERE state IN ('leased', 'running') AND lease_expires_at > now()"
+    )
     return int(count.strip())
 
 
-def _restart_master_after_the_leases_expired(master: LocalRole) -> None:
-    master.compose("stop", "master-api")
-    _wait_for(lambda: _live_leases(master) == 0, 180, "every lease expiring while the master is down")
-    master.compose("start", "master-api")
-    master.wait_ready()
+def _restart_control_node_after_the_leases_expired(control_node: LocalRole) -> None:
+    control_node.compose("stop", "control-node-api")
+    _wait_for(lambda: _live_leases(control_node) == 0, 180, "every lease expiring while the control node is down")
+    control_node.compose("start", "control-node-api")
+    control_node.wait_ready()
 
 
-def test_campaigns_through_every_stage_survive_a_master_restart(cluster, api):
-    _wait_for(lambda: [node for node in api.get("/cluster/nodes").json() if node["status"] == "online" and not node["out_of_date"]], 240, "the node coming online and up to date")
+def test_campaigns_through_every_stage_survive_a_control_node_restart(cluster, api):
+    _wait_for(
+        lambda: [worker_node for worker_node in api.get("/cluster/worker-nodes").json() if worker_node["status"] == "online" and not worker_node["out_of_date"]],
+        240,
+        "the worker node coming online and up to date",
+    )
     straight = _create(api, STRAIGHT_CAMPAIGN)
     rrt = _create(api, RRT_CAMPAIGN)
 
     _wait_for(lambda: _campaign(api, straight["campaign_id"])["totals"]["complete"] >= 6, 1200, "six complete cases before the restart", every_s=5)
-    _restart_master_after_the_leases_expired(cluster)
+    _restart_control_node_after_the_leases_expired(cluster)
 
     finished = {}
     for campaign in (straight, rrt):
@@ -208,7 +214,7 @@ def test_campaigns_through_every_stage_survive_a_master_restart(cluster, api):
     kinds = [event["kind"] for event in events]
     assert kinds.count("engine_started") == 1 and kinds.index("engine_started") > kinds.index("started")
 
-    # Results travelled as artifacts: a state log is in the master's store and matches its address
+    # Results travelled as artifacts: a state log is in the control node's store and matches its address
     state_log = next(record["artifacts"]["state_log"] for record in records if record["artifacts"].get("state_log"))
     content = api.get(f"/cluster/artifacts/{state_log}")
     assert content.status_code == 200 and hashlib.sha256(content.content).hexdigest() == state_log

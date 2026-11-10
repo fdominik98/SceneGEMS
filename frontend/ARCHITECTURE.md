@@ -102,7 +102,7 @@ input (from the previous page's output, a Campaign History output or a file, `Pa
 the target of the latest loaded entry. Every run is a one-step workbench entry (`entryConfig.ts`
 builds its format 3 config; `WorkbenchJobDriver` creates it with `kind: "workbench"` and the page
 as origin, follows its case with `entryFollower.ts`, then loads its output). `entryLoader.ts` fetches
-a target's output from the master; a 404 clears the page. The shown page takes queued targets with
+a target's output from the control node; a 404 clears the page. The shown page takes queued targets with
 `useTargetConsumer`, and every page fetches its loaded entry again on start (`useLoadedRefresh`). The left
 pane is 280px with a plain-language hint per destination, an icon rail of 72px when collapsed (the
 choice is kept per browser) and a bar at the top below 800px. Below 1100px the workbench panes stack
@@ -113,10 +113,37 @@ The Design Space Exploration page (`features/workbench/designSpace/`, view and p
 (`DesignSpaceSidebar`) holds the specification editor, `DesignSpaceSpecificationEditor`: the one text
 for the metamodel and the well-formedness constraints, on `controls/ProblemEditor.tsx` (the `.problem`
 editor setup the scene sidebar uses too), with Load the default (`GET /cluster/catalog/design-space`
-through `presetsApi.getDesignSpaceDefault`, null from a master without the route), Open file and Export.
+through `presetsApi.getDesignSpaceDefault`, null from a control node without the route), Open file and Export,
+and a Text and Graph switch (`designSpace/graphs/ViewSwitch.tsx`, kept as
+`scenegems:design-space-specification-view`) whose Graph shows `MetamodelGraph` of the text, parsed a moment after
+it changes (`useDebouncedValue`); the editor stays mounted, hidden. The wizard's exploration page uses the same editor.
 Its centre pane (`ExploredFecList`) is a windowed list of the FECs found (fixed row height, texts
 fetched lazily for the selected and visible rows through `fecTexts.ts`), each with its counts and its
-relations in words (`domain/designSpace/fecRelations.ts`), and the selected FEC's text. Its `StepPanel`
+relations in words (`domain/designSpace/fecRelations.ts`), and the selected FEC as `ModelGraph` or its text
+(switch kept as `scenegems:design-space-fec-view`, Graph by default).
+
+The graphs know no specification by its names. `domain/designSpace/problemModel.ts` (`readProblem`) parses a
+`.problem` text with the editor's Lezer parser (`language/refineryProblem/problem.grammar`, compiled by the Vite
+Lezer plugin, so the node tests run the real grammar) and walks the syntax tree into the metamodel (classes with
+abstract, superclasses and features: kind, multiplicity as written, opposite, subsets, and whether the type is a
+class, an enum or a datatype; enums; predicates with parameters and `error`; other declarations by name; scopes), the
+model (objects from `declare`, `multi`, `atom` and every assertion argument, their types, values and facts, the
+binary links with `?` as possible and a pair in both directions as one two-way link; `default`, negative facts,
+`X::new`, `exists`, `equals` and facts of more than two objects are counted, not drawn) and the syntax errors (count,
+first line). It never throws; a text with errors gives what parsed. This grammar copy reads `module m.`, `atom a.` and
+`multi a.` (contextual keywords) as functions without body; `readProblem` reads them back. `relationWords` and
+`describeLink` say a link in words ("ts1 overtaking to port os"), which `fecRelations.ts` uses for a row (links only,
+values left out, summaries cached by text). `designSpace/graphs/` draws them with React Flow: `metamodelLayout.ts`
+(pure: class and enum cards, inheritance, reference and containment edges, an opposite pair as one edge with a name
+at each end; layers by inheritance depth, barycenter sweeps, rows of at most six, enums below) and `modelLayout.ts`
+(pure: object cards, links; the object with the most links in the middle and flattened rings by link distance, spaced
+so that no cards overlap and a link's name fits between two cards), `graphGeometry.ts` (edges from border to border, parallel edges bowed apart,
+loops), `ProblemGraphCanvas.tsx` (the canvas, the one edge type, the markers per canvas, the legend behind a disclosure, the
+syntax notice), `ProblemGraphNodes.tsx`, `MetamodelGraph.tsx` and `ModelGraph.tsx`. The cards follow Refinery's graph
+view and the paper's FEC figure: a dark outline, the name on a colored header, a tagged row per class, fact and value;
+edges are plain dark lines with their name beside them, a two-way link with an arrowhead at both ends. An object that
+is a vessel takes the vessel's color of the rest of the console (`shipColorOfName` in `scene/shipColors.ts`, by id, any
+case); other cards take a token by the place of their class among the classes (`pg-tone-<n>`), enums the danger token. Its `StepPanel`
 (`DesignSpaceExplorationControls`) has the specification summary and the scope (`ScopeInput`, checked
 as typed by `domain/designSpace/designSpaceScope.ts`) under Input, Seed, Max FECs (empty: every FEC)
 and Timeout under Setup, and under Result what was found and what the stop reason means
@@ -139,8 +166,8 @@ A config or an entry that names no steps means scene generation, trajectory gene
 (`IMPLIED_STEPS` in `domain/cluster/schemas.ts`), never the exploration.
 
 The cluster sections work on the cluster selected in the left pane. `domain/cluster/clusterStore.ts`
-keeps the list (name and operator URL, per browser). A master's operator API listens on its
-127.0.0.1:5174; from another machine it is reached over `ssh -L 5174:127.0.0.1:5174 <user>@<master>`.
+keeps the list (name and operator URL, per browser). A control node's operator API listens on its
+127.0.0.1:5174; from another machine it is reached over `ssh -L 5174:127.0.0.1:5174 <user>@<control node>`.
 
 - `operatorApi.ts`: fetch client of the operator routes, answers checked by the Zod schemas
   in `schemas.ts`, errors as `OperatorApiError` with the server's reasons, `X-Total-Count`.
@@ -148,20 +175,29 @@ keeps the list (name and operator URL, per browser). A master's operator API lis
   reference-counted topic subscriptions, snapshot then updates with per-topic `seq`, reconnect
   with backoff and resubscribe, ping. `liveTopics.ts` has the reducers per topic.
 - `useLiveTopic(topic, reducer)`: a topic of the selected cluster as React state.
-- `presetsApi.ts`: everything the console starts from comes from the master; the frontend ships no
+- `presetsApi.ts`: everything the console starts from comes from the control node; the frontend ships no
   presets. The FEC catalog's functional scenarios (`GET /cluster/catalog/fecs/<fec id>` as
   text), the domain presets (`GET /cluster/catalog/domain-presets`), the cluster's domain
   configuration (`GET` and `POST /cluster/domain`) and the campaign presets (`GET`, `POST` and
-  `DELETE /cluster/campaign-presets`), all read from `backend/assets/` in the master image or the
-  master's database.
+  `DELETE /cluster/campaign-presets`), all read from `backend/assets/` in the control node image or the
+  control node's database.
 
 The domain configuration is global for the cluster. `features/domain/` is its section:
 `useClusterDomain()` reads it (also for the workbench, whose runs and monitors take its texts,
 and for the wizard's Domain page), `DomainSection` edits a draft per cluster
 (`domainDraftStore.ts`, in memory) and saves it with `useSaveClusterDomain()`. The scene page lists
-the master's catalog (`useCatalogClasses`, `controls/scenarioCatalog.ts`) and loads a class's text
-into its editor; when it loads a generated scene, `pages/inputSpecification.ts` loads the scene's
-functional scenario too (the case's `input_artifact`, or the catalog class). The wizard's
+the control node's catalog (`useCatalogClasses`, `controls/scenarioCatalog.ts`) in one windowed list with a
+checkbox per FEC (`controls/CatalogFecList.tsx`, texts read lazily and cached in `controls/catalogTexts.ts` for the rows
+in view, the previewed and the selected FEC). What a run does follows from the selection
+(`batchGenerationStore.selectedClassIds`, persisted as `scenegems:scene-generation-selection`; `sceneSelectionMode`):
+none generates the editor's text, one a single scene of that FEC under its id (the single path, its text from the
+cache), several a batch with a case per FEC (`runBatchGeneration.ts`, results in `SceneBatchResults.tsx`). The pane
+(`SceneGenerationSidebar.tsx`) shows the editor only while nothing is selected, the one selected FEC read only with
+"Edit a copy", and a preview of any row; each with the Graph and Text switch and `ModelGraph`. Every text put into the
+editor from outside (a file, `sendToScenePage`, a loaded scene's scenario) clears the selection. When it loads a
+generated scene, `pages/inputSpecification.ts` reads the scene's functional scenario (the case's `input_artifact`,
+or the catalog class), and `controls/sceneSelection.placeOfInput` selects it when its label is a catalog FEC and
+puts it into the editor otherwise; showing a batch row's case keeps the selection. The wizard's
 `PresetBar` starts a draft from a campaign preset (`presetDraft.ts`: `draftFromConfig`, the inverse
 of `configBuilder.ts`) and saves the draft as one without its input (`presetConfigOf`).
 
@@ -169,7 +205,7 @@ The wizard picks presets and a run's stack from catalogs: `CatalogDialog.tsx` dr
 and groups over any items, `catalogModel.ts` holds their rules (values of one filter are alternatives
 unless the filter says all, different filters narrow together, a filter that cannot narrow is left
 out), and `stackCatalog.ts` and `presetCatalog.ts` say what each catalog's items have. Nothing is
-tagged by hand: a stack's values are the fields the master reports, a preset's are read from its config
+tagged by hand: a stack's values are the fields the control node reports, a preset's are read from its config
 (`presetFacts`) against the stacks and the FEC catalog, so saved presets sort like shipped ones. The
 filters and the grouping are kept per browser and per catalog.
 
@@ -177,7 +213,7 @@ The wizard has a page per step the campaign runs (Design space exploration, Scen
 with that step's monitor where it has one. The exploration page (`wizard/ExplorationStep.tsx`) has the specification editor and
 the scope field of the workbench page, the limits, and the cases and failure budget every explored FEC gets; a campaign that
 explores names no catalog FECs and no input (`configBuilder.ts` writes the `design_space_exploration` section instead, and
-`presetDraft.ts` reads it back, filling a preset's missing specification from the master's default), and the review says the
+`presetDraft.ts` reads it back, filling a preset's missing specification from the control node's default), and the review says the
 cases per explored FEC, since the FECs are not known before the exploration ran. Above the pages, the campaign map (`wizard/CampaignMap.tsx`, React Flow) draws the
 draft: the chain from the input to the review with a box per simulation run in a frame, the steps not run as
 dashed boxes, and a row of the settings of the whole campaign. `campaignMapModel.ts` (pure) builds the boxes,
@@ -199,31 +235,31 @@ table names the `exploration` FEC as the exploration itself and the FECs that ne
 `historyStore.ts` keeps the open entry and step per browser; other sections open an entry with
 `showHistoryEntry(id)`. The Campaigns section is the wizard only.
 
-`features/cluster/instances/` is the instance browser of a node (pools and leased jobs, from
-`domain/cluster/observableInstances.ts`) with the viewers; a node card's "Instances" opens it.
+`features/cluster/instances/` is the instance browser of a worker node (pools and leased jobs, from
+`domain/cluster/observableInstances.ts`) with the viewers; a worker node card's "Instances" opens it.
 A viewer subscribes to its `instance:` topic only while it is shown. `domain/cluster/observeFrames.ts`
 turns instance samples and frames into encounter view frames (the workbench's job driver uses it too).
 
 ## Capabilities
 
-`features/capabilities/` draws the architecture documents of the selected cluster's master
+`features/capabilities/` draws the architecture documents of the selected cluster's control node
 (`GET /cluster/catalog/architecture`, schemas in `domain/cluster/architectureApi.ts`). One document per
 part of the system, in the order of the chain (design space exploration, scene generation, trajectory
 generation, the vessel stack that simulates, monitoring), each with a metamodel (the generic layers,
 interfaces and adapters) and the concrete implementations over the same lanes, and with its place in the
 chain: `role` (step or support), `step`, `takes`, `gives` and the `job_types` that run it (all with
-defaults, so a master from before the overview still reads). The page opens on the Overview tab
+defaults, so a control node from before the overview still reads). The page opens on the Overview tab
 (`ChainOverview.tsx`): a card per step joined by what one step hands to the next, the supporting parts
-under it, and per card whether the selected cluster's machines offer the part's job now (the nodes feed
+under it, and per card whether the selected cluster's machines offer the part's job now (the worker nodes feed
 and `jobTypeResources`). Each document has a tab of its own with three views: the implemented graph, the
 metamodel graph and, for the vessel stack, the availability matrix; the line beside the view buttons says
 what the shown view is for. Nothing in the frontend lists parts, steps or implementations: a new simulator,
-generator or step declared in the backend specs appears after the master restarts.
+generator or step declared in the backend specs appears after the control node restarts.
 
 - `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix, the
-  `cluster_job` fact of an available stack: the job and runner that run it on a node ("simulation,
+  `cluster_job` fact of an available stack: the job and runner that run it on a worker node ("simulation,
   runner kinematic"), or none for a stack the workbench runs only as a live session; `chainOf`: the step
-  parts numbered in the master's order and the supporting parts; `describePartOffer`: what the cluster
+  parts numbered in the control node's order and the supporting parts; `describePartOffer`: what the cluster
   offers of a part, or why that is not known).
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
 - `ArchitectureGraph.tsx` (React Flow canvas, custom edge with a label), `GraphNodes.tsx` (cards and
@@ -233,7 +269,7 @@ generator or step declared in the backend specs appears after the master restart
 - `useFullscreen.ts` and `FullscreenButton.tsx`: full screen for the graph and its detail panel. It
   covers the window at once and asks the browser for the whole screen; where the browser refuses or
   never answers (an embedded browser), the window stays covered. Escape leaves it.
-- `nodesStore.ts`: the nodes of the selected cluster from the `nodes` topic, with a REST poll
+- `workerNodesStore.ts`: the worker nodes of the selected cluster from the `worker_nodes` topic, with a REST poll
   while the topic is not live.
 
 ## Data flow
@@ -250,12 +286,12 @@ flowchart LR
 
 ## WebSocket lifecycle
 
-1. **Connect**: `BackendWsClient` to the gateway of the active cluster's master-api (`gatewayWsUrl`; no socket without a selected cluster)
-2. **Generate scenes and trajectories**: jobs on the active cluster (`features/workbench/cluster/`: `WorkbenchJobDriver` submits `scene_generation`, `trajectory_generation` and `monitoring.post_hoc` jobs through the operator API, follows them on the live channel and reports them to the stores as `generated_scene`, `trajectory_generation_preview` and `trajectory_generation_result`). A job type no usable node offers is not submitted; `workbenchResources.ts` says why.
+1. **Connect**: `BackendWsClient` to the gateway of the active cluster's control-node-api (`gatewayWsUrl`; no socket without a selected cluster)
+2. **Generate scenes and trajectories**: jobs on the active cluster (`features/workbench/cluster/`: `WorkbenchJobDriver` submits `scene_generation`, `trajectory_generation` and `monitoring.post_hoc` jobs through the operator API, follows them on the live channel and reports them to the stores as `generated_scene`, `trajectory_generation_preview` and `trajectory_generation_result`). A job type no usable worker node offers is not submitted; `workbenchResources.ts` says why.
 3. **Load scenario**: `load_scenario_file` -> `preview_trajectory_chunk`(s), then the cluster's post-hoc monitor replaces the preview with monitored frames
    A bare scene loads as its initial scene only (`initial_state` with trajectory length 0); trajectories come from the trajectory generator, and the simulation refuses to run without them.
-4. **Run on the cluster**: a kinematic setup runs as one `simulation` job with runner `kinematic`, a replay on ArduPilot SITL or Gazebo as one with runner `ardupilot` and its `simulation_layer` (`simulationJobs.ts`; a plan names the components its job needs, and `workbenchResources.ts` counts the nodes that have them up to date), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<node>/job-<id>-<attempt>`
-5. **Live session**: `connect_to_mqtt_broker` (the master's broker by default), `initialize_simulation` -> `initial_state`, `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
+4. **Run on the cluster**: a kinematic setup runs as one `simulation` job with runner `kinematic`, a replay on ArduPilot SITL or Gazebo as one with runner `ardupilot` and its `simulation_layer` (`simulationJobs.ts`; a plan names the components its job needs, and `workbenchResources.ts` counts the worker nodes that have them up to date), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<worker node>/job-<id>-<attempt>`
+5. **Live session**: `connect_to_mqtt_broker` (the control node's broker by default), `initialize_simulation` -> `initial_state`, `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
 
 `playbackStore.ts` makes one store per page (`createPlaybackStore`): `useScenePlaybackStore` (the
 scene page's scene), `useTrajectoryPlaybackStore` (the planned trajectories) and `usePlaybackStore`

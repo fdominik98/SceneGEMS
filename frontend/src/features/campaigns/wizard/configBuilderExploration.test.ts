@@ -23,12 +23,12 @@ function exploring(steps: WizardDraft["steps"] = ["design_space_exploration", "s
   const draft = emptyDraft();
   draft.name = "explore";
   draft.steps = steps;
-  draft.exploration = { specification: SPECIFICATION, specificationLabel: "the master's default", scope: "TS = 2, StaticObstacle = 0", maxFecs: 50, timeoutS: 300, quota: 2, failureBudget: "unlimited" };
+  draft.exploration = { specification: SPECIFICATION, specificationLabel: "the control node's default", scope: "TS = 2, StaticObstacle = 0", maxFecs: 50, timeoutS: 300, quota: 2, failureBudget: "unlimited" };
   draft.runs = [{ ...emptyRun("kinematic.replay"), id: "r1" }];
   return draft;
 }
 
-/** `backend/assets/campaign_presets/13_design_space_exploration.yaml` as the master serves it: no specification, the master's default applies. */
+/** `backend/assets/campaign_presets/13_design_space_exploration.yaml` as the control node serves it: no specification, the control node's default applies. */
 const PRESET_13 = parse(`
 format: 3
 name: Design space exploration
@@ -80,7 +80,7 @@ describe("the steps of a campaign that explores", () => {
     expect(draft.exploration).toEqual(emptyDraft().exploration);
   });
 
-  it("sends the master's reasons about the section to the exploration page", () => {
+  it("sends the control node's reasons about the section to the exploration page", () => {
     expect(parseReason("design_space_exploration.scope: entry 1 is not Type = n").step).toBe("exploration");
   });
 });
@@ -96,7 +96,7 @@ describe("the config of a campaign that explores", () => {
     expect(config.input).toBeUndefined();
   });
 
-  it("writes null for every FEC and leaves out an empty specification for the master's default", () => {
+  it("writes null for every FEC and leaves out an empty specification for the control node's default", () => {
     const draft = exploring(["design_space_exploration"]);
     draft.exploration.maxFecs = null;
     draft.exploration.specification = "";
@@ -115,17 +115,17 @@ describe("the config of a campaign that explores", () => {
     expect(presetConfigOf(exploring(), catalog).design_space_exploration).toEqual(config.design_space_exploration);
   });
 
-  it("reads a preset that leaves the specification to the master, and builds it again without one", () => {
+  it("reads a preset that leaves the specification to the control node, and builds it again without one", () => {
     const draft = draftFromConfig(PRESET_13, catalog);
     expect(draft.steps).toEqual(["design_space_exploration", "scene_generation", "trajectory_generation", "simulation"]);
     expect(draft.exploration).toMatchObject({ specification: "", scope: "TS = 2, StaticObstacle = 0", maxFecs: 100, quota: 1, failureBudget: 0 });
     expect(JSON.parse(JSON.stringify(buildCampaignConfig(draft, catalog)))).toEqual(PRESET_13);
   });
 
-  it("starts such a preset from the master's default, which the wizard then shows and sends", () => {
+  it("starts such a preset from the control node's default, which the wizard then shows and sends", () => {
     const draft = draftFromConfig(PRESET_13, catalog);
-    const filled = withDefaultSpecification(draft, { specification: "class OS.\r\n" }, "the master's default");
-    expect(filled.exploration).toMatchObject({ specification: "class OS.\n", specificationLabel: "the master's default" });
+    const filled = withDefaultSpecification(draft, { specification: "class OS.\r\n" }, "the control node's default");
+    expect(filled.exploration).toMatchObject({ specification: "class OS.\n", specificationLabel: "the control node's default" });
     expect(withDefaultSpecification(draft, null, "x")).toBe(draft);
     expect(withDefaultSpecification(exploring(), { specification: "other" }, "x").exploration.specification).toBe(SPECIFICATION);
     expect(withDefaultSpecification(emptyDraft(), { specification: "other" }, "x").exploration.specification).toBe("");

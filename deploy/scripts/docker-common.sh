@@ -57,7 +57,7 @@ dockerfile_uses_upstream_pins() {
 # lines over the image's inputs, so the same commit gives the same value on every machine:
 # paths are relative to the repository root, text files are hashed with LF line endings (whatever
 # core.autocrlf checked out) and the order does not depend on the argument order or the locale.
-# The fingerprint is stored in the built image as a label, which is what a node reports.
+# The fingerprint is stored in the built image as a label, which is what a worker node reports.
 IMAGE_FINGERPRINT_LABEL="org.scenegems.fingerprint"
 
 # Prints the path relative to the repository root. Fails for a path outside the repository.

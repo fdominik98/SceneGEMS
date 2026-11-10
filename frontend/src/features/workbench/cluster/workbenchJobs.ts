@@ -11,8 +11,8 @@ import type { TrajectoryGenerationParamsWire } from "../../../domain/simulation/
 
 /**
  * The workbench's jobs on the selected cluster: scene generation, trajectory generation and
- * post-hoc monitoring, as the job types of `cluster/node/jobs/` define their payloads and
- * results. The cluster's scheduler places them on any node with a free slot, so a batch
+ * post-hoc monitoring, as the job types of `cluster/worker_node/jobs/` define their payloads and
+ * results. The cluster's scheduler places them on any worker node with a free slot, so a batch
  * submitted at once uses every slot the cluster has.
  */
 
@@ -55,12 +55,12 @@ export async function runClusterJob(cluster: WorkbenchCluster, submission: JobSu
   }
 }
 
-/** The request id a job's attempt uses on its node's pool, which its previews carry. */
+/** The request id a job's attempt uses on its worker node's pool, which its previews carry. */
 export function poolRequestId(job: Pick<JobView, "job_id" | "attempt">): string {
   return `${job.job_id}-${job.attempt}`;
 }
 
-// Scene generation (cluster/node/jobs/scene_generation_job.py)
+// Scene generation (cluster/worker_node/jobs/scene_generation_job.py)
 
 export interface SceneGenerationInput {
   functionalScenarioContent: string;
@@ -87,7 +87,7 @@ export async function sceneJobResult(cluster: WorkbenchCluster, job: JobView, si
   return { evaluationData, valid: result.valid === true };
 }
 
-// Trajectory generation (cluster/node/jobs/trajectory_generation_job.py)
+// Trajectory generation (cluster/worker_node/jobs/trajectory_generation_job.py)
 
 export interface TrajectoryGenerationInput {
   /** The generated scene as the workbench exports it (EvaluationData JSON with `best_scene`). */
@@ -100,7 +100,7 @@ export interface TrajectoryJobResult {
   /** The TrajectoryData payload (`trajectories`, and `monitor_frames` when the search recorded them), null when nothing was planned. */
   trajectoryData: Record<string, unknown> | null;
   valid: boolean;
-  /** False for the best partial path of a search that ended without a complete one. */
+  /** False for the best path the planner found: it ends early or still fails a COLREGS rule. */
   complete: boolean | null;
   errorMessage: string | null;
 }
@@ -116,7 +116,7 @@ export async function trajectoryJobResult(cluster: WorkbenchCluster, job: JobVie
   };
 }
 
-// Post-hoc monitoring (cluster/node/jobs/monitoring_post_hoc_job.py)
+// Post-hoc monitoring (cluster/worker_node/jobs/monitoring_post_hoc_job.py)
 
 /**
  * A scenario's first scene as a state log of one step, so the post-hoc monitor judges it like the
@@ -146,28 +146,28 @@ export async function monitoredFrames(cluster: WorkbenchCluster, job: JobView, s
   return parseFrames(await readResultField(cluster.client, result.frames, { signal }));
 }
 
-// Previews of a running job, from its node's pool (instance:<node>/<subsystem>-0 on the live channel)
+// Previews of a running job, from its worker node's pool (instance:<worker node>/<subsystem>-0 on the live channel)
 
 export type PoolKind = "scene_generation" | "trajectory_generation";
 
-/** The pool instance a node runs a subsystem's jobs in: one pool per subsystem and node (service_pools.POOL_INDEX). */
-export function poolTopic(nodeId: string, kind: PoolKind): string {
-  return instanceTopic(nodeId, `${kind}-0`);
+/** The pool instance a worker node runs a subsystem's jobs in: one pool per subsystem and worker node (service_pools.POOL_INDEX). */
+export function poolTopic(workerNodeId: string, kind: PoolKind): string {
+  return instanceTopic(workerNodeId, `${kind}-0`);
 }
 
 /**
  * Calls `onPreview` with every new scene sample or trajectory preview of one request on a
- * node's pool, until the returned function is called. The pool serves every request on the
- * node, so the others' previews are left out by their request id.
+ * worker node's pool, until the returned function is called. The pool serves every request on the
+ * worker node, so the others' previews are left out by their request id.
  */
 export function watchPoolPreviews(
   channel: LiveChannel,
-  nodeId: string,
+  workerNodeId: string,
   kind: PoolKind,
   requestId: string,
   onPreview: (preview: SceneSample | TrajectoryPreview) => void
 ): () => void {
-  const watcher = new LiveTopicWatcher(channel, poolTopic(nodeId, kind), instanceReducer);
+  const watcher = new LiveTopicWatcher(channel, poolTopic(workerNodeId, kind), instanceReducer);
   let last: SceneSample | TrajectoryPreview | null = null;
   return watcher.subscribe(() => {
     const data = watcher.getState().data;

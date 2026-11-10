@@ -35,7 +35,7 @@ describe("the Design space exploration page of the wizard", () => {
     mocks.designSpace = { data: { specification: "abstract class Vessel.\n", scope: "TS = 2, StaticObstacle = 0" }, isSuccess: true, isError: false, error: null };
   });
 
-  it("starts from the master's default and sets the scope, the limits and what each FEC needs", async () => {
+  it("starts from the control node's default and sets the scope, the limits and what each FEC needs", async () => {
     const { latest, user } = setup(exploring());
     await waitFor(() => expect(latest()?.exploration).toMatchObject({ specification: "abstract class Vessel.\n", scope: "TS = 2, StaticObstacle = 0" }));
     const scope = screen.getByRole("textbox", { name: "Scope" });
@@ -56,7 +56,7 @@ describe("the Design space exploration page of the wizard", () => {
     expect(screen.getByText("The campaign runs the exploration alone, so its FECs need no cases.")).toBeInTheDocument();
   });
 
-  it("shows the master's reasons at the fields they name", () => {
+  it("shows the control node's reasons at the fields they name", () => {
     setup(exploring(), parseReasons(["design_space_exploration.timeout_s: Input should be greater than 0"]));
     expect(screen.getByText("Input should be greater than 0")).toBeVisible();
   });

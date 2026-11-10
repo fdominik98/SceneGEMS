@@ -1,14 +1,14 @@
 import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
-from scenegems_tool.persistence.schema import Base, JobEventRow, JobRow, NodeCapabilityRow, NodeRow
+from scenegems_tool.persistence.schema import Base, JobEventRow, JobRow, WorkerNodeCapabilityRow, WorkerNodeRow
 
 
 def _check_constraint(table, name):
     return next(constraint for constraint in table.constraints if constraint.name == name)
 
 
-CLUSTER_TABLES = {"node", "node_capability", "node_component", "node_fingerprint", "job", "job_event"}
+CLUSTER_TABLES = {"worker_node", "worker_node_capability", "worker_node_component", "worker_node_fingerprint", "job", "job_event"}
 CAMPAIGN_TABLES = {
     "campaign",
     "campaign_config_version",
@@ -49,7 +49,7 @@ def test_jobs_have_an_availability_and_events_their_transaction():
     [
         (JobRow.__table__, "job_type", [job_type.value for job_type in JobType]),
         (JobRow.__table__, "state", [state.value for state in JobState]),
-        (NodeCapabilityRow.__table__, "job_type", [job_type.value for job_type in JobType]),
+        (WorkerNodeCapabilityRow.__table__, "job_type", [job_type.value for job_type in JobType]),
         (JobEventRow.__table__, "to_state", [state.value for state in JobState]),
     ],
 )
@@ -59,14 +59,14 @@ def test_enum_columns_store_values(table, column, values):
 
 def test_enum_constraints_follow_the_naming_convention():
     names = {constraint.name for constraint in JobRow.__table__.constraints}
-    assert {"ck_job_job_type", "ck_job_state", "pk_job", "uq_job_idempotency_key", "uq_job_lease_id", "fk_job_lease_owner_node"} <= names
-    assert "ck_node_status" in {constraint.name for constraint in NodeRow.__table__.constraints}
+    assert {"ck_job_job_type", "ck_job_state", "pk_job", "uq_job_idempotency_key", "uq_job_lease_id", "fk_job_lease_owner_worker_node"} <= names
+    assert "ck_worker_node_status" in {constraint.name for constraint in WorkerNodeRow.__table__.constraints}
 
 
-def test_a_job_requires_components_and_a_node_offers_them():
+def test_a_job_requires_components_and_a_worker_node_offers_them():
     column = JobRow.__table__.c.required_components
     assert not column.nullable and "'[]'::jsonb" in str(column.server_default.arg)
-    assert [column.name for column in Base.metadata.tables["node_component"].primary_key.columns] == ["node_id", "component"]
+    assert [column.name for column in Base.metadata.tables["worker_node_component"].primary_key.columns] == ["worker_node_id", "component"]
 
 
 def test_idempotency_key_is_unique_and_required():
@@ -80,10 +80,10 @@ def test_queue_index_covers_queued_jobs_in_claim_order():
     assert [str(expression) for expression in index.expressions] == ["priority DESC", "job.submitted_at", "job.seq"]
 
 
-def test_lease_columns_are_optional_and_owner_references_a_node():
+def test_lease_columns_are_optional_and_owner_references_a_worker_node():
     table = JobRow.__table__
     assert all(table.c[name].nullable for name in ("lease_id", "lease_owner", "lease_expires_at"))
-    assert {foreign_key.target_fullname for foreign_key in table.c.lease_owner.foreign_keys} == {"node.id"}
+    assert {foreign_key.target_fullname for foreign_key in table.c.lease_owner.foreign_keys} == {"worker_node.id"}
 
 
 def test_active_lease_must_be_complete():
@@ -91,7 +91,7 @@ def test_active_lease_must_be_complete():
     assert "lease_expires_at IS NOT NULL" in str(constraint.sqltext)
 
 
-def test_node_children_are_deleted_with_the_node():
-    for table_name in ("node_capability", "node_component", "node_fingerprint"):
-        (foreign_key,) = Base.metadata.tables[table_name].c.node_id.foreign_keys
+def test_worker_node_children_are_deleted_with_the_worker_node():
+    for table_name in ("worker_node_capability", "worker_node_component", "worker_node_fingerprint"):
+        (foreign_key,) = Base.metadata.tables[table_name].c.worker_node_id.foreign_keys
         assert foreign_key.ondelete == "CASCADE"

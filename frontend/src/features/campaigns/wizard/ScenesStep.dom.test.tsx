@@ -32,7 +32,7 @@ describe("the Scene generation page", () => {
     expect(latest().domain.enforceLowTcpa).toBe(true);
   });
 
-  it("shows the master's reasons at the fields they name", () => {
+  it("shows the control node's reasons at the fields they name", () => {
     setup(parseReasons(["scene_generation.monitor: Value error, a generation step cannot be monitored live", "domain.scene_generation_timeout_s: Input should be greater than 0"]));
     expect(screen.getByText("a generation step cannot be monitored live")).toBeVisible();
     expect(screen.getByText("Input should be greater than 0")).toBeVisible();

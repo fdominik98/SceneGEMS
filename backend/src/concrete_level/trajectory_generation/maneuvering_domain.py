@@ -2,8 +2,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
+from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import early_action_start_deadline
 from concrete_level.colregs_monitoring.situation_context import COLREGSType, SituationContext
 from concrete_level.models.concrete_actors import ConcreteActor
+from utils.colregs_approximations import COLREGSConstraints
 from utils.global_constants import EPSILON
 from utils.math_utils import Direction
 from utils.safety_domains import DomainCollection
@@ -14,8 +16,8 @@ class ManeuveringDomain:
 
     Vertices live in the give-way vessel's original-course frame: along the heading at
     the first give-way latch, across positive toward the committed avoidance side. A is
-    a few seconds of original-track travel after that latch (the readily apparent course
-    change time). A-B is a readily apparent outbound slant, steeper if that ray would
+    a short stretch of original-track travel after that latch, inside the window Rule 16
+    leaves for the first turn (the monitor's ``early_action_start_deadline``). A-B is a readily apparent outbound slant, steeper if that ray would
     cut a frozen potential collision domain. B-C is original heading at the clearance
     offset, past the furthest domain. C-D is a straight inbound segment at the same
     slant back onto the original track. After D the seed stays on that track. Empty
@@ -181,7 +183,7 @@ class ManeuveringDomain:
             acrosses,
             actor.safety_radius,
             first.colregs_constants.READILY_APPARENT_HEADING_CHANGE,
-            start.speed * first.colregs_constants.READILY_APPARENT_COURSE_CHANGE_TIME,
+            start.speed * outbound_start_delay(first.colregs_constants),
         )
 
     def to_monitor_payload(self) -> Dict[str, Any]:
@@ -191,6 +193,18 @@ class ManeuveringDomain:
             "holdPolyline": [_xy(self.vertex_a), _xy(self.vertex_b), _xy(self.vertex_c), _xy(self.vertex_d)],
             "holdHeadingChangeDeg": float(np.degrees(self.hold_heading_change)),
         }
+
+
+def outbound_start_delay(colregs_constants: COLREGSConstraints) -> float:
+    """Seconds a give-way ship keeps its course after the latch before it turns at A.
+
+    It is the monitor's deadline for the first turn to be under way, so the corridor and
+    Rule 16 agree. This was READILY_APPARENT_COURSE_CHANGE_TIME, which is how long a turn
+    takes to be seen, not how long the ship may wait: with the shipped 70 s it put A
+    behind the 60 s of IMMEDIATE_HEADING_CHANGE_TIME and every seed failed Rule 16 at its
+    first step after that.
+    """
+    return float(early_action_start_deadline(colregs_constants))
 
 
 def _give_way_contexts(actor: ConcreteActor, situation_contexts: Sequence[SituationContext]) -> List[SituationContext]:

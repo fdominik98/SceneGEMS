@@ -12,8 +12,8 @@ import { MockWebSocket } from "../../../test/mockWebSocket";
  * the same watcher and channel.
  */
 
-const SCENE = "instance:node-a1/scene_generation-0";
-const TRAJ = "instance:node-a1/trajectory_generation-0";
+const SCENE = "instance:worker-node-a1/scene_generation-0";
+const TRAJ = "instance:worker-node-a1/trajectory_generation-0";
 
 function makeChannel() {
   return new LiveChannel("ws://m/cluster/live", { createSocket: MockWebSocket.factory, idleCloseMs: 5_000 });
@@ -60,7 +60,7 @@ describe("observing one instance at a time", () => {
     expect(channel.subscriberCount(SCENE)).toBe(0);
   });
 
-  it("ends the master's observation only when the last view of an instance leaves", () => {
+  it("ends the control node's observation only when the last view of an instance leaves", () => {
     const channel = makeChannel();
     const first = view(channel, SCENE);
     const second = view(channel, SCENE);

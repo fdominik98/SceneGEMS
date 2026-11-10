@@ -53,7 +53,7 @@ def test_one_file_per_document_and_an_index_are_written(tmp_path):
     index = yaml.safe_load((tmp_path / INDEX_FILE).read_text(encoding="utf-8"))
     assert index["schema_version"] == SCHEMA_VERSION
     assert [entry["id"] for entry in index["documents"]] == DOCUMENT_IDS
-    assert (tmp_path / "monitoring.yaml").read_text(encoding="utf-8").startswith("# Generated at master startup")
+    assert (tmp_path / "monitoring.yaml").read_text(encoding="utf-8").startswith("# Generated at control node startup")
 
 
 def test_the_files_read_back_as_the_documents_they_were_built_from(tmp_path):

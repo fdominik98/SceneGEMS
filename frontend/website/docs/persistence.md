@@ -18,8 +18,8 @@ The application stores user preferences and editor content in browser local stor
 - MQTT broker connection form
 - Simulation vessel setup drafts, wind and waves
 - UI preferences (layers and chart marks of the canvas, panel visibility, view mode, sections opened or closed)
-- Per workbench page: its input (where it came from and, for inputs on the master, the reference) and the latest loaded entry
+- Per workbench page: its input (where it came from and, for inputs on the control node, the reference) and the latest loaded entry
 - The campaign wizard's draft, and the filters and grouping of its catalogs
 - Campaign History's open entry and step
 
-The domain configuration (COLREGS constants, vessel types, obstacle types) is not stored in the browser: the master keeps it for the cluster, and an unsaved edit on the Domain Configuration page lasts until the page is reloaded. The contents of the loaded entries are not stored in the browser either: after a reload each page fetches its entry from the master again, and a page whose entry was deleted is cleared. An input taken from a file is not kept across a reload. WebSocket connection state and trajectory buffers are *not* persisted: reload reconnects to the gateway and a live session needs its input loaded again.
+The domain configuration (COLREGS constants, vessel types, obstacle types) is not stored in the browser: the control node keeps it for the cluster, and an unsaved edit on the Domain Configuration page lasts until the page is reloaded. The contents of the loaded entries are not stored in the browser either: after a reload each page fetches its entry from the control node again, and a page whose entry was deleted is cleared. An input taken from a file is not kept across a reload. WebSocket connection state and trajectory buffers are *not* persisted: reload reconnects to the gateway and a live session needs its input loaded again.

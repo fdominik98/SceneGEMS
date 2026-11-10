@@ -2,7 +2,7 @@
 
 The catalog is backend/assets/generated_functional_models/all/, found the way
 utils/file_system_utils finds the assets, so it is the same in a checkout and in the
-backend image the master runs. A class is one .problem file; its id is its path relative
+backend image the control node runs. A class is one .problem file; its id is its path relative
 to all/ without the extension (`3vessel_0obstacle_scenarios/fec5`). Each class
 carries the sha256 of its content with LF line endings (equal in a Windows and a Linux
 checkout) and its vessel and obstacle counts, read from the instances it declares.

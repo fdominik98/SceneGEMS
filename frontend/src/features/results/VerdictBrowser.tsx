@@ -14,7 +14,7 @@ interface VerdictBrowserProps {
   campaignId: string;
   /** The step view shown. */
   step: MonitoredStep;
-  /** Whether the master filters verdicts by step; one without Phase 6 lists the verdicts of the whole campaign. */
+  /** Whether the control node filters verdicts by step; one without Phase 6 lists the verdicts of the whole campaign. */
   stepFilter: boolean;
 }
 
@@ -36,7 +36,7 @@ export function VerdictBrowser({ operatorUrl, campaignId, step, stepFilter }: Ve
   const verdicts = useVerdictPage(operatorUrl, campaignId, filters, paging, verdictStep);
   const summary = useVerdictSummary(operatorUrl, campaignId, filters, verdictStep, byRun);
   const total = verdicts.data?.total ?? null;
-  // An older master answers false once it was seen ignoring the sort: it has the FEC order only.
+  // An older control node answers false once it was seen ignoring the sort: it has the FEC order only.
   const sortable = verdicts.data?.serverSort !== false;
   const csvUrl = client ? client.verdictsCsvUrl(campaignId, { ...toApiFilters(filters, verdictStep), ...(sortable && (sort !== "fec_id" || direction === "desc") ? { sort, order: direction } : {}) }) : null;
   const onSort = (next: VerdictSort) => (sortable ? sortBy(next) : setDirection(direction === "asc" ? "desc" : "asc"));

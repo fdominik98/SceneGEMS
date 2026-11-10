@@ -1,10 +1,10 @@
-"""The architecture files: written at master startup, read by the operator API.
+"""The architecture files: written at control node startup, read by the operator API.
 
 backend/assets/architecture holds one YAML file per document and an index. They are generated from the specs in code,
 so they are not tracked in git and nothing edits them by hand; measured values stay in their own files (the vessel stack's
 registry file, subsystems/measured_capabilities.yaml) and are merged in when the files are written.
 
-The writer runs in a background thread at startup and never stops the master: a folder that cannot be written is logged and
+The writer runs in a background thread at startup and never stops the control node: a folder that cannot be written is logged and
 the API builds the documents in memory instead.
 """
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 ARCHITECTURE_FOLDER = f"{ASSET_FOLDER}/architecture"
 INDEX_FILE = "index.yaml"
 
-_HEADER = "# Generated at master startup from the specs in code (scenegems_tool/architecture). Do not edit: the next start rewrites it.\n"
+_HEADER = "# Generated at control node startup from the specs in code (scenegems_tool/architecture). Do not edit: the next start rewrites it.\n"
 _FileStamp = Tuple[Tuple[str, int], ...]
 _cache: Dict[str, Tuple[_FileStamp, Dict[str, Any]]] = {}
 _cache_lock = threading.Lock()
@@ -36,7 +36,7 @@ def document_file(document_id: str) -> str:
 
 def write_architecture_files(folder: Optional[str] = None) -> List[Path]:
     """Build the documents and write one YAML file each plus the index; returns the files in index order."""
-    from scenegems_tool.architecture.architecture_catalog import build_architecture_documents  # the specs pull in the vessel stack and numpy, which the master's startup avoids
+    from scenegems_tool.architecture.architecture_catalog import build_architecture_documents  # the specs pull in the vessel stack and numpy, which the control node's startup avoids
 
     target = Path(folder or ARCHITECTURE_FOLDER)
     target.mkdir(parents=True, exist_ok=True)

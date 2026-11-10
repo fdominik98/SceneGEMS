@@ -125,7 +125,7 @@ ardupilot_gazebo_plugin:
     2 repeats). Paced by Gazebo physics under the JSON lockstep backend: about 4.4x per
     instance on the 12-core host and about 7x in aggregate with two instances (the 5x
     request achieved 3.5x per instance with two in parallel). max_speedup is a per-host
-    value; nodes measure and report their own in Phase 3. The vessel weaves (heading 45 to
+    value; worker nodes measure and report their own in Phase 3. The vessel weaves (heading 45 to
     116 degrees, up to 24 m cross-track), so Gazebo runs were not assurance evidence until
     the control layer was tuned per vessel model (WP3).
 

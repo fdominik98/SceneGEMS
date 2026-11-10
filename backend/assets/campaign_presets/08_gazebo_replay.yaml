@@ -1,9 +1,9 @@
-# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+# Shipped with the control node image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
 format: 3
 name: "Gazebo replay of two-vessel encounters"
 description: >-
   One case of every two-vessel FEC without obstacles replayed on ArduPilot SITL against a Gazebo
-  world at five times real time, judged by the post hoc monitor. Needs nodes that offer the Gazebo
+  world at five times real time, judged by the post hoc monitor. Needs worker nodes that offer the Gazebo
   simulation.
 steps: [scene_generation, trajectory_generation, simulation]
 scope:

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * Zod schemas of the master's operator API views. They mirror
- * `backend/src/scenegems_tool/cluster/master/api/views.py` (node, job, master status) and
+ * Zod schemas of the control node's operator API views. They mirror
+ * `backend/src/scenegems_tool/cluster/control_node/api/views.py` (worker node, job, control node status) and
  * `campaign_views.py` (campaigns, FECs, cases, verdicts, run records, events). Times are
  * ISO strings as the server sends them. Enum fields that grow with the backend (job type,
  * event kind, monitor) are plain strings; the `*_VALUES` lists name the known ones.
@@ -13,7 +13,7 @@ const nullableTime = isoTime.nullable();
 const stringMap = z.record(z.string(), z.string());
 const jsonObject = z.record(z.string(), z.unknown());
 
-export const nodeStatusSchema = z.enum(["online", "draining", "offline"]);
+export const workerNodeStatusSchema = z.enum(["online", "draining", "offline"]);
 export const jobStateSchema = z.enum(["queued", "leased", "running", "succeeded", "failed", "cancelled"]);
 export const campaignDesiredStateSchema = z.enum(["running", "paused", "draining", "stopped"]);
 export const campaignActualStateSchema = z.enum([
@@ -44,7 +44,7 @@ export const verdictStateSchema = z.enum(["passed", "failed", "unmonitored"]);
 // The design space exploration enumerates the FECs of a specification and scope; it has no monitor and no verdicts.
 export const CAMPAIGN_STEPS = ["design_space_exploration", "scene_generation", "trajectory_generation", "simulation"] as const;
 export const campaignStepSchema = z.enum(CAMPAIGN_STEPS);
-/** The steps of a config or an entry that names none (format 1, a master before Phase 6): the chain before the design space exploration. */
+/** The steps of a config or an entry that names none (format 1, a control node before Phase 6): the chain before the design space exploration. */
 export const IMPLIED_STEPS = ["scene_generation", "trajectory_generation", "simulation"] as const;
 /** The step a verdict belongs to: `scene` and `trajectories` verdicts have run index 0. */
 export const verdictStepSchema = z.enum(["scene", "trajectories", "simulation"]);
@@ -65,16 +65,16 @@ export type VerdictStep = z.infer<typeof verdictStepSchema>;
 export type CampaignKind = z.infer<typeof campaignKindSchema>;
 export type CampaignOrigin = z.infer<typeof campaignOriginSchema>;
 
-// Nodes and the master (views.py, operator_routes.py)
+// Worker nodes and the control node (views.py, operator_routes.py)
 
 export const fingerprintMismatchSchema = z.object({
   image: z.string(),
   required: z.string(),
-  /** Null when the node has no fingerprinted image of that name. */
+  /** Null when the worker node has no fingerprinted image of that name. */
   actual: z.string().nullable(),
 });
 
-export const nodeResourcesSchema = z.object({
+export const workerNodeResourcesSchema = z.object({
   cpus: z.number(),
   memory_mb: z.number(),
   free_memory_mb: z.number(),
@@ -87,67 +87,67 @@ export const slotUsageSchema = z.object({
   slots_in_use: z.number().int(),
 });
 
-/** A component the node offers (`views.component_views`): its images, and out_of_date while one of them differs from the release. */
-export const nodeComponentSchema = z.object({
+/** A component the worker node offers (`views.component_views`): its images, and out_of_date while one of them differs from the release. */
+export const workerNodeComponentSchema = z.object({
   component: z.string(),
   images: z.array(z.string()),
   state: z.enum(["usable", "out_of_date"]),
 });
 
-const nodeViewFields = z.object({
-  node_id: z.string(),
+const workerNodeViewFields = z.object({
+  worker_node_id: z.string(),
   name: z.string(),
-  /** The machine the node runs on (P5.1); missing or null from masters before it. */
+  /** The machine the worker node runs on (P5.1); missing or null from control nodes before it. */
   machine: z.string().nullable().optional(),
-  status: nodeStatusSchema,
+  status: workerNodeStatusSchema,
   connected: z.boolean(),
   /** Some component's images differ from the release; those components get no jobs, the others do. */
   out_of_date: z.boolean(),
   fingerprint_mismatches: z.array(fingerprintMismatchSchema),
   software_revision: z.string(),
   labels: stringMap,
-  resources: nodeResourcesSchema,
+  resources: workerNodeResourcesSchema,
   /** Job type to its slots and slots in use. */
   slots: z.record(z.string(), slotUsageSchema),
-  /** The components the node runs its jobs with, in catalog order. */
-  components: z.array(nodeComponentSchema),
+  /** The components the worker node runs its jobs with, in catalog order. */
+  components: z.array(workerNodeComponentSchema),
   leases: z.array(z.string()),
   registered_at: isoTime,
   last_seen_at: isoTime,
 });
 
-/** A node of the operator API. */
-export const nodeViewSchema = nodeViewFields;
+/** A worker node of the operator API. */
+export const workerNodeViewSchema = workerNodeViewFields;
 
-export const nodeListSchema = z.array(nodeViewSchema);
+export const workerNodeListSchema = z.array(workerNodeViewSchema);
 
-export const masterStatusSchema = z.object({
-  master_id: z.string(),
+export const controlNodeStatusSchema = z.object({
+  control_node_id: z.string(),
   expected_fingerprints: z.object({
     state: z.string(),
     error: z.string().nullable(),
     images: stringMap,
   }),
-  connected_nodes: z.array(z.string()),
-  /** Whether the master's workbench gateway starts live sessions (it needs the Docker socket); absent from older masters. */
+  connected_worker_nodes: z.array(z.string()),
+  /** Whether the control node's workbench gateway starts live sessions (it needs the Docker socket); absent from older control nodes. */
   live_sessions: z.boolean().optional(),
 });
-export type NodeView = z.infer<typeof nodeViewSchema>;
-export type NodeComponentView = z.infer<typeof nodeComponentSchema>;
-export type MasterStatus = z.infer<typeof masterStatusSchema>;
+export type WorkerNodeView = z.infer<typeof workerNodeViewSchema>;
+export type WorkerNodeComponentView = z.infer<typeof workerNodeComponentSchema>;
+export type ControlNodeStatus = z.infer<typeof controlNodeStatusSchema>;
 
 // Jobs (views.py)
 
 export const jobRequirementsSchema = z.object({
   labels: stringMap,
-  /** The components a node must offer (protocol 6). */
+  /** The components a worker node must offer (protocol 6). */
   components: z.array(z.string()).default([]),
   fingerprints: stringMap,
   min_memory_mb: z.number(),
   min_cpus: z.number(),
 });
 
-/** The latest status a running job reported (`JobProgress`), kept in the master's memory. */
+/** The latest status a running job reported (`JobProgress`), kept in the control node's memory. */
 export const jobProgressSchema = z.object({
   lease_id: z.string(),
   progress: z.number().nullable(),
@@ -191,14 +191,14 @@ export const jobEventSchema = z.object({
   to_state: jobStateSchema,
   attempt: z.number().int(),
   lease_id: z.string().nullable(),
-  node_id: z.string().nullable(),
+  worker_node_id: z.string().nullable(),
   detail: z.unknown(),
 });
 
 export const jobDetailSchema = jobViewSchema.extend({
   payload: jsonObject,
   events: z.array(jobEventSchema),
-  /** The recent log lines the master keeps (at most 200). */
+  /** The recent log lines the control node keeps (at most 200). */
   log_lines: z.array(logLineSchema),
 });
 
@@ -207,7 +207,7 @@ export const cancelJobResultSchema = z.object({
   job: jobViewSchema,
 });
 
-export const nodeRemovedSchema = z.object({ removed: z.string() });
+export const workerNodeRemovedSchema = z.object({ removed: z.string() });
 export type JobProgress = z.infer<typeof jobProgressSchema>;
 export type LogLine = z.infer<typeof logLineSchema>;
 export type JobView = z.infer<typeof jobViewSchema>;
@@ -243,7 +243,7 @@ export const campaignSummarySchema = z.object({
   updated_at: isoTime,
   started_at: nullableTime,
   finished_at: nullableTime,
-  // Phase 6 (6.5): optional, so a master without Phase 6 still parses.
+  // Phase 6 (6.5): optional, so a control node without Phase 6 still parses.
   kind: campaignKindSchema.optional(),
   /** Null for campaigns created before migration 0005, which recorded no origin. */
   origin: campaignOriginSchema.nullish(),
@@ -317,7 +317,7 @@ export const caseViewSchema = z.object({
   scene_artifact: z.string().nullable(),
   trajectories_artifact: z.string().nullable(),
   trajectories_complete: z.boolean().nullable(),
-  /** The artifact the case started from (a functional scenario or an item), null for a catalog class; an older master leaves it out. */
+  /** The artifact the case started from (a functional scenario or an item), null for a catalog class; an older control node leaves it out. */
   input_artifact: z.string().nullish(),
   input_source: z.record(z.string(), z.unknown()).nullish(),
   reason: z.string().nullable(),
@@ -355,7 +355,7 @@ export const caseJobSchema = z.object({
 export const runRecordSchema = z.object({
   run_record_id: z.number().int(),
   case_id: z.number().int(),
-  /** The case's index in its class (P5.1); missing from masters before it. */
+  /** The case's index in its class (P5.1); missing from control nodes before it. */
   case_index: z.number().int().optional(),
   campaign_id: z.string(),
   fec_id: z.string(),
@@ -364,7 +364,7 @@ export const runRecordSchema = z.object({
   /** Null for trajectories taken from an item or a live session (Phase 6). */
   trajectory_generator: z.string().nullable(),
   trajectories_complete: z.boolean(),
-  /** Phase 6; missing from masters before it, which only ran jobs. */
+  /** Phase 6; missing from control nodes before it, which only ran jobs. */
   source: runSourceSchema.optional(),
   stack: jsonObject,
   repeatability_tier: z.string().nullable(),
@@ -376,7 +376,7 @@ export const runRecordSchema = z.object({
   /** Artifact role to sha256. */
   artifacts: stringMap,
   job_id: z.string().nullable(),
-  node_id: z.string().nullable(),
+  worker_node_id: z.string().nullable(),
   fingerprints: stringMap,
   durations_s: z.record(z.string(), z.number()),
   created_at: isoTime,
@@ -385,11 +385,11 @@ export const runRecordSchema = z.object({
 export const verdictSchema = z.object({
   verdict_id: z.number().int(),
   case_id: z.number().int(),
-  /** The case's index in its class (P5.1); missing from masters before it. */
+  /** The case's index in its class (P5.1); missing from control nodes before it. */
   case_index: z.number().int().optional(),
   campaign_id: z.string(),
   fec_id: z.string(),
-  /** Phase 6; missing from masters before it, whose verdicts are all of the simulation. */
+  /** Phase 6; missing from control nodes before it, whose verdicts are all of the simulation. */
   step: verdictStepSchema.optional(),
   run_index: z.number().int(),
   run_record_id: z.number().int().nullable(),
@@ -403,7 +403,7 @@ export const verdictSchema = z.object({
   early_stop_time_s: z.number().nullable(),
   /**
    * Phase 7: per relation (keyed like `rule_outcomes`, for example `os - ts1`) the encounter types
-   * in order of first appearance; null for a verdict stored before them. Missing from an older master,
+   * in order of first appearance; null for a verdict stored before them. Missing from an older control node,
    * which also cannot sort the verdict list (see `fetchVerdictPage`).
    */
   encounters: z.record(z.string(), z.array(z.string())).nullable().optional(),

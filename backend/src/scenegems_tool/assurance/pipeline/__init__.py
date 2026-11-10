@@ -1,4 +1,4 @@
-"""The pipeline engine: runs the cases of every unfinished campaign as jobs, in the master process.
+"""The pipeline engine: runs the cases of every unfinished campaign as jobs, in the control node process.
 
 stage_graph.py          the stages and jobs of a case, idempotency keys, priorities, the case's progress
 payload_builder.py      each job's payload from the config and the earlier results (inline or referenced)
@@ -11,6 +11,6 @@ pipeline_queries.py     the engine's queries beyond the store API
 pipeline_engine.py      the tick: events, desired and actual states, submissions, restart
 engine_leadership.py    one engine per database: the advisory lock the leading engine holds
 
-The module is loaded by the master when it builds its control plane, not when its package is
-imported, so importing the master stays light.
+The module is loaded by the control node when it builds its control plane, not when its package is
+imported, so importing the control node stays light.
 """

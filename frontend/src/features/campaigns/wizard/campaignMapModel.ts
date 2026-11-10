@@ -81,7 +81,7 @@ export interface CampaignMap {
   height: number;
 }
 
-/** Where the master's check of the config stands, as the review card says it. */
+/** Where the control node's check of the config stands, as the review card says it. */
 export type ReviewStatus = "incomplete" | "unchecked" | "checking" | "accepted" | "refused" | "failed";
 
 export interface MapContext {
@@ -114,14 +114,14 @@ const RETENTION_LABELS: Record<RetentionPolicy, string> = {
 
 const REVIEW_FACTS: Record<ReviewStatus, MapFact> = {
   incomplete: { text: "Not complete yet", tone: "muted" },
-  unchecked: { text: "Not checked on the master", tone: "plain" },
-  checking: { text: "Checking on the master", tone: "plain" },
-  accepted: { text: "Accepted by the master", tone: "ok" },
-  refused: { text: "Refused by the master", tone: "bad" },
+  unchecked: { text: "Not checked on the control node", tone: "plain" },
+  checking: { text: "Checking on the control node", tone: "plain" },
+  accepted: { text: "Accepted by the control node", tone: "ok" },
+  refused: { text: "Refused by the control node", tone: "bad" },
   failed: { text: "The check did not complete", tone: "warn" },
 };
 
-/** Where the check stands: the browser's own problems first, then the master's answer to the current config. */
+/** Where the check stands: the browser's own problems first, then the control node's answer to the current config. */
 export function reviewStatusOf(localProblems: number, validation: Pick<ValidationState, "status" | "yaml">, yaml: string): ReviewStatus {
   if (localProblems > 0) {
     return "incomplete";
@@ -293,14 +293,14 @@ function settingsOf(draft: WizardDraft, context: MapContext): MapSetting[] {
   const { resources, policy } = draft;
   let machines: MapFact[];
   if (plan === null) {
-    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.nodes.length, "machine")} chosen`), fact("Machines not read yet", "muted")];
+    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.workerNodes.length, "machine")} chosen`), fact("Machines not read yet", "muted")];
   } else if (plan.missing.length > 0) {
     // The need as the resources step names it: a simulation with the components its runs need
     const label = needLabel(plan.missing[0]);
     const missing = label.charAt(0).toUpperCase() + label.slice(1);
     machines = [fact(plan.missing.length === 1 ? `Missing: ${missing}` : `Missing: ${missing} and ${plan.missing.length - 1} more`, "bad")];
   } else {
-    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.nodes.length, "machine")} chosen`), fact(`${plural(plan.usable.length, "machine")} usable`, plan.usable.length > 0 ? "ok" : "warn")];
+    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.workerNodes.length, "machine")} chosen`), fact(`${plural(plan.usable.length, "machine")} usable`, plan.usable.length > 0 ? "ok" : "warn")];
   }
   const stops = [policy.maxCases, policy.maxFailedVerdicts, policy.maxDurationS].filter((value) => value !== null).length;
   const name = draft.name.trim();

@@ -7,7 +7,7 @@ docker_common_init
 BUILD_BACKEND=0
 BUILD_SIMULATION=0
 BUILD_ARDUAGENT=0
-BUILD_NODE=0
+BUILD_WORKER_NODE=0
 BUILD_ALL=0
 BUILD_BROKER=0
 BUILD_NO_CHECK=0
@@ -28,15 +28,15 @@ With no options, builds every image in the project.
 Options:
   -h, --help              Show this help and exit
 
-  -1, --backend           scenegems-master-api and the Python subsystems (monitoring,
+  -1, --backend           scenegems-control-node-api and the Python subsystems (monitoring,
                           scene-generation, trajectory-generation,
                           scenario-execution, design-space-exploration)
 
   -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
-                          sessions with ArduPilot run it on the master's machine
+                          sessions with ArduPilot run it on the control node's machine
 
-  -5, --node              Node daemon image only (scenegems-node:latest); a node
-                          also needs the images of the components it offers
+  -5, --worker-node       Worker node daemon image only (scenegems-worker-node:latest);
+                          a worker node also needs the images of the components it offers
 
   --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy, USV Navigation
                           (scenegems-gazebo-harmonic, scenegems-ardupilot-sitl, scenegems-mavproxy,
@@ -44,12 +44,12 @@ Options:
 
   --all                   Build every image (same as no arguments)
 
-  --release <folder>      Build the images a cluster runs (broker, master-api and
-                          subsystems, simulation, node daemon) as :latest, pull
+  --release <folder>      Build the images a cluster runs (broker, control-node-api and
+                          subsystems, simulation, worker node daemon) as :latest, pull
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
-                          with those tags, and the master and node stacks.
+                          with those tags, and the control node and worker node stacks.
                           Machine Hub installs the bundle on the machines.
 
   --fingerprints          Print "image fingerprint" for every image of this checkout
@@ -59,15 +59,15 @@ Options:
                           for the selected images (stamps updated after build).
                           With no other options, builds every image (same as
                           ./build.sh --all --no-check). Full builds run the broker,
-                          master-api and subsystems before the simulation images.
+                          control-node-api and subsystems before the simulation images.
 
 Examples:
   ./build.sh                        # full build
-  ./build.sh --backend              # master-api and subsystems, after Python changes
+  ./build.sh --backend              # control-node-api and subsystems, after Python changes
   ./build.sh --arduagent            # agent image only
   ./build.sh --release ../release   # images and bundle for Machine Hub
-  ./build.sh --backend --simulation # master-api, subsystems and simulation images
-  ./build.sh --backend --no-check   # force rebuild master-api and subsystems
+  ./build.sh --backend --simulation # control-node-api, subsystems and simulation images
+  ./build.sh --backend --no-check   # force rebuild control-node-api and subsystems
 EOF
 }
 
@@ -89,8 +89,8 @@ parse_build_args() {
             -4 | --arduagent)
                 BUILD_ARDUAGENT=1
                 ;;
-            -5 | --node)
-                BUILD_NODE=1
+            -5 | --worker-node)
+                BUILD_WORKER_NODE=1
                 ;;
             --simulation)
                 BUILD_SIMULATION=1
@@ -151,7 +151,7 @@ build_broker_image() {
 }
 
 build_backend_stack_images() {
-    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Master-api and subsystems =="
+    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Control-Node-api and subsystems =="
     build_subsystem_if_stale "scenegems-monitoring-subsystem:latest" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/monitoring/requirements.txt" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
@@ -172,15 +172,15 @@ build_backend_stack_images() {
     # which is then part of its fingerprint); nothing of backend/ goes into it.
     build_subsystem_if_stale "scenegems-design-space-exploration-subsystem:latest" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" "$SCRIPT_DIR/deploy/images/design_space_exploration"
-    build_subsystem_if_stale "scenegems-master-api:latest" "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
+    build_subsystem_if_stale "scenegems-control-node-api:latest" "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"
 }
 
-build_node_image() {
-    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Node daemon =="
-    build_subsystem_if_stale "scenegems-node:latest" "$SCRIPT_DIR/deploy/images/node/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/node/requirements.txt" "$SCRIPT_DIR/deploy/images/node/Dockerfile" \
+build_worker_node_image() {
+    [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ] || echo "== Worker node daemon =="
+    build_subsystem_if_stale "scenegems-worker-node:latest" "$SCRIPT_DIR/deploy/images/worker_node/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/worker_node/requirements.txt" "$SCRIPT_DIR/deploy/images/worker_node/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config" "$SCRIPT_DIR/backend/assets/runtime_assets"
 }
@@ -188,18 +188,18 @@ build_node_image() {
 parse_build_args "$@"
 
 # A release builds what a cluster runs. ArduAgent and MAVProxy are only used by live sessions,
-# which run the :latest images of the master's machine (deploy/master/docker-compose.live-sessions.yml).
+# which run the :latest images of the control node's machine (deploy/control_node/docker-compose.live-sessions.yml).
 if [ -n "$RELEASE_DIR" ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1
     BUILD_SIMULATION=1
-    BUILD_NODE=1
+    BUILD_WORKER_NODE=1
 fi
 
 # Modifier-only invocations (e.g. ./build.sh --no-check) should build everything,
 # same as running ./build.sh with no arguments.
 if [ "$BUILD_ALL" -eq 0 ] && [ "$BUILD_BACKEND" -eq 0 ] && [ "$BUILD_SIMULATION" -eq 0 ] \
-    && [ "$BUILD_ARDUAGENT" -eq 0 ] && [ "$BUILD_NODE" -eq 0 ]; then
+    && [ "$BUILD_ARDUAGENT" -eq 0 ] && [ "$BUILD_WORKER_NODE" -eq 0 ]; then
     BUILD_ALL=1
 fi
 
@@ -212,7 +212,7 @@ if [ "$BUILD_ALL" -eq 1 ]; then
     BUILD_BACKEND=1
     BUILD_SIMULATION=1
     BUILD_ARDUAGENT=1
-    BUILD_NODE=1
+    BUILD_WORKER_NODE=1
 fi
 
 print_selected_build_targets() {
@@ -221,7 +221,7 @@ print_selected_build_targets() {
         targets+=("mqtt-broker")
     fi
     if [ "$BUILD_BACKEND" -eq 1 ]; then
-        targets+=("master-api+subsystems")
+        targets+=("control-node-api+subsystems")
     fi
     if [ "$BUILD_SIMULATION" -eq 1 ]; then
         targets+=("simulation")
@@ -229,8 +229,8 @@ print_selected_build_targets() {
     if [ "$BUILD_ARDUAGENT" -eq 1 ]; then
         targets+=("arduagent")
     fi
-    if [ "$BUILD_NODE" -eq 1 ]; then
-        targets+=("node")
+    if [ "$BUILD_WORKER_NODE" -eq 1 ]; then
+        targets+=("worker-node")
     fi
     if [ "${#targets[@]}" -eq 0 ]; then
         echo "No build targets selected." >&2
@@ -248,7 +248,7 @@ if [ "${DOCKER_FINGERPRINT_ONLY:-0}" != "1" ]; then
     print_selected_build_targets
 fi
 
-# The broker, master-api and subsystems first, then the optional simulation images.
+# The broker, control-node-api and subsystems first, then the optional simulation images.
 if [ "$BUILD_BROKER" -eq 1 ]; then
     build_broker_image
 fi
@@ -261,8 +261,8 @@ fi
 if [ "$BUILD_ARDUAGENT" -eq 1 ]; then
     build_arduagent_image
 fi
-if [ "$BUILD_NODE" -eq 1 ]; then
-    build_node_image
+if [ "$BUILD_WORKER_NODE" -eq 1 ]; then
+    build_worker_node_image
 fi
 
 if [ "${DOCKER_FINGERPRINT_ONLY:-0}" = "1" ]; then

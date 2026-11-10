@@ -29,6 +29,18 @@
   max-width: 460px;
 }
 
+/* An entry name carries its kind, state and time: the entry list takes a row of its own */
+.results-picker .results-picker-entry {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.results-picker .results-picker-entry select {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
 /* Panels */
 
 .results-panel {

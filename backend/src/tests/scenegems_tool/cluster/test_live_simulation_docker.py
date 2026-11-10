@@ -1,13 +1,13 @@
-"""A live simulation end to end: a browser on the live channel watches a kinematic job that a node container runs.
+"""A live simulation end to end: a browser on the live channel watches a kinematic job that a worker node container runs.
 
-The master is real and runs in this process (control plane on in-memory stores, the node API
+The control node is real and runs in this process (control plane on in-memory stores, the worker node API
 over plain HTTP on all interfaces, the operator listener with the live channel on loopback, one event
-loop as in the master process). The node is the scenegems-node image started from
-deploy/node/docker-compose.yml; it connects to the master, which it trusts without pairing, and runs the job in a runner
+loop as in the control node process). The worker node is the scenegems-worker-node image started from
+deploy/worker_node/docker-compose.yml; it connects to the control node, which it trusts without pairing, and runs the job in a runner
 container of the scenario execution image. The browser subscribes to the job's instance topic
 with a speed as soon as the job is leased, and the frames of the paced run reach it.
 
-Images: scenegems-node:<SCENEGEMS_TEST_NODE_IMAGE_TAG> and the subsystem images with
+Images: scenegems-worker-node:<SCENEGEMS_TEST_WORKER_NODE_IMAGE_TAG> and the subsystem images with
 SCENEGEMS_TEST_IMAGE_TAG (both default latest). Build them from this checkout under a tag of
 their own. Containers reach the test process through host.docker.internal (Docker Desktop).
 """
@@ -30,28 +30,28 @@ from websockets.asyncio.client import connect
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from scenegems_tool.cluster.master.api.master_apps import create_master_apps
-from scenegems_tool.cluster.master.api.operator_routes import NODES_PATH
-from scenegems_tool.cluster.master.control_plane import ControlPlane
-from scenegems_tool.cluster.master.live.topics import create_live_channel
-from scenegems_tool.cluster.master.scheduling.fingerprint_policy import ExpectedFingerprints
-from scenegems_tool.cluster.master.server import listeners
-from scenegems_tool.cluster.master.settings import Listener, MasterSettings
-from scenegems_tool.cluster.node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem, subsystem_image
+from scenegems_tool.cluster.control_node.api.control_node_apps import create_control_node_apps
+from scenegems_tool.cluster.control_node.api.operator_routes import WORKER_NODES_PATH
+from scenegems_tool.cluster.control_node.control_plane import ControlPlane
+from scenegems_tool.cluster.control_node.live.topics import create_live_channel
+from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
+from scenegems_tool.cluster.control_node.server import listeners
+from scenegems_tool.cluster.control_node.settings import ControlNodeSettings, Listener
 from scenegems_tool.cluster.protocol.jobs import JobSubmission, JobType
 from scenegems_tool.cluster.protocol.live import instance_topic, job_instance
 from scenegems_tool.cluster.protocol.routes import JOBS_PATH, LIVE_PATH
+from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem, subsystem_image
 from scenegems_tool.persistence.clock import utc_now
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
-from tests.scenegems_tool.cluster.master.fake_stores import InMemoryJobStore, InMemoryNodeStore
-from tests.scenegems_tool.cluster.node.conftest import _vessel
+from tests.scenegems_tool.cluster.control_node.fake_stores import InMemoryJobStore, InMemoryWorkerNodeStore
+from tests.scenegems_tool.cluster.worker_node.conftest import _vessel
 from utils.file_system_utils import REPO_ROOT
 
 pytestmark = [pytest.mark.docker, pytest.mark.slow]
 
 IMAGE_TAG = os.environ.get("SCENEGEMS_TEST_IMAGE_TAG", "latest")
-NODE_IMAGE_TAG = os.environ.get("SCENEGEMS_TEST_NODE_IMAGE_TAG", "latest")
-COMPOSE_FILE = Path(REPO_ROOT) / "deploy" / "node" / "docker-compose.yml"
+WORKER_NODE_IMAGE_TAG = os.environ.get("SCENEGEMS_TEST_WORKER_NODE_IMAGE_TAG", "latest")
+COMPOSE_FILE = Path(REPO_ROOT) / "deploy" / "worker_node" / "docker-compose.yml"
 HOST = "host.docker.internal"
 TIMEOUT_S = 240.0
 STEPS = 300
@@ -72,32 +72,32 @@ def _image(subsystem: Subsystem) -> str:
     return subsystem_image(subsystem).rsplit(":", 1)[0] + f":{IMAGE_TAG}"
 
 
-class Master:
-    """The master's node API and operator listeners on one event loop in a thread."""
+class ControlNode:
+    """The control node's worker node API and operator listeners on one event loop in a thread."""
 
     def __init__(self):
-        self.node_port, self.operator_port = _free_port(), _free_port()
-        self.master_id = f"m{uuid.uuid4().hex[:6]}"
-        nodes = InMemoryNodeStore(utc_now)
-        self.plane = ControlPlane(self.master_id, nodes, InMemoryJobStore(nodes, utc_now), ExpectedFingerprints.fixed({}))
-        apps = create_master_apps(self.plane, live=create_live_channel(self.plane))
-        settings = MasterSettings(
-            master_id=self.master_id,
+        self.worker_node_port, self.operator_port = _free_port(), _free_port()
+        self.control_node_id = f"m{uuid.uuid4().hex[:6]}"
+        worker_nodes = InMemoryWorkerNodeStore(utc_now)
+        self.plane = ControlPlane(self.control_node_id, worker_nodes, InMemoryJobStore(worker_nodes, utc_now), ExpectedFingerprints.fixed({}))
+        apps = create_control_node_apps(self.plane, live=create_live_channel(self.plane))
+        settings = ControlNodeSettings(
+            control_node_id=self.control_node_id,
             database_url="postgresql://unused",
-            node_api=Listener("0.0.0.0", self.node_port),
+            worker_node_api=Listener("0.0.0.0", self.worker_node_port),
             operator=Listener("127.0.0.1", self.operator_port),
         )
         self.servers = listeners(settings, apps)
-        self.thread = threading.Thread(target=lambda: asyncio.run(self._serve()), name="master", daemon=True)
+        self.thread = threading.Thread(target=lambda: asyncio.run(self._serve()), name="control_node", daemon=True)
 
     async def _serve(self) -> None:
         await asyncio.gather(*(server.serve() for server in self.servers))
 
-    def start(self) -> "Master":
+    def start(self) -> "ControlNode":
         self.thread.start()
         deadline = time.monotonic() + 30
         while not all(server.started for server in self.servers):
-            assert time.monotonic() < deadline, "the master did not start"
+            assert time.monotonic() < deadline, "the control node did not start"
             time.sleep(0.05)
         return self
 
@@ -121,41 +121,41 @@ class Master:
 
 
 @pytest.fixture(scope="module")
-def master():
+def control_node():
     if _docker("info", check=False).returncode != 0:
         pytest.skip("Docker engine is not reachable")
-    for image in (f"scenegems-node:{NODE_IMAGE_TAG}", _image(Subsystem.SCENARIO_EXECUTION)):
+    for image in (f"scenegems-worker-node:{WORKER_NODE_IMAGE_TAG}", _image(Subsystem.SCENARIO_EXECUTION)):
         if _docker("image", "inspect", image, check=False).returncode != 0:
             pytest.fail(f"Image {image} is missing; build it from this checkout or set the test image tags")
-    master = Master().start()
+    control_node = ControlNode().start()
     try:
-        yield master
+        yield control_node
     finally:
-        master.stop()
+        control_node.stop()
 
 
 @pytest.fixture(scope="module")
-def node(master, tmp_path_factory):
-    node_name = f"live-{uuid.uuid4().hex[:6]}"
-    env_file = tmp_path_factory.mktemp("node") / "node.env"
+def worker_node(control_node, tmp_path_factory):
+    worker_node_name = f"live-{uuid.uuid4().hex[:6]}"
+    env_file = tmp_path_factory.mktemp("worker_node") / "worker_node.env"
     values = {
-        "SCENEGEMS_MASTER_URL": f"http://{HOST}:{master.node_port}",
-        "SCENEGEMS_MASTER_ID": master.master_id,
-        "SCENEGEMS_NODE_NAME": node_name,
-        "SCENEGEMS_NODE_SLOTS": "simulation:1",
-        "SCENEGEMS_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic",
-        "SCENEGEMS_IMAGE_TAG": NODE_IMAGE_TAG,  # the node image; the subsystem images come by their variables
+        "SCENEGEMS_CONTROL_NODE_URL": f"http://{HOST}:{control_node.worker_node_port}",
+        "SCENEGEMS_CONTROL_NODE_ID": control_node.control_node_id,
+        "SCENEGEMS_WORKER_NODE_NAME": worker_node_name,
+        "SCENEGEMS_WORKER_NODE_SLOTS": "simulation:1",
+        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic",
+        "SCENEGEMS_IMAGE_TAG": WORKER_NODE_IMAGE_TAG,  # the worker node image; the subsystem images come by their variables
         "SCENEGEMS_SOFTWARE_REVISION": "live-simulation-test",
         **{variable: _image(subsystem) for subsystem, variable in IMAGE_ENVIRONMENT_VARIABLES.items()},
     }
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
     compose = ["docker", "compose", "-f", str(COMPOSE_FILE), "--env-file", str(env_file)]
     subprocess.run([*compose, "up", "-d"], capture_output=True, text=True, check=True, timeout=300)
-    container = f"scenegems-node-{master.master_id}-{node_name}"
+    container = f"scenegems-worker-node-{control_node.control_node_id}-{worker_node_name}"
     try:
         deadline = time.monotonic() + TIMEOUT_S
-        while not [view for view in master.get(NODES_PATH) if view["connected"]]:
-            assert time.monotonic() < deadline, f"the node never connected:\n{_docker('logs', container, check=False).stdout[-4000:]}"
+        while not [view for view in control_node.get(WORKER_NODES_PATH) if view["connected"]]:
+            assert time.monotonic() < deadline, f"the worker node never connected:\n{_docker('logs', container, check=False).stdout[-4000:]}"
             time.sleep(0.5)
         yield container
     finally:
@@ -167,20 +167,20 @@ def _trajectories():
     return TrajectoryBuilder.default_trajectory_from_scene(scene, 1, STEPS)
 
 
-def _wait_for_attempt(master: Master, job_id: str) -> dict:
+def _wait_for_attempt(control_node: ControlNode, job_id: str) -> dict:
     deadline = time.monotonic() + TIMEOUT_S
     while True:
-        job = master.get(f"{JOBS_PATH}/{job_id}")
+        job = control_node.get(f"{JOBS_PATH}/{job_id}")
         if job["attempt"] >= 1:
             return job
         assert time.monotonic() < deadline, f"job {job_id} was never leased: {job}"
         time.sleep(0.05)
 
 
-async def _watch(master: Master, topic: str, job_id: str):
+async def _watch(control_node: ControlNode, topic: str, job_id: str):
     """Subscribes at SPEED and collects frames (with their arrival times) until the job's status is final."""
     frames, statuses = [], []
-    async with connect(f"ws://127.0.0.1:{master.operator_port}{LIVE_PATH}", open_timeout=10) as browser:
+    async with connect(f"ws://127.0.0.1:{control_node.operator_port}{LIVE_PATH}", open_timeout=10) as browser:
         await browser.send(json.dumps({"version": 1, "type": "subscribe", "topic": topic, "options": {"speed": SPEED}}))
         subscribed = json.loads(await asyncio.wait_for(browser.recv(), 10))
         assert subscribed["type"] == "subscribed", subscribed
@@ -198,17 +198,17 @@ async def _watch(master: Master, topic: str, job_id: str):
     return subscribed, frames, statuses
 
 
-def test_a_browser_watches_an_observed_kinematic_run_at_its_speed(master, node):
+def test_a_browser_watches_an_observed_kinematic_run_at_its_speed(control_node, worker_node):
     trajectories = _trajectories()
     payload = {"runner": "kinematic", "trajectories": trajectories.to_dict(), "monitor": "live", "include_trajectories": False}
-    job = master.post(JOBS_PATH, JobSubmission(job_type=JobType.SIMULATION, payload=payload).model_dump(mode="json"))
-    leased = _wait_for_attempt(master, job["job_id"])
+    job = control_node.post(JOBS_PATH, JobSubmission(job_type=JobType.SIMULATION, payload=payload).model_dump(mode="json"))
+    leased = _wait_for_attempt(control_node, job["job_id"])
     topic = instance_topic(leased["lease_owner"], job_instance(job["job_id"], 1))
 
-    _, frames, statuses = asyncio.run(_watch(master, topic, job["job_id"]))
+    _, frames, statuses = asyncio.run(_watch(control_node, topic, job["job_id"]))
 
-    finished = master.get(f"{JOBS_PATH}/{job['job_id']}")
-    assert finished["state"] == "succeeded", (finished["error"], _docker("logs", node, check=False).stdout[-4000:])
+    finished = control_node.get(f"{JOBS_PATH}/{job['job_id']}")
+    assert finished["state"] == "succeeded", (finished["error"], _docker("logs", worker_node, check=False).stdout[-4000:])
     assert finished["result"]["state_digest"] == run_kinematic_replay(trajectories).state_digest()  # observing changed nothing in the run
     timestamps = [frame["timestamp"] for _, frame in frames]
     assert timestamps == sorted(timestamps) and timestamps[-1] == STEPS and len(timestamps) > STEPS / 10

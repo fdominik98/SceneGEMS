@@ -3,8 +3,8 @@ import type { ScopeEntryDraft } from "./wizardState";
 
 /**
  * Which catalog classes a scope entry selects, and how many cases a campaign plans, worked out in
- * the browser from the class catalog the same way the master does (`ClassCatalog.expand`: a pattern
- * without a slash matches folders, one with a slash matches class ids, shell wildcards). The master
+ * the browser from the class catalog the same way the control node does (`ClassCatalog.expand`: a pattern
+ * without a slash matches folders, one with a slash matches class ids, shell wildcards). The control node
  * has the last word: the review step validates the config on the server.
  */
 
@@ -62,7 +62,7 @@ export interface ScopePlan {
   casesPlanned: number;
 }
 
-/** The plan of the scope: each class counts once, for the first entry that names it (as the master resolves it). */
+/** The plan of the scope: each class counts once, for the first entry that names it (as the control node resolves it). */
 export function planScope(scope: readonly ScopeEntryDraft[], catalog: readonly CatalogClass[]): ScopePlan {
   const byId = new Map(catalog.map((entry) => [entry.fec_id, entry]));
   const taken = new Set<string>();

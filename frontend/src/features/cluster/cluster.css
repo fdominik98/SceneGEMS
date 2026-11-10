@@ -1,4 +1,4 @@
-/* The Cluster section: summary tiles, node cards, cluster list. */
+/* The Cluster section: summary tiles, worker node cards, cluster list. */
 
 .cluster-main {
   display: flex;
@@ -58,52 +58,52 @@
   font-size: var(--font-size-xs);
 }
 
-/* Master status */
+/* Control node status */
 
-.master-facts {
+.control-node-facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-3) var(--space-5);
   margin: 0 0 var(--space-3);
 }
 
-.master-facts dt {
+.control-node-facts dt {
   color: var(--text-muted);
   font-size: var(--font-size-sm);
 }
 
-.master-facts dd {
+.control-node-facts dd {
   margin: 0;
   font-weight: 600;
 }
 
-.master-images {
+.control-node-images {
   margin-top: var(--space-3);
   border-collapse: collapse;
   font-size: var(--font-size-sm);
 }
 
-.master-images th,
-.master-images td {
+.control-node-images th,
+.control-node-images td {
   text-align: left;
   padding: 2px var(--space-5) 2px 0;
   border-bottom: 1px solid var(--border);
 }
 
-.master-images th {
+.control-node-images th {
   color: var(--text-muted);
   font-weight: 600;
 }
 
-/* Node cards */
+/* Worker node cards */
 
-.node-grid {
+.worker-node-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
   gap: var(--space-3);
 }
 
-.node-card {
+.worker-node-card {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -115,26 +115,26 @@
   min-width: 0;
 }
 
-.node-card--draining {
+.worker-node-card--draining {
   border-top-color: var(--warn);
 }
 
-.node-card--offline {
+.worker-node-card--offline {
   border-top-color: var(--text-faint);
   opacity: 0.8;
 }
 
-.node-card--stale {
+.worker-node-card--stale {
   border-color: rgb(var(--danger-rgb) / 0.55);
 }
 
-.node-card-head {
+.worker-node-card-head {
   display: flex;
   align-items: center;
   gap: var(--space-4);
 }
 
-.node-dot {
+.worker-node-dot {
   flex-shrink: 0;
   width: 9px;
   height: 9px;
@@ -142,19 +142,19 @@
   background: var(--text-faint);
 }
 
-.node-dot--connected {
+.worker-node-dot--connected {
   background: var(--ok);
   box-shadow: 0 0 0 3px rgb(var(--ok-rgb) / 0.18);
 }
 
-.node-card-title {
+.worker-node-card-title {
   display: flex;
   flex-direction: column;
   min-width: 0;
   flex: 1;
 }
 
-.node-card-name {
+.worker-node-card-name {
   font-weight: 600;
   font-size: var(--font-size-sm);
   overflow: hidden;
@@ -162,12 +162,12 @@
   white-space: nowrap;
 }
 
-.node-card-machine {
+.worker-node-card-machine {
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
 
-.node-status {
+.worker-node-status {
   padding: 1px 7px;
   border-radius: var(--radius);
   font-size: var(--font-size-xs);
@@ -175,35 +175,35 @@
   text-transform: capitalize;
 }
 
-.node-status--online {
+.worker-node-status--online {
   color: var(--ok-vivid-text);
   background: rgb(var(--ok-rgb) / 0.12);
 }
 
-.node-status--draining {
+.worker-node-status--draining {
   color: var(--warn-bright-text);
   background: rgb(var(--warn-rgb) / 0.14);
 }
 
-.node-status--offline {
+.worker-node-status--offline {
   color: var(--text-muted);
   background: rgb(var(--neutral-rgb) / 0.12);
 }
 
-.node-card-action {
+.worker-node-card-action {
   min-width: 64px;
 }
 
-.node-card-action--danger {
+.worker-node-card-action--danger {
   border-color: var(--danger);
   color: var(--danger-text-soft);
 }
 
-.node-card-error {
+.worker-node-card-error {
   margin: 0;
 }
 
-.node-stale {
+.worker-node-stale {
   padding: var(--space-3) var(--space-4);
   border-left: 3px solid var(--danger);
   border-radius: var(--radius);
@@ -212,18 +212,18 @@
   font-size: var(--font-size-sm);
 }
 
-.node-stale-list {
+.worker-node-stale-list {
   margin: var(--space-2) 0 0;
   padding-left: 16px;
 }
 
-.node-card-block {
+.worker-node-card-block {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.node-card-block-head {
+.worker-node-card-block-head {
   display: flex;
   justify-content: space-between;
   color: var(--text-muted);
@@ -233,13 +233,13 @@
   letter-spacing: 0.04em;
 }
 
-.node-card-block-total {
+.worker-node-card-block-total {
   font-family: var(--font-mono);
   text-transform: none;
   letter-spacing: 0;
 }
 
-.node-capabilities {
+.worker-node-capabilities {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -248,7 +248,7 @@
   gap: 3px;
 }
 
-.node-capability {
+.worker-node-capability {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 110px 44px;
   align-items: center;
@@ -256,19 +256,19 @@
   font-size: var(--font-size-sm);
 }
 
-.node-capability-name {
+.worker-node-capability-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.node-capability-count {
+.worker-node-capability-count {
   font-family: var(--font-mono);
   text-align: right;
   color: var(--text-muted);
 }
 
-.node-meter {
+.worker-node-meter {
   display: block;
   height: 6px;
   border-radius: 3px;
@@ -276,38 +276,38 @@
   overflow: hidden;
 }
 
-.node-meter-fill {
+.worker-node-meter-fill {
   display: block;
   height: 100%;
   background: var(--accent);
 }
 
-.node-meter--high .node-meter-fill {
+.worker-node-meter--high .worker-node-meter-fill {
   background: var(--warn);
 }
 
-.node-meter--full .node-meter-fill {
+.worker-node-meter--full .worker-node-meter-fill {
   background: var(--danger);
 }
 
-.node-facts {
+.worker-node-facts {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-3) var(--space-4);
   margin: 0;
 }
 
-.node-facts > div {
+.worker-node-facts > div {
   min-width: 0;
 }
 
-.node-facts dt {
+.worker-node-facts dt {
   color: var(--text-faint);
   font-size: var(--font-size-xs);
   font-weight: 600;
 }
 
-.node-facts dd {
+.worker-node-facts dd {
   margin: 0;
   display: flex;
   flex-direction: column;
@@ -315,16 +315,16 @@
   font-size: var(--font-size-sm);
 }
 
-.node-facts dd .node-meter {
+.worker-node-facts dd .worker-node-meter {
   margin-top: 3px;
 }
 
-.node-fact-sub {
+.worker-node-fact-sub {
   color: var(--text-muted);
   font-size: var(--font-size-xs);
 }
 
-.node-labels {
+.worker-node-labels {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -333,7 +333,7 @@
   gap: var(--space-2);
 }
 
-.node-label {
+.worker-node-label {
   padding: 1px 7px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
@@ -342,13 +342,13 @@
   color: var(--text-muted);
 }
 
-.node-leases summary {
+.worker-node-leases summary {
   cursor: pointer;
   color: var(--text-muted);
   font-size: var(--font-size-sm);
 }
 
-.node-leases ul {
+.worker-node-leases ul {
   margin: var(--space-2) 0 0;
   padding-left: 16px;
   font-size: var(--font-size-xs);
@@ -473,15 +473,15 @@
   word-break: break-all;
 }
 
-/* Node card summary: slots in use at a glance, with the rest behind Details. */
+/* Worker node card summary: slots in use at a glance, with the rest behind Details. */
 
-.node-card-summary {
+.worker-node-card-summary {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.node-chip {
+.worker-node-chip {
   align-self: flex-start;
   padding: 2px var(--space-3);
   border-radius: 999px;
@@ -489,23 +489,23 @@
   font-weight: 600;
 }
 
-.node-chip--warn {
+.worker-node-chip--warn {
   color: var(--warn-text);
   background: rgb(var(--warn-rgb) / 0.12);
   border: 1px solid rgb(var(--warn-rgb) / 0.45);
 }
 
-/* Opens the node's instances below the cards */
-.node-card-instances {
+/* Opens the worker node's instances below the cards */
+.worker-node-card-instances {
   align-self: flex-start;
 }
 
-.node-card-instances--open {
+.worker-node-card-instances--open {
   border-color: var(--accent);
 }
 
-/* The components a node runs its jobs with; an out-of-date one gets no jobs there */
-.node-components {
+/* The components a worker node runs its jobs with; an out-of-date one gets no jobs there */
+.worker-node-components {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -514,7 +514,7 @@
   gap: var(--space-2);
 }
 
-.node-component {
+.worker-node-component {
   padding: 1px 7px;
   border: 1px solid var(--border-strong);
   border-radius: 999px;
@@ -522,12 +522,12 @@
   color: var(--text-muted);
 }
 
-.node-component--stale {
+.worker-node-component--stale {
   border-color: rgb(var(--danger-rgb) / 0.6);
   color: var(--danger-text-soft);
   background: rgb(var(--danger-rgb) / 0.1);
 }
 
-.node-component-state {
+.worker-node-component-state {
   font-weight: 600;
 }

@@ -19,7 +19,7 @@ import {
  * row fields, deleting an entry, the outputs of a step, the findings of a step, and the upload
  * of a file as an artifact. The campaign list, verdicts (`step` filter) and run records
  * (`source`) are served by `OperatorClient` and `schemas.ts`; this module reuses that client and its
- * `OperatorApiError`, and adds no second one. A master without Phase 6 answers the older list rows
+ * `OperatorApiError`, and adds no second one. A control node without Phase 6 answers the older list rows
  * (the new fields are optional) and 404 for the new routes.
  */
 
@@ -44,14 +44,14 @@ export async function listHistory(client: OperatorClient, filters: HistoryFilter
   return { items: data, total } satisfies ListPage<(typeof data)[number]>;
 }
 
-/** Deletes a final entry, its rows and references. The master answers 409 unless the campaign is final (stop it first) and 404 when it is gone. */
+/** Deletes a final entry, its rows and references. The control node answers 409 unless the campaign is final (stop it first) and 404 when it is gone. */
 export async function deleteCampaign(client: OperatorClient, campaignId: string): Promise<void> {
   await client.request("DELETE", campaignPath(campaignId), z.null());
 }
 
 // Outputs of a step
 
-/** Where an output's input came from, as the master reports it; both forms may be absent once the source entry was deleted. */
+/** Where an output's input came from, as the control node reports it; both forms may be absent once the source entry was deleted. */
 export const inputSourceSchema = z.object({
   campaign_id: z.string().optional(),
   case_id: z.number().int().optional(),
@@ -62,7 +62,7 @@ export const inputSourceSchema = z.object({
 export const outputVerdictSchema = z.object({
   state: verdictStateSchema,
   failed_rules: z.array(z.string()),
-  /** The earliest failure over all rules, in seconds. This and the two below are missing from an older master. */
+  /** The earliest failure over all rules, in seconds. This and the two below are missing from an older control node. */
   first_failure_time_s: z.number().nullable().optional(),
   /** Per vessel pair (`os - ts1`; `OS_0 - TS_1` in verdicts stored before 2026-11-09), the encounter types in order of first appearance; null for a verdict stored before them. */
   encounters: z.record(z.string(), z.array(z.string())).nullable().optional(),
@@ -140,7 +140,7 @@ export const findingsSchema = z.object({
       first_failure_time_s: z.object({ min: z.number().nullable(), median: z.number().nullable() }),
     })
   ),
-  /** Phase 7: vessel pairs by the first encounter type of each (COLREGSType name); missing from an older master, empty for an unmonitored step. */
+  /** Phase 7: vessel pairs by the first encounter type of each (COLREGSType name); missing from an older control node, empty for an unmonitored step. */
   encounter_types: z.record(z.string(), z.number().int()).optional(),
   fecs: z.array(z.object({ fec_id: z.string(), cases: z.number().int(), passed: z.number().int(), failed: z.number().int() })),
   durations_s: durationSummarySchema,
@@ -148,7 +148,7 @@ export const findingsSchema = z.object({
 
 export type Findings = z.infer<typeof findingsSchema>;
 
-/** The monitor findings (or, unmonitored, the statistics) of one executed step. The design space exploration has none (the master answers 422): never ask for it. */
+/** The monitor findings (or, unmonitored, the statistics) of one executed step. The design space exploration has none (the control node answers 422): never ask for it. */
 export async function getFindings(client: OperatorClient, campaignId: string, step: CampaignStep, signal?: AbortSignal): Promise<Findings> {
   return (await client.request("GET", `${campaignPath(campaignId)}/findings`, findingsSchema, { query: { step }, signal })).data;
 }
@@ -162,7 +162,7 @@ export type UploadKind = (typeof UPLOAD_KINDS)[number];
 /**
  * Stores a file as an artifact and answers its reference. The reference carries an `upload` hold
  * that expires after 24 hours; a campaign created with it takes over the artifact. The size limit
- * of node uploads applies (the master answers 413 beyond it).
+ * of worker node uploads applies (the control node answers 413 beyond it).
  */
 export async function uploadArtifact(
   client: OperatorClient,

@@ -55,7 +55,7 @@ function ScenarioCard({
   );
 }
 
-/** Scenario files for scene generation: each is uploaded to the master and becomes a class of its own with a quota and failure budget. */
+/** Scenario files for scene generation: each is uploaded to the control node and becomes a class of its own with a quota and failure budget. */
 export function ScenarioFiles({ draft, update, reasons, client, now }: StepProps & { client: OperatorClient | null; now: number }) {
   const scenarios = draft.input.scenarios;
   const onUploaded = useCallback(

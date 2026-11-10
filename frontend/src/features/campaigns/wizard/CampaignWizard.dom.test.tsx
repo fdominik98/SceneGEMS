@@ -8,7 +8,7 @@ import { emptyDraft, useWizardStore, WIZARD_STORAGE_KEY } from "./wizardState";
 import { WithQueries } from "./wizardTestHarness";
 
 const mocks = vi.hoisted(() => ({
-  client: { baseUrl: "http://master.test" },
+  client: { baseUrl: "http://control-node.test" },
   createCampaign: vi.fn(),
   validateCampaignConfig: vi.fn(),
 }));
@@ -17,7 +17,7 @@ vi.mock("../useCampaignData", () => {
   const idle = { data: undefined, error: null, isLoading: false, refetch: () => Promise.resolve() };
   return { useOperatorClient: () => mocks.client, useCatalogClasses: () => idle, useCatalogStacks: () => idle, useDesignSpaceDefault: () => idle, retryUnlessUnreachable: () => false };
 });
-// The preset bar reads the master's presets; these tests start from an empty draft
+// The preset bar reads the control node's presets; these tests start from an empty draft
 vi.mock("./useCampaignPresets", () => {
   const idle = { mutate: () => undefined, isPending: false, isError: false, error: null };
   return { useCampaignPresets: () => ({ data: [], isLoading: false, isError: false, error: null }), useSaveCampaignPreset: () => idle, useDeleteCampaignPreset: () => idle };
@@ -169,13 +169,13 @@ describe("creating the campaign", () => {
     expect(useWizardStore.getState().draft.name).toBe("");
   });
 
-  it("does not say the campaign was not created when the master did not answer in time", async () => {
+  it("does not say the campaign was not created when the control node did not answer in time", async () => {
     mocks.validateCampaignConfig.mockResolvedValue(VALID);
     mocks.createCampaign.mockRejectedValue(
-      new OperatorApiError("timeout", "http://master.test did not answer within 60 s; the master may have created it anyway, so check Campaign History before you create it again", "/cluster/campaigns")
+      new OperatorApiError("timeout", "http://control-node.test did not answer within 60 s; the control node may have created it anyway, so check Campaign History before you create it again", "/cluster/campaigns")
     );
     const draft = emptyDraft();
-    draft.name = "slow master";
+    draft.name = "slow control node";
     draft.steps = ["scene_generation"];
     draft.scope = [{ id: "s", classes: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 2, failureBudget: 0 }];
     useWizardStore.setState({ step: "review", draft });
@@ -183,12 +183,12 @@ describe("creating the campaign", () => {
     const create = await screen.findByRole("button", { name: "Create paused" });
     await waitFor(() => expect(create).toBeEnabled());
     await user.click(create);
-    expect(await screen.findByText(/The master did not confirm the campaign/)).toHaveTextContent("check Campaign History before you create it again");
+    expect(await screen.findByText(/The control node did not confirm the campaign/)).toHaveTextContent("check Campaign History before you create it again");
     expect(screen.queryByText(/was not created/)).not.toBeInTheDocument();
     expect(onCreated).not.toHaveBeenCalled();
   });
 
-  it("does not check the master while a later start has no input, and says what is missing", async () => {
+  it("does not check the control node while a later start has no input, and says what is missing", async () => {
     const draft = emptyDraft();
     draft.name = "needs input";
     draft.steps = ["simulation"];

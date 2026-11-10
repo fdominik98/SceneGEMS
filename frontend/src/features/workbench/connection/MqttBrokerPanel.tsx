@@ -5,13 +5,13 @@ import { PageHeader } from "../../../components/PageHeader";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
 import type { ClientToServerMessage } from "../../../domain/simulation/wireTypes";
 import {
-  MASTER_BROKER_PRESET,
+  CONTROL_NODE_BROKER_PRESET,
   mqttConnectionLibrary,
   PRESET_LABELS,
   type MqttConnectionPresetKey,
 } from "./connectionLibrary";
 import { buildConnectMessage, connectionFormIsValid, useConnectionStore } from "./connectionStore";
-import { useMasterStatus } from "../../cluster/useMasterStatus";
+import { useControlNodeStatus } from "../../cluster/useControlNodeStatus";
 import { connectionHints, liveSessionsOffNote } from "./connectionHints";
 import { ReferenceGeofenceMap } from "./ReferenceGeofenceMap";
 
@@ -19,7 +19,7 @@ interface MqttBrokerPanelProps {
   sendMessage: (message: ClientToServerMessage) => void;
 }
 
-const PRESET_ORDER: (MqttConnectionPresetKey | "")[] = ["master_broker", "waraps_tls_broker", ""];
+const PRESET_ORDER: (MqttConnectionPresetKey | "")[] = ["control_node_broker", "waraps_tls_broker", ""];
 
 /**
  * The Connections page: the MQTT broker the workbench's live simulations run over. Simulated
@@ -29,7 +29,7 @@ const PRESET_ORDER: (MqttConnectionPresetKey | "")[] = ["master_broker", "waraps
 export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
   const brokerStatus = usePlaybackStore((s) => s.mqttBrokerStatus);
-  const masterBroker = usePlaybackStore((s) => s.masterBroker);
+  const controlNodeBroker = usePlaybackStore((s) => s.controlNodeBroker);
   const monitorStatus = usePlaybackStore((s) => s.monitorStatus);
 
   const form = useConnectionStore();
@@ -45,14 +45,14 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
     beginConnectionAttempt,
     clearConnectionAttempt,
   } = form;
-  const usesMaster = selectedPreset === MASTER_BROKER_PRESET;
-  const masterStatus = useMasterStatus(useSelectedCluster()?.operatorUrl ?? null);
-  const liveSessionsOff = liveSessionsOffNote(masterStatus.data?.live_sessions);
+  const usesControlNode = selectedPreset === CONTROL_NODE_BROKER_PRESET;
+  const controlNodeStatus = useControlNodeStatus(useSelectedCluster()?.operatorUrl ?? null);
+  const liveSessionsOff = liveSessionsOffNote(controlNodeStatus.data?.live_sessions);
 
   const choosePreset = useCallback(
     (preset: MqttConnectionPresetKey | "") => {
       setSelectedPreset(preset);
-      if (preset !== "" && preset !== MASTER_BROKER_PRESET) {
+      if (preset !== "" && preset !== CONTROL_NODE_BROKER_PRESET) {
         applyConnection(mqttConnectionLibrary[preset]);
       }
     },
@@ -60,9 +60,9 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
   );
 
   const connected = brokerStatus === "connected";
-  const masterMissing = usesMaster && streamStatus === "connected" && masterBroker === null;
-  const canConnect = streamStatus === "connected" && connectionFormIsValid(form) && !masterMissing && liveSessionsOff === null;
-  const target = usesMaster ? (masterBroker ?? "the master broker") : `${form.clientBroker || "no broker"}:${form.port}${form.tlsConnection ? ", TLS" : ""}`;
+  const controlNodeMissing = usesControlNode && streamStatus === "connected" && controlNodeBroker === null;
+  const canConnect = streamStatus === "connected" && connectionFormIsValid(form) && !controlNodeMissing && liveSessionsOff === null;
+  const target = usesControlNode ? (controlNodeBroker ?? "the control node broker") : `${form.clientBroker || "no broker"}:${form.port}${form.tlsConnection ? ", TLS" : ""}`;
 
   const connect = () => {
     setUserDisconnected(false);
@@ -119,7 +119,7 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
           <p className="error">{connectionError}</p>
           <Disclosure id="mqtt-broker:error-hints" variant="link" headingLevel={null} title="What to check" openTitle="Hide the checks" defaultOpen>
             <ul className="meta">
-              {connectionHints(usesMaster, form.clientBroker, form.port, form.tlsConnection).map((hint) => (
+              {connectionHints(usesControlNode, form.clientBroker, form.port, form.tlsConnection).map((hint) => (
                 <li key={hint}>{hint}</li>
               ))}
             </ul>
@@ -138,20 +138,20 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
             ))}
           </select>
         </label>
-        {usesMaster ? (
+        {usesControlNode ? (
           <p className="meta">
-            {masterBroker === null
+            {controlNodeBroker === null
               ? streamStatus === "connected"
-                ? "This server has no master broker. Choose another broker."
-                : "The master names its broker once the server is connected."
-              : `The master's own broker, ${masterBroker}: plain MQTT on the cluster's VPN. A real vessel must reach the master over the VPN to join.`}
+                ? "This server has no control node broker. Choose another broker."
+                : "The control node names its broker once the server is connected."
+              : `The control node's own broker, ${controlNodeBroker}: plain MQTT on the cluster's VPN. A real vessel must reach the control node over the VPN to join.`}
           </p>
         ) : (
           <p className="meta">{target}</p>
         )}
       </section>
 
-      {!usesMaster && (
+      {!usesControlNode && (
         <Disclosure id="mqtt-broker:details" title="Broker address" hint="User, brokers, port, TLS" defaultOpen={selectedPreset === ""} headingLevel={3}>
           <BrokerAddressFields />
         </Disclosure>

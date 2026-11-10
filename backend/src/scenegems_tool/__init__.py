@@ -21,14 +21,14 @@ Present now:
                                 mission_planner/ (specs)
         hosting.py              where a run's layers are: the stack's containers, or the caller's process (tests, calibration)
     cluster/        distributed integration layer
-        protocol/               typed, versioned master-node messages and jobs
-        node/                   instance scopes, launchers, job types and the node daemon
+        protocol/               typed, versioned control node to worker node messages and jobs
+        worker_node/                   instance scopes, launchers, job types and the worker node daemon
         fingerprints/           image build fingerprints: label reader, comparison, images per job type
         release/                the release bundle a deployment tool installs: images, stacks, roles
-        master/                 node registry, scheduler, lease manager and the master's API and process
+        control_node/                 worker node registry, scheduler, lease manager and the control node's API and process
     architecture/   the architecture description: documents built from the specs in code, written to
-                    backend/assets/architecture at master startup and served to the web console's Capabilities page
-    persistence/    the master's Postgres: tables, migrations, node, job, campaign, result and artifact record stores
+                    backend/assets/architecture at control node startup and served to the web console's Capabilities page
+    persistence/    the control node's Postgres: tables, migrations, worker node, job, campaign, result and artifact record stores
     assurance/      campaigns over the functional scenario catalog
         campaign/               config model, YAML, hash and seeds; class catalog; validation
 

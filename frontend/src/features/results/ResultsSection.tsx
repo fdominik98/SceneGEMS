@@ -103,7 +103,7 @@ export function ResultsSection() {
     const unreachable = history.error instanceof OperatorApiError && history.error.unreachable;
     body = (
       <EmptyState
-        title={unreachable ? "The master cannot be reached" : "Campaign History cannot be listed"}
+        title={unreachable ? "The control node cannot be reached" : "Campaign History cannot be listed"}
         tone="error"
         action={
           <button type="button" className="primary-btn accent" onClick={() => void history.refetch()}>
@@ -112,7 +112,7 @@ export function ResultsSection() {
         }
       >
         <p>{describeOperatorError(history.error)}</p>
-        {unreachable && <p>The Cluster section shows how to open the SSH tunnel to the master&apos;s operator API.</p>}
+        {unreachable && <p>The Cluster section shows how to open the SSH tunnel to the control node&apos;s operator API.</p>}
       </EmptyState>
     );
   } else if (history.isPending && effectiveId === null) {

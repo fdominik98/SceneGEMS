@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sampleCampaignSummary, sampleMasterStatus, sampleNode } from "../../test/fixtures/clusterViews";
+import { sampleCampaignSummary, sampleControlNodeStatus, sampleWorkerNode } from "../../test/fixtures/clusterViews";
 import { buildQueryString, createOperatorClient, describeErrorBody, describeOperatorError, LARGE_PAGE_TIMEOUT_MS, OperatorApiError } from "./operatorApi";
 
 const BASE = "http://127.0.0.1:5174";
@@ -34,12 +34,12 @@ afterEach(() => {
 });
 
 describe("operator API client", () => {
-  it("lists nodes with X-Total-Count", async () => {
-    const { client, spy } = clientWith(async () => jsonResponse([sampleNode()], { headers: { "X-Total-Count": "17" } }));
-    const page = await client.listNodes();
+  it("lists worker nodes with X-Total-Count", async () => {
+    const { client, spy } = clientWith(async () => jsonResponse([sampleWorkerNode()], { headers: { "X-Total-Count": "17" } }));
+    const page = await client.listWorkerNodes();
     expect(page.total).toBe(17);
     expect(page.items[0].name).toBe("worker-a");
-    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/nodes`);
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/worker-nodes`);
   });
 
   it("answers a null total without the header", async () => {
@@ -58,26 +58,26 @@ describe("operator API client", () => {
     expect(client.verdictsCsvUrl("c1", { state: "failed" })).toBe(`${BASE}/cluster/campaigns/c1/verdicts?state=failed&format=csv`);
   });
 
-  it("drains and resumes a node with POST", async () => {
+  it("drains and resumes a worker node with POST", async () => {
     const { client, spy } = clientWith(async (url) =>
-      jsonResponse(sampleNode({ status: url.endsWith("/drain") ? "draining" : "online" }))
+      jsonResponse(sampleWorkerNode({ status: url.endsWith("/drain") ? "draining" : "online" }))
     );
-    expect((await client.drainNode("node-a1", "maintenance")).status).toBe("draining");
+    expect((await client.drainWorkerNode("worker-node-a1", "maintenance")).status).toBe("draining");
     const [url, init] = spy.mock.calls[0];
-    expect(url).toBe(`${BASE}/cluster/nodes/node-a1/drain`);
+    expect(url).toBe(`${BASE}/cluster/worker-nodes/worker-node-a1/drain`);
     expect(init?.method).toBe("POST");
     expect(init?.body).toBe(JSON.stringify({ reason: "maintenance" }));
-    expect((await client.resumeNode("node-a1")).status).toBe("online");
+    expect((await client.resumeWorkerNode("worker-node-a1")).status).toBe("online");
     expect(spy.mock.calls[1][1]?.body).toBeUndefined();
   });
 
-  it("removes an offline node with POST and reports a refusal", async () => {
-    const { client, spy } = clientWith(async () => jsonResponse({ removed: "node-a1" }));
-    expect(await client.removeNode("node-a1")).toBe("node-a1");
-    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/nodes/node-a1/remove`);
+  it("removes an offline worker node with POST and reports a refusal", async () => {
+    const { client, spy } = clientWith(async () => jsonResponse({ removed: "worker-node-a1" }));
+    expect(await client.removeWorkerNode("worker-node-a1")).toBe("worker-node-a1");
+    expect(spy.mock.calls[0][0]).toBe(`${BASE}/cluster/worker-nodes/worker-node-a1/remove`);
     expect(spy.mock.calls[0][1]?.method).toBe("POST");
-    const refused = clientWith(async () => jsonResponse({ detail: "node node-a1 is not offline; only an offline node can be removed" }, { status: 409 }));
-    const error = await rejection(refused.client.removeNode("node-a1"));
+    const refused = clientWith(async () => jsonResponse({ detail: "worker node worker-node-a1 is not offline; only an offline worker node can be removed" }, { status: 409 }));
+    const error = await rejection(refused.client.removeWorkerNode("worker-node-a1"));
     expect(error.status).toBe(409);
     expect(describeOperatorError(error)).toContain("not offline");
   });
@@ -94,7 +94,7 @@ describe("operator API client", () => {
   });
 
   it("reads every shape of FastAPI's detail", () => {
-    expect(describeErrorBody(404, "Not Found", { detail: "no node x" })).toEqual({ message: "no node x", reasons: [] });
+    expect(describeErrorBody(404, "Not Found", { detail: "no worker node x" })).toEqual({ message: "no worker node x", reasons: [] });
     expect(describeErrorBody(422, "", { detail: [{ loc: ["query", "limit"], msg: "not an integer" }] })).toEqual({
       message: "the request is not valid",
       reasons: ["query.limit: not an integer"],
@@ -106,7 +106,7 @@ describe("operator API client", () => {
     expect(describeErrorBody(502, "Bad Gateway", "<html>")).toEqual({ message: "HTTP 502 Bad Gateway", reasons: [] });
   });
 
-  it("reports an unreachable master", async () => {
+  it("reports an unreachable control node", async () => {
     const { client } = clientWith(async () => {
       throw new TypeError("Failed to fetch");
     });
@@ -184,7 +184,7 @@ describe("operator API client", () => {
       if (init?.signal?.aborted) {
         throw new DOMException("aborted", "AbortError");
       }
-      return jsonResponse(sampleMasterStatus);
+      return jsonResponse(sampleControlNodeStatus);
     });
     const controller = new AbortController();
     controller.abort();
@@ -206,10 +206,10 @@ describe("operator API client", () => {
   });
 
   it("refuses an answer that does not match the schema", async () => {
-    const { client } = clientWith(async () => jsonResponse({ ...sampleMasterStatus, connected_nodes: "all" }));
+    const { client } = clientWith(async () => jsonResponse({ ...sampleControlNodeStatus, connected_worker_nodes: "all" }));
     const error = await rejection(client.getStatus());
     expect(error.kind).toBe("schema");
-    expect(error.reasons[0]).toContain("connected_nodes");
+    expect(error.reasons[0]).toContain("connected_worker_nodes");
   });
 
   it("builds artifact links", () => {

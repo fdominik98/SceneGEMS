@@ -7,7 +7,7 @@ import { createOperatorClient, OperatorApiError, type OperatorClient } from "../
 
 /** The operator client and catalog queries of the Campaigns section (the wizard); entries are followed in Campaign History. */
 
-/** Retries a failed query unless the master is unreachable or refused it (a 4xx). */
+/** Retries a failed query unless the control node is unreachable or refused it (a 4xx). */
 export const retryUnlessUnreachable = (failureCount: number, error: unknown) => !(error instanceof OperatorApiError && (error.unreachable || (error.status !== null && error.status < 500))) && failureCount < 2;
 
 /** The operator client of the selected cluster, or null without one. */
@@ -40,7 +40,7 @@ export function useCatalogStacks() {
   });
 }
 
-/** The master's default design space (specification and scope); null from a master that has none (404). */
+/** The control node's default design space (specification and scope); null from a control node that has none (404). */
 export function useDesignSpaceDefault() {
   const client = useOperatorClient();
   return useQuery({

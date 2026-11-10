@@ -133,8 +133,11 @@ def _emit_result(
     try:
         trajectories, iter_number = planner.plan_trajectory()
         valid = trajectories is not None and len(trajectories) > 1
+        # The planner returns its path also when the repair could not clear every COLREGS
+        # failure. That path is the best one found, like a partial one: valid, not complete.
+        complete = valid and planner.first_failed_step is None
         payload = _trajectory_payload(factory(trajectories, iter_number), _current_monitored_trajectory(planner, include_monitor_results))
-        result_queue.put((task, payload, valid, valid, None))
+        result_queue.put((task, payload, valid, complete, None))
         return
     except Exception as exc:
         error = str(exc)
@@ -190,13 +193,17 @@ def run_trajectory_generation_worker(
 
     include_monitor_results = params.monitor_results_enabled
 
-    def _observer(trajectories: Trajectories, monitored: MonitoredTrajectory, iteration: int) -> None:
+    def _observer(trajectories: Trajectories, monitored: MonitoredTrajectory, iteration: int) -> bool:
+        """Publish a preview, at most one per interval. False for a dropped one, so the planner can offer it again."""
         nonlocal last_preview_mono
         now = time.monotonic()
         if now - last_preview_mono < _MIN_PREVIEW_INTERVAL_SEC:
-            return
-        last_preview_mono = now
+            return False
         preview_queue.put((task, _trajectory_payload(factory(trajectories, iteration), monitored if include_monitor_results else None)))
+        # Timed from the end of the preview: building one for a long path can take longer than
+        # the interval, and timed from its start every seed step then published a preview.
+        last_preview_mono = time.monotonic()
+        return True
 
     planner = _build_planner(task, initial_scene, other_trajectories, colregs_constants, _observer, _termination_signal)
     _emit_result(result_queue, task, planner, factory)

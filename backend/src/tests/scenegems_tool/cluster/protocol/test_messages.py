@@ -13,8 +13,8 @@ from scenegems_tool.cluster.protocol.messages import (
     Observe,
     Welcome,
 )
-from scenegems_tool.cluster.protocol.node_description import SlotOffer
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
+from scenegems_tool.cluster.protocol.worker_node_description import SlotOffer
 
 
 def test_frames_carry_the_protocol_version():
@@ -44,8 +44,8 @@ def test_a_slot_offer_needs_a_slot():
 
 def test_hello_lists_slots_and_components(resources):
     hello = Hello(
-        node_id="n1",
-        node_name="lab-1",
+        worker_node_id="n1",
+        worker_node_name="lab-1",
         software_revision="4ac7ef2",
         slots=[SlotOffer(job_type=JobType.SIMULATION, slots=4)],
         components=["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"],
@@ -54,13 +54,15 @@ def test_hello_lists_slots_and_components(resources):
     assert hello.slots[0].slots == 4 and hello.components[2] == "simulation_layer/kinematic"
     assert hello.running_lease_ids == []
     with pytest.raises(ValidationError, match="components"):
-        Hello(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[], resources=resources)
+        Hello(worker_node_id="n1", worker_node_name="lab-1", software_revision="4ac7ef2", slots=[], resources=resources)
     with pytest.raises(ValidationError, match="capabilities"):
-        Hello(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[], components=[], capabilities=[], resources=resources)
+        Hello(worker_node_id="n1", worker_node_name="lab-1", software_revision="4ac7ef2", slots=[], components=[], capabilities=[], resources=resources)
 
 
 def test_hello_names_the_machine_optionally(resources):
-    base = dict(node_id="n1", node_name="lab-1", software_revision="4ac7ef2", slots=[SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1)], components=["scene_generation"], resources=resources)
+    base = dict(
+        worker_node_id="n1", worker_node_name="lab-1", software_revision="4ac7ef2", slots=[SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1)], components=["scene_generation"], resources=resources
+    )
     assert Hello(**base).machine is None
     hello = Hello(**base, machine="lab-pc-3")
     assert Hello.model_validate_json(hello.model_dump_json()).machine == "lab-pc-3"
@@ -73,7 +75,7 @@ def test_progress_is_a_fraction():
 
 def test_welcome_needs_positive_intervals():
     with pytest.raises(ValidationError):
-        Welcome(master_id="m1", heartbeat_interval_s=0.0, lease_timeout_s=30.0)
+        Welcome(control_node_id="m1", heartbeat_interval_s=0.0, lease_timeout_s=30.0)
 
 
 def test_observe_defaults_to_ten_times_real_time_within_bounds():

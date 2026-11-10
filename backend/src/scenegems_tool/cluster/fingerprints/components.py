@@ -1,6 +1,6 @@
-"""The component catalog: what a node may offer, and the images each component runs in.
+"""The component catalog: what a worker node may offer, and the images each component runs in.
 
-A node's capability is a set of components (SCENEGEMS_NODE_COMPONENTS). The vessel stack
+A worker node's capability is a set of components (SCENEGEMS_WORKER_NODE_COMPONENTS). The vessel stack
 components are the campaign layers of the vessel stack matrix, named as LayerRef names them
 (asv_software/replay, control_layer/ardupilot, simulation_layer/gazebo, ...); the subsystem
 components are design_space_exploration, scene_generation, trajectory_generation, monitoring and calibration.
@@ -9,14 +9,14 @@ A job requires components (JobRequirements.components): a simulation every layer
 vessel's stack, any other job type its subsystem component (JOB_TYPE_COMPONENTS). The images of
 the required components are the job's required images, so the release lists the images per
 component (cluster/release/roles.py), the deployment tool installs the images of the components
-it is given per node, and the master judges a node out of date per component.
+it is given per worker node, and the control node judges a worker node out of date per component.
 
 A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image):
 every layer runs in a container of its own. An ASV software adds those of the adapters that run it on the
 runners' stacks, and a simulation layer adds the scenario execution image the simulation runner runs in. The
 simulation job's runners and the vessel stacks each runs are declared here too (RUNNER_STACKS), so
 the Capabilities page can name the runner of a stack without loading the job modules. The registry
-is read on first use, so importing this module (the master does at start) loads neither it nor numpy.
+is read on first use, so importing this module (the control node does at start) loads neither it nor numpy.
 """
 
 from enum import Enum
@@ -87,7 +87,7 @@ _ORDER = {component: index for index, component in enumerate(COMPONENTS)}
 
 
 class SimulationRunner(str, Enum):
-    """The runners of the simulation job (cluster/node/jobs/simulation_job.py), the value of its payload's runner."""
+    """The runners of the simulation job (cluster/worker_node/jobs/simulation_job.py), the value of its payload's runner."""
 
     KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, the runner stepping the kinematic simulator's container
     ARDUPILOT = "ardupilot"  # replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
@@ -189,7 +189,7 @@ def component_images() -> Dict[ComponentId, Tuple[str, ...]]:
 
 
 def images_of(components: Collection[ComponentId]) -> Set[str]:
-    """The images a node or a job needs for these components; components the catalog does not list add none."""
+    """The images a worker node or a job needs for these components; components the catalog does not list add none."""
     catalog = component_images()
     return {image for component in components for image in catalog.get(component, ())}
 

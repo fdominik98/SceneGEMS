@@ -35,7 +35,7 @@ beforeEach(() => {
 });
 
 describe("sameStoredInput", () => {
-  it("compares inputs on the master by their artifact", () => {
+  it("compares inputs on the control node by their artifact", () => {
     expect(sameStoredInput(historyInput("a"), { ...historyInput("a"), label: "other name" })).toBe(true);
     expect(sameStoredInput(historyInput("a"), historyInput("b"))).toBe(false);
   });
@@ -103,7 +103,7 @@ describe("simulationInputToRestore", () => {
 });
 
 describe("storedTrajectoryContent", () => {
-  const client = { artifactUrl: (sha: string) => `http://master/cluster/artifacts/${sha}` };
+  const client = { artifactUrl: (sha: string) => `http://control-node/cluster/artifacts/${sha}` };
   const respond = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
   it("reads the trajectories of a planned trajectory document", async () => {
@@ -117,7 +117,7 @@ describe("storedTrajectoryContent", () => {
     expect(await storedTrajectoryContent(client, { sha256: "s" }, { fetch: respond({ best_scene: [] }) })).toBeNull();
   });
 
-  it("rejects with the master's 404 when the artifact was deleted", async () => {
+  it("rejects with the control node's 404 when the artifact was deleted", async () => {
     await expect(storedTrajectoryContent(client, { sha256: "x" }, { fetch: respond({}, 404) })).rejects.toMatchObject({ status: 404 });
   });
 });

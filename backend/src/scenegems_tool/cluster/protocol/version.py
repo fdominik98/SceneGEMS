@@ -1,6 +1,6 @@
-"""Version of the master-node protocol.
+"""Version of the control node to worker node protocol.
 
-Master and node must speak the same version. Every frame carries it, and a frame of
+Control node and worker node must speak the same version. Every frame carries it, and a frame of
 another version is rejected before its body is read, so a version change can reshape
 any message without producing confusing validation errors on the other side.
 
@@ -8,24 +8,27 @@ Version 2 (Phase 4): payloads and results may hold artifact references (artifact
 generation payloads take a seed, trajectory results say whether the plan is complete, the
 kinematic simulation takes a live monitor, and calibration.deviation is a job type.
 
-Version 3 (Phase 5): Hello may name the node's machine, and running simulations are observed
-live (Observe from the master, ObservationFrames from the node).
+Version 3 (Phase 5): Hello may name the worker node's machine, and running simulations are observed
+live (Observe from the control node, ObservationFrames from the worker node).
 
-Version 4: no pairing, credentials or TLS. A node names itself in its Hello (its node id is its
-node name) and in the node id header of the artifact routes; master and nodes trust the VPN.
+Version 4: no pairing, credentials or TLS. A worker node names itself in its Hello (its worker node id is its
+worker node name) and in the worker node id header of the artifact routes; control node and worker nodes trust the VPN.
 
 Version 5: simulation.ardupilot is split into simulation.ardupilot_sim and simulation.gazebo, so a
-node offers SITL's own physics and Gazebo as separate capabilities.
+worker node offers SITL's own physics and Gazebo as separate capabilities.
 
-Version 6: a node's capability is a set of components (vessel stack layers and subsystems). Hello
+Version 6: a worker node's capability is a set of components (vessel stack layers and subsystems). Hello
 carries slots per job type and components; job requirements carry the components a job needs. The
 three simulation job types are one, simulation, whose payload names its runner (kinematic, ardupilot).
 
 Version 7: design_space_exploration is a job type (the Refinery model generator in a container per job), and a
 result field that holds a list (ArtifactField.many) is stored as one artifact per item.
+Version 8: the master is the control node and a node is a worker node. The fields follow: control_node_id
+(Hello, Welcome), worker_node_id, allowed_worker_nodes; the control socket is /cluster/worker-node/control and
+the artifact routes read the X-Worker-Node-Id header.
 """
 
-PROTOCOL_VERSION = 7
+PROTOCOL_VERSION = 8
 
 
 class ProtocolVersionMismatch(ValueError):
@@ -34,7 +37,7 @@ class ProtocolVersionMismatch(ValueError):
     def __init__(self, received: object, expected: int = PROTOCOL_VERSION) -> None:
         self.received = received
         self.expected = expected
-        super().__init__(f"Incompatible cluster protocol version: received {received!r}, this side speaks {expected}. Update the master and every node to the same SceneGEMS revision.")
+        super().__init__(f"Incompatible cluster protocol version: received {received!r}, this side speaks {expected}. Update the control node and every worker node to the same SceneGEMS revision.")
 
 
 def ensure_compatible(received: object) -> None:

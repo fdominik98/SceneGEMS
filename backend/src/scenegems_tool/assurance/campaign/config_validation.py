@@ -34,7 +34,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, exploration_class_spec, item_class_spec, scenario_class_spec
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
-from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import ClassSpec
 from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
@@ -250,7 +250,7 @@ def validate_campaign_config(
 ) -> ValidatedCampaign:
     """Checks the config against the catalog, the artifact store and the resolver; raises CampaignConfigRejected with every reason.
 
-    artifact_exists and read_artifact reach the master's artifact store; a config with
+    artifact_exists and read_artifact reach the control node's artifact store; a config with
     functional scenarios or items given is rejected without them.
     """
     catalog = catalog or ClassCatalog.default()

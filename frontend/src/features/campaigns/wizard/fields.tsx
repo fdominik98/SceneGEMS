@@ -13,7 +13,7 @@ export function FieldIssues({ reasons, showField = false }: { reasons: readonly 
     <ul className="wiz-issues" role="alert">
       {reasons.map((reason, index) => (
         <li key={`${reason.raw}-${index}`} className={`wiz-issue wiz-issue--${reason.source}`}>
-          {reason.source === "server" && <span className="wiz-issue-source">master</span>}
+          {reason.source === "server" && <span className="wiz-issue-source">control node</span>}
           {showField && reason.field ? `${reason.field}: ` : ""}
           {reason.message}
         </li>

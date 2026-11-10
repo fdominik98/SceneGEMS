@@ -1,6 +1,6 @@
 """Concurrent claimers, sweepers and submitters against one database, in threads.
 
-Every thread calls the store through its own sessions and connections, as the master's
+Every thread calls the store through its own sessions and connections, as the control node's
 workers will; a barrier starts them together so their transactions overlap.
 """
 
@@ -39,17 +39,17 @@ def _count_events(session_factory, kind: JobEventKind) -> int:
         return session.execute(select(func.count()).select_from(JobEventRow).where(JobEventRow.kind == kind)).scalar_one()
 
 
-def test_concurrent_claimers_never_share_a_job(job_store, node_store, session_factory):
-    job_count, node_count, workers = 300, 8, 24
-    for index in range(node_count):
-        node_store.register(make_hello(f"node-{index}", slots={SCENE: job_count}))
+def test_concurrent_claimers_never_share_a_job(job_store, worker_node_store, session_factory):
+    job_count, worker_node_count, workers = 300, 8, 24
+    for index in range(worker_node_count):
+        worker_node_store.register(make_hello(f"worker node-{index}", slots={SCENE: job_count}))
     for index in range(job_count):
         job_store.submit(make_submission(priority=index % 3))
 
     def claim_until_empty(worker: int) -> List:
-        node_id = f"node-{worker % node_count}"
+        worker_node_id = f"worker node-{worker % worker_node_count}"
         leases = []
-        while (lease := job_store.claim_next(node_id, LEASE_S)) is not None:
+        while (lease := job_store.claim_next(worker_node_id, LEASE_S)) is not None:
             leases.append(lease)
         return leases
 
@@ -60,28 +60,28 @@ def test_concurrent_claimers_never_share_a_job(job_store, node_store, session_fa
     assert len({lease.lease_id for lease in leases}) == job_count
     assert job_store.list_jobs(JobState.QUEUED) == []
     assert _count_events(session_factory, JobEventKind.LEASED) == job_count
-    # every job was leased once, to the node its lease names
+    # every job was leased once, to the worker node its lease names
     stored = {job.job_id: job for job in job_store.list_jobs(limit=job_count)}
-    assert all(stored[lease.job.job_id].lease_owner == lease.node_id and stored[lease.job.job_id].attempt == 1 for lease in leases)
+    assert all(stored[lease.job.job_id].lease_owner == lease.worker_node_id and stored[lease.job.job_id].attempt == 1 for lease in leases)
 
 
-def test_concurrent_claimers_for_one_node_respect_its_slots(job_store, node_store):
+def test_concurrent_claimers_for_one_worker_node_respect_its_slots(job_store, worker_node_store):
     workers, slots = 16, 3
-    node_store.register(make_hello("node-a", slots={SCENE: slots}))
+    worker_node_store.register(make_hello("worker-node-a", slots={SCENE: slots}))
     for _ in range(workers):
         job_store.submit(make_submission())
 
-    leases = _run_together(workers, lambda worker: [lease for lease in [job_store.claim_next("node-a", LEASE_S)] if lease is not None])
+    leases = _run_together(workers, lambda worker: [lease for lease in [job_store.claim_next("worker-node-a", LEASE_S)] if lease is not None])
     assert len(leases) == slots
-    assert len(job_store.active_leases("node-a")) == slots
+    assert len(job_store.active_leases("worker-node-a")) == slots
 
 
-def test_concurrent_sweepers_expire_each_lease_once(job_store, node_store, clock):
+def test_concurrent_sweepers_expire_each_lease_once(job_store, worker_node_store, clock):
     job_count, workers = 120, 8
-    node_store.register(make_hello("node-a", slots={SCENE: job_count}))
+    worker_node_store.register(make_hello("worker-node-a", slots={SCENE: job_count}))
     for _ in range(job_count):
         job_store.submit(make_submission(max_attempts=3))
-        job_store.claim_next("node-a", LEASE_S)
+        job_store.claim_next("worker-node-a", LEASE_S)
     clock.advance(LEASE_S)
 
     expired = _run_together(workers, lambda worker: job_store.expire_leases(limit=7) + job_store.expire_leases())

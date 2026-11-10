@@ -29,7 +29,7 @@ export function ViewerHeader({
       <div className="instances-viewer-title">
         <h3>{instance.label}</h3>
         <span className="meta">
-          {instance.nodeId} / <code>{instance.instance}</code>
+          {instance.workerNodeId} / <code>{instance.instance}</code>
         </span>
       </div>
       <div className="instances-viewer-chips">

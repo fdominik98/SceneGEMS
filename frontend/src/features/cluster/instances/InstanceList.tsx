@@ -30,7 +30,7 @@ function InstanceRow({ instance, selected, onSelect }: { instance: ObservableIns
   );
 }
 
-/** A node's instances: pool instances from its capabilities and slots, then the jobs it holds. */
+/** A worker node's instances: pool instances from its capabilities and slots, then the jobs it holds. */
 export function InstanceList({ instances, jobsLoading, jobsError, selectedTopic, onSelect }: InstanceListProps) {
   const pools = instances.filter((entry) => entry.origin === "pool");
   const jobs = instances.filter((entry) => entry.origin === "job");
@@ -38,7 +38,7 @@ export function InstanceList({ instances, jobsLoading, jobsError, selectedTopic,
     <nav className="instances-picker" aria-label="Instances">
       <h4 className="instances-subhead">Pools</h4>
       {pools.length === 0 ? (
-        <p className="meta">This node offers no scene generation or trajectory search slots.</p>
+        <p className="meta">This worker node offers no scene generation or trajectory search slots.</p>
       ) : (
         <ul className="instances-item-list">
           {pools.map((entry) => (
@@ -50,7 +50,7 @@ export function InstanceList({ instances, jobsLoading, jobsError, selectedTopic,
       {jobsError ? (
         <p className="instances-notice instances-notice--warn">{jobsError}</p>
       ) : jobs.length === 0 ? (
-        <p className="meta">{jobsLoading ? "Loading the jobs." : "No job is leased or running on this node."}</p>
+        <p className="meta">{jobsLoading ? "Loading the jobs." : "No job is leased or running on this worker node."}</p>
       ) : (
         <ul className="instances-item-list">
           {jobs.map((entry) => (

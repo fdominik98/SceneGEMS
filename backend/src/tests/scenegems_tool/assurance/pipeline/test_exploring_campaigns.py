@@ -6,7 +6,7 @@ import pytest
 
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.case_machine import NO_LATER_STEP
-from scenegems_tool.assurance.pipeline.pipeline_engine import NodeAvailability
+from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import ArtifactHolderKind, CampaignActualState, CampaignClassState, CampaignEventKind, CampaignKind, CampaignOrigin, CaseState, PipelineStage
 from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID
@@ -185,7 +185,7 @@ def test_an_exploration_that_fails_ends_the_campaign_without_fecs(make_harness):
 
 
 def test_an_exploration_whose_fecs_were_not_stored_as_artifacts_fails_its_case(make_harness):
-    harness = make_harness(references=False)  # a node without artifact transport returns the texts inline
+    harness = make_harness(references=False)  # a worker node without artifact transport returns the texts inline
     campaign = _create(harness, exploring_dict(FULL_CHAIN))
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     (exploration,) = _cases(harness, campaign)
@@ -217,18 +217,18 @@ def test_a_dropped_case_of_an_explored_fec_is_replaced_within_the_configured_fai
     assert [case.state for case in _cases(harness, campaign, "explored/00000")] == [CaseState.DROPPED, CaseState.COMPLETE]
 
 
-def test_an_exploring_campaign_stalls_while_no_node_explores(make_harness):
+def test_an_exploring_campaign_stalls_while_no_worker_node_explores(make_harness):
     harness = make_harness(references=True)
     slots = {job_type: 1 for job_type in JobType if job_type != JobType.DESIGN_SPACE_EXPLORATION}
-    other = harness.node_store.register(_hello("no-explorer", slots))
-    harness.nodes = [NodeAvailability(other)]
+    other = harness.worker_node_store.register(_hello("no-explorer", slots))
+    harness.worker_nodes = [WorkerNodeAvailability(other)]
     campaign = _create(harness, exploring_dict(FULL_CHAIN))
     harness.settle()
     harness.clock.advance(31)
     harness.settle()
     stalled = harness.campaign(campaign.campaign_id)
     assert stalled.actual_state == CampaignActualState.STALLED and "design_space_exploration with design_space_exploration" in stalled.state_reason
-    harness.nodes = [NodeAvailability(harness.executor.node)]
+    harness.worker_nodes = [WorkerNodeAvailability(harness.executor.worker_node)]
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
 
 
@@ -247,8 +247,8 @@ def test_a_restarted_engine_carries_on_with_the_explored_fecs(make_harness):
         assert case.input_artifact == _classes(harness, campaign)[class_id].content_hash
 
 
-def _hello(node_id: str, slots):
+def _hello(worker_node_id: str, slots):
     from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED
     from tests.scenegems_tool.persistence.stores.builders import make_hello
 
-    return make_hello(node_id, slots=slots, fingerprints=EXPECTED)
+    return make_hello(worker_node_id, slots=slots, fingerprints=EXPECTED)

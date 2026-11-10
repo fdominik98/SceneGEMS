@@ -5,17 +5,17 @@ title: Campaign wizard
 
 # Campaign wizard
 
-The Campaigns section defines and starts campaigns. A campaign runs a consecutive part of the chain design space exploration, scene generation, trajectory generation and simulation, with an optional monitor after each step. The wizard walks through the choices and checks the finished config on the master before it creates the campaign. Your entries are kept in this browser until the campaign is created or you discard them.
+The Campaigns section defines and starts campaigns. A campaign runs a consecutive part of the chain design space exploration, scene generation, trajectory generation and simulation, with an optional monitor after each step. The wizard walks through the choices and checks the finished config on the control node before it creates the campaign. Your entries are kept in this browser until the campaign is created or you discard them.
 
 ## Presets
 
-Above the pages, **Start from a preset** opens the catalog of the campaign presets of the active cluster's master: the ones its image ships for campaign runs that come up again and again (`backend/assets/campaign_presets/`), and the ones saved on the cluster. Each card says what the preset selects and runs: its vessel and obstacle counts, its FECs and cases, its simulation stacks and its steps.
+Above the pages, **Start from a preset** opens the catalog of the campaign presets of the active cluster's control node: the ones its image ships for campaign runs that come up again and again (`backend/assets/campaign_presets/`), and the ones saved on the cluster. Each card says what the preset selects and runs: its vessel and obstacle counts, its FECs and cases, its simulation stacks and its steps.
 
 Find a preset with the search box, or with the filters:
 
 | Filter | What it looks at |
 |--------|------------------|
-| Source | Shipped with the master, or saved on this cluster |
+| Source | Shipped with the control node, or saved on this cluster |
 | Vessels | The vessel counts of the FECs in the preset's scope. **Set by the input** is a preset without a scope: the input you pick in the wizard decides |
 | Obstacles | The obstacle counts of those FECs, or **Set by the input** |
 | Simulation stack | The stacks of the preset's runs |
@@ -23,7 +23,7 @@ Find a preset with the search box, or with the filters:
 
 Ticking several values of a filter shows the presets with any of them (Steps and the stack catalog's Supports need all of them), and different filters narrow together. The number beside a value says how many presets you would see with it. A filter that would not tell the presets apart is left out. **Group by** sorts the cards by source, vessels, simulation stack or steps; a preset with several values, such as two stacks, shows under each of them. The filters and the grouping are kept in this browser.
 
-**Load into the wizard** replaces the draft with the preset (the wizard asks first when the draft has entries) and opens the Steps page, so you only adjust what differs. A card warns when a run of the preset needs a stack this master cannot run.
+**Load into the wizard** replaces the draft with the preset (the wizard asks first when the draft has entries) and opens the Steps page, so you only adjust what differs. A card warns when a run of the preset needs a stack this control node cannot run.
 
 | Shipped preset | What it runs |
 |----------------|--------------|
@@ -39,15 +39,15 @@ Ticking several values of a filter shows the presets with any of them (Steps and
 | Trajectory planning check without simulation | Scene and trajectory generation with the planned trajectories judged |
 | Simulate saved trajectories: kinematic and ArduPilot SITL | Simulation only; pick the trajectories on the Input page |
 | USV Navigation on straight trajectories with low TCPA | One case per two-vessel FEC without obstacles, low TCPA enforced and straight trajectories, USV Navigation steering the own ship, with the post hoc monitor after every step |
-| Design space exploration: every three-vessel FEC, one case each | Explores `TS = 2, StaticObstacle = 0` with the master's default specification, then scene generation, trajectory generation and a kinematic replay with the post hoc monitor, one case of each FEC found |
+| Design space exploration: every three-vessel FEC, one case each | Explores `TS = 2, StaticObstacle = 0` with the control node's default specification, then scene generation, trajectory generation and a kinematic replay with the post hoc monitor, one case of each FEC found |
 
-**Save this draft as a preset** stores the current draft on the master under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
+**Save this draft as a preset** stores the current draft on the control node under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
 ## Campaign map
 
 Above the pages, the campaign map draws the campaign as a graph of what it does, as set so far. The chain runs left to right: the input, each step the campaign runs, one box per simulation run inside the simulation frame (every case goes through each run), and the review. Arrows show what each part hands on. A step the campaign does not run is a dashed box marked "Not run". Under the chain, a row holds what applies to the whole campaign: Steps, Domain, Resources and Policy.
 
-Each box says in a few words what its page holds (the FECs and cases of the input, a step's monitor, a run's stack and repeats, whether the master accepted the config), so you see what the earlier pages set while you fill in the next one. A box opens its page; a run's box opens the Simulation page at that run. The boxes of the page shown are highlighted, and a red count marks the problems a page has. In a window too narrow for the whole map, it moves to the page you are on and shades the side that goes on; drag it sideways to see the rest.
+Each box says in a few words what its page holds (the FECs and cases of the input, a step's monitor, a run's stack and repeats, whether the control node accepted the config), so you see what the earlier pages set while you fill in the next one. A box opens its page; a run's box opens the Simulation page at that run. The boxes of the page shown are highlighted, and a red count marks the problems a page has. In a window too narrow for the whole map, it moves to the page you are on and shades the side that goes on; drag it sideways to see the rest.
 
 **List** shows the pages as a numbered list in place of the map, and **Map** brings the map back. The choice is kept in this browser. The footer says which page of how many you are on.
 
@@ -70,9 +70,9 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay or USV Navigation on the own ship), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
 | Policy | always | Retention, frames, the base seed and stop conditions |
-| Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the master's check of it and the buttons that create the campaign |
+| Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the control node's check of it and the buttons that create the campaign |
 
-A run's **Stack** field opens the catalog of the master's stacks, with the same search, filters and grouping as the presets. It filters by simulation layer, control layer, own ship software, repeatability and what a run on the stack supports (wind, waves, early stop). A stack the master cannot run stays listed with the reason, but cannot be picked. Picking another stack clears the values that belonged to the old one; picking the same stack again changes nothing.
+A run's **Stack** field opens the catalog of the control node's stacks, with the same search, filters and grouping as the presets. It filters by simulation layer, control layer, own ship software, repeatability and what a run on the stack supports (wind, waves, early stop). A stack the control node cannot run stays listed with the reason, but cannot be picked. Picking another stack clears the values that belonged to the old one; picking the same stack again changes nothing.
 
 ## Steps
 
@@ -93,7 +93,7 @@ Changing the first step removes chosen input items that do not fit it, such as s
 
 This page is shown when the design space exploration is a step. It holds:
 
-- **Metamodel and well-formedness constraints**: the specification editor, with **Load the default**, **Open file...** and an export, as on the [Design Space Exploration](./design-space-exploration) page. An empty editor starts from the master's default, and a preset that leaves the specification out explores that default.
+- **Metamodel and well-formedness constraints**: the specification editor, with **Load the default**, **Open file...** and an export, as on the [Design Space Exploration](./design-space-exploration) page. An empty editor starts from the control node's default, and a preset that leaves the specification out explores that default. Its **Text** and **Graph** switch shows the specification as a [metamodel graph](./design-space-exploration#text-or-graph); the choice is the same as on the workbench page.
 - **Scope**: how many objects of each class a model has, such as `TS = 2, StaticObstacle = 0`, checked as you type.
 - **Max FECs**: the search stops after this many; empty finds every FEC. **Timeout**: how long the search may run; the FECs found until then are kept.
 - **Cases per explored FEC** and **Failure budget per explored FEC**: shown when a step follows the exploration. They are the quota and the failure budget that every FEC the exploration finds gets (see [Quota and failure budget](#quota-and-failure-budget)). Without a later step the page says that the campaign runs the exploration alone, so its FECs need no cases.
@@ -110,10 +110,10 @@ The Input page depends on the first step. A campaign that starts with the design
 
 ### Scene generation
 
-A functional equivalence class (FEC) is one functional scenario: a scenario of the master's catalog, or a file you add.
+A functional equivalence class (FEC) is one functional scenario: a scenario of the control node's catalog, or a file you add.
 
-- **Catalog FECs**: pick folders, patterns or FECs from the master's catalog, each scope entry with a quota and a failure budget.
-- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the master when you pick it and becomes a FEC of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
+- **Catalog FECs**: pick folders, patterns or FECs from the control node's catalog, each scope entry with a quota and a failure budget.
+- **Functional scenario files**: add your own functional scenario files (`.problem` files). Each file is uploaded to the control node when you pick it and becomes a FEC of its own named `scenario/<name>`, with a quota and a failure budget. Give each file a name without a slash; names must differ.
 
 Use either or both. Scope entries without FECs are ignored while there are scenario files.
 
@@ -134,16 +134,16 @@ The base seed on the Policy page is where the case seeds start: case k of every 
 A campaign that starts with trajectory generation takes **scenes**. One that starts with simulation takes **trajectories**. Each item is one case. Take them from Campaign History, from files, or both.
 
 - **From Campaign History**: choose an entry, then a step of it (the scenes of scene generation, or the planned trajectories of trajectory generation and the recorded trajectories of a simulation run), then add outputs one by one, the outputs shown, or every output of the step (the first 1000 when there are more). Outputs the step dropped or found invalid cannot be added. Each item keeps a link to its source, so Campaign History shows what the campaign was made from.
-- **From files**: scene and trajectory files must be JSON. Each file is uploaded to the master when you pick it and keeps the file name as its source.
+- **From files**: scene and trajectory files must be JSON. Each file is uploaded to the control node when you pick it and keeps the file name as its source.
 
 Items have a name you can change. Remove items from the chosen list at any time.
 
 ### Uploads expire
 
-The master keeps an uploaded file for 24 hours unless a campaign uses it. A campaign created with the file keeps it for as long as the campaign exists. The wizard shows how long each upload has left and reports an upload that expired, because a config that refers to a deleted file is refused. Upload the file again in that case. Outputs taken from Campaign History are kept by the master with their entry and do not expire.
+The control node keeps an uploaded file for 24 hours unless a campaign uses it. A campaign created with the file keeps it for as long as the campaign exists. The wizard shows how long each upload has left and reports an upload that expired, because a config that refers to a deleted file is refused. Upload the file again in that case. Outputs taken from Campaign History are kept by the control node with their entry and do not expire.
 
 ## Review and create
 
-The review step checks the config on the master as soon as it is complete and has stopped changing. Reasons the master gives are listed with the page and the entry they belong to, such as a scenario file or an input item that no longer exists on the master. **Create paused** stores the campaign without starting it. **Create and start** also needs a usable machine for every job the steps need; the Resources page lists what is missing. The campaign appears in Campaign History with the kind campaign and the origin wizard.
+The review step checks the config on the control node as soon as it is complete and has stopped changing. Reasons the control node gives are listed with the page and the entry they belong to, such as a scenario file or an input item that no longer exists on the control node. **Create paused** stores the campaign without starting it. **Create and start** also needs a usable machine for every job the steps need; the Resources page lists what is missing. The campaign appears in Campaign History with the kind campaign and the origin wizard.
 
 A draft saved by an earlier version of the wizard opens as a campaign with all three steps, on the Input page in place of the former Scope page.

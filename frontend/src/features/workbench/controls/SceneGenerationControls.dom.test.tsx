@@ -7,7 +7,7 @@ import type { JobTypeResources } from "../cluster/workbenchResources";
 import { useEntrySeedStore } from "../pages/entrySeedStore";
 import { SceneGenerationControls } from "./SceneGenerationControls";
 
-const RESOURCES: JobTypeResources = { jobType: "scene_generation", components: ["scene_generation"], nodes: 2, slots: 4, freeSlots: 3, blocker: null };
+const RESOURCES: JobTypeResources = { jobType: "scene_generation", components: ["scene_generation"], workerNodes: 2, slots: 4, freeSlots: 3, blocker: null };
 
 const VALID_SCENE: GeneratedSceneData = {
   scene: sampleFrames[0]!,
@@ -19,8 +19,7 @@ function renderControls(overrides: Partial<Parameters<typeof SceneGenerationCont
   const props: Parameters<typeof SceneGenerationControls>[0] = {
     resources: RESOURCES,
     busy: false,
-    batch: false,
-    batchCount: 0,
+    selectedFecs: [],
     scenarioLabel: "2vessel/fec2",
     hasScenario: true,
     loadingLabel: null,
@@ -67,10 +66,10 @@ describe("SceneGenerationControls", () => {
   });
 
   it("lists what blocks the run elsewhere", () => {
-    renderControls({ domainProblem: "The cluster's domain configuration is incomplete.", resources: { ...RESOURCES, blocker: "No usable node generates scenes." } });
+    renderControls({ domainProblem: "The cluster's domain configuration is incomplete.", resources: { ...RESOURCES, blocker: "No usable worker node generates scenes." } });
     const notices = screen.getByRole("list", { name: "Before it can run" });
     expect(notices).toHaveTextContent("The cluster's domain configuration is incomplete.");
-    expect(notices).toHaveTextContent("No usable node generates scenes.");
+    expect(notices).toHaveTextContent("No usable worker node generates scenes.");
     expect(screen.getByRole("button", { name: "Generate scene" })).toBeDisabled();
   });
 
@@ -87,16 +86,42 @@ describe("SceneGenerationControls", () => {
     expect(props.onShowSpecification).toHaveBeenCalledTimes(1);
   });
 
-  it("waits for the FECs of a batch", () => {
-    renderControls({ batch: true, batchCount: 0 });
-    expect(screen.getByRole("button", { name: "Generate 0 scenes" })).toBeDisabled();
-    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch no FECs selected");
+  it("generates the editor's text when no FEC is selected", async () => {
+    const user = userEvent.setup();
+    const props = renderControls({ selectedFecs: [], scenarioLabel: "head_on.problem" });
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("FEC head_on.problem the editor's text in the specification pane");
+    await user.click(screen.getByRole("button", { name: "Generate scene" }));
+    expect(props.onGenerate).toHaveBeenCalledTimes(1);
   });
 
-  it("counts the FECs of a batch", () => {
-    renderControls({ batch: true, batchCount: 3 });
-    expect(screen.getByRole("button", { name: "Generate 3 scenes" })).toBeEnabled();
-    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch 3 FECs selected");
+  it("generates one scene of the one FEC selected, whatever the editor holds", async () => {
+    const user = userEvent.setup();
+    const props = renderControls({ selectedFecs: ["3vessel_0obstacle_scenarios/fec5"], hasScenario: false, scenarioLabel: null });
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("FEC 3vessel_0obstacle_scenarios/fec5 selected in the specification pane");
+    const generate = screen.getByRole("button", { name: "Generate scene" });
+    expect(generate).toBeEnabled();
+    await user.click(generate);
+    expect(props.onGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits while the one FEC selected is read, and says so", () => {
+    renderControls({ selectedFecs: ["3vessel_0obstacle_scenarios/fec5"], loadingLabel: "3vessel_0obstacle_scenarios/fec5" });
+    const generate = screen.getByRole("button", { name: "Generate scene" });
+    expect(generate).toBeDisabled();
+    expect(generate).toHaveAttribute("title", "Waiting for 3vessel_0obstacle_scenarios/fec5 to load");
+  });
+
+  it("generates a batch of the FECs selected, a scene each", async () => {
+    const user = userEvent.setup();
+    const props = renderControls({ selectedFecs: ["a/fec1", "a/fec2", "b/fec1"], hasScenario: false });
+    expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("Batch 3 FECs selected in the specification pane, a scene of each");
+    await user.click(screen.getByRole("button", { name: "Generate 3 scenes" }));
+    expect(props.onGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("says in the disabled run button's tooltip what blocks the run elsewhere", () => {
+    renderControls({ selectedFecs: ["a/fec1", "a/fec2"], resources: { ...RESOURCES, blocker: "No usable worker node generates scenes." } });
+    expect(screen.getByRole("button", { name: "Generate 2 scenes" })).toHaveAttribute("title", "No usable worker node generates scenes.");
   });
 
   it("has the generation settings on one row", async () => {

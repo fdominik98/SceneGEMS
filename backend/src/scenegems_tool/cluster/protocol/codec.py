@@ -9,12 +9,12 @@ from typing import Any, Dict, Union
 
 from pydantic import TypeAdapter, ValidationError
 
-from scenegems_tool.cluster.protocol.messages import MasterMessage, NodeMessage
+from scenegems_tool.cluster.protocol.messages import ControlNodeMessage, WorkerNodeMessage
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
 from scenegems_tool.cluster.protocol.version import ensure_compatible
 
-_NODE_MESSAGES: TypeAdapter = TypeAdapter(NodeMessage)
-_MASTER_MESSAGES: TypeAdapter = TypeAdapter(MasterMessage)
+_WORKER_NODE_MESSAGES: TypeAdapter = TypeAdapter(WorkerNodeMessage)
+_CONTROL_NODE_MESSAGES: TypeAdapter = TypeAdapter(ControlNodeMessage)
 
 
 class MalformedFrame(ValueError):
@@ -25,14 +25,14 @@ def encode(frame: ProtocolFrame) -> str:
     return frame.model_dump_json()
 
 
-def decode_node_message(text: Union[str, bytes]) -> NodeMessage:
-    """Decode a frame the master received from a node."""
-    return _decode(text, _NODE_MESSAGES)
+def decode_worker_node_message(text: Union[str, bytes]) -> WorkerNodeMessage:
+    """Decode a frame the control node received from a worker node."""
+    return _decode(text, _WORKER_NODE_MESSAGES)
 
 
-def decode_master_message(text: Union[str, bytes]) -> MasterMessage:
-    """Decode a frame the node received from the master."""
-    return _decode(text, _MASTER_MESSAGES)
+def decode_control_node_message(text: Union[str, bytes]) -> ControlNodeMessage:
+    """Decode a frame the worker node received from the control node."""
+    return _decode(text, _CONTROL_NODE_MESSAGES)
 
 
 def _decode(text: Union[str, bytes], adapter: TypeAdapter) -> Any:

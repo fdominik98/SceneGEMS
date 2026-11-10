@@ -107,7 +107,7 @@ class TestRunRecorder:
         monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
         assert websocket_app.run_recorder() is None
 
-    async def test_each_connection_gets_the_recorder_the_master_set(self, monkeypatch):
+    async def test_each_connection_gets_the_recorder_the_control_node_set(self, monkeypatch):
         monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
         recorder = object()
         websocket_app.set_run_recorder(recorder)

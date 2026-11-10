@@ -81,7 +81,7 @@ describe("presetFacts", () => {
     expect(facts.blocked).toBe(false);
   });
 
-  it("flags a run on a stack the master does not offer or cannot run", () => {
+  it("flags a run on a stack the control node does not offer or cannot run", () => {
     expect(factsOf("two").blocked).toBe(false);
     const unknown = preset("unknown", WHOLE_CHAIN, [{ patterns: ["*"], quota: 1, failure_budget: 1 }], [{ simulation_layer: "somewhere", mode: "replay" }]);
     expect(presetFacts(unknown, catalog, classes)).toMatchObject({ blocked: true, stacks: [] });
@@ -146,7 +146,7 @@ describe("the preset catalog", () => {
     };
     expect(PRESET_CATALOG.groupings[0].key).toBe("source");
     expect(groupingOf("source")).toEqual([
-      ["Shipped with the master", ["two", "compare", "sitl", "scenes", "saved_trajectories"]],
+      ["Shipped with the control node", ["two", "compare", "sitl", "scenes", "saved_trajectories"]],
       ["Saved on this cluster", ["mine"]],
     ]);
     expect(groupingOf("vessels").at(-1)).toEqual(["Set by the input", ["saved_trajectories"]]);

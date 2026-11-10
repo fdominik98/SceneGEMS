@@ -43,8 +43,8 @@ def test_a_new_engine_continues_where_the_old_one_stopped(harness):
         harness.settle()
         harness.executor.run(limit=3)
     harness.settle()
-    harness.executor.claim_all(limit=2)  # two jobs are leased when the master goes down
-    # The master is down for longer than a lease: the leases expire and the jobs return to the queue
+    harness.executor.claim_all(limit=2)  # two jobs are leased when the control node goes down
+    # The control node is down for longer than a lease: the leases expire and the jobs return to the queue
     harness.clock.advance(LEASE_S + 1)
     assert len(harness.job_store.expire_leases()) == 2
     harness.replace_engine()
@@ -60,7 +60,7 @@ def test_a_crash_inside_a_tick_loses_nothing(harness, monkeypatch):
     position = harness.stores.pipeline.read_cursor()
 
     def crash(*arguments, **options):
-        raise RuntimeError("the master died before the commit")
+        raise RuntimeError("the control node died before the commit")
 
     monkeypatch.setattr(harness.stores.pipeline, "advance_cursor", crash)
     with pytest.raises(RuntimeError):
@@ -116,7 +116,7 @@ def test_a_crash_between_submission_and_link_resubmits_the_same_jobs(harness, mo
     harness.executor.run()  # the scene results arrive
 
     def crash_before_linking(*arguments):
-        raise RuntimeError("the master died before linking")
+        raise RuntimeError("the control node died before linking")
 
     monkeypatch.setattr(harness.engine, "_link", crash_before_linking)
     with pytest.raises(RuntimeError):
@@ -169,7 +169,7 @@ def test_a_second_engine_on_the_same_database_stands_by_and_takes_over(harness):
     assert report.standby and not second.stopped and harness.stores.pipeline.read_cursor() == position  # a standby writes nothing
     harness.settle()  # the first engine leads on and moves the cursor
     assert harness.tick(second).standby
-    harness.crash()  # the first master dies
+    harness.crash()  # the first control node dies
     assert not harness.tick(second).standby
     harness.drive(campaign.campaign_id, engine=second)
     _assert_finished_with_quota(harness, campaign, 4)
@@ -188,7 +188,7 @@ def test_a_stopped_engine_gives_the_lock_to_the_next(harness):
 
 
 def test_a_cancelled_engine_run_gives_the_lock_up(harness):
-    # The control plane stops its timers by cancelling them; the next master must be able to lead
+    # The control plane stops its timers by cancelling them; the next control node must be able to lead
     async def run_then_cancel():
         task = asyncio.create_task(harness.engine.run(0.01))
         for _ in range(200):

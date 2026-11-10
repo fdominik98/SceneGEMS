@@ -109,7 +109,7 @@ describe("buildCampaignConfig steps", () => {
     expect(Object.keys(buildCampaignConfig(draft, catalog).domain as object)).toEqual(["colregs_constants", "vessel_types", "obstacle_types"]);
   });
 
-  it("closes a gap in the steps, as the master needs them consecutive", () => {
+  it("closes a gap in the steps, as the control node needs them consecutive", () => {
     const draft = baseDraft();
     draft.steps = ["simulation", "scene_generation"];
     expect(buildCampaignConfig(draft, catalog).steps).toEqual(["scene_generation", "trajectory_generation", "simulation"]);
@@ -141,7 +141,7 @@ describe("buildCampaignConfig steps", () => {
 });
 
 describe("buildCampaignConfig input", () => {
-  it("writes scenario files after the scope, with their reference as the master stored it", () => {
+  it("writes scenario files after the scope, with their reference as the control node stored it", () => {
     const draft = baseDraft();
     draft.steps = ["scene_generation"];
     draft.input.scenarios = [
@@ -170,7 +170,7 @@ describe("buildCampaignConfig input", () => {
     expect(buildCampaignConfig(draft, catalog).scope).toEqual([{ fecs: ["a/b"], quota: 2, failure_budget: 0 }]);
   });
 
-  it("keeps an empty scope entry when there are no scenario files, so the master and the draft check report it", () => {
+  it("keeps an empty scope entry when there are no scenario files, so the control node and the draft check report it", () => {
     const draft = baseDraft();
     draft.steps = ["scene_generation"];
     draft.scope = [{ id: "empty", classes: [], patterns: [], quota: 1, failureBudget: 0 }];

@@ -38,7 +38,7 @@ describe("scene generation entries", () => {
     expect(campaignInputSchema.safeParse(config.input).success).toBe(true);
   });
 
-  it("leaves the monitor out when no node monitors", () => {
+  it("leaves the monitor out when no worker node monitors", () => {
     const config = sceneEntryConfig({ name: "n", scenarios: [{ name: "s", ref: scenarioRef }], domain, timeoutSeconds: 60, enforceLowTcpa: false, seed: 1, monitor: "empty" });
     expect(config.scene_generation).toEqual({ monitor: "empty" });
   });
@@ -174,7 +174,7 @@ describe("entry seeds, names and YAML", () => {
     expect(seeds.size).toBeGreaterThan(1);
   });
 
-  it("serializes to YAML the master reads back as the same config", () => {
+  it("serializes to YAML the control node reads back as the same config", () => {
     const config = sceneEntryConfig({ name: "Scene: x", scenarios: [{ name: "s", ref: scenarioRef }], domain: { ...domain, colregsConstraintsContent: "a: 1\nb: [2, 3]\n" }, timeoutSeconds: 60, enforceLowTcpa: false, seed: 1 });
     expect(parse(toConfigYaml(config))).toEqual(JSON.parse(JSON.stringify(config)));
   });

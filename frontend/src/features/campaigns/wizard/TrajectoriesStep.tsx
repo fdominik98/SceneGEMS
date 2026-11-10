@@ -4,7 +4,7 @@ import { Field, FieldIssues, MonitorChoice, ParameterInput } from "./fields";
 import { reasonsOfEntry, splitByField } from "./reasons";
 import type { CatalogState, StepProps } from "./stepTypes";
 
-/** Trajectory generation: the generator and its parameters, built from the generators the master offers, and the monitor after the step. */
+/** Trajectory generation: the generator and its parameters, built from the generators the control node offers, and the monitor after the step. */
 export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps & { catalog: CatalogState }) {
   const generators = catalog.stacks?.trajectory_generators ?? [];
   const generator = generators.find((entry) => entry.id === draft.trajectories.generator);
@@ -15,12 +15,12 @@ export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps 
   const issuesOfParameter = (key: string) => [...(byField.get(key) ?? []), ...(byField.get("params")?.filter((reason) => reason.field === `params.${key}`) ?? [])];
 
   if (catalog.stacksLoading) {
-    return <p className="meta" role="status">Loading the generators the master offers...</p>;
+    return <p className="meta" role="status">Loading the generators the control node offers...</p>;
   }
   if (catalog.stacksError || !catalog.stacks) {
     return (
       <div className="wiz-error" role="alert">
-        <p>The master's generators did not load: {describeOperatorError(catalog.stacksError)}</p>
+        <p>The control node's generators did not load: {describeOperatorError(catalog.stacksError)}</p>
         <button type="button" onClick={catalog.retry}>
           Try again
         </button>
@@ -53,7 +53,7 @@ export function TrajectoriesStep({ draft, update, reasons, catalog }: StepProps 
             </span>
           </label>
         ))}
-        {!generator && <p className="error">The master offers no generator {draft.trajectories.generator}. Choose one of the above.</p>}
+        {!generator && <p className="error">The control node offers no generator {draft.trajectories.generator}. Choose one of the above.</p>}
         <FieldIssues reasons={byField.get("generator")} />
       </fieldset>
 

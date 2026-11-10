@@ -1,7 +1,7 @@
 """The release file, release.json: the revision, its images and the roles of the cluster.
 
-The deployment tool reads the images and roles to install a machine; the master reads the
-image fingerprints to know which nodes are up to date (cluster/master/scheduling). The file
+The deployment tool reads the images and roles to install a machine; the control node reads the
+image fingerprints to know which worker nodes are up to date (cluster/control_node/scheduling). The file
 is JSON with a format number, so a reader of another format fails with a clear message.
 """
 

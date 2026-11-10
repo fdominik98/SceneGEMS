@@ -106,7 +106,7 @@ describe("the monitor result summary", () => {
     expect(summary.pairs[0].encounters[0]).toEqual({ type: "CROSSING_FROM_PORT", label: "Crossing from Port", roles: null });
   });
 
-  it("reads a verdict of an older master: the state and the failed rules, with their relation kept", () => {
+  it("reads a verdict of an older control node: the state and the failed rules, with their relation kept", () => {
     const summary = monitorSummary(outputVerdictSchema.parse({ state: "failed", failed_rules: ["os - ts1: rule_13", "rule_15"] }));
     expect(summary.headline).toBe("2 rules failed");
     expect(summary.pairs).toEqual([]);
@@ -167,7 +167,7 @@ describe("entries", () => {
     expect(canDelete(row(sampleWorkbenchRow()))).toBe(true);
     expect(canDelete(row(sampleRunningWorkbenchRow()))).toBe(false);
     expect(deleteRefusal(new OperatorApiError("http", "conflict", "/cluster/campaigns/wb1", 409))).toMatch(/Stop it first/);
-    expect(deleteRefusal(new OperatorApiError("http", "gone", "/cluster/campaigns/wb1", 404))).toMatch(/not on this master/);
+    expect(deleteRefusal(new OperatorApiError("http", "gone", "/cluster/campaigns/wb1", 404))).toMatch(/not on this control node/);
   });
 });
 
@@ -220,8 +220,8 @@ describe("outputs of a step", () => {
     expect(isOutputRunning(output(sampleDroppedOutput()))).toBe(false);
   });
 
-  it("flags validity and partial paths, and counts runs from 1", () => {
-    expect(outputFlags(output(sampleTrajectoryOutput())).map((flag) => flag.label)).toEqual(["valid", "partial"]);
+  it("flags validity and incomplete paths, and counts runs from 1", () => {
+    expect(outputFlags(output(sampleTrajectoryOutput())).map((flag) => flag.label)).toEqual(["valid", "incomplete"]);
     expect(outputFlags(output(sampleSimulationOutput())).map((flag) => flag.label)).toEqual(["complete"]);
     expect(runLabel(output(sampleSimulationOutput()))).toBe("run 1, repeat 1");
     expect(runLabel(output(sampleSceneOutput()))).toBeNull();

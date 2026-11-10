@@ -2204,89 +2204,6 @@ pre {
   font-size: var(--font-size-xs);
 }
 
-.batch-preset-runner {
-  margin: 8px 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: rgb(var(--panel-rgb) / 0.5);
-  flex-shrink: 0;
-  max-height: min(480px, 52vh);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.batch-preset-runner > summary {
-  padding: 8px 10px;
-  margin: 0;
-  flex-shrink: 0;
-}
-
-.batch-preset-runner-body {
-  padding: 0 10px 10px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.batch-preset-toolbar {
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.batch-preset-list {
-  flex-shrink: 0;
-  max-height: 140px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  margin: 8px 0;
-  -webkit-overflow-scrolling: touch;
-}
-
-.batch-preset-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: var(--font-size-sm);
-  padding: 2px 0;
-}
-
-.batch-preset-item-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  cursor: pointer;
-}
-
-.batch-preset-item-label span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.batch-preset-refinery-icon-btn {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--hit-target);
-  min-height: var(--hit-target);
-  padding: 0;
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  cursor: pointer;
-  opacity: 0.7;
-}
-
-.batch-preset-refinery-icon-btn:hover {
-  opacity: 1;
-  border-color: var(--accent);
-}
-
 .batch-preset-results-scroll {
   flex: 1;
   min-height: 0;
@@ -2352,7 +2269,7 @@ pre {
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-/* Scene generation: Single / Batch tab switcher. */
+/* Tab switchers of the right panes and the domain configuration. */
 .scene-gen-tabs {
   display: flex;
   gap: 0;
@@ -2388,27 +2305,6 @@ pre {
 .scene-gen-tab:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* Batch runner rendered as a full tab (not a collapsible card). */
-.batch-preset-runner--tab {
-  flex: 1;
-  min-height: 0;
-  max-height: none;
-  margin: 0;
-  border: none;
-  background: transparent;
-  overflow: hidden;
-}
-
-.batch-preset-runner--tab > .batch-preset-runner-body {
-  padding: 0;
-  flex: 1;
-}
-
-.batch-preset-runner--tab .batch-preset-results-scroll {
-  flex: 1;
-  max-height: none;
 }
 
 .preset-filters input[type="search"] {

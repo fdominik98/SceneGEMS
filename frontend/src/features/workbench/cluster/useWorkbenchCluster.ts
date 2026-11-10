@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
 import { getLiveChannel } from "../../../domain/cluster/liveChannels";
-import { useNodesFeed, useNodesStore } from "../../../domain/cluster/nodesStore";
+import { useWorkerNodesFeed, useWorkerNodesStore } from "../../../domain/cluster/workerNodesStore";
 import { createOperatorClient } from "../../../domain/cluster/operatorApi";
 import { jobTypeResources, type JobTypeResources } from "./workbenchResources";
 import type { WorkbenchCluster } from "./workbenchJobs";
@@ -15,15 +15,15 @@ export interface WorkbenchClusterView {
   resources: (jobType: string, components?: readonly string[]) => JobTypeResources;
 }
 
-/** The active cluster the workbench runs its jobs on, with its nodes followed while mounted. */
+/** The active cluster the workbench runs its jobs on, with its worker nodes followed while mounted. */
 export function useWorkbenchCluster(): WorkbenchClusterView {
   const selected = useSelectedCluster();
   const operatorUrl = selected?.operatorUrl ?? null;
-  useNodesFeed(operatorUrl);
-  const feedUrl = useNodesStore((s) => s.operatorUrl);
-  const nodes = useNodesStore((s) => s.nodes);
-  const loaded = useNodesStore((s) => s.loaded);
-  const unreachable = useNodesStore((s) => s.unreachable);
+  useWorkerNodesFeed(operatorUrl);
+  const feedUrl = useWorkerNodesStore((s) => s.operatorUrl);
+  const workerNodes = useWorkerNodesStore((s) => s.workerNodes);
+  const loaded = useWorkerNodesStore((s) => s.loaded);
+  const unreachable = useWorkerNodesStore((s) => s.unreachable);
 
   const cluster = useMemo<WorkbenchCluster | null>(
     () => (operatorUrl ? { client: createOperatorClient(operatorUrl), channel: getLiveChannel(operatorUrl) } : null),
@@ -31,15 +31,15 @@ export function useWorkbenchCluster(): WorkbenchClusterView {
   );
   const resources = useCallback(
     (jobType: string, components?: readonly string[]) => {
-      // Nodes of another cluster, from a feed that has not switched yet, count as unknown.
+      // Worker nodes of another cluster, from a feed that has not switched yet, count as unknown.
       const current = feedUrl === operatorUrl;
       return jobTypeResources(
-        { operatorUrl, nodes: current ? nodes : [], loaded: current && loaded, unreachable: current && unreachable },
+        { operatorUrl, workerNodes: current ? workerNodes : [], loaded: current && loaded, unreachable: current && unreachable },
         jobType,
         components
       );
     },
-    [feedUrl, loaded, nodes, operatorUrl, unreachable]
+    [feedUrl, loaded, workerNodes, operatorUrl, unreachable]
   );
   return { operatorUrl, cluster, resources };
 }

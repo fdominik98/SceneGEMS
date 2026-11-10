@@ -6,7 +6,7 @@ import { configureMessage, subscribeMessage } from "./liveProtocol";
 import { instanceReducer } from "./liveTopics";
 import { LiveTopicWatcher } from "./liveTopicWatcher";
 
-const TOPIC = "instance:node-a1/job-job-1-1";
+const TOPIC = "instance:worker-node-a1/job-job-1-1";
 
 function makeChannel() {
   return new LiveChannel("ws://m/cluster/live", { createSocket: MockWebSocket.factory, reconnectBaseMs: 100, random: () => 0.5 });
@@ -67,7 +67,7 @@ describe("speed messages", () => {
 
   it("ignores configure for a topic nobody subscribes to", () => {
     const channel = makeChannel();
-    channel.subscribe("nodes", () => {});
+    channel.subscribe("worker_nodes", () => {});
     const socket = MockWebSocket.latest();
     socket.open();
     socket.clearSent();
@@ -89,7 +89,7 @@ describe("speed messages", () => {
     off();
   });
 
-  it("shows the pace the master reports: from the snapshot, then from a status update", () => {
+  it("shows the pace the control node reports: from the snapshot, then from a status update", () => {
     const state = instanceReducer.snapshot(jobInstanceSnapshot("job-1", 1, { observed_speed: 10 }));
     expect(state.info.observed_speed).toBe(10);
     const unreported = instanceReducer.snapshot({ ...jobInstanceSnapshot(), observed_speed: undefined });

@@ -7,7 +7,7 @@ import { useExplorationStore } from "../designSpace/explorationStore";
 import { useExplorationPageStore } from "../pages/pageStore";
 import { WorkbenchJobDriver, type ClusterAccess } from "./workbenchJobDriver";
 
-/** The design space exploration as a workbench entry, against a master that explores two FECs. */
+/** The design space exploration as a workbench entry, against a control node that explores two FECs. */
 
 const FEC_SHA = "f".repeat(64);
 const RESULT = {
@@ -71,7 +71,7 @@ function outputRow(index: number) {
   };
 }
 
-function fakeMaster(jobState = "succeeded") {
+function fakeControlNode(jobState = "succeeded") {
   const created: Record<string, unknown>[] = [];
   const requests: string[] = [];
   let caseGets = 0;
@@ -123,16 +123,16 @@ function fakeMaster(jobState = "succeeded") {
     getJob: async (jobId: string) => jobView(jobId, jobState, jobState === "succeeded" ? RESULT : null),
     cancelJob: async () => ({}),
     controlCampaign: vi.fn(async () => ({})),
-    artifactUrl: (sha256: string) => `http://master/cluster/artifacts/${sha256}`,
+    artifactUrl: (sha256: string) => `http://control-node/cluster/artifacts/${sha256}`,
   };
   return { client: client as unknown as OperatorClient & { controlCampaign: ReturnType<typeof vi.fn> }, created, requests };
 }
 
 function access(client: OperatorClient, blocker: string | null = null): ClusterAccess {
-  return { cluster: { client, channel: null }, resources: (jobType, components = []) => ({ jobType, components: [...components], nodes: blocker ? 0 : 1, slots: 1, freeSlots: 1, blocker }) };
+  return { cluster: { client, channel: null }, resources: (jobType, components = []) => ({ jobType, components: [...components], workerNodes: blocker ? 0 : 1, slots: 1, freeSlots: 1, blocker }) };
 }
 
-const REQUEST = { specification: "class OS.\n", label: "the master's default", scope: "TS = 2, StaticObstacle = 0", maxFecs: 100, timeoutSeconds: 600 };
+const REQUEST = { specification: "class OS.\n", label: "the control node's default", scope: "TS = 2, StaticObstacle = 0", maxFecs: 100, timeoutSeconds: 600 };
 
 describe("the design space exploration on the workbench", () => {
   beforeEach(() => {
@@ -145,15 +145,15 @@ describe("the design space exploration on the workbench", () => {
   });
 
   it("explores as a one-step workbench entry and lists the explored FECs", async () => {
-    const master = fakeMaster();
-    const driver = new WorkbenchJobDriver(() => access(master.client));
+    const controlNode = fakeControlNode();
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client));
     driver.pollMs = 1;
     driver.jobPollMs = 1;
     await driver.exploreDesignSpace(REQUEST);
 
-    expect(master.created).toHaveLength(1);
-    expect(master.created[0]).toMatchObject({ kind: "workbench", origin: "design_space_exploration", start: true });
-    const config = parse(master.created[0].config as string);
+    expect(controlNode.created).toHaveLength(1);
+    expect(controlNode.created[0]).toMatchObject({ kind: "workbench", origin: "design_space_exploration", start: true });
+    const config = parse(controlNode.created[0].config as string);
     expect(config).toMatchObject({
       format: 3,
       steps: ["design_space_exploration"],
@@ -162,9 +162,9 @@ describe("the design space exploration on the workbench", () => {
     });
     expect(config.input).toBeUndefined();
     expect(config.scope).toBeUndefined();
-    // The findings of the step are never asked for: the master answers 422
-    expect(master.requests.some((request) => request.includes("/findings"))).toBe(false);
-    expect(master.requests).toContain("GET /cluster/campaigns/wb1/outputs?step=design_space_exploration");
+    // The findings of the step are never asked for: the control node answers 422
+    expect(controlNode.requests.some((request) => request.includes("/findings"))).toBe(false);
+    expect(controlNode.requests).toContain("GET /cluster/campaigns/wb1/outputs?step=design_space_exploration");
 
     const shown = useExplorationStore.getState();
     expect(shown.running).toBeNull();
@@ -178,16 +178,16 @@ describe("the design space exploration on the workbench", () => {
   });
 
   it("does not create an entry when no machine offers the exploration, and says why", async () => {
-    const master = fakeMaster();
-    const driver = new WorkbenchJobDriver(() => access(master.client, "No machine of the active cluster offers design space exploration."));
+    const controlNode = fakeControlNode();
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client, "No machine of the active cluster offers design space exploration."));
     await driver.exploreDesignSpace(REQUEST);
-    expect(master.created).toEqual([]);
+    expect(controlNode.created).toEqual([]);
     expect(useExplorationPageStore.getState()).toMatchObject({ status: "failed", message: "No machine of the active cluster offers design space exploration." });
   });
 
   it("says why a failed exploration failed", async () => {
-    const master = fakeMaster("failed");
-    const driver = new WorkbenchJobDriver(() => access(master.client));
+    const controlNode = fakeControlNode("failed");
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client));
     driver.pollMs = 1;
     driver.jobPollMs = 1;
     await driver.exploreDesignSpace(REQUEST);
@@ -197,22 +197,22 @@ describe("the design space exploration on the workbench", () => {
   });
 
   it("opens an entry of Campaign History with the FEC it names selected", async () => {
-    const master = fakeMaster();
-    const driver = new WorkbenchJobDriver(() => access(master.client));
+    const controlNode = fakeControlNode();
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client));
     await driver.openTarget({ page: "designSpaceExploration", campaignId: "wb1", caseId: 1, step: "design_space_exploration", caseIndex: 0, fecId: "explored/00001" });
     expect(useExplorationStore.getState().selectedFecId).toBe("explored/00001");
     expect(useExplorationPageStore.getState().loaded?.fecId).toBeUndefined();
   });
 
   it("stops the entry it made on the user's Stop", async () => {
-    const master = fakeMaster();
-    const driver = new WorkbenchJobDriver(() => access(master.client));
+    const controlNode = fakeControlNode();
+    const driver = new WorkbenchJobDriver(() => access(controlNode.client));
     driver.pollMs = 1000;
     const run = driver.exploreDesignSpace(REQUEST);
-    await vi.waitFor(() => expect(master.created).toHaveLength(1));
+    await vi.waitFor(() => expect(controlNode.created).toHaveLength(1));
     driver.stopExploration(true);
     await run;
-    expect(master.client.controlCampaign).toHaveBeenCalledWith("wb1", "stop");
+    expect(controlNode.client.controlCampaign).toHaveBeenCalledWith("wb1", "stop");
     expect(useExplorationPageStore.getState().status).toBe("idle");
     expect(useExplorationStore.getState().running).toBeNull();
   });

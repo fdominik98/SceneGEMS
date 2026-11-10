@@ -22,7 +22,8 @@ def test_mismatch_message_names_both_versions_and_the_fix():
     assert "same SceneGEMS revision" in message
 
 
-def test_the_design_space_exploration_job_is_version_7():
+def test_the_worker_node_terminology_is_version_8():
     # Version 6: slots and components in the Hello, components in the requirements, one simulation job type.
-    # Version 7: the design_space_exploration job type, and list result fields stored as one artifact per item; an older node is refused by its version
-    assert PROTOCOL_VERSION == 7
+    # Version 7: the design_space_exploration job type, and list result fields stored as one artifact per item; an older worker node is refused by its version
+    # Version 8: control node and worker node in the field names, the control socket path and the artifact header
+    assert PROTOCOL_VERSION == 8

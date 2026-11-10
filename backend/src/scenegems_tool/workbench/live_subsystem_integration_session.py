@@ -2,8 +2,8 @@ import asyncio
 import time
 from typing import Callable, Optional
 
-from scenegems_tool.cluster.node.instance_scope import InstanceScope
-from scenegems_tool.cluster.node.launchers.per_job.simulation_session_stack import new_live_session_scope
+from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_stack import new_live_session_scope
 from scenegems_tool.gateway.protocol import ServerMessage
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenegems_client import MqttSceneGEMSClient

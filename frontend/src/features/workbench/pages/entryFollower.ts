@@ -3,7 +3,7 @@ import { OperatorApiError, type OperatorClient } from "../../../domain/cluster/o
 import type { CampaignActualState, CaseDetail, CaseJob, CaseView, PipelineStage } from "../../../domain/cluster/schemas";
 
 /**
- * Following a workbench entry on the master: the engine creates the entry's case, and the case's
+ * Following a workbench entry on the control node: the engine creates the entry's case, and the case's
  * jobs one stage after the other (`generate_scene`, `monitor_scene`, ...). The workbench polls
  * the case and, once a stage has its job, follows that job like one it submitted itself.
  */

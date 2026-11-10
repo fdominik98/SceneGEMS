@@ -1,9 +1,9 @@
-"""A fake fleet for the pipeline engine: it claims queued jobs from the real JobStore, as a node does, and reports scripted results.
+"""A fake fleet for the pipeline engine: it claims queued jobs from the real JobStore, as a worker node does, and reports scripted results.
 
 Results have P4.2's shapes. With references the declared result fields are stored in an
-in-memory artifact store and replaced by their references, as the node runner does with the
+in-memory artifact store and replaced by their references, as the worker node runner does with the
 artifact store (P4.3), and each upload is recorded with the job's reference to it, as the
-master's artifact route does. The executor resolves the references of every payload it
+control node's artifact route does. The executor resolves the references of every payload it
 runs, so a payload that names an artifact nobody stored fails the test.
 
 What a job returns is scripted per case (class id, case index) with a CaseScript: an invalid
@@ -11,7 +11,7 @@ scene, a partial or missing trajectory, a failed verdict (of every monitor, or o
 trajectory or run monitor alone), a failure of some stage (retryable or not), the FECs a
 design space exploration finds and why it stopped. Unscripted
 cases pass every stage; an unscripted exploration finds three FECs. A case of an input class gets its input from the artifact store: the
-scenario's text, an item's scene or trajectories, as the node resolves them.
+scenario's text, an item's scene or trajectories, as the worker node resolves them.
 """
 
 import hashlib
@@ -20,12 +20,12 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
 from scenegems_tool.cluster.fingerprints.components import DESIGN_SPACE_EXPLORATION_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
-from scenegems_tool.cluster.node.jobs.job_types import artifact_input_fields, artifact_result_fields
 from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference, json_pointer, resolve_references, store_results
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
+from scenegems_tool.cluster.worker_node.jobs.job_types import artifact_input_fields, artifact_result_fields
 from scenegems_tool.persistence.schema import ArtifactHolderKind, PipelineStage
-from scenegems_tool.persistence.stores import AssuranceStores, JobStore, Lease, NodeStore
+from scenegems_tool.persistence.stores import AssuranceStores, JobStore, Lease, WorkerNodeStore
 from tests.scenegems_tool.cluster.payloads import trajectories_data
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_hello
@@ -61,7 +61,7 @@ class CaseScript:
 
 
 class FakeArtifactStore:
-    """Content-addressed documents in memory: what the master's artifact store will hold."""
+    """Content-addressed documents in memory: what the control node's artifact store will hold."""
 
     def __init__(self) -> None:
         self.documents: Dict[str, bytes] = {}
@@ -69,7 +69,7 @@ class FakeArtifactStore:
     def put(self, field, data: bytes) -> ArtifactRef:
         sha = hashlib.sha256(data).hexdigest()
         self.documents[sha] = data
-        media_type = "text/plain; charset=utf-8" if field.content.value == "text" else "application/json"  # as the node's artifact transport names it
+        media_type = "text/plain; charset=utf-8" if field.content.value == "text" else "application/json"  # as the worker node's artifact transport names it
         return ArtifactRef(sha256=sha, size_bytes=len(data), kind=field.kind, media_type=media_type)
 
     def load(self, reference: ArtifactRef) -> bytes:
@@ -89,10 +89,10 @@ class FakeExecutor:
         self,
         stores: AssuranceStores,
         job_store: JobStore,
-        node_store: NodeStore,
+        worker_node_store: WorkerNodeStore,
         references: bool = False,
         scripts: Optional[Mapping[Tuple[str, int], CaseScript]] = None,
-        node_id: str = "fake-node",
+        worker_node_id: str = "fake-worker-node",
         fingerprints: Optional[Dict[str, str]] = None,
         slots: Optional[Dict[JobType, int]] = None,
         labels: Optional[Dict[str, str]] = None,
@@ -100,14 +100,14 @@ class FakeExecutor:
     ):
         self.stores = stores
         self.jobs = job_store
-        self.node_id = node_id
+        self.worker_node_id = worker_node_id
         self.references = references
         self.scripts: Dict[Tuple[str, int], CaseScript] = dict(scripts or {})
         self.artifacts = FakeArtifactStore()
         self.reports: List[Report] = []
         self.attempts: Dict[str, int] = {}
         self.payloads: Dict[str, Dict[str, Any]] = {}
-        self.node = node_store.register(make_hello(node_id, slots=slots or ALL_SLOTS, fingerprints=fingerprints or EXPECTED, labels=labels, components=components))
+        self.worker_node = worker_node_store.register(make_hello(worker_node_id, slots=slots or ALL_SLOTS, fingerprints=fingerprints or EXPECTED, labels=labels, components=components))
 
     # Claiming and reporting
 
@@ -115,7 +115,7 @@ class FakeExecutor:
         """Leases (and accepts) every queued job that is available, up to limit."""
         leases = []
         while limit is None or len(leases) < limit:
-            lease = self.jobs.claim_next(self.node_id, LEASE_S, job_types)
+            lease = self.jobs.claim_next(self.worker_node_id, LEASE_S, job_types)
             if lease is None:
                 break
             leases.append(self.jobs.accept(lease.lease_id, LEASE_S))
@@ -152,7 +152,7 @@ class FakeExecutor:
         return self._finish(lease, stage, key, JobOutcome.SUCCEEDED, result=result)
 
     def _record_uploads(self, job, result: Mapping[str, Any]) -> None:
-        """What the master's artifact route does on an upload: the artifact's record and the job's reference to it."""
+        """What the control node's artifact route does on an upload: the artifact's record and the job's reference to it."""
         for declared in artifact_result_fields(job.job_type):
             stored = result.get(declared.name)
             for value in stored if declared.many and isinstance(stored, list) else [stored]:
@@ -168,7 +168,7 @@ class FakeExecutor:
         return report
 
     def document(self, reference: Mapping[str, Any]) -> Any:
-        """The content of a reference, as the node would resolve it."""
+        """The content of a reference, as the worker node would resolve it."""
         import json
 
         return json_pointer(json.loads(self.artifacts.documents[reference["sha256"]]), reference.get("pointer"))

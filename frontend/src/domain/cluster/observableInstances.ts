@@ -1,10 +1,10 @@
 import { instanceTopic, jobInstanceName } from "./liveProtocol";
 import type { OperatorClient } from "./operatorApi";
-import type { JobView, NodeView } from "./schemas";
+import type { JobView, WorkerNodeView } from "./schemas";
 
 /**
- * The subsystem instances of a node that the Cluster page can show (its instance browser) and follow (design doc 5.2 and
- * 5.3, topic `instance:<node>/<instance>`): the pool instances its slots
+ * The subsystem instances of a worker node that the Cluster page can show (its instance browser) and follow (design doc 5.2 and
+ * 5.3, topic `instance:<worker node>/<instance>`): the pool instances its slots
  * give (`scene_generation-<n>`, `trajectory_generation-<n>`) and the instances of the jobs
  * it has leased or runs (`job-<job id>-<attempt>`).
  */
@@ -15,8 +15,8 @@ export type InstanceKind = "scene_generation" | "trajectory_generation" | "simul
 export type ViewerKind = "scene_generation" | "trajectory_search" | "simulation" | "job";
 
 export interface ObservableInstance {
-  nodeId: string;
-  /** The instance name on the node: `scene_generation-0`, `job-<job id>-<attempt>`. */
+  workerNodeId: string;
+  /** The instance name on the worker node: `scene_generation-0`, `job-<job id>-<attempt>`. */
   instance: string;
   topic: string;
   kind: InstanceKind;
@@ -27,13 +27,13 @@ export interface ObservableInstance {
   job: JobView | null;
   /** Short text for the picker. */
   label: string;
-  /** The job's state, or the node's status for a pool instance (the snapshot's `state` once viewed). */
+  /** The job's state, or the worker node's status for a pool instance (the snapshot's `state` once viewed). */
   state: string;
 }
 
 const POOL_KINDS = ["scene_generation", "trajectory_generation"] as const;
 
-/** Job types to the instance kind the master reports (`JOB_INSTANCE_KINDS` in `cluster/protocol/live.py`). */
+/** Job types to the instance kind the control node reports (`JOB_INSTANCE_KINDS` in `cluster/protocol/live.py`). */
 export function jobInstanceKind(jobType: string): InstanceKind {
   if (jobType === "scene_generation") {
     return "scene_generation";
@@ -47,41 +47,41 @@ export function jobInstanceKind(jobType: string): InstanceKind {
   return "simulation";
 }
 
-/** The pool instances of a node: one per slot of each pooled subsystem it offers. */
-export function poolInstances(node: NodeView): ObservableInstance[] {
+/** The pool instances of a worker node: one per slot of each pooled subsystem it offers. */
+export function poolInstances(workerNode: WorkerNodeView): ObservableInstance[] {
   const result: ObservableInstance[] = [];
   for (const kind of POOL_KINDS) {
-    const usage = node.slots[kind];
+    const usage = workerNode.slots[kind];
     if (!usage) {
       continue;
     }
     for (let index = 0; index < usage.slots; index += 1) {
       const instance = `${kind}-${index}`;
       result.push({
-        nodeId: node.node_id,
+        workerNodeId: workerNode.worker_node_id,
         instance,
-        topic: instanceTopic(node.node_id, instance),
+        topic: instanceTopic(workerNode.worker_node_id, instance),
         kind,
         origin: "pool",
         index,
         job: null,
         label: `${kind === "scene_generation" ? "Scene generation" : "Trajectory generation"} ${index}`,
-        state: node.status,
+        state: workerNode.status,
       });
     }
   }
   return result;
 }
 
-/** Job states whose instance runs on a node. */
+/** Job states whose instance runs on a worker node. */
 export const OBSERVABLE_JOB_STATES = ["leased", "running"] as const;
 
-/** The instances of the jobs a node holds: jobs leased or running with this node as the lease owner. */
-export function jobInstances(node: NodeView, jobs: readonly JobView[]): ObservableInstance[] {
+/** The instances of the jobs a worker node holds: jobs leased or running with this worker node as the lease owner. */
+export function jobInstances(workerNode: WorkerNodeView, jobs: readonly JobView[]): ObservableInstance[] {
   const seen = new Set<string>();
   const result: ObservableInstance[] = [];
   for (const job of jobs) {
-    if (job.lease_owner !== node.node_id || !(OBSERVABLE_JOB_STATES as readonly string[]).includes(job.state)) {
+    if (job.lease_owner !== workerNode.worker_node_id || !(OBSERVABLE_JOB_STATES as readonly string[]).includes(job.state)) {
       continue;
     }
     const instance = jobInstanceName(job.job_id, job.attempt);
@@ -90,9 +90,9 @@ export function jobInstances(node: NodeView, jobs: readonly JobView[]): Observab
     }
     seen.add(instance);
     result.push({
-      nodeId: node.node_id,
+      workerNodeId: workerNode.worker_node_id,
       instance,
-      topic: instanceTopic(node.node_id, instance),
+      topic: instanceTopic(workerNode.worker_node_id, instance),
       kind: jobInstanceKind(job.job_type),
       origin: "job",
       index: null,
@@ -104,9 +104,9 @@ export function jobInstances(node: NodeView, jobs: readonly JobView[]): Observab
   return result;
 }
 
-/** The instances of a node, pools first. */
-export function nodeInstances(node: NodeView, jobs: readonly JobView[]): ObservableInstance[] {
-  return [...poolInstances(node), ...jobInstances(node, jobs)];
+/** The instances of a worker node, pools first. */
+export function workerNodeInstances(workerNode: WorkerNodeView, jobs: readonly JobView[]): ObservableInstance[] {
+  return [...poolInstances(workerNode), ...jobInstances(workerNode, jobs)];
 }
 
 export function viewerFor(instance: Pick<ObservableInstance, "origin" | "kind">): ViewerKind {
@@ -116,8 +116,8 @@ export function viewerFor(instance: Pick<ObservableInstance, "origin" | "kind">)
   return instance.kind === "simulation" ? "simulation" : "job";
 }
 
-/** The jobs a node holds, from `GET /cluster/jobs` for each observable state, filtered by lease owner. */
-export async function fetchNodeJobs(client: OperatorClient, nodeId: string, signal?: AbortSignal): Promise<JobView[]> {
+/** The jobs a worker node holds, from `GET /cluster/jobs` for each observable state, filtered by lease owner. */
+export async function fetchWorkerNodeJobs(client: OperatorClient, workerNodeId: string, signal?: AbortSignal): Promise<JobView[]> {
   const lists = await Promise.all(OBSERVABLE_JOB_STATES.map((state) => client.listJobs({ state, limit: 200 }, signal)));
-  return lists.flatMap((list) => list.items).filter((job) => job.lease_owner === nodeId);
+  return lists.flatMap((list) => list.items).filter((job) => job.lease_owner === workerNodeId);
 }

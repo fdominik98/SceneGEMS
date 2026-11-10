@@ -1,7 +1,7 @@
-"""Compare the fingerprints a node reports with the required ones.
+"""Compare the fingerprints a worker node reports with the required ones.
 
 Fingerprints are keyed by image repository, the name without its tag (utils/image_names.py): a
-release tags its images with its revision, so the master, its nodes and a campaign pinned under
+release tags its images with its revision, so the control node, its worker nodes and a campaign pinned under
 an older release name the same image with different tags. by_repository turns a map keyed by
 full names, such as a campaign's pins from before release tags, into that form.
 """
@@ -18,7 +18,7 @@ LEGACY_TAG = "latest"  # every image's tag before releases tagged their images
 class FingerprintMismatch:
     image: str  # the image repository
     required: str
-    actual: Optional[str]  # None when the node has no fingerprinted image of that repository
+    actual: Optional[str]  # None when the worker node has no fingerprinted image of that repository
 
     @property
     def missing(self) -> bool:
@@ -51,11 +51,11 @@ def fingerprints_of(images: Collection[str], fingerprints: Mapping[str, str]) ->
 
 
 def with_legacy_names(fingerprints: Mapping[str, str]) -> Dict[str, str]:
-    """A node's fingerprints by repository, each also under <repository>:latest, the only name before release tags.
+    """A worker node's fingerprints by repository, each also under <repository>:latest, the only name before release tags.
 
     The claim (JSONB containment) matches a job's required fingerprints against this: a job
     submitted since release tags requires them by repository, one submitted before by those
-    names. A node stored with full names (a Hello not passed through the registry) is keyed by
+    names. A worker node stored with full names (a Hello not passed through the registry) is keyed by
     repository first.
     """
     keyed = by_repository(fingerprints, LEGACY_TAG)
@@ -63,6 +63,6 @@ def with_legacy_names(fingerprints: Mapping[str, str]) -> Dict[str, str]:
 
 
 def find_mismatches(actual: Mapping[str, str], required: Mapping[str, str]) -> List[FingerprintMismatch]:
-    """Required images the node lacks or has built from other inputs, compared by repository; images not required are ignored."""
+    """Required images the worker node lacks or has built from other inputs, compared by repository; images not required are ignored."""
     actual, required = by_repository(actual), by_repository(required)
     return [FingerprintMismatch(image, fingerprint, actual.get(image)) for image, fingerprint in sorted(required.items()) if actual.get(image) != fingerprint]

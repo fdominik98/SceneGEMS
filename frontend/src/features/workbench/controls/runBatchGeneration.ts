@@ -4,9 +4,9 @@ import {
 } from "../../../domain/sceneGeneration/batchGenerationStore";
 
 export interface RunBatchGenerationParams {
-  /** Class ids of the master's catalog. */
+  /** Class ids of the control node's catalog. */
   selectedClassIds: string[];
-  /** A class's functional scenario, from the master. */
+  /** A class's functional scenario, from the control node. */
   loadScenarioText: (classId: string) => Promise<string>;
   /** Runs every row as one batch entry with a case per scenario; resolves once every row ended. */
   generateBatch: (rows: { requestId: string; label: string; specText: string }[]) => Promise<void>;
@@ -16,7 +16,7 @@ export interface RunBatchGenerationParams {
 }
 
 /**
- * Runs every selected functional scenario of the master's catalog as one workbench entry with a case per scenario (design doc 6.3),
+ * Runs every selected functional scenario of the control node's catalog as one workbench entry with a case per scenario (design doc 6.3),
  * so the cluster runs as many as it has free slots and queues the rest. Each row follows its
  * case's job (queued, running, done); the per-scene timeout is the generation's own, not the wait
  * in the queue.

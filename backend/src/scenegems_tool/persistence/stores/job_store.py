@@ -1,6 +1,6 @@
-"""The job queue and its leases, as atomic steps the master's scheduler and lease manager call.
+"""The job queue and its leases, as atomic steps the control node's scheduler and lease manager call.
 
-A job moves queued, leased (offered to a node), running (accepted), and ends succeeded,
+A job moves queued, leased (offered to a worker node), running (accepted), and ends succeeded,
 failed or cancelled. Expired, rejected and released leases return it to the queue; see
 job_lifecycle for the rules. Every state change appends one job_event row in the same
 transaction.
@@ -11,8 +11,8 @@ and cap). hold_jobs moves the jobs of a set to HELD_UNTIL (a campaign's pause) a
 release_held_jobs makes them available at once; a held job that is leased keeps running,
 and stays held if it comes back to the queue.
 
-Concurrency: the claim locks the node row (serializing claims per node, so slots hold) and
-picks the job with FOR UPDATE SKIP LOCKED (so claims for different nodes never block each
+Concurrency: the claim locks the worker node row (serializing claims per worker node, so slots hold) and
+picks the job with FOR UPDATE SKIP LOCKED (so claims for different worker nodes never block each
 other or take the same job). Every other step locks the job row it changes.
 """
 
@@ -29,7 +29,7 @@ from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmis
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.database import transaction
-from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, JobRow, NodeRow, NodeStatus
+from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, JobRow, WorkerNodeRow, WorkerNodeStatus
 from scenegems_tool.persistence.stores.job_claim import free_job_types, next_queued_job_query
 from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events, rejections_since
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES, lease_is_current, result_status, retry_backoff_s, state_after_failed_attempt
@@ -37,7 +37,7 @@ from scenegems_tool.persistence.stores.job_records import CancelOutcome, Expired
 from scenegems_tool.persistence.stores.store_session import session_scope
 
 
-class UnknownNode(LookupError):
+class UnknownWorkerNode(LookupError):
     pass
 
 
@@ -99,7 +99,7 @@ class JobStore:
                     required_components=list(requirements.components),
                     min_memory_mb=requirements.min_memory_mb,
                     min_cpus=requirements.min_cpus,
-                    allowed_nodes=list(submission.allowed_nodes),
+                    allowed_worker_nodes=list(submission.allowed_worker_nodes),
                     priority=submission.priority,
                     max_attempts=submission.max_attempts,
                     idempotency_key=idempotency_key,
@@ -138,69 +138,71 @@ class JobStore:
             return job_events(session, job_id)
 
     def recent_rejections(self, since: datetime) -> List[JobEventRecord]:
-        """The rejects since `since` of jobs that have not ended, oldest first: what the master rebuilds its reject holds from at start."""
+        """The rejects since `since` of jobs that have not ended, oldest first: what the control node rebuilds its reject holds from at start."""
         with transaction(self._sessions) as session:
             return rejections_since(session, since, UNFINISHED_STATES)
 
-    def active_leases(self, node_id: Optional[str] = None) -> List[Lease]:
-        """Leases in state leased or running, of one node or of all; for reconciling after a reconnect."""
+    def active_leases(self, worker_node_id: Optional[str] = None) -> List[Lease]:
+        """Leases in state leased or running, of one worker node or of all; for reconciling after a reconnect."""
         with transaction(self._sessions) as session:
             query = select(JobRow).where(JobRow.state.in_(ACTIVE_STATES)).order_by(JobRow.seq)
-            if node_id is not None:
-                query = query.where(JobRow.lease_owner == node_id)
+            if worker_node_id is not None:
+                query = query.where(JobRow.lease_owner == worker_node_id)
             return [Lease.from_row(row) for row in session.execute(query).scalars()]
 
     # Leases
 
     def claim_next(
         self,
-        node_id: str,
+        worker_node_id: str,
         lease_duration_s: float,
         job_types: Optional[Collection[JobType]] = None,
         exclude_job_ids: Collection[str] = (),
         components: Optional[Collection[str]] = None,
     ) -> Optional[Lease]:
-        """Leases the next matching queued job to the node, or returns None.
+        """Leases the next matching queued job to the worker node, or returns None.
 
-        Considers only online nodes and job types the node has a free slot for (slots minus
+        Considers only online worker nodes and job types the worker node has a free slot for (slots minus
         its leased and running jobs of that type), optionally limited to job_types, and skips
         the jobs in exclude_job_ids and those not available yet. A job's components must be among
-        components (the node's usable ones, which the scheduler passes) or, when None, among the
-        node's stored components. The match on labels, components, fingerprints, resources and allowed nodes and the
+        components (the worker node's usable ones, which the scheduler passes) or, when None, among the
+        worker node's stored components. The match on labels, components, fingerprints, resources and allowed worker nodes and the
         order (priority, then submission) are in next_queued_job_query. The lease starts as
-        an offer that holds for lease_duration_s; the node accepts it with accept().
+        an offer that holds for lease_duration_s; the worker node accepts it with accept().
         """
         now = self._clock()
         expires_at = _lease_expiry(now, lease_duration_s)
         with transaction(self._sessions) as session:
             # key_share without read is FOR NO KEY UPDATE: it serializes claims and heartbeats
-            # of this node, but not the foreign key checks of job rows that reference it
-            node = session.execute(select(NodeRow).where(NodeRow.id == node_id).with_for_update(key_share=True)).scalar_one_or_none()
-            if node is None:
-                raise UnknownNode(node_id)
-            if node.status != NodeStatus.ONLINE:
+            # of this worker node, but not the foreign key checks of job rows that reference it
+            worker_node = session.execute(select(WorkerNodeRow).where(WorkerNodeRow.id == worker_node_id).with_for_update(key_share=True)).scalar_one_or_none()
+            if worker_node is None:
+                raise UnknownWorkerNode(worker_node_id)
+            if worker_node.status != WorkerNodeStatus.ONLINE:
                 return None
-            active_counts = dict(session.execute(select(JobRow.job_type, func.count()).where(JobRow.lease_owner == node_id, JobRow.state.in_(ACTIVE_STATES)).group_by(JobRow.job_type)).all())
-            job_types = free_job_types({capability.job_type: capability.slots for capability in node.capabilities}, active_counts, job_types)
+            active_counts = dict(session.execute(select(JobRow.job_type, func.count()).where(JobRow.lease_owner == worker_node_id, JobRow.state.in_(ACTIVE_STATES)).group_by(JobRow.job_type)).all())
+            job_types = free_job_types({capability.job_type: capability.slots for capability in worker_node.capabilities}, active_counts, job_types)
             if not job_types:
                 return None
-            fingerprints = with_legacy_names({fingerprint.image: fingerprint.fingerprint for fingerprint in node.fingerprints})
-            offered = sorted(components) if components is not None else [component.component for component in node.components]
-            query = next_queued_job_query(job_types, node.labels, fingerprints, node.free_memory_mb, node.cpus, exclude_job_ids, now=now, node_id=node_id, components=offered)
+            fingerprints = with_legacy_names({fingerprint.image: fingerprint.fingerprint for fingerprint in worker_node.fingerprints})
+            offered = sorted(components) if components is not None else [component.component for component in worker_node.components]
+            query = next_queued_job_query(
+                job_types, worker_node.labels, fingerprints, worker_node.free_memory_mb, worker_node.cpus, exclude_job_ids, now=now, worker_node_id=worker_node_id, components=offered
+            )
             row = session.execute(query).scalar_one_or_none()
             if row is None:
                 return None
             row.state = JobState.LEASED
             row.attempt += 1
             row.lease_id = str(uuid4())
-            row.lease_owner = node_id
+            row.lease_owner = worker_node_id
             row.lease_expires_at = expires_at
             row.updated_at = now
             append_job_event(session, row, JobEventKind.LEASED, JobState.QUEUED, now, {"expires_at": expires_at.isoformat()})
             return Lease.from_row(row)
 
     def accept(self, lease_id: str, lease_duration_s: float) -> Optional[Lease]:
-        """The node accepted the offer: the job runs and the lease holds lease_duration_s from now.
+        """The worker node accepted the offer: the job runs and the lease holds lease_duration_s from now.
 
         Accepting a running lease again returns it unchanged. Returns None when the lease is
         not current (unknown, expired, ended).
@@ -236,11 +238,11 @@ class JobStore:
             return Lease.from_row(row)
 
     def reject(self, lease_id: str, reason: str) -> Optional[JobRecord]:
-        """The node refused the offer: the job is queued again without a failed attempt."""
+        """The worker node refused the offer: the job is queued again without a failed attempt."""
         return self._give_back(lease_id, reason, JobEventKind.REJECTED, (JobState.LEASED,))
 
     def release(self, lease_id: str, reason: str) -> Optional[JobRecord]:
-        """The node gave the job back unfinished (for example while draining): queued again without a failed attempt."""
+        """The worker node gave the job back unfinished (for example while draining): queued again without a failed attempt."""
         return self._give_back(lease_id, reason, JobEventKind.RELEASED, ACTIVE_STATES)
 
     def report_result(self, report: JobResult) -> ResultReport:
@@ -293,7 +295,7 @@ class JobStore:
             if row is None:
                 raise UnknownJob(job_id)
             if row.state.is_terminal:
-                return CancelOutcome(job=JobRecord.from_row(row), cancelled=False, lease_id=None, node_id=None)
+                return CancelOutcome(job=JobRecord.from_row(row), cancelled=False, lease_id=None, worker_node_id=None)
             from_state = row.state
             was_active = from_state in ACTIVE_STATES
             row.state = JobState.CANCELLED
@@ -301,7 +303,7 @@ class JobStore:
             row.updated_at = now
             row.finished_at = now
             append_job_event(session, row, JobEventKind.CANCELLED, from_state, now, {"reason": reason})
-            return CancelOutcome(job=JobRecord.from_row(row), cancelled=True, lease_id=row.lease_id if was_active else None, node_id=row.lease_owner if was_active else None)
+            return CancelOutcome(job=JobRecord.from_row(row), cancelled=True, lease_id=row.lease_id if was_active else None, worker_node_id=row.lease_owner if was_active else None)
 
     def expire_leases(self, limit: Optional[int] = None) -> List[ExpiredLease]:
         """Ends every lease whose expiry has passed; each counts as a failed attempt.
@@ -325,7 +327,7 @@ class JobStore:
                     row.error = f"lease expired on attempt {row.attempt}, no attempts left"
                     row.finished_at = now
                 append_job_event(session, row, JobEventKind.EXPIRED, from_state, now, {"lease_expired_at": lease_expired_at.isoformat()})
-                expired.append(ExpiredLease(lease_id=row.lease_id, node_id=row.lease_owner, job=JobRecord.from_row(row)))
+                expired.append(ExpiredLease(lease_id=row.lease_id, worker_node_id=row.lease_owner, job=JobRecord.from_row(row)))
         return expired
 
     # Holds

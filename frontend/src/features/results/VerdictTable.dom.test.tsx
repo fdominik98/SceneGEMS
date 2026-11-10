@@ -15,7 +15,7 @@ function show(props: Partial<Parameters<typeof VerdictTable>[0]>) {
 }
 
 describe("VerdictTable sorting", () => {
-  it("lets FEC, Case, Run, State and First failure sort on a master that sorts", async () => {
+  it("lets FEC, Case, Run, State and First failure sort on a control node that sorts", async () => {
     const onSort = show({ paging: { ...paging, sort: "first_failure_time_s", direction: "desc" } });
     for (const [label, key] of [["FEC", "fec_id"], ["Case", "case_index"], ["Run", "run_index"], ["State", "state"], ["First failure", "first_failure_time_s"]] as const) {
       await userEvent.click(screen.getByRole("button", { name: new RegExp(`^${label}`) }));
@@ -26,7 +26,7 @@ describe("VerdictTable sorting", () => {
     expect(screen.queryByRole("button", { name: /^Monitor/ })).toBeNull();
   });
 
-  it("keeps the FEC order only, flipped by FEC, Case and Run, on a master that does not sort", () => {
+  it("keeps the FEC order only, flipped by FEC, Case and Run, on a control node that does not sort", () => {
     show({ sortable: false });
     for (const label of ["FEC", "Case", "Run"]) {
       expect(screen.getByRole("button", { name: new RegExp(`^${label}`) })).toBeInTheDocument();

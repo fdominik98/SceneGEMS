@@ -5,7 +5,7 @@ title: Capabilities
 
 # Capabilities
 
-The Capabilities page shows how a scenario is made and run, what each part of the system can do today and what was measured about it. It needs a selected cluster: the master builds the descriptions from its code, so a new simulator, generator or step appears here after the master restarts.
+The Capabilities page shows how a scenario is made and run, what each part of the system can do today and what was measured about it. It needs a selected cluster: the control node builds the descriptions from its code, so a new simulator, generator or step appears here after the control node restarts.
 
 ## The overview
 
@@ -28,7 +28,7 @@ Each card says:
 - **On this cluster**: how many slots on how many machines of the selected cluster run that job now. "no machine offers it" means that a workbench run or a campaign step of this kind has nowhere to run until a machine with the component joins;
 - how many implementations are described and how many values were measured.
 
-**Open** shows the part. A master from before the overview states no chain: the page then lists the parts side by side without arrows.
+**Open** shows the part. A control node from before the overview states no chain: the page then lists the parts side by side without arrows.
 
 ## A part and its views
 

@@ -13,7 +13,7 @@ import {
 } from "../../test/fixtures/historyViews";
 import { ResultsSection } from "./ResultsSection";
 
-// The master is a table of routes behind fetch; every request is recorded to check the queries.
+// The control node is a table of routes behind fetch; every request is recorded to check the queries.
 const requests: URL[] = [];
 
 function json(body: unknown, headers: Record<string, string> = {}): Response {
@@ -29,7 +29,7 @@ const WORKBENCH = sampleWorkbenchRow();
 // Entries that started after the first read, newest first
 let newer: Record<string, unknown>[] = [];
 
-function master(url: URL): Response {
+function controlNode(url: URL): Response {
   const path = url.pathname;
   if (path === "/cluster/campaigns") {
     const kind = url.searchParams.get("kind");
@@ -83,7 +83,7 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(String(input));
       requests.push(url);
-      return master(url);
+      return controlNode(url);
     })
   );
 });

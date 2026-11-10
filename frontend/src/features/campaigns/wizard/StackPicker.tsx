@@ -20,7 +20,7 @@ function StackCard({ stack, chosen, onPick }: { stack: CatalogStack; chosen: boo
         ))}
         <span className="wiz-catalog-tag">Repeatability: {repeatabilityValue(stack).label.toLowerCase()}</span>
       </span>
-      {!stack.available && <span className="wiz-catalog-warning">{stack.reasons.join("; ") || "The master gave no reason."}</span>}
+      {!stack.available && <span className="wiz-catalog-warning">{stack.reasons.join("; ") || "The control node gave no reason."}</span>}
     </button>
   );
 }

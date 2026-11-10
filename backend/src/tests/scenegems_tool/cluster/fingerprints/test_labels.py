@@ -26,7 +26,7 @@ def test_reads_the_label_of_every_image_by_repository():
     assert read_image_fingerprints(client, tag="latest") == {"a": "abc", "b": "def"}
 
 
-def test_the_image_of_the_node_s_tag_wins_over_other_tags_of_its_repository():
+def test_the_image_of_the_worker_node_s_tag_wins_over_other_tags_of_its_repository():
     client = _Client([_Image(["a:latest"], {FINGERPRINT_LABEL: "old"}), _Image(["a:rev2", "a:x"], {FINGERPRINT_LABEL: "new"})])
     assert read_image_fingerprints(client, tag="rev2") == {"a": "new"}
     assert read_image_fingerprints(client, tag="latest") == {"a": "old"}

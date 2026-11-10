@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { nodeViewSchema } from "../../domain/cluster/schemas";
-import { sampleNode } from "../../test/fixtures/clusterViews";
-import { formatAge, formatMegabytes, jobTypeLabel, memoryUseFraction, nodeSlotTotals, shortHash, summarizeNodes } from "./clusterFormat";
+import { workerNodeViewSchema } from "../../domain/cluster/schemas";
+import { sampleWorkerNode } from "../../test/fixtures/clusterViews";
+import { formatAge, formatMegabytes, jobTypeLabel, memoryUseFraction, workerNodeSlotTotals, shortHash, summarizeWorkerNodes } from "./clusterFormat";
 
 describe("cluster formatting", () => {
   it("formats ages coarsely", () => {
@@ -27,14 +27,14 @@ describe("cluster formatting", () => {
     expect(memoryUseFraction(0, 0)).toBe(0);
   });
 
-  it("sums slots and summarizes the nodes", () => {
-    const a = nodeViewSchema.parse(sampleNode());
-    const b = nodeViewSchema.parse(
-      sampleNode({ node_id: "b", status: "draining", connected: false, out_of_date: true, leases: [], slots: { trajectory_generation: { slots: 2, slots_in_use: 0 } } })
+  it("sums slots and summarizes the worker nodes", () => {
+    const a = workerNodeViewSchema.parse(sampleWorkerNode());
+    const b = workerNodeViewSchema.parse(
+      sampleWorkerNode({ worker_node_id: "b", status: "draining", connected: false, out_of_date: true, leases: [], slots: { trajectory_generation: { slots: 2, slots_in_use: 0 } } })
     );
-    expect(nodeSlotTotals(a)).toEqual({ slots: 12, inUse: 9 });
-    expect(summarizeNodes([a, b])).toEqual({
-      nodes: 2,
+    expect(workerNodeSlotTotals(a)).toEqual({ slots: 12, inUse: 9 });
+    expect(summarizeWorkerNodes([a, b])).toEqual({
+      workerNodes: 2,
       online: 1,
       draining: 1,
       offline: 0,

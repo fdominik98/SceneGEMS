@@ -79,8 +79,8 @@ interface TrajectoryGenerationState {
   resultScenarioJson: string | null;
   resultValid: boolean;
   /**
-   * Whether the last result is a complete plan. False is the best partial path of a
-   * search that ended without a complete one; null when the backend did not say.
+   * Whether the last result is a complete plan. False is the best path the planner found
+   * (it ends early or still fails a COLREGS rule); null when the backend did not say.
    */
   resultComplete: boolean | null;
   errorMessage: string | null;

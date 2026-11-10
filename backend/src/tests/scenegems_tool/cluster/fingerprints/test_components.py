@@ -27,8 +27,8 @@ from scenegems_tool.cluster.fingerprints.components import (
     stack_images,
     unrun_campaign_stacks,
 )
-from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -103,7 +103,7 @@ def test_the_subsystem_components_and_their_job_types():
         job_type_of("gpu")
 
 
-def test_the_subsystem_images_are_the_ones_the_node_launches(monkeypatch):
+def test_the_subsystem_images_are_the_ones_the_worker_node_launches(monkeypatch):
     for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SCENARIO_EXECUTION_IMAGE"):
         monkeypatch.delenv(variable, raising=False)
     assert subsystem_image(Subsystem.SCENE_GENERATION) == SCENE_GENERATION_IMAGE
@@ -142,7 +142,7 @@ def test_every_campaign_stack_has_a_runner():
 
 
 def test_the_custom_controller_needs_no_sitl():
-    """A node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
+    """A worker node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
     components = stack_components(RUNNER_STACKS[SimulationRunner.GAZEBO_CUSTOM])
     assert components == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
     assert images_of(components) == {GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE, USV_NAVIGATION_IMAGE}

@@ -110,7 +110,7 @@ function trajectoriesOf(config: ConfigObject, catalog: BuilderCatalog): WizardDr
 }
 
 /**
- * The catalog stack a run's stack section names, or "" when the master offers none: its layer and
+ * The catalog stack a run's stack section names, or "" when the control node offers none: its layer and
  * mode (kinematic replay when it names none), and its control layer when it names one. A section
  * without a control layer is the option whose own section names none (the layer's implied one).
  */
@@ -157,12 +157,12 @@ function runOf(item: unknown, catalog: BuilderCatalog): RunDraft {
 
 function resourcesOf(config: ConfigObject): WizardDraft["resources"] {
   const resources = record(config.resources);
-  const nodes = strings(resources.nodes);
+  const workerNodes = strings(resources.worker_nodes);
   const queueDepth = record(resources.queue_depth);
   return {
-    // A preset that names neither nodes nor queue caps uses every node with caps sized to their slots
-    fullUsage: nodes.length === 0 && Object.keys(queueDepth).length === 0,
-    nodes,
+    // A preset that names neither worker nodes nor queue caps uses every worker node with caps sized to their slots
+    fullUsage: workerNodes.length === 0 && Object.keys(queueDepth).length === 0,
+    workerNodes,
     labels: Object.entries(record(resources.required_labels)).map(([key, value]) => ({ key, value: String(value) })),
     queueDepth: Object.fromEntries(Object.entries(QUEUE_DEPTH_DEFAULTS).map(([stage, depth]) => [stage, numberOr(queueDepth[stage], depth)])),
     priority: numberOr(resources.priority, 0),
@@ -184,7 +184,7 @@ function policyOf(config: ConfigObject): WizardDraft["policy"] {
   };
 }
 
-/** The draft a preset's config describes. Runs need the stack catalog to find their stack; a stack the master does not offer leaves the run without one. */
+/** The draft a preset's config describes. Runs need the stack catalog to find their stack; a stack the control node does not offer leaves the run without one. */
 export function draftFromConfig(source: Record<string, unknown>, catalog: BuilderCatalog): WizardDraft {
   const config = record(source);
   const steps = Array.isArray(config.steps) ? normalizeSteps(config.steps) : [...IMPLIED_STEPS];
@@ -217,8 +217,8 @@ export function presetConfigOf(draft: WizardDraft, catalog: BuilderCatalog): Con
 }
 
 /**
- * A draft whose design space exploration names no specification (a preset that leaves it to the master)
- * starts from the master's default, so the wizard shows and sends what will run; without a default the
+ * A draft whose design space exploration names no specification (a preset that leaves it to the control node)
+ * starts from the control node's default, so the wizard shows and sends what will run; without a default the
  * editor stays empty and the exploration page reports it.
  */
 export function withDefaultSpecification(draft: WizardDraft, shipped: { specification: string } | null | undefined, label: string): WizardDraft {

@@ -20,7 +20,7 @@ Each row shows:
 | Totals | Cases by state, and the monitor result summaries of each monitored step |
 | Created | When the entry was made |
 
-Filter the list by kind, by state, by step and by a part of the name. The kind, state and name filters are applied by the master; the step filter narrows the page that is shown. The list follows the master's live channel (the badge says **live**); when the channel does not deliver, it is read every 4 seconds (**polling**).
+Filter the list by kind, by state, by step and by a part of the name. The kind, state and name filters are applied by the control node; the step filter narrows the page that is shown. The list follows the control node's live channel (the badge says **live**); when the channel does not deliver, it is read every 4 seconds (**polling**).
 
 **New campaign** opens the Campaigns page.
 
@@ -49,7 +49,7 @@ The tab of the design space exploration lists the explored FECs with their vesse
 |--------|-------------|
 | Case | The case, its FEC, and the run and repeat of a simulated run |
 | State | In progress, complete, dropped, failed or cancelled, with the reason |
-| Output | **valid** or **not valid** (the case dropped at this step), and **complete** or **partial** (a trajectory set in which not every vessel reached its goal) |
+| Output | **valid** or **not valid** (the case dropped at this step), and **complete** or **incomplete** (the best trajectory set the planner found: it ends early or still fails a COLREGS rule) |
 | Monitor result summary | Only for a step with a monitor configured: whether the monitor passed or failed the output and, per vessel pair, the scenario type, each vessel's role (give-way or stand-on) and the rules that failed. Pairs that never met in an encounter are only counted, and a list longer than three failed rules is cut short: Results has them all. A summary written before the roles were recorded says "roles not recorded" |
 | Input from | The case of another entry the input came from (a link), the uploaded file, or "a deleted entry" |
 

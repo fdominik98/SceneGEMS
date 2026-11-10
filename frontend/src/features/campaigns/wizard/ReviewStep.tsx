@@ -35,7 +35,7 @@ function ReasonGroup({ step, reasons, onGoTo }: { step: WizardStepId; reasons: r
       <ul>
         {reasons.map((reason, index) => (
           <li key={`${reason.raw}-${index}`}>
-            <span className={`wiz-issue-source wiz-issue-source--${reason.source}`}>{reason.source === "server" ? "master" : "here"}</span>
+            <span className={`wiz-issue-source wiz-issue-source--${reason.source}`}>{reason.source === "server" ? "control node" : "here"}</span>
             {reason.entry !== null && <strong>{entryLabel(step, reason)}: </strong>}
             {describeReason(reason)}
           </li>
@@ -50,9 +50,9 @@ export interface ReviewStepProps {
   validation: ValidationState;
   /** Whether the validation answers the YAML shown. */
   current: boolean;
-  /** What the browser found wrong without asking the master. */
+  /** What the browser found wrong without asking the control node. */
   localReasons: readonly Reason[];
-  /** What the master found wrong, from the last check or a refused create. */
+  /** What the control node found wrong, from the last check or a refused create. */
   serverReasons: readonly Reason[];
   onGoTo: (step: WizardStepId) => void;
   onCheck: () => void;
@@ -70,7 +70,7 @@ export interface ReviewStepProps {
   explored?: string | null;
 }
 
-/** Review: the generated YAML, the master's check of it (reasons attached to their steps) and the way to create the campaign. */
+/** Review: the generated YAML, the control node's check of it (reasons attached to their steps) and the way to create the campaign. */
 export function ReviewStep({ yaml, validation, current, localReasons, serverReasons, onGoTo, onCheck, onCreate, creating, createMessage, startBlocker, baseSeed, explored = null }: ReviewStepProps) {
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -95,27 +95,27 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
       <section className={`wiz-verdict wiz-verdict--${blocked ? "invalid" : validation.status}`} aria-live="polite">
         {blocked && (
           <p>
-            <strong>Not ready to check.</strong> {plural(localReasons.length, "problem")} to fix first; the master is asked once the config is complete.
+            <strong>Not ready to check.</strong> {plural(localReasons.length, "problem")} to fix first; the control node is asked once the config is complete.
           </p>
         )}
-        {!blocked && validation.status === "idle" && <p>The config has not been checked on the master yet.</p>}
-        {!blocked && validation.status === "checking" && <p role="status">Checking the config on the master...</p>}
+        {!blocked && validation.status === "idle" && <p>The config has not been checked on the control node yet.</p>}
+        {!blocked && validation.status === "checking" && <p role="status">Checking the config on the control node...</p>}
         {!blocked && validation.status === "valid" && result && explored !== null && (
           <p>
-            <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> Its FECs come from the design space exploration, so how many
+            <strong>The control node accepts this config{current ? "" : " (an earlier version of it)"}.</strong> Its FECs come from the design space exploration, so how many
             there are is known only once it ran: {explored}{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}, base seed <code>{baseSeed ?? 0}</code>.
             Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
           </p>
         )}
         {!blocked && validation.status === "valid" && result && explored === null && (
           <p>
-            <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> {plural(result.fecs.length, "FEC")} selected, <strong>{plural(result.cases_planned, "case")}</strong> planned
+            <strong>The control node accepts this config{current ? "" : " (an earlier version of it)"}.</strong> {plural(result.fecs.length, "FEC")} selected, <strong>{plural(result.cases_planned, "case")}</strong> planned
             to complete{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}, base seed <code>{baseSeed ?? 0}</code>. Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
           </p>
         )}
         {!blocked && validation.status === "invalid" && (
           <p>
-            <strong>The master refuses this config.</strong> {plural(validation.reasons.length, "reason")}, listed with the step they belong to.
+            <strong>The control node refuses this config.</strong> {plural(validation.reasons.length, "reason")}, listed with the step they belong to.
           </p>
         )}
         {!blocked && validation.status === "error" && (
@@ -125,7 +125,7 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
         )}
         <div className="wiz-verdict-actions">
           <button type="button" onClick={onCheck} disabled={validation.status === "checking" || blocked}>
-            {validation.status === "checking" ? "Checking..." : "Check on the master"}
+            {validation.status === "checking" ? "Checking..." : "Check on the control node"}
           </button>
         </div>
       </section>
@@ -140,7 +140,7 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
 
       {result && validation.status === "valid" && (explored === null || result.runs.length > 0) && (
         <div className="wiz-result">
-          <h4>What the master resolved</h4>
+          <h4>What the control node resolved</h4>
           {explored === null && (
             <>
           <div className="camp-table-wrap wiz-class-scroll">
@@ -196,7 +196,7 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
       <details className="wiz-yaml" open>
         <summary>
           <span>Generated config</span>
-          <span className="meta">YAML, exactly what is sent to the master</span>
+          <span className="meta">YAML, exactly what is sent to the control node</span>
         </summary>
         <div className="wiz-yaml-bar">
           <button type="button" onClick={copy}>
@@ -240,10 +240,10 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
             {blocked
               ? "Fix the problems above first."
               : validation.status === "checking"
-                ? "Waiting for the master's check."
+                ? "Waiting for the control node's check."
                 : validation.status === "valid" && !current
                   ? "The config changed since the check; check it again."
-                  : "The master has to accept the config first."}
+                  : "The control node has to accept the config first."}
           </p>
         )}
         {createMessage && (

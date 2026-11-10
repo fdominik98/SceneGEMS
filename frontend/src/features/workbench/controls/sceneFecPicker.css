@@ -1,0 +1,182 @@
+/* The scene page's right pane: the catalog FECs to select, the batch results and what the run takes. */
+
+.fec-pick-toolbar {
+  gap: var(--space-2);
+}
+
+.fec-pick-count {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* The pane holds the list, what is selected and its graph or the editor: it scrolls as one when they do not fit */
+.scene-generation-sidebar .scene-editor-panel {
+  overflow-y: auto;
+}
+
+.fec-pick-list {
+  position: relative;
+  flex: none;
+  height: 208px;
+  min-height: 104px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  resize: vertical;
+}
+
+.fec-pick-space {
+  position: relative;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fec-pick-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.fec-pick-row input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
+
+.fec-pick-row.is-selected {
+  background: var(--accent-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.fec-pick-body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.fec-pick-body:hover {
+  background: var(--bg-control-hover);
+}
+
+.fec-pick-body[aria-pressed="true"] {
+  border-color: var(--accent-strong);
+}
+
+.fec-pick-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fec-pick-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.fec-pick-counts {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.fec-pick-relations {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+}
+
+.fec-pick-relations.is-pending {
+  color: var(--text-faint);
+}
+
+.scene-batch-results {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: var(--space-1);
+}
+
+.scene-batch-results .batch-preset-results-scroll {
+  max-height: min(220px, 30vh);
+  margin-top: 0;
+}
+
+.scene-batch-results-head {
+  justify-content: space-between;
+}
+
+.scene-pane-heading {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size);
+  font-weight: 600;
+}
+
+.scene-pane-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 0 auto;
+  min-height: 420px;
+  min-width: 0;
+}
+
+.scene-pane-detail > .meta {
+  margin: 0;
+}
+
+.scene-pane-detail-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.scene-pane-editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.scene-pane-editor[hidden] {
+  display: none;
+}
+
+.scene-pane-detail .scene-editor-problem-codemirror {
+  flex: 1;
+  min-height: 160px;
+  min-width: 0;
+}

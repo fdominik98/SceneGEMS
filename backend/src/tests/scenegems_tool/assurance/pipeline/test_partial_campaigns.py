@@ -113,7 +113,7 @@ def test_a_scene_campaign_over_catalog_classes_and_a_scenario_with_its_monitor(m
         assert jobs[MONITOR_SCENE].payload["scene"]["sha256"] == case.scene_artifact and jobs[MONITOR_SCENE].payload["include_frames"] is True
         assert jobs[MONITOR_SCENE].payload["scenario_id"] == f"{case.class_id}#{case.case_index}#scene"
     scenario_job = next(job for pipeline_job, job in _jobs_of(harness, cases["scenario/mine"]) if pipeline_job.stage == SCENE)
-    assert scenario_job.payload["functional_scenario_content"]["sha256"] == scenario["sha256"]  # the node resolves it
+    assert scenario_job.payload["functional_scenario_content"]["sha256"] == scenario["sha256"]  # the worker node resolves it
     assert harness.executor.payloads[scenario_job.job_id]["functional_scenario_content"] == text
     verdicts = _verdicts(harness, campaign)
     assert {(verdict.step, verdict.run_index, verdict.run_record_id, verdict.state) for verdict in verdicts} == {(StepKind.SCENE, 0, None, VerdictState.PASSED)}
@@ -183,7 +183,7 @@ def test_the_full_chain_still_drops_a_partial_path(make_harness):
     campaign = _create(harness, config)
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     first = next(case for case in _cases(harness, campaign) if case.case_index == 0)
-    assert first.state == CaseState.DROPPED and "only the best partial path" in first.reason
+    assert first.state == CaseState.DROPPED and "ends early or still fails a COLREGS rule" in first.reason
 
 
 # Later starts: item classes

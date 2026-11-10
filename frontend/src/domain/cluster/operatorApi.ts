@@ -10,9 +10,9 @@ import {
   classViewSchema,
   jobDetailSchema,
   jobViewSchema,
-  masterStatusSchema,
-  nodeRemovedSchema,
-  nodeViewSchema,
+  controlNodeStatusSchema,
+  workerNodeRemovedSchema,
+  workerNodeViewSchema,
   runRecordSchema,
   verdictSchema,
   type CampaignActualState,
@@ -23,19 +23,19 @@ import {
   type VerdictStep,
 } from "./schemas";
 
-/** A request to run one job (`JobSubmission` of `cluster/protocol/jobs.py`); the master checks the payload against its job type. */
+/** A request to run one job (`JobSubmission` of `cluster/protocol/jobs.py`); the control node checks the payload against its job type. */
 export interface JobSubmission {
   job_type: string;
   payload: Record<string, unknown>;
   priority?: number;
   max_attempts?: number;
   idempotency_key?: string;
-  /** Node ids that may run the job; empty or left out for any node. */
-  allowed_nodes?: string[];
+  /** Worker node ids that may run the job; empty or left out for any worker node. */
+  allowed_worker_nodes?: string[];
 }
 
 /**
- * Client of a master's operator API (`backend/.../cluster/master/api/operator_routes.py` and
+ * Client of a control node's operator API (`backend/.../cluster/control_node/api/operator_routes.py` and
  * `campaign_routes.py`). Every answer is checked against the schemas in `schemas.ts`; errors
  * carry the server's reasons. List calls return the `X-Total-Count` header when the server
  * sends it (and exposes it to the browser).
@@ -60,7 +60,7 @@ export class OperatorApiError extends Error {
     this.path = path;
   }
 
-  /** True when the master could not be reached at all (no tunnel, wrong URL, no CORS). */
+  /** True when the control node could not be reached at all (no tunnel, wrong URL, no CORS). */
   get unreachable(): boolean {
     return this.kind === "network" || this.kind === "timeout";
   }
@@ -103,7 +103,7 @@ export interface CaseFilters {
   offset?: number;
 }
 
-/** The orders the master sorts verdicts in (Phase 7); `fec_id` is FEC, case, step and run. */
+/** The orders the control node sorts verdicts in (Phase 7); `fec_id` is FEC, case, step and run. */
 export const VERDICT_SORTS = ["fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at"] as const;
 export type VerdictSort = (typeof VERDICT_SORTS)[number];
 
@@ -114,7 +114,7 @@ export interface VerdictFilters {
   sensitive?: boolean;
   /** Phase 6: the verdicts of one monitored step; without it, every step. */
   step?: VerdictStep;
-  /** Phase 7: the order (`fec_id` is the default FEC, case, step, run order); an older master ignores it. */
+  /** Phase 7: the order (`fec_id` is the default FEC, case, step, run order); an older control node ignores it. */
   sort?: VerdictSort;
   order?: "asc" | "desc";
   limit?: number;
@@ -309,33 +309,33 @@ export class OperatorClient {
     return { items: data as z.infer<S>[], total };
   }
 
-  // Master and nodes
+  // Control node and worker nodes
 
   getStatus(signal?: AbortSignal) {
-    return this.get("/cluster/status", masterStatusSchema, undefined, signal);
+    return this.get("/cluster/status", controlNodeStatusSchema, undefined, signal);
   }
 
-  listNodes(signal?: AbortSignal) {
-    return this.list("/cluster/nodes", nodeViewSchema, undefined, signal);
+  listWorkerNodes(signal?: AbortSignal) {
+    return this.list("/cluster/worker-nodes", workerNodeViewSchema, undefined, signal);
   }
 
-  getNode(nodeId: string, signal?: AbortSignal) {
-    return this.get(`/cluster/nodes/${encodeURIComponent(nodeId)}`, nodeViewSchema, undefined, signal);
+  getWorkerNode(workerNodeId: string, signal?: AbortSignal) {
+    return this.get(`/cluster/worker-nodes/${encodeURIComponent(workerNodeId)}`, workerNodeViewSchema, undefined, signal);
   }
 
-  /** No new jobs for the node; running ones finish. Answers the node. */
-  async drainNode(nodeId: string, reason?: string) {
+  /** No new jobs for the worker node; running ones finish. Answers the worker node. */
+  async drainWorkerNode(workerNodeId: string, reason?: string) {
     const body = reason === undefined ? undefined : { reason };
-    return (await this.request("POST", `/cluster/nodes/${encodeURIComponent(nodeId)}/drain`, nodeViewSchema, { body })).data;
+    return (await this.request("POST", `/cluster/worker-nodes/${encodeURIComponent(workerNodeId)}/drain`, workerNodeViewSchema, { body })).data;
   }
 
-  async resumeNode(nodeId: string) {
-    return (await this.request("POST", `/cluster/nodes/${encodeURIComponent(nodeId)}/resume`, nodeViewSchema)).data;
+  async resumeWorkerNode(workerNodeId: string) {
+    return (await this.request("POST", `/cluster/worker-nodes/${encodeURIComponent(workerNodeId)}/resume`, workerNodeViewSchema)).data;
   }
 
-  /** Forgets an offline node (the master refuses one that is not offline). Answers the removed node's id. */
-  async removeNode(nodeId: string) {
-    return (await this.request("POST", `/cluster/nodes/${encodeURIComponent(nodeId)}/remove`, nodeRemovedSchema)).data.removed;
+  /** Forgets an offline worker node (the control node refuses one that is not offline). Answers the removed worker node's id. */
+  async removeWorkerNode(workerNodeId: string) {
+    return (await this.request("POST", `/cluster/worker-nodes/${encodeURIComponent(workerNodeId)}/remove`, workerNodeRemovedSchema)).data.removed;
   }
 
   // Jobs

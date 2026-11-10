@@ -15,7 +15,7 @@ def test_the_tag_is_latest_unless_set(monkeypatch):
     monkeypatch.delenv("SCENEGEMS_IMAGE_TAG", raising=False)
     assert image_tag() == DEFAULT_IMAGE_TAG == "latest"
     monkeypatch.setenv("SCENEGEMS_IMAGE_TAG", " abc123-dirty ")
-    assert image_tag() == "abc123-dirty" and tagged("scenegems-node") == "scenegems-node:abc123-dirty"
+    assert image_tag() == "abc123-dirty" and tagged("scenegems-worker-node") == "scenegems-worker-node:abc123-dirty"
     monkeypatch.setenv("SCENEGEMS_IMAGE_TAG", "")
     assert image_tag() == "latest"
 
@@ -30,8 +30,8 @@ def test_a_malformed_tag_fails(monkeypatch, tag):
 @pytest.mark.parametrize(
     "name, repository",
     [
-        ("scenegems-node:latest", "scenegems-node"),
-        ("scenegems-node", "scenegems-node"),
+        ("scenegems-worker-node:latest", "scenegems-worker-node"),
+        ("scenegems-worker-node", "scenegems-worker-node"),
         ("localhost:5000/a/b:v1", "localhost:5000/a/b"),
         ("localhost:5000/a", "localhost:5000/a"),
         ("a@sha256:00", "a"),
@@ -43,13 +43,13 @@ def test_the_repository_is_the_name_without_tag_and_digest(name, repository):
 
 
 def test_with_tag_replaces_the_tag():
-    assert with_tag("scenegems-node:latest", "abc") == "scenegems-node:abc" and with_tag("localhost:5000/a", "v2") == "localhost:5000/a:v2"
+    assert with_tag("scenegems-worker-node:latest", "abc") == "scenegems-worker-node:abc" and with_tag("localhost:5000/a", "v2") == "localhost:5000/a:v2"
 
 
 SCRIPT = """
 import json
 from scenegems_tool.cluster.fingerprints.components import component_images
-from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
+from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER, SITL_CONTAINER
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gazebo_specs import GAZEBO_CONTAINER
 images = [image for images in component_images().values() for image in images]

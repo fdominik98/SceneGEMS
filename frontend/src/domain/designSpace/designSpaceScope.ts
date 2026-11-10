@@ -1,7 +1,7 @@
 /**
  * The scope of a design space exploration (the campaign config's `design_space_exploration.scope`):
  * how many objects of each class a generated model has. Entries are comma separated, each
- * `Type = n` or `Type = a..b` with whole numbers and a <= b, as the master checks them. The
+ * `Type = n` or `Type = a..b` with whole numbers and a <= b, as the control node checks them. The
  * workbench page and the wizard check the scope with this module as it is typed.
  */
 

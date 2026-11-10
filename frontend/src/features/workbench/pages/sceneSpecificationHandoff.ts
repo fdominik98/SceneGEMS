@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useUiStore } from "../../../app/uiStore";
+import { useBatchGenerationStore } from "../../../domain/sceneGeneration/batchGenerationStore";
 
 /**
  * A FEC specification on its way into the scene page's editor: an explored FEC from the design
@@ -33,12 +34,15 @@ export const useSceneSpecificationHandoff = create<SceneSpecificationHandoffStat
   },
 }));
 
-/** Queues a specification for the scene page's editor and shows the scene page. */
+/**
+ * Queues a specification for the scene page's editor and shows the scene page. The editor shows
+ * only while no FEC of the catalog is selected, so the selection is cleared.
+ */
 export function sendToScenePage(load: SceneSpecificationLoad): void {
   useSceneSpecificationHandoff.getState().queue(load);
+  useBatchGenerationStore.getState().clearSelectedClassIds();
   const ui = useUiStore.getState();
   ui.setSceneGenerationPaneView("specification");
-  ui.setSceneGenerationTab("single");
   ui.setWorkbenchView("sceneGeneration");
   ui.setSection("workbench");
 }

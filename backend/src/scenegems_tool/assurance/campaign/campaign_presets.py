@@ -1,9 +1,9 @@
 """Campaign presets: campaign configs to start the wizard from, for campaign runs that come up again and again.
 
-The presets shipped with the master are the config files under backend/assets/campaign_presets/
-(in the master image with the other assets). A file's name without .yaml is the preset's id; the
+The presets shipped with the control node are the config files under backend/assets/campaign_presets/
+(in the control node image with the other assets). A file's name without .yaml is the preset's id; the
 leading number only orders the list. Its name and description are the config's own. Operators save
-more presets on the master (persistence/stores/setting_stores.py); both kinds follow the same rule:
+more presets on the control node (persistence/stores/setting_stores.py); both kinds follow the same rule:
 
     a preset is a campaign config that loads, and it has no input section. Picked history outputs
     and uploaded files belong to one campaign, so the operator picks them when starting from a preset.
@@ -45,7 +45,7 @@ def preset_config(config: Union[str, Mapping[str, Any]]) -> Tuple[Dict[str, Any]
 
 
 def builtin_presets(folder: Union[str, Path] = CAMPAIGN_PRESETS_FOLDER) -> Tuple[BuiltinPreset, ...]:
-    """The presets shipped with the master, in file name order; none when the folder is missing."""
+    """The presets shipped with the control node, in file name order; none when the folder is missing."""
     root = Path(folder)
     if not root.is_dir():
         return ()

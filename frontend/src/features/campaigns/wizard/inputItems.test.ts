@@ -106,11 +106,11 @@ describe("upload expiry notes", () => {
     expect(uploadHoursLeft(NOW + 5000, NOW)).toBe(24);
   });
 
-  it("says when the master deletes an upload and that history outputs are kept", () => {
+  it("says when the control node deletes an upload and that history outputs are kept", () => {
     expect(uploadNote(NOW, NOW)).toContain("about 24 hours unless a campaign uses it");
     expect(uploadNote(NOW - UPLOAD_LIFETIME_MS + 1000, NOW)).toContain("about 1 hour ");
     expect(uploadNote(NOW - UPLOAD_LIFETIME_MS, NOW)).toContain("Expired");
-    expect(uploadNote(null, NOW)).toContain("Kept by the master");
+    expect(uploadNote(null, NOW)).toContain("Kept by the control node");
   });
 });
 

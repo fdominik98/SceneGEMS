@@ -7,7 +7,7 @@ import type { WorkbenchPage, WorkbenchTarget } from "./workbenchTarget";
  * What each workbench page holds (design doc 6.6): its input, set from the previous page's
  * output, a history output or a file, and the target of the latest loaded entry. The pages are
  * independent: the scene page and the trajectory page may show outputs of different campaigns.
- * Contents are not stored here; the page fetches them from the master (`entryLoader.ts`), and a
+ * Contents are not stored here; the page fetches them from the control node (`entryLoader.ts`), and a
  * 404 clears the page.
  */
 
@@ -17,7 +17,7 @@ export interface PageInput {
   /** How the page names the input. */
   label: string;
   origin: PageInputOrigin;
-  /** The input on the master: a history output, or a page output that came from an entry. Null for a file not uploaded yet. */
+  /** The input on the control node: a history output, or a page output that came from an entry. Null for a file not uploaded yet. */
   ref: ConfigArtifactRef | null;
   /** Where it came from, as the entry's config item records it. */
   source: InputItemSource;
@@ -26,7 +26,7 @@ export interface PageInput {
 /** The shown output, as the next page takes it for its input. */
 export interface PageOutput {
   label: string;
-  /** Null for an output that is not on the master (a scene loaded from a file). */
+  /** Null for an output that is not on the control node (a scene loaded from a file). */
   ref: ConfigArtifactRef | null;
   source: InputItemSource;
 }

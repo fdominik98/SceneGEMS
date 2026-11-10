@@ -1,7 +1,7 @@
 """Artifact references: large job data stored once, by content hash, and named in payloads and results.
 
 A payload field that holds large data (trajectories, a scene) takes either the data inline
-or an ArtifactRef. The master checks a reference's shape only; the node downloads the
+or an ArtifactRef. The control node checks a reference's shape only; the worker node downloads the
 artifact, checks its hash, puts the content in place of the reference (resolve_references)
 and only then validates the content with the job type's payload model.
 

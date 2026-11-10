@@ -80,7 +80,7 @@ export function sampleRunningWorkbenchRow(overrides: Record<string, unknown> = {
 export const sampleHistoryRows = [sampleRunningWorkbenchRow(), sampleWorkbenchRow(), sampleCampaignRow()];
 export const SAMPLE_HISTORY_TOTAL = 3;
 
-/** A list row as the master answered before Phase 6: none of the new fields. */
+/** A list row as the control node answered before Phase 6: none of the new fields. */
 export const samplePreSixCampaignRow = { ...sampleCampaignSummary };
 
 /** An output of the scene generation step: a valid scene whose monitor passed. */
@@ -103,7 +103,7 @@ export function sampleSceneOutput(overrides: Record<string, unknown> = {}): Reco
   };
 }
 
-/** An output of the trajectory generation step: a partial path (the step was last) that failed its monitor. */
+/** An output of the trajectory generation step: an incomplete path (the step was last) that failed its monitor. */
 export function sampleTrajectoryOutput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     case_id: 6,
@@ -143,7 +143,7 @@ export function sampleSimulationOutput(overrides: Record<string, unknown> = {}):
   };
 }
 
-/** A verdict as a master sends it with its monitor result summary: a crossing that failed, a head-on, a pair without an encounter and a vessel's own failed rule. */
+/** A verdict as a control node sends it with its monitor result summary: a crossing that failed, a head-on, a pair without an encounter and a vessel's own failed rule. */
 export function sampleMonitorVerdict(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     state: "failed",
@@ -206,7 +206,7 @@ export const sampleLiveRunRecord = {
   trajectory_generator: null,
   source: "live_session",
   job_id: null,
-  node_id: null,
+  worker_node_id: null,
 };
 
 /** A case of a campaign that stopped after trajectory generation, with the new monitor stages. */
@@ -248,6 +248,6 @@ export const sampleScenarioConfig = {
 export const sampleRunRecordingMessages = [
   { type: "run_recording", status: "recording", campaignId: "wb3", caseId: 1, message: "Recording the run as a workbench entry" },
   { type: "run_recording", status: "saved", campaignId: "wb3", caseId: 1, message: null },
-  { type: "run_recording", status: "failed", campaignId: "wb3", caseId: 1, message: "the master refused the run record" },
-  { type: "run_recording", status: "unavailable", campaignId: null, caseId: null, message: "the gateway runs without a master" },
+  { type: "run_recording", status: "failed", campaignId: "wb3", caseId: 1, message: "the control node refused the run record" },
+  { type: "run_recording", status: "unavailable", campaignId: null, caseId: null, message: "the gateway runs without a control node" },
 ];

@@ -14,9 +14,9 @@ import type { WizardDraft } from "./wizardState";
 
 interface PresetBarProps {
   draft: WizardDraft;
-  /** The stacks and generators the master offers; null while they load (a preset's runs need them). */
+  /** The stacks and generators the control node offers; null while they load (a preset's runs need them). */
   catalog: BuilderCatalog | null;
-  /** The master's FEC catalog, to say what a preset's scope selects; undefined while it loads. */
+  /** The control node's FEC catalog, to say what a preset's scope selects; undefined while it loads. */
   classes?: readonly CatalogClass[];
   onLoad: (draft: WizardDraft) => void;
 }
@@ -48,9 +48,9 @@ function PresetCard({ facts, canLoad, deleting, onLoad, onDelete }: { facts: Pre
           </span>
         ))}
       </div>
-      {facts.blocked && <p className="wiz-catalog-warning">A run needs a stack this master cannot run: load it and pick another stack on the Simulation page.</p>}
+      {facts.blocked && <p className="wiz-catalog-warning">A run needs a stack this control node cannot run: load it and pick another stack on the Simulation page.</p>}
       <div className="wiz-catalog-item-actions">
-        <button type="button" className="primary-btn" disabled={!canLoad} onClick={onLoad} title={canLoad ? undefined : "Waiting for the master's stacks"}>
+        <button type="button" className="primary-btn" disabled={!canLoad} onClick={onLoad} title={canLoad ? undefined : "Waiting for the control node's stacks"}>
           Load into the wizard
         </button>
         {!preset.builtin && (
@@ -64,7 +64,7 @@ function PresetCard({ facts, canLoad, deleting, onLoad, onDelete }: { facts: Pre
 }
 
 /**
- * Campaign presets of the master: start the wizard from one of them (the ones the master image
+ * Campaign presets of the control node: start the wizard from one of them (the ones the control node image
  * ships for campaign runs that come up again and again, or ones saved on this cluster), found in the
  * preset catalog, or save the current draft as a preset for the next time.
  */
@@ -72,7 +72,7 @@ export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
   const presets = useCampaignPresets();
   const save = useSaveCampaignPreset();
   const remove = useDeleteCampaignPreset();
-  // A preset that explores the design space may leave the specification to the master: the draft starts from its default
+  // A preset that explores the design space may leave the specification to the control node: the draft starts from its default
   const designSpaceDefault = useDesignSpaceDefault();
   const [browsing, setBrowsing] = useState(false);
   const [name, setName] = useState("");
@@ -104,14 +104,14 @@ export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
       { name: presetName, description: description.trim() || draft.description.trim(), config: presetConfigOf(draft, catalog), replace },
       {
         onSuccess: (preset) => {
-          setNotice(`Saved the preset "${preset.name}" on the master.`);
+          setNotice(`Saved the preset "${preset.name}" on the control node.`);
         },
       }
     );
   };
 
   const deletePreset = (preset: CampaignPreset) => {
-    if (preset.builtin || !window.confirm(`Delete the preset "${preset.name}" from the master?`)) {
+    if (preset.builtin || !window.confirm(`Delete the preset "${preset.name}" from the control node?`)) {
       return;
     }
     remove.mutate(preset.preset_id, {
@@ -126,7 +126,7 @@ export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
       <div className="wiz-presets-row">
         <span className="wiz-presets-label">Start from a preset</span>
         <button type="button" aria-haspopup="dialog" disabled={presets.isLoading || facts.length === 0} onClick={() => setBrowsing(true)}>
-          {presets.isLoading ? "Reading the master's presets..." : facts.length === 0 ? "The master offers no presets" : `Browse ${facts.length} presets`}
+          {presets.isLoading ? "Reading the control node's presets..." : facts.length === 0 ? "The control node offers no presets" : `Browse ${facts.length} presets`}
         </button>
       </div>
       {presets.isError && <p className="error">The presets could not be read: {describeOperatorError(presets.error)}</p>}

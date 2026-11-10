@@ -33,7 +33,7 @@ class NewRunRecord:
     state_digest: Optional[str] = None
     artifacts: Dict[str, str] = field(default_factory=dict)  # role to sha256
     job_id: Optional[str] = None
-    node_id: Optional[str] = None
+    worker_node_id: Optional[str] = None
     fingerprints: Dict[str, str] = field(default_factory=dict)
     durations_s: Dict[str, float] = field(default_factory=dict)
     source: RunSource = RunSource.JOB
@@ -58,7 +58,7 @@ class RunRecord:
     state_digest: Optional[str]
     artifacts: Dict[str, str]
     job_id: Optional[str]
-    node_id: Optional[str]
+    worker_node_id: Optional[str]
     fingerprints: Dict[str, str]
     durations_s: Dict[str, float]
     created_at: datetime
@@ -85,7 +85,7 @@ class RunRecord:
             state_digest=row.state_digest,
             artifacts=dict(row.artifacts),
             job_id=row.job_id,
-            node_id=row.node_id,
+            worker_node_id=row.worker_node_id,
             fingerprints=dict(row.fingerprints),
             durations_s=dict(row.durations_s),
             created_at=row.created_at,

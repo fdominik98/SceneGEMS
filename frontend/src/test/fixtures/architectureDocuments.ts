@@ -40,7 +40,7 @@ export function sampleStackDocument(): ArchitectureDocument {
   const exact = [fact("repeatability_tier", "exact"), fact("max_speedup", "unbounded", { unit: "x" }), fact("wind", "unsupported"), fact("waves", "supported", { measured: true })];
   // An available combination names the cluster job that runs it, or none (a workbench live session)
   const clusterJob = (jobType: string | null) =>
-    fact("cluster_job", jobType, { label: "Cluster job", group: "property", note: jobType === null ? "no job type runs it yet" : "runs as this job on a node" });
+    fact("cluster_job", jobType, { label: "Cluster job", group: "property", note: jobType === null ? "no job type runs it yet" : "runs as this job on a worker node" });
   const combination = (path: string[], status: string, reasons: string[] = [], jobType: string | null = null) => ({
     path,
     status,
@@ -104,7 +104,7 @@ export function sampleStackDocument(): ArchitectureDocument {
   };
 }
 
-/** The same document as a master from before the overview writes it: without its place in the chain. */
+/** The same document as a control node from before the overview writes it: without its place in the chain. */
 export function sampleStackDocumentWithoutChain(): Record<string, unknown> {
   const document: Record<string, unknown> = { ...sampleStackDocument() };
   for (const key of ["role", "step", "takes", "gives", "job_types"]) {

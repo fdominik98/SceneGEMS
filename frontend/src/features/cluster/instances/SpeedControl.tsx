@@ -3,7 +3,7 @@ import { SPEED_CHOICES } from "./speedChoices";
 interface SpeedControlProps {
   /** The speed this browser asked for. */
   requested: number;
-  /** The pace the master reports (`observed_speed` of the instance), null while it reports none. */
+  /** The pace the control node reports (`observed_speed` of the instance), null while it reports none. */
   reported: number | null | undefined;
   disabled?: boolean;
   onChange: (speed: number) => void;
@@ -20,10 +20,10 @@ export function SpeedControl({ requested, reported, disabled, onChange }: SpeedC
         </span>
         <span className="meta" role="status">
           {reported === null || reported === undefined
-            ? "The master reports no pace yet."
+            ? "The control node reports no pace yet."
             : settled
-              ? `The master paces the run at ${reported}x real time.`
-              : `The master reports ${reported}x real time, you asked for ${requested}x.`}
+              ? `The control node paces the run at ${reported}x real time.`
+              : `The control node reports ${reported}x real time, you asked for ${requested}x.`}
         </span>
       </div>
       <div className="instances-speed-choices" role="group" aria-labelledby="instances-speed-label">

@@ -8,7 +8,7 @@ import type { WorkbenchTarget } from "./workbenchTarget";
  * when it loads the scene. A case of a scenario class (`scenario/<name>`, a workbench run or an
  * uploaded file) and a case of a FEC a design space exploration found (`explored/00003`) name their
  * input artifact; a case of a catalog class gets the class's content from
- * the master's catalog. Item classes (`item/<n>`) start later in the chain and have no scenario.
+ * the control node's catalog. Item classes (`item/<n>`) start later in the chain and have no scenario.
  */
 
 export interface InputSpecification {
@@ -46,7 +46,7 @@ export async function artifactText(
   return (await response.text()).replace(/\r\n?/g, "\n");
 }
 
-/** The specification of a scene case, or null when the case has none (an item class, or a master that does not name the input). */
+/** The specification of a scene case, or null when the case has none (an item class, or a control node that does not name the input). */
 export async function sceneInputSpecification(
   client: SpecificationClient,
   target: Pick<WorkbenchTarget, "campaignId" | "caseId">,

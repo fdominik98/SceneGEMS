@@ -128,7 +128,7 @@ describe("the preset bar", () => {
   it("lists the shipped and the saved presets apart and loads one into the wizard", async () => {
     const { loaded, user } = setup();
     const dialog = await openCatalog(user);
-    expect(within(dialog).getByRole("region", { name: "Shipped with the master" })).toBeVisible();
+    expect(within(dialog).getByRole("region", { name: "Shipped with the control node" })).toBeVisible();
     expect(within(dialog).getByRole("region", { name: "Saved on this cluster" })).toBeVisible();
     const card = presetCard(dialog, SHIPPED.name);
     expect(within(card).getByText(/Checks that every step works on the cluster/)).toBeVisible();
@@ -166,11 +166,11 @@ describe("the preset bar", () => {
     expect(within(card).getByText("Whole chain")).toBeVisible();
   });
 
-  it("warns on the card of a preset whose stack the master cannot run", async () => {
+  it("warns on the card of a preset whose stack the control node cannot run", async () => {
     presets = [{ ...SHIPPED, config: { ...SHIPPED.config, execution: { runs: [{ stack: { simulation_layer: "somewhere", mode: "replay" } }] } } }];
     const { user } = setup();
     const dialog = await openCatalog(user);
-    expect(within(dialog).getByText(/A run needs a stack this master cannot run/)).toBeVisible();
+    expect(within(dialog).getByText(/A run needs a stack this control node cannot run/)).toBeVisible();
   });
 
   it("asks before replacing a draft that has entries", async () => {
@@ -183,7 +183,7 @@ describe("the preset bar", () => {
     expect(screen.getByRole("dialog")).toBeVisible();
   });
 
-  it("waits for the master's stacks before loading", async () => {
+  it("waits for the control node's stacks before loading", async () => {
     render(
       <WithQueries>
         <PresetBar draft={draftOf()} catalog={null} onLoad={() => undefined} />
@@ -193,10 +193,10 @@ describe("the preset bar", () => {
     expect(within(presetCard(dialog, SHIPPED.name)).getByRole("button", { name: "Load into the wizard" })).toBeDisabled();
   });
 
-  it("says so when the master offers no presets", async () => {
+  it("says so when the control node offers no presets", async () => {
     presets = [];
     setup();
-    expect(await screen.findByRole("button", { name: "The master offers no presets" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "The control node offers no presets" })).toBeDisabled();
   });
 
   it("saves the draft as a preset without its input", async () => {
@@ -208,7 +208,7 @@ describe("the preset bar", () => {
     await openSaving(user);
     await user.type(screen.getByRole("textbox", { name: "Description" }), "every night");
     await user.click(screen.getByRole("button", { name: "Save as preset" }));
-    expect(await screen.findByText('Saved the preset "two-vessel nightly" on the master.')).toBeVisible();
+    expect(await screen.findByText('Saved the preset "two-vessel nightly" on the control node.')).toBeVisible();
     const post = requests.find((request) => request.method === "POST");
     expect(post?.body).toMatchObject({ name: "two-vessel nightly", description: "every night", replace: false });
     expect((post?.body as { config: Record<string, unknown> }).config.input).toBeUndefined();

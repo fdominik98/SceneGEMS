@@ -12,7 +12,7 @@ export interface DeleteEntryProps {
 
 /**
  * Deletes a final entry after a confirmation. A running entry has to be stopped first; the
- * button says so instead of asking, and the master's 409 says the same if the state changed.
+ * button says so instead of asking, and the control node's 409 says the same if the state changed.
  */
 export function DeleteEntry({ entry, onDeleted = () => {}, compact = false }: DeleteEntryProps) {
   const [confirming, setConfirming] = useState(false);

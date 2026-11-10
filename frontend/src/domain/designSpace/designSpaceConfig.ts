@@ -1,7 +1,7 @@
 /**
  * The `design_space_exploration` section of a format 3 campaign config, present only when the
  * campaign runs the step (then first in its `steps`, with no `scope` and no `input`: the FECs come
- * from the exploration). The master validates it; these are its defaults and its shape.
+ * from the exploration). The control node validates it; these are its defaults and its shape.
  */
 
 /** At most this many FECs unless the config says otherwise; null in the config means every FEC. */

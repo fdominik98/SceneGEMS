@@ -1,4 +1,4 @@
-import type { NodeView } from "../../domain/cluster/schemas";
+import type { WorkerNodeView } from "../../domain/cluster/schemas";
 
 /** Readable text for the Cluster section's values. */
 
@@ -66,10 +66,10 @@ export interface SlotTotals {
   inUse: number;
 }
 
-export function nodeSlotTotals(node: NodeView): SlotTotals {
+export function workerNodeSlotTotals(workerNode: WorkerNodeView): SlotTotals {
   let slots = 0;
   let inUse = 0;
-  for (const usage of Object.values(node.slots)) {
+  for (const usage of Object.values(workerNode.slots)) {
     slots += usage.slots;
     inUse += usage.slots_in_use;
   }
@@ -77,7 +77,7 @@ export function nodeSlotTotals(node: NodeView): SlotTotals {
 }
 
 export interface ClusterSummary {
-  nodes: number;
+  workerNodes: number;
   online: number;
   draining: number;
   offline: number;
@@ -88,9 +88,9 @@ export interface ClusterSummary {
   leases: number;
 }
 
-export function summarizeNodes(nodes: readonly NodeView[]): ClusterSummary {
+export function summarizeWorkerNodes(workerNodes: readonly WorkerNodeView[]): ClusterSummary {
   const summary: ClusterSummary = {
-    nodes: nodes.length,
+    workerNodes: workerNodes.length,
     online: 0,
     draining: 0,
     offline: 0,
@@ -100,14 +100,14 @@ export function summarizeNodes(nodes: readonly NodeView[]): ClusterSummary {
     slotsInUse: 0,
     leases: 0,
   };
-  for (const node of nodes) {
-    summary[node.status] += 1;
-    if (node.connected) summary.connected += 1;
-    if (node.out_of_date) summary.outOfDate += 1;
-    const totals = nodeSlotTotals(node);
+  for (const workerNode of workerNodes) {
+    summary[workerNode.status] += 1;
+    if (workerNode.connected) summary.connected += 1;
+    if (workerNode.out_of_date) summary.outOfDate += 1;
+    const totals = workerNodeSlotTotals(workerNode);
     summary.slots += totals.slots;
     summary.slotsInUse += totals.inUse;
-    summary.leases += node.leases.length;
+    summary.leases += workerNode.leases.length;
   }
   return summary;
 }

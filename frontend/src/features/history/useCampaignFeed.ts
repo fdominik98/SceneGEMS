@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
 import { campaignTopic } from "../../domain/cluster/liveProtocol";
 import { campaignReducer, type CampaignTopicState } from "../../domain/cluster/liveTopics";
-import { useNodesFeed, useNodesStore } from "../../domain/cluster/nodesStore";
+import { useWorkerNodesFeed, useWorkerNodesStore } from "../../domain/cluster/workerNodesStore";
 import { OperatorApiError, type CampaignControl, type OperatorClient } from "../../domain/cluster/operatorApi";
 import type { CampaignConfig, CampaignDetail, CampaignSummary } from "../../domain/cluster/schemas";
 import { useLiveTopic } from "../../domain/cluster/useLiveTopic";
@@ -107,7 +107,7 @@ export function useCampaignEvents(campaignId: string, lastEventId: number | null
       try {
         let after = lastIdRef.current;
         for (let page = 0; page < EVENTS_PAGES_MAX; page += 1) {
-          // The first read takes the newest page (what the feed keeps); a master without `newest` ignores it and pages from event 0 as before.
+          // The first read takes the newest page (what the feed keeps); a control node without `newest` ignores it and pages from event 0 as before.
           const first = after === 0 && page === 0;
           const { items } = await client.listEvents(campaignId, first ? { newest: EVENTS_KEPT, limit: EVENTS_PAGE } : { after, limit: EVENTS_PAGE }, signal);
           if (signal.aborted || items.length === 0) {
@@ -163,13 +163,13 @@ export function useCampaignConfig(campaignId: string) {
   });
 }
 
-/** Why the campaign of a stored config cannot start on the selected cluster's machines, or null; follows the nodes while mounted. */
+/** Why the campaign of a stored config cannot start on the selected cluster's machines, or null; follows the worker nodes while mounted. */
 export function useStartBlocker(config: CampaignConfig | undefined): string | null {
   const operatorUrl = useSelectedCluster()?.operatorUrl ?? null;
-  useNodesFeed(operatorUrl);
+  useWorkerNodesFeed(operatorUrl);
   const current = config?.versions.find((version) => version.version === config.current_version)?.config;
   // Only the answer is selected: a heartbeat that leaves it as it was does not render the entry page again
-  return useNodesStore((state) => startBlocker(operatorUrl !== null && state.operatorUrl === operatorUrl && state.loaded && current ? planOfConfig(current, state.nodes) : null));
+  return useWorkerNodesStore((state) => startBlocker(operatorUrl !== null && state.operatorUrl === operatorUrl && state.loaded && current ? planOfConfig(current, state.workerNodes) : null));
 }
 
 export function useCampaignControl(campaignId: string, onDone: (summary: CampaignSummary) => void) {

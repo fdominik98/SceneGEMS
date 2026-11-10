@@ -10,7 +10,7 @@ import {
 } from "./liveProtocol";
 
 /**
- * Browser client of the master's live channel: one WebSocket, topic subscriptions shared
+ * Browser client of the control node's live channel: one WebSocket, topic subscriptions shared
  * by reference count across components.
  *
  * - The first subscriber of a topic sends `subscribe`, the last one to leave `unsubscribe`.

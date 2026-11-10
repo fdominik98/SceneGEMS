@@ -5,7 +5,7 @@
     scene_generation        a catalog class's content from the catalog (checked against the hash
                             the campaign pinned), or a functional scenario given as content or an
                             explored FEC as its
-                            reference (kind functional_scenario, which the node resolves); the
+                            reference (kind functional_scenario, which the worker node resolves); the
                             domain contents, the timeout, enforce_low_tcpa, the case seed
     monitoring.post_hoc     (monitor_scene) the scene result's evaluation_data as scene, a
                             reference when the result holds one
@@ -35,7 +35,7 @@ into the payload as it is, except that a trajectory_data item without a pointer 
 /trajectories, so the simulation takes its trajectories. Results come inline (before the
 artifact store) or with references in their declared fields; both work. Every payload is
 checked with its job type's model (references for shape only) before the engine writes the
-intent, so a payload the master would refuse never reaches the queue.
+intent, so a payload the control node would refuse never reaches the queue.
 """
 
 import hashlib
@@ -126,8 +126,8 @@ def item_trajectories(item: InputItem) -> Dict[str, Any]:
 
 
 def validate_payload(job_type: JobType, payload: Mapping[str, Any]) -> Tuple[ComponentId, ...]:
-    """Checks the payload with its job type's model, as the master does at submission, and returns the components it needs; raises PayloadError."""
-    from scenegems_tool.cluster.node.jobs.job_types import payload_components
+    """Checks the payload with its job type's model, as the control node does at submission, and returns the components it needs; raises PayloadError."""
+    from scenegems_tool.cluster.worker_node.jobs.job_types import payload_components
 
     try:
         return payload_components(job_type, payload)
@@ -300,7 +300,7 @@ class PayloadBuilder:
     # Submissions
 
     def submission(self, step: Step, payload: Dict[str, Any], key: str, pinned: Mapping[str, str]) -> JobSubmission:
-        """The job of a step, checked: its payload, the campaign's labels and nodes, its components and the pinned fingerprints of their images, its priority."""
+        """The job of a step, checked: its payload, the campaign's labels and worker nodes, its components and the pinned fingerprints of their images, its priority."""
         job_type = self.graph.job_type_of(step)
         components = validate_payload(job_type, payload)
         resources = self.config.resources
@@ -311,7 +311,7 @@ class PayloadBuilder:
             requirements=requirements,
             priority=step.priority(resources.priority, self.priority_offsets),
             idempotency_key=key,
-            allowed_nodes=list(resources.nodes),
+            allowed_worker_nodes=list(resources.worker_nodes),
         )
 
     # Helpers

@@ -6,9 +6,9 @@ import { firstStep, inputKindOf, itemKindsFor, normalizeSteps, runsStep } from "
 import { UPLOAD_LIFETIME_MS, type WizardDraft, type WizardStepId } from "./wizardState";
 
 /**
- * Problems of a draft the browser can see without the master: a missing name, an empty scope entry, a
+ * Problems of a draft the browser can see without the control node: a missing name, an empty scope entry, a
  * run without an available stack, a parameter the stack requires, domain text that is not YAML. They
- * come in the shape of the server's reasons so the steps show both the same way. The master still
+ * come in the shape of the server's reasons so the steps show both the same way. The control node still
  * validates everything (the catalog, the resolver, every range).
  */
 
@@ -29,12 +29,12 @@ function yamlProblem(text: string): string | null {
   return null;
 }
 
-/** Whether an upload made at `uploadedAt` is gone from the master by `now` (it holds the file for 24 hours). */
+/** Whether an upload made at `uploadedAt` is gone from the control node by `now` (it holds the file for 24 hours). */
 export function uploadExpired(uploadedAt: number | null, now: number): boolean {
   return uploadedAt !== null && now - uploadedAt >= UPLOAD_LIFETIME_MS;
 }
 
-const EXPIRED_UPLOAD = "The upload has expired on the master; upload the file again.";
+const EXPIRED_UPLOAD = "The upload has expired on the control node; upload the file again.";
 
 /** The design space exploration's own fields: a specification, a valid scope, and limits in range. */
 function checkExploration(draft: WizardDraft, reasons: Reason[]): void {
@@ -127,7 +127,7 @@ function checkInput(draft: WizardDraft, reasons: Reason[], now: number): void {
   });
 }
 
-/** The problems found in the draft; `catalog` is null while the master's stack catalog is not loaded; `now` dates the uploads. */
+/** The problems found in the draft; `catalog` is null while the control node's stack catalog is not loaded; `now` dates the uploads. */
 export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, now: number = Date.now()): Reason[] {
   const reasons: Reason[] = [];
   const steps = normalizeSteps(draft.steps);
@@ -157,7 +157,7 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
   if (catalog && runsStep(steps, "trajectory_generation")) {
     const generator = findGenerator(catalog, draft.trajectories.generator);
     if (!generator) {
-      reasons.push(local("trajectories", null, "generator", `The master offers no generator ${draft.trajectories.generator}.`));
+      reasons.push(local("trajectories", null, "generator", `The control node offers no generator ${draft.trajectories.generator}.`));
     } else {
       for (const parameter of generator.parameters) {
         if (parameter.required && !isSet(draft.trajectories.parameters[parameter.key])) {
@@ -174,7 +174,7 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
     if (catalog && !run.stackId) {
       reasons.push(local("runs", index, "stack", "Choose a stack."));
     } else if (catalog && !stack) {
-      reasons.push(local("runs", index, "stack", `The master offers no stack ${run.stackId}.`));
+      reasons.push(local("runs", index, "stack", `The control node offers no stack ${run.stackId}.`));
     } else if (stack && !stack.available) {
       reasons.push(local("runs", index, "stack", `${stack.label} is not available: ${stack.reasons.join("; ") || "no reason given"}.`));
     }
@@ -208,8 +208,8 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
   if (runsStep(steps, "simulation") && draft.runs.length === 0) {
     reasons.push(local("runs", null, "runs", "Add at least one run."));
   }
-  if (!draft.resources.fullUsage && draft.resources.nodes.length === 0) {
-    reasons.push(local("resources", null, "nodes", "Choose at least one machine, or use every machine."));
+  if (!draft.resources.fullUsage && draft.resources.workerNodes.length === 0) {
+    reasons.push(local("resources", null, "worker_nodes", "Choose at least one machine, or use every machine."));
   }
   if (draft.resources.labels.some((label) => label.key.trim().length === 0 && label.value.length > 0)) {
     reasons.push(local("resources", null, "required_labels", "A label value needs a name."));

@@ -9,7 +9,7 @@ import { emptyDraft, emptyRun } from "./wizardState";
 const parsedCatalog = catalogStacksSchema.parse(sampleCatalogStacks);
 const catalog: BuilderCatalog = { stacks: parsedCatalog.stacks, generators: parsedCatalog.trajectory_generators };
 
-/** `backend/assets/campaign_presets/05_usv_navigation_comparison.yaml` as the master serves it (a preset holds no input). */
+/** `backend/assets/campaign_presets/05_usv_navigation_comparison.yaml` as the control node serves it (a preset holds no input). */
 const USV_PRESET = parse(`
 format: 3
 name: "USV Navigation against the planned trajectories"
@@ -65,14 +65,14 @@ describe("draftFromConfig", () => {
       steps: ["simulation"],
       domain: { colregs_constants: "A: 1\n", vessel_types: "Ferry: {}\n", obstacle_types: "Buoy: {}\n" },
       execution: { runs: [{ stack: { simulation_layer: "ardupilot_sim", mode: "replay", speedup: 10, geofence: { radius_meters: 900 } }, repeats: 3, monitor: "post_hoc", seed: 7 }] },
-      resources: { nodes: ["node-2"], required_labels: { gpu: "yes" }, queue_depth: { simulate: 4 }, priority: 5 },
+      resources: { worker_nodes: ["worker-node-2"], required_labels: { gpu: "yes" }, queue_depth: { simulate: 4 }, priority: 5 },
       policy: { retention: "failures", keep_frames: true, seed: 3, stop: { max_cases: 10 } },
     };
     const draft = draftFromConfig(config, catalog);
     const [run] = draft.runs;
     expect(run).toMatchObject({ stackId: "ardupilot_sim.replay", repeats: 3, seed: 7, stackParameters: { speedup: 10 }, groups: { geofence: { radius_meters: 900 } } });
     expect(draft.domain).toMatchObject({ custom: true, colregsConstants: "A: 1\n" });
-    expect(draft.resources).toMatchObject({ fullUsage: false, nodes: ["node-2"], labels: [{ key: "gpu", value: "yes" }], priority: 5 });
+    expect(draft.resources).toMatchObject({ fullUsage: false, workerNodes: ["worker-node-2"], labels: [{ key: "gpu", value: "yes" }], priority: 5 });
     expect(draft.resources.queueDepth.simulate).toBe(4);
     expect(draft.policy).toMatchObject({ retention: "failures", keepFrames: true, seed: 3, maxCases: 10 });
     expect(draft.steps).toEqual(["simulation"]);
@@ -98,7 +98,7 @@ describe("draftFromConfig", () => {
     expect([config.format, config.scope]).toEqual([3, [{ fecs: ["2vessel_0obstacle_scenarios/fec1"], quota: 2, failure_budget: 0 }]]);
   });
 
-  it("leaves a run without a stack the master does not offer", () => {
+  it("leaves a run without a stack the control node does not offer", () => {
     expect(stackIdOf({ simulation_layer: "carla" }, catalog)).toBe("");
     expect(stackIdOf({}, catalog)).toBe("kinematic.replay");
   });

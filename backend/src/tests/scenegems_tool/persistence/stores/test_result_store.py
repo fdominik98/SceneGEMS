@@ -49,7 +49,7 @@ def _run(case, run_index=0, repeat_index=0, digest="d" * 64):
         state_digest=digest,
         artifacts={"trajectories": sha256_of("simulated")},
         job_id=None,
-        node_id="node-a",
+        worker_node_id="worker-node-a",
         fingerprints={"scenegems-scenario-execution": "fp-execution"},
         durations_s={"scene_generation": 2.5, "simulation": 0.4},
     )
@@ -71,7 +71,7 @@ def test_a_run_record_holds_what_repeats_the_run(stores, campaign):
     (case,) = _cases(stores, campaign, CLASS_A, 1)
     stored = stores.results.add_run_record(_run(case))
     assert (stored.campaign_id, stored.class_id, stored.case_id, stored.run_index, stored.repeat_index) == (campaign.campaign_id, CLASS_A, case.case_id, 0, 0)
-    assert (stored.stack, stored.seed, stored.steps, stored.state_digest, stored.node_id) == (STACK, 11, 600, "d" * 64, "node-a")
+    assert (stored.stack, stored.seed, stored.steps, stored.state_digest, stored.worker_node_id) == (STACK, 11, 600, "d" * 64, "worker-node-a")
     assert stored.trajectory_generator == TrajectoryGeneratorImplementation.MONITOR_DRIVEN_RRT and stored.trajectories_complete
     assert stored.durations_s == {"scene_generation": 2.5, "simulation": 0.4}
     assert stores.results.get_run_record(stored.run_record_id) == stored

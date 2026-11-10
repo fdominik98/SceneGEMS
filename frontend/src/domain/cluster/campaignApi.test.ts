@@ -54,10 +54,10 @@ describe("catalog schemas", () => {
     expect(parsed.stacks[0].environment.wind).toBe("unsupported");
     expect(parsed.stacks.map((stack) => stack.supports_early_stop)).toEqual([true, true, false, false, false, false]);
     expect(parsed.stacks[4].stack_section).toEqual({ simulation_layer: "gazebo", control_layer: "custom", mode: "replay" });
-    const older = catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], control_layer: undefined, stack_section: undefined }); // an older master leaves both out
+    const older = catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], control_layer: undefined, stack_section: undefined }); // an older control node leaves both out
     expect([older.control_layer, older.stack_section]).toEqual([undefined, undefined]);
     expect(parsed.stacks[2].groups[0].key).toBe("geofence");
-    expect(catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], supports_early_stop: undefined }).supports_early_stop).toBe(true); // an older master leaves it out
+    expect(catalogStackSchema.parse({ ...sampleCatalogStacks.stacks[0], supports_early_stop: undefined }).supports_early_stop).toBe(true); // an older control node leaves it out
     expect(parsed.trajectory_generators.find((generator) => generator.id === "straight")?.params_field).toBeNull();
     expect(parsed.monitors.find((monitor) => monitor.id === "live")?.supports_early_stop).toBe(true);
     expect(parsed.unavailable_stacks[0].reasons[0]).toMatch(/Gazebo/);

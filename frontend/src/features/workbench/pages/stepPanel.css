@@ -244,7 +244,8 @@
 }
 
 .step-number .wiz-number input {
-  width: calc(var(--field-ch, 6) * 1ch + 28px);
+  /* Room for the characters, then the padding, the border and the spin buttons */
+  width: calc(var(--field-ch, 6) * 1ch + 2 * var(--control-pad-x) + 22px);
   min-width: 0;
 }
 

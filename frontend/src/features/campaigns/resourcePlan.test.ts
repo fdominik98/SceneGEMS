@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { COMPONENTS } from "../../domain/cluster/components";
-import { nodeViewSchema, type NodeView } from "../../domain/cluster/schemas";
-import { sampleNode } from "../../test/fixtures/clusterViews";
+import { workerNodeViewSchema, type WorkerNodeView } from "../../domain/cluster/schemas";
+import { sampleWorkerNode } from "../../test/fixtures/clusterViews";
 import {
   capabilityLabel,
   fullUsageQueueDepth,
   needLabel,
-  nodeProblems,
+  workerNodeProblems,
   planKey,
   planOfConfig,
   planResources,
@@ -18,17 +18,17 @@ import {
 } from "./resourcePlan";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
-const KINEMATIC_NODE = ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring"];
-const SITL_NODE = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+const KINEMATIC_WORKER_NODE = ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring"];
+const SITL_WORKER_NODE = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
 
 function components(usable: readonly string[], stale: readonly string[] = []) {
   return [...usable.map((component) => ({ component, images: [], state: "usable" })), ...stale.map((component) => ({ component, images: [], state: "out_of_date" }))];
 }
 
-/** A node with slots per job type and components, every one of the catalog unless named. */
-function node(id: string, slots: Record<string, number>, overrides: Record<string, unknown> = {}, offered: readonly string[] = COMPONENTS): NodeView {
+/** A worker node with slots per job type and components, every one of the catalog unless named. */
+function workerNode(id: string, slots: Record<string, number>, overrides: Record<string, unknown> = {}, offered: readonly string[] = COMPONENTS): WorkerNodeView {
   const usage = Object.fromEntries(Object.entries(slots).map(([jobType, count]) => [jobType, { slots: count, slots_in_use: 0 }]));
-  return nodeViewSchema.parse(sampleNode({ node_id: id, name: id, machine: `${id}-pc`, labels: { site: "lab" }, slots: usage, components: components(offered), ...overrides }));
+  return workerNodeViewSchema.parse(sampleWorkerNode({ worker_node_id: id, name: id, machine: `${id}-pc`, labels: { site: "lab" }, slots: usage, components: components(offered), ...overrides }));
 }
 
 const PIPELINE = { scene_generation: 4, trajectory_generation: 4, simulation: 8, "monitoring.post_hoc": 4 };
@@ -72,7 +72,7 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
 
   it("needs the layers of the run's stack", () => {
     const required = requiredCapabilities(config([sitl]));
-    expect(required[2]).toMatchObject({ jobType: "simulation", stage: "simulate", components: SITL_NODE, reason: "The run is simulated on ArduPilot SITL." });
+    expect(required[2]).toMatchObject({ jobType: "simulation", stage: "simulate", components: SITL_WORKER_NODE, reason: "The run is simulated on ArduPilot SITL." });
     expect(requiredCapabilities(config([world, { ...world, name: "again" }]))[2].reason).toBe("Each of the 2 runs is simulated on Gazebo.");
     const navigation = requiredCapabilities(config([{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" } }]))[2];
     expect(navigation.components).toEqual(["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
@@ -92,19 +92,19 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
     expect(needLabel(required[0])).toBe("scene generation");
   });
 
-  it("is missing when no usable node has the run's components", () => {
-    const nodes = [node("a", PIPELINE, {}, KINEMATIC_NODE), node("b", { simulation: 2 }, {}, SITL_NODE)];
-    const plan = planOfConfig(config([sitl], {}), [nodes[0]]);
-    expect(plan.missing.map((capability) => capability.components)).toEqual([SITL_NODE]);
+  it("is missing when no usable worker node has the run's components", () => {
+    const workerNodes = [workerNode("a", PIPELINE, {}, KINEMATIC_WORKER_NODE), workerNode("b", { simulation: 2 }, {}, SITL_WORKER_NODE)];
+    const plan = planOfConfig(config([sitl], {}), [workerNodes[0]]);
+    expect(plan.missing.map((capability) => capability.components)).toEqual([SITL_WORKER_NODE]);
     expect(startBlocker(plan)).toBe("No usable machine of the campaign runs simulation with Replay, ArduPilot and ArduPilot SITL.");
-    expect(planOfConfig(config([sitl], {}), nodes).missing).toEqual([]);
-    // a SITL node does not run Gazebo runs
-    expect(planOfConfig(config([world], {}), nodes).missing.map((capability) => capability.components.at(-1))).toEqual(["simulation_layer/gazebo"]);
+    expect(planOfConfig(config([sitl], {}), workerNodes).missing).toEqual([]);
+    // a SITL worker node does not run Gazebo runs
+    expect(planOfConfig(config([world], {}), workerNodes).missing.map((capability) => capability.components.at(-1))).toEqual(["simulation_layer/gazebo"]);
   });
 
-  it("does not count a component that is out of date on the node", () => {
-    const stale = node("s", { simulation: 2 }, { out_of_date: true, components: components(["asv_software/replay", "control_layer/ardupilot"], ["simulation_layer/ardupilot_sim"]) });
-    expect(nodeProblems(stale, {}), "the node's other components still work").toEqual([]);
+  it("does not count a component that is out of date on the worker node", () => {
+    const stale = workerNode("s", { simulation: 2 }, { out_of_date: true, components: components(["asv_software/replay", "control_layer/ardupilot"], ["simulation_layer/ardupilot_sim"]) });
+    expect(workerNodeProblems(stale, {}), "the worker node's other components still work").toEqual([]);
     expect(planOfConfig(config([sitl], {}), [stale]).missing.map((capability) => capability.stage)).toContain("simulate");
   });
 });
@@ -140,34 +140,34 @@ describe("requiredCapabilities of a partial campaign", () => {
   });
 });
 
-describe("nodeProblems", () => {
-  it("accepts an online, current node with the labels", () => {
-    expect(nodeProblems(node("a", PIPELINE), { site: "lab" })).toEqual([]);
+describe("workerNodeProblems", () => {
+  it("accepts an online, current worker node with the labels", () => {
+    expect(workerNodeProblems(workerNode("a", PIPELINE), { site: "lab" })).toEqual([]);
   });
 
-  it("names every reason a node cannot take jobs", () => {
-    const stale = node("a", PIPELINE, { status: "draining", out_of_date: true, components: components([], ["scene_generation", "monitoring"]) });
-    expect(nodeProblems(stale, { site: "sea", gpu: "true" })).toEqual([
+  it("names every reason a worker node cannot take jobs", () => {
+    const stale = workerNode("a", PIPELINE, { status: "draining", out_of_date: true, components: components([], ["scene_generation", "monitoring"]) });
+    expect(workerNodeProblems(stale, { site: "sea", gpu: "true" })).toEqual([
       "Draining: it takes no new jobs.",
-      "Out of date: the images of all its components differ from the master's release.",
+      "Out of date: the images of all its components differ from the control node's release.",
       "Lacks the labels site=sea, gpu=true.",
     ]);
-    expect(nodeProblems(node("b", PIPELINE, { status: "offline" }), {})).toEqual(["Offline."]);
+    expect(workerNodeProblems(workerNode("b", PIPELINE, { status: "offline" }), {})).toEqual(["Offline."]);
   });
 });
 
 describe("planResources", () => {
   const required = requiredCapabilities(config([{ repeats: 2 }]));
-  const nodes = [
-    node("a", { scene_generation: 2, trajectory_generation: 2 }),
-    node("b", { simulation: 6, "monitoring.post_hoc": 2 }),
-    node("c", { simulation: 4, "calibration.deviation": 1 }, { out_of_date: true, components: components([], ["simulation_layer/kinematic", "calibration"]) }),
-    node("d", { simulation: 9 }, {}, SITL_NODE),
+  const workerNodes = [
+    workerNode("a", { scene_generation: 2, trajectory_generation: 2 }),
+    workerNode("b", { simulation: 6, "monitoring.post_hoc": 2 }),
+    workerNode("c", { simulation: 4, "calibration.deviation": 1 }, { out_of_date: true, components: components([], ["simulation_layer/kinematic", "calibration"]) }),
+    workerNode("d", { simulation: 9 }, {}, SITL_WORKER_NODE),
   ];
 
-  it("covers with every usable node in full usage and reports what no node runs", () => {
-    const plan = planResources(required, nodes, { nodes: null, labels: {} });
-    expect(plan.usable.map((entry) => entry.node_id)).toEqual(["a", "b", "d"]);
+  it("covers with every usable worker node in full usage and reports what no worker node runs", () => {
+    const plan = planResources(required, workerNodes, { workerNodes: null, labels: {} });
+    expect(plan.usable.map((entry) => entry.worker_node_id)).toEqual(["a", "b", "d"]);
     expect(plan.coverage.map((entry) => [entry.capability.jobType, entry.slots])).toEqual([
       ["scene_generation", 2],
       ["trajectory_generation", 2],
@@ -175,51 +175,51 @@ describe("planResources", () => {
       ["monitoring.post_hoc", 2],
       ["calibration.deviation", 0],
     ]);
-    expect(plan.coverage[2].nodes.map((entry) => entry.node_id), "the SITL node lacks the kinematic layer").toEqual(["b"]);
+    expect(plan.coverage[2].workerNodes.map((entry) => entry.worker_node_id), "the SITL worker node lacks the kinematic layer").toEqual(["b"]);
     expect(plan.missing.map((capability) => capability.jobType)).toEqual(["calibration.deviation"]);
     expect(startBlocker(plan)).toBe("No usable machine of the campaign runs repeat calibration.");
   });
 
-  it("counts only the selected nodes and lists selected ids the master does not know", () => {
-    const plan = planResources(required.slice(0, 3), nodes, { nodes: ["b", "gone"], labels: {} });
-    expect(plan.usable.map((entry) => entry.node_id)).toEqual(["b"]);
+  it("counts only the selected worker nodes and lists selected ids the control node does not know", () => {
+    const plan = planResources(required.slice(0, 3), workerNodes, { workerNodes: ["b", "gone"], labels: {} });
+    expect(plan.usable.map((entry) => entry.worker_node_id)).toEqual(["b"]);
     expect(plan.missing.map((capability) => capability.jobType)).toEqual(["scene_generation", "trajectory_generation"]);
-    expect(plan.unknownNodes).toEqual(["gone"]);
+    expect(plan.unknownWorkerNodes).toEqual(["gone"]);
     expect(startBlocker(plan)).toBe("No usable machine of the campaign runs scene generation and trajectory generation.");
-    expect(startBlocker(planResources(required.slice(0, 3), nodes, { nodes: ["a", "b"], labels: {} }))).toBeNull();
+    expect(startBlocker(planResources(required.slice(0, 3), workerNodes, { workerNodes: ["a", "b"], labels: {} }))).toBeNull();
   });
 
-  it("does not count nodes without the required labels", () => {
-    expect(planResources(required.slice(0, 1), nodes, { nodes: null, labels: { site: "sea" } }).missing).toHaveLength(1);
+  it("does not count worker nodes without the required labels", () => {
+    expect(planResources(required.slice(0, 1), workerNodes, { workerNodes: null, labels: { site: "sea" } }).missing).toHaveLength(1);
   });
 
-  it("blocks the start while the nodes are unknown", () => {
+  it("blocks the start while the worker nodes are unknown", () => {
     expect(startBlocker(null)).toBe("The cluster's machines are not known yet.");
   });
 
-  it("keys a plan by what it says, not by the nodes' heartbeats", () => {
-    const plan = planResources(required, nodes, { nodes: null, labels: {} });
-    const beat = nodes.map((entry) => ({ ...entry, last_seen_at: "2030-01-01T00:00:00+00:00" }));
-    expect(planKey(planResources(required, beat, { nodes: null, labels: {} }))).toBe(planKey(plan));
-    expect(planKey(planResources(required, nodes.slice(1), { nodes: null, labels: {} }))).not.toBe(planKey(plan));
-    expect(planKey(planResources(required.slice(0, 2), nodes, { nodes: null, labels: {} }))).not.toBe(planKey(plan));
+  it("keys a plan by what it says, not by the worker nodes' heartbeats", () => {
+    const plan = planResources(required, workerNodes, { workerNodes: null, labels: {} });
+    const beat = workerNodes.map((entry) => ({ ...entry, last_seen_at: "2030-01-01T00:00:00+00:00" }));
+    expect(planKey(planResources(required, beat, { workerNodes: null, labels: {} }))).toBe(planKey(plan));
+    expect(planKey(planResources(required, workerNodes.slice(1), { workerNodes: null, labels: {} }))).not.toBe(planKey(plan));
+    expect(planKey(planResources(required.slice(0, 2), workerNodes, { workerNodes: null, labels: {} }))).not.toBe(planKey(plan));
     expect(planKey(null)).toBe("");
   });
 });
 
 describe("planOfConfig", () => {
-  it("reads the nodes and labels of a stored config", () => {
-    const nodes = [node("a", PIPELINE), node("b", PIPELINE, { labels: {} })];
-    const stored = config([{ monitor: "post_hoc", repeats: 1 }], { nodes: ["b"], required_labels: { site: "lab" }, priority: 0 });
-    expect(planOfConfig(stored, nodes).usable).toEqual([]);
-    expect(planOfConfig(config([{}], { nodes: [], required_labels: {} }), nodes).usable.map((entry) => entry.node_id)).toEqual(["a", "b"]);
+  it("reads the worker nodes and labels of a stored config", () => {
+    const workerNodes = [workerNode("a", PIPELINE), workerNode("b", PIPELINE, { labels: {} })];
+    const stored = config([{ monitor: "post_hoc", repeats: 1 }], { worker_nodes: ["b"], required_labels: { site: "lab" }, priority: 0 });
+    expect(planOfConfig(stored, workerNodes).usable).toEqual([]);
+    expect(planOfConfig(config([{}], { worker_nodes: [], required_labels: {} }), workerNodes).usable.map((entry) => entry.worker_node_id)).toEqual(["a", "b"]);
   });
 });
 
 describe("full usage", () => {
-  it("adds the slots of usable nodes per job type", () => {
-    const nodes = [node("a", PIPELINE), node("b", { simulation: 40 }), node("c", { simulation: 99 }, { status: "offline" })];
-    expect(slotsByJobType(nodes)).toEqual({ scene_generation: 4, trajectory_generation: 4, simulation: 48, "monitoring.post_hoc": 4 });
+  it("adds the slots of usable worker nodes per job type", () => {
+    const workerNodes = [workerNode("a", PIPELINE), workerNode("b", { simulation: 40 }), workerNode("c", { simulation: 99 }, { status: "offline" })];
+    expect(slotsByJobType(workerNodes)).toEqual({ scene_generation: 4, trajectory_generation: 4, simulation: 48, "monitoring.post_hoc": 4 });
   });
 
   it("sizes each queue cap to the slots of its stage, never below the default", () => {
