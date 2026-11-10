@@ -21,7 +21,7 @@ from scenegems_tool.vessel_stack.calibration.sitl_stack_runs import (
     prepare_run_folder,
     uncapped_generation,
 )
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 from utils.file_system_utils import RUNTIME_ASSETS_FOLDER
 
@@ -176,7 +176,7 @@ class TestMeasurementEntries:
         spec = StackRunSpec(ARDUPILOT_SIM, "straight", "5m", 20, 1, 1, "usv_navigation")
         with uncapped_generation():
             _, endpoints, instance = prepare_run_folder(spec, straight_run("5m", 20), str(tmp_path), 16420)
-        assert instance.vessels["0"].stack.asv_software == AsvSoftwareId.USV_NAVIGATION
+        assert instance.vessels["0"].stack.asv_system == AsvSystemId.USV_NAVIGATION
         assert instance.vessels["0"].adapter_ids == ("usv_navigation_mavlink_lockstep",)
         assert endpoints == {"0": "tcp:127.0.0.1:16420"}
 
@@ -227,13 +227,13 @@ class TestCustomController:
         assert list(services) == ["gazebo"]
         assert services["gazebo"]["ports"] == ["127.0.0.1:16400:11400"]
         assert endpoints == {"actuator": "127.0.0.1:16400"}
-        assert instance.vessels["0"].stack.asv_software == AsvSoftwareId.REPLAY
+        assert instance.vessels["0"].stack.asv_system == AsvSystemId.REPLAY
 
     def test_the_usv_navigation_drive_puts_usv_navigation_on_every_vessel(self, tmp_path):
         spec = StackRunSpec(GAZEBO, "straight", "5m", 20, 1, 1, "usv_navigation", control_layer=CUSTOM)
         with uncapped_generation():
             _, _, instance = prepare_run_folder(spec, straight_run("5m", 20), str(tmp_path), 16410)
-        assert instance.vessels["0"].stack.asv_software == AsvSoftwareId.USV_NAVIGATION
+        assert instance.vessels["0"].stack.asv_system == AsvSystemId.USV_NAVIGATION
         assert spec.label() == "gazebo-custom-usv_navigation-straight-5m-1x"
 
     def test_identical_digests_without_late_thrust_are_the_exact_tier(self):

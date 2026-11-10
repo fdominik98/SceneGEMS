@@ -22,7 +22,7 @@ export function applySetupRequestToDrafts(
   return drafts.map((draft) => ({
     ...draft,
     context: "simulation",
-    asvSoftware: mode === "usv_navigation" && ownShipIds.has(draft.vesselId) ? "usv_navigation" : "replay",
+    asvSystem: mode === "usv_navigation" && ownShipIds.has(draft.vesselId) ? "usv_navigation" : "replay",
     controlLayer,
   }));
 }

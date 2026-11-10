@@ -7,11 +7,11 @@ the session's stack: every layer has its own container there, and the runner ste
 (vessel_stack/hosting.py):
 
 - kinematic: run_kinematic_instance against the kinematic simulator and each vessel's ASV
-  software container (replay or USV Navigation);
-- ardupilot on ardupilot_sim or gazebo: run_mavlink_stack against each vessel's ASV software
+  system container (replay or USV Navigation);
+- ardupilot on ardupilot_sim or gazebo: run_mavlink_stack against each vessel's ASV system
   container and SITL SERIAL0, as an attended run, so Mission Planner vessels are observed and
   left to their operator;
-- custom on gazebo: run_gz_custom against each vessel's ASV software and controller containers
+- custom on gazebo: run_gz_custom against each vessel's ASV system and controller containers
   and the gz-transport actuator in the Gazebo service.
 
 Every step's states reach the worker as a scene. SITL paces itself to the instance's speedup;

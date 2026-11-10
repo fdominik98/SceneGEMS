@@ -59,15 +59,15 @@ def parameter(
 
 
 def _triple(stack: Any) -> Dict[str, str]:
-    return {"asv_software": stack.asv_software.value, "control_layer": stack.control_layer.value, "simulation_layer": stack.simulation_layer.value}
+    return {"asv_system": stack.asv_system.value, "control_layer": stack.control_layer.value, "simulation_layer": stack.simulation_layer.value}
 
 
 def _key(stack: Any) -> Tuple[str, str, str]:
-    return stack.asv_software.value, stack.control_layer.value, stack.simulation_layer.value
+    return stack.asv_system.value, stack.control_layer.value, stack.simulation_layer.value
 
 
 def _usv_navigation_parameters() -> List[Dict[str, Any]]:
-    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import DEFAULT_PRESCRIBED_TIME_S
+    from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import DEFAULT_PRESCRIBED_TIME_S
 
     return [
         parameter("goal", "number_pair", "waypoint [x, y] in the scene's local frame", required=True, unit="m"),
@@ -83,7 +83,7 @@ def _usv_navigation_parameters() -> List[Dict[str, Any]]:
 
 
 def _derived_usv_navigation() -> str:
-    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import (
+    from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import (
         DCPA_BETA1_RADII,
         DCPA_BETA2_RADII,
         DEFAULT_CONTROL_HORIZON_STEPS,
@@ -294,7 +294,7 @@ def _kinematic_stacks(resolver: Any) -> List[Dict[str, Any]]:
 
 def unavailable_stacks(resolver: Any, offered: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Every other triple of the resolver's matrix with the reasons a campaign cannot use it."""
-    taken = {(vessel["asv_software"], vessel["control_layer"], vessel["simulation_layer"]) for option in offered for vessel in option["vessels"].values()}
+    taken = {(vessel["asv_system"], vessel["control_layer"], vessel["simulation_layer"]) for option in offered for vessel in option["vessels"].values()}
     others = []
     for chain in resolver.availability_matrix():
         if _key(chain.stack) in taken:

@@ -2,7 +2,7 @@
 
 Two modes: replay of every vessel's generated trajectory (kinematic_runner.run_kinematic_replay),
 or USV Navigation on the own ship against replaying targets (run_kinematic_closed_loop).
-The stack holds the kinematic simulator, one container for the scenario, and an ASV software
+The stack holds the kinematic simulator, one container for the scenario, and an ASV system
 container per vessel (vessel_job_stack.py); the runner, from the scenario execution image, owns
 the clock and carries the commands and states between them. The stack's network is its own and
 reaches nothing else. A run is bit-identical for the same payload, and the result carries its
@@ -35,8 +35,8 @@ from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallb
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import DEFAULT_PRESCRIBED_TIME_S, UsvNavigationParameters
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import DEFAULT_PRESCRIBED_TIME_S, UsvNavigationParameters
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
@@ -53,10 +53,10 @@ class KinematicMode(str, Enum):
 
 def vessel_stacks(mode: KinematicMode) -> Tuple[StackTriple, ...]:
     """The vessel stacks a run of the mode runs: replay for the vessels that replay, USV Navigation for the own ship in mode usv_navigation."""
-    replay = (AsvSoftwareId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
+    replay = (AsvSystemId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
     if mode == KinematicMode.REPLAY:
         return (replay,)
-    return (replay, (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC))
+    return (replay, (AsvSystemId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC))
 
 
 class UsvNavigationPayload(ProtocolModel):
@@ -148,14 +148,14 @@ def kinematic_run_instance(payload: KinematicSimulationPayload):
     from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import kinematic_instance
 
     trajectories = to_trajectories(payload.trajectories)
-    asv_software: Dict[int, AsvSoftwareId] = {}
+    asv_system: Dict[int, AsvSystemId] = {}
     if payload.mode == KinematicMode.USV_NAVIGATION:
-        asv_software[own_ship(trajectories.initial_scene, payload.own_ship_id).id] = AsvSoftwareId.USV_NAVIGATION
-    return trajectories, kinematic_instance(trajectories, asv_software, environment=EnvironmentConfig.calm(seed=payload.seed))
+        asv_system[own_ship(trajectories.initial_scene, payload.own_ship_id).id] = AsvSystemId.USV_NAVIGATION
+    return trajectories, kinematic_instance(trajectories, asv_system, environment=EnvironmentConfig.calm(seed=payload.seed))
 
 
 def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: KinematicSimulationPayload) -> JobStack:
-    """The job's stack: the kinematic simulator, an ASV software container per vessel, and the runner."""
+    """The job's stack: the kinematic simulator, an ASV system container per vessel, and the runner."""
     try:
         trajectories, instance = kinematic_run_instance(payload)
     except ValueError as error:
@@ -203,9 +203,9 @@ def step_observer(monitor: Optional[LiveMonitor], observer) -> Optional[Callable
 
 
 def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None) -> JobResultData:
-    """The in-container part: step the simulator and every vessel's ASV software container and describe the run; observation makes it observable live.
+    """The in-container part: step the simulator and every vessel's ASV system container and describe the run; observation makes it observable live.
 
-    hosting is where the simulator and the ASV software run: the stack's containers unless given (vessel_stack/hosting.py).
+    hosting is where the simulator and the ASV system run: the stack's containers unless given (vessel_stack/hosting.py).
     """
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
     from scenegems_tool.vessel_stack.hosting import in_stack_hosting

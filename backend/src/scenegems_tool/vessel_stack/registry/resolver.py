@@ -1,6 +1,6 @@
 """Resolver: does a stack combination exist, what does it support, and is a request valid on it.
 
-For a requested (ASV software, control layer, simulation layer) the resolver looks up the
+For a requested (ASV system, control layer, simulation layer) the resolver looks up the
 two adapters that connect the three layers. Where several adapters connect the same two
 layers, the registry's default is taken unless the vessel selects another one by id
 (VesselConfig.adapter_ids). A missing adapter makes the combination
@@ -20,7 +20,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, AnySpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier, weakest_link
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef, Role, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, Role, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 
@@ -36,7 +36,7 @@ class StackUnavailableError(ValueError):
 @dataclass(frozen=True)
 class ChainResolution:
     stack: VesselStackConfig
-    specs: Tuple[AnySpec, ...]  # registered layers and adapters on the chain, from ASV software down
+    specs: Tuple[AnySpec, ...]  # registered layers and adapters on the chain, from ASV system down
     complete: bool  # every layer and adapter of the chain exists, implemented or planned
     reasons: Tuple[str, ...]  # why the combination cannot be used now; empty when available
 
@@ -54,8 +54,8 @@ class ChainResolution:
 
     @property
     def asv_adapter(self) -> Optional[AdapterSpec]:
-        """The adapter from the ASV software to the control layer, which decides how the ASV software is run."""
-        return next((adapter for adapter in self.adapters if adapter.from_role == Role.ASV_SOFTWARE), None)
+        """The adapter from the ASV system to the control layer, which decides how the ASV system is run."""
+        return next((adapter for adapter in self.adapters if adapter.from_role == Role.ASV_SYSTEM), None)
 
     @property
     def capabilities(self) -> Optional[Capabilities]:
@@ -136,7 +136,7 @@ class StackResolver:
     def resolve(self, stack: VesselStackConfig, adapter_ids: Iterable[str] = ()) -> ChainResolution:
         """Resolve one triple. adapter_ids selects alternatives to the default adapter of a connection."""
         adapter_ids = tuple(adapter_ids)
-        refs = (LayerRef.of(stack.asv_software), LayerRef.of(stack.control_layer), LayerRef.of(stack.simulation_layer))
+        refs = (LayerRef.of(stack.asv_system), LayerRef.of(stack.control_layer), LayerRef.of(stack.simulation_layer))
         connections = tuple(zip(refs, refs[1:]))
         layers = [self.registry.layer(ref) for ref in refs]
         adapters = [self.registry.adapter_between(upper, lower, adapter_ids) for upper, lower in connections]
@@ -229,8 +229,8 @@ class StackResolver:
     def availability_matrix(self) -> List[ChainResolution]:
         """Every combination of the three roles, in the order of the design's availability table."""
         return [
-            self.resolve(VesselStackConfig(asv_software=asv_software, control_layer=control_layer, simulation_layer=simulation_layer))
-            for asv_software in AsvSoftwareId
+            self.resolve(VesselStackConfig(asv_system=asv_system, control_layer=control_layer, simulation_layer=simulation_layer))
+            for asv_system in AsvSystemId
             for simulation_layer in SimulationLayerId
             for control_layer in ControlLayerId
         ]

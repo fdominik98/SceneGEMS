@@ -21,9 +21,9 @@ pytestmark = pytest.mark.postgres
 SIMULATE, MONITOR, CALIBRATE = PipelineStage.SIMULATE, PipelineStage.MONITOR, PipelineStage.CALIBRATE
 SITL_RUN = {"name": "sitl", "stack": {"simulation_layer": "ardupilot_sim"}, "monitor": "post_hoc"}
 GAZEBO_RUN = {"name": "world", "stack": {"simulation_layer": "gazebo", "speedup": 2}, "monitor": "live"}
-ON_SITL = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]
-ON_GAZEBO = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
-NO_ARDUPILOT = ("asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring", "calibration")
+ON_SITL = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]
+ON_GAZEBO = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+NO_ARDUPILOT = ("asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring", "calibration")
 
 
 def _cases(harness, campaign):
@@ -44,7 +44,7 @@ def test_each_run_is_simulated_by_a_job_needing_its_stacks_components_with_their
     jobs = _jobs(harness, case)
     kinematic, sitl, world = (jobs[(SIMULATE, run, 0)] for run in range(3))
     assert [job.job_type for job in (kinematic, sitl, world)] == [JobType.SIMULATION] * 3
-    assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO]
+    assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO]
     assert (kinematic.payload["runner"], sitl.payload["runner"], world.payload["runner"]) == ("kinematic", "ardupilot", "ardupilot")
     assert set(kinematic.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE]))
     assert set(sitl.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE, SITL_IMAGE]))
@@ -136,7 +136,7 @@ def test_a_campaign_with_an_ardupilot_run_stalls_without_a_worker_node_with_its_
     harness.settle()
     stalled = harness.campaign(campaign.campaign_id)
     assert stalled.actual_state == CampaignActualState.STALLED
-    assert "simulation with asv_software/replay, control_layer/ardupilot, simulation_layer/ardupilot_sim" in stalled.state_reason
+    assert "simulation with asv_system/replay, control_layer/ardupilot, simulation_layer/ardupilot_sim" in stalled.state_reason
     assert harness.campaign(kinematic.campaign_id).actual_state != CampaignActualState.STALLED
     stall = next(event for event in harness.stores.campaigns.list_events(campaign.campaign_id) if event.kind == CampaignEventKind.STALLED)
     assert (stall.detail["job_types"], stall.detail["components"]) == (["simulation"], ON_SITL)

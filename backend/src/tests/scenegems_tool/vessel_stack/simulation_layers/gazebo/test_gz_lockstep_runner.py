@@ -5,7 +5,7 @@ import pytest
 
 from scenegems_tool.vessel_stack.calibration.reference_scenarios import reference_run
 from scenegems_tool.vessel_stack.calibration.repeat_analysis import TrackSamples, tracking_error
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
 from scenegems_tool.vessel_stack.control_layers.custom.hull_surge_yaw_model import HullState, HullSurgeYawModel
 from scenegems_tool.vessel_stack.control_layers.custom.los_waypoint_follower import LosWaypointFollower
@@ -108,11 +108,11 @@ class TestHull:
 class TestGzCustom:
     def test_the_instance_runs_every_vessel_on_the_custom_controller(self):
         trajectories, _ = straight_run()
-        instance = gz_custom_instance(trajectories, {0: AsvSoftwareId.USV_NAVIGATION}, speedup=2)
+        instance = gz_custom_instance(trajectories, {0: AsvSystemId.USV_NAVIGATION}, speedup=2)
         vessel = instance.vessels["0"]
-        assert (vessel.stack.asv_software, vessel.stack.control_layer, vessel.stack.simulation_layer) == (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
+        assert (vessel.stack.asv_system, vessel.stack.control_layer, vessel.stack.simulation_layer) == (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
         assert vessel.connection.agent_name == "vessel_0"
-        assert gz_custom_instance(trajectories).vessels["0"].stack.asv_software == AsvSoftwareId.REPLAY
+        assert gz_custom_instance(trajectories).vessels["0"].stack.asv_system == AsvSystemId.REPLAY
 
     def test_run_gz_custom_drives_the_registry_participants_and_records_the_run(self, monkeypatch):
         trajectories, vessel = straight_run()
@@ -142,7 +142,7 @@ class TestGzCustom:
     def test_usv_navigation_drives_the_custom_controller(self, monkeypatch):
         trajectories, vessel = straight_run()
         monkeypatch.setattr(gz_lockstep_runner, "GzLockstepLink", lambda host, port: setup_run(trajectories, vessel)[0])
-        result = run_gz_custom(trajectories, gz_custom_instance(trajectories, {0: AsvSoftwareId.USV_NAVIGATION}), steps=20)
+        result = run_gz_custom(trajectories, gz_custom_instance(trajectories, {0: AsvSystemId.USV_NAVIGATION}), steps=20)
         record = result.run_record
         assert "custom_controller_heading_speed_input" in record["specs"]
         assert dict(result.participant_seeds).keys() == {"usv_navigation/0"}

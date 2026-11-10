@@ -1,5 +1,5 @@
 import type {
-  AsvSoftwareWire,
+  AsvSystemWire,
   ControlLayerWire,
   StackOptionsPayload,
   StackOptionWire,
@@ -9,7 +9,7 @@ import { createActorNamer } from "../../../domain/simulation/actorNaming";
 export type SimulationContext = "simulation" | "real";
 export type ControlMode = "autonomous" | "external";
 export type GlobalSimulatorType = "Gazebo" | "ArduPilot Sim" | "Kinematic";
-export type AsvSoftware = AsvSoftwareWire;
+export type AsvSystem = AsvSystemWire;
 export type ControlLayer = ControlLayerWire;
 
 export const GLOBAL_SIMULATOR_TYPES: readonly GlobalSimulatorType[] = [
@@ -18,16 +18,16 @@ export const GLOBAL_SIMULATOR_TYPES: readonly GlobalSimulatorType[] = [
   "Kinematic",
 ];
 
-/** The ASV software SceneGEMS runs for a simulated vessel. */
-export const ASV_SOFTWARE: readonly AsvSoftware[] = ["replay", "usv_navigation", "mission_planner"];
+/** The ASV system SceneGEMS runs for a simulated vessel. */
+export const ASV_SYSTEM: readonly AsvSystem[] = ["replay", "usv_navigation", "mission_planner"];
 /** The control layers of a simulated vessel; a real vessel's is its own autopilot (real_vessel). */
 export const CONTROL_LAYERS: readonly ControlLayer[] = ["ardupilot", "custom", "none"];
 /** What may steer a real vessel: through its ArduAgent, or its own software on board. */
-export const REAL_VESSEL_ASV_SOFTWARE: readonly AsvSoftware[] = ["replay", "mission_planner", "on_board"];
+export const REAL_VESSEL_ASV_SYSTEM: readonly AsvSystem[] = ["replay", "mission_planner", "on_board"];
 /** The simulatorType of a real vessel's stacks in the stack options: it is its own control and simulation layer. */
 export const REAL_VESSEL_SIMULATOR = "Real vessel";
 
-export const ASV_SOFTWARE_LABELS: Record<AsvSoftware, string> = {
+export const ASV_SYSTEM_LABELS: Record<AsvSystem, string> = {
   replay: "Replay",
   usv_navigation: "USV Navigation",
   mission_planner: "Mission Planner",
@@ -40,15 +40,15 @@ export const CONTROL_LAYER_LABELS: Record<ControlLayer, string> = {
   real_vessel: "Its own autopilot",
 };
 
-/** ArduAgent's control mode for an ASV software, used when an instance has a real vessel; none for USV Navigation. */
-export function controlModeOf(asvSoftware: AsvSoftware): ControlMode | undefined {
-  if (asvSoftware === "replay") {
+/** ArduAgent's control mode for an ASV system, used when an instance has a real vessel; none for USV Navigation. */
+export function controlModeOf(asvSystem: AsvSystem): ControlMode | undefined {
+  if (asvSystem === "replay") {
     return "autonomous";
   }
-  return asvSoftware === "mission_planner" ? "external" : undefined;
+  return asvSystem === "mission_planner" ? "external" : undefined;
 }
 
-export function asvSoftwareOfControlMode(controlMode: ControlMode): AsvSoftware {
+export function asvSystemOfControlMode(controlMode: ControlMode): AsvSystem {
   return controlMode === "external" ? "mission_planner" : "replay";
 }
 
@@ -64,7 +64,7 @@ export interface VesselDescriptor {
 export interface VesselInitConnectionDraft {
   vesselId: string;
   context: SimulationContext;
-  asvSoftware: AsvSoftware;
+  asvSystem: AsvSystem;
   controlLayer: ControlLayer;
   agentName: string;
   topic: string;
@@ -76,7 +76,7 @@ export interface VesselInitConnectionDraft {
 export type SimulationConnectionWire =
   | {
       context: "simulation";
-      asvSoftware: AsvSoftware;
+      asvSystem: AsvSystem;
       controlLayer: ControlLayer;
       controlMode?: ControlMode;
       agentName: string;
@@ -86,7 +86,7 @@ export type SimulationConnectionWire =
     }
   | {
       context: "real";
-      asvSoftware: AsvSoftware;
+      asvSystem: AsvSystem;
       controlLayer: "real_vessel";
       controlMode?: ControlMode;
       agentName: string;
@@ -120,11 +120,11 @@ export function buildInitialVesselConnectionDrafts(
     const parsedId = Number.parseInt(vessel.id, 10);
     const hasNumericId = Number.isFinite(parsedId);
     const portOffset = hasNumericId ? parsedId : index;
-    const asvSoftware: AsvSoftware = hasNumericId && parsedId === 0 ? "mission_planner" : "replay";
+    const asvSystem: AsvSystem = hasNumericId && parsedId === 0 ? "mission_planner" : "replay";
     return {
       vesselId: vessel.id,
       context,
-      asvSoftware,
+      asvSystem,
       controlLayer: "ardupilot",
       agentName,
       topic: `waraps/unit/surface/${toTopicSegment(context)}/${agentName}`,
@@ -134,13 +134,13 @@ export function buildInitialVesselConnectionDrafts(
 }
 
 function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire {
-  const controlMode = controlModeOf(draft.asvSoftware);
+  const controlMode = controlModeOf(draft.asvSystem);
   const mode = controlMode !== undefined ? { controlMode } : {};
   if (draft.context === "real") {
     // A real vessel is its own control and simulation layer and needs no Gazebo model.
     return {
       context: "real",
-      asvSoftware: draft.asvSoftware,
+      asvSystem: draft.asvSystem,
       controlLayer: "real_vessel",
       ...mode,
       agentName: draft.agentName,
@@ -150,7 +150,7 @@ function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire
   const hasModel = typeof draft.gazeboVesselModel === "string" && draft.gazeboVesselModel.length > 0;
   return {
     context: "simulation",
-    asvSoftware: draft.asvSoftware,
+    asvSystem: draft.asvSystem,
     controlLayer: draft.controlLayer,
     ...mode,
     agentName: draft.agentName,
@@ -185,13 +185,19 @@ export function toPersistedVesselDrafts(
   });
 }
 
-/** Settings saved before the stack choices existed carry a controlMode instead of an ASV software. */
-type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode };
+/**
+ * Settings saved before the stack choices existed carry a controlMode instead of an ASV system, and settings saved
+ * while the ASV system was called the ASV software carry it under that name.
+ */
+type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode; asvSoftware?: PersistedVesselConnectionDraft["asvSystem"] };
 
 function upgradePersistedDraft(saved: LegacyPersistedDraft): Partial<PersistedVesselConnectionDraft> {
-  const { controlMode, ...rest } = saved;
-  if (rest.asvSoftware === undefined && controlMode !== undefined) {
-    return { ...rest, asvSoftware: asvSoftwareOfControlMode(controlMode) };
+  const { controlMode, asvSoftware: formerName, ...rest } = saved;
+  if (rest.asvSystem === undefined && formerName !== undefined) {
+    return { ...rest, asvSystem: formerName };
+  }
+  if (rest.asvSystem === undefined && controlMode !== undefined) {
+    return { ...rest, asvSystem: asvSystemOfControlMode(controlMode) };
   }
   return rest;
 }
@@ -220,13 +226,13 @@ export interface StackChoiceState {
 export function findStackOption(
   options: StackOptionsPayload | null,
   simulatorType: GlobalSimulatorType | typeof REAL_VESSEL_SIMULATOR,
-  asvSoftware: AsvSoftware,
+  asvSystem: AsvSystem,
   controlLayer: ControlLayer
 ): StackOptionWire | undefined {
   return options?.combinations.find(
     (item) =>
       item.simulatorType === simulatorType &&
-      item.asvSoftware === asvSoftware &&
+      item.asvSystem === asvSystem &&
       item.controlLayer === controlLayer
   );
 }
@@ -234,26 +240,26 @@ export function findStackOption(
 export function controlLayerChoice(
   options: StackOptionsPayload | null,
   simulatorType: GlobalSimulatorType,
-  asvSoftware: AsvSoftware,
+  asvSystem: AsvSystem,
   controlLayer: ControlLayer
 ): StackChoiceState {
   if (options === null) {
     return { available: true, reason: "" };
   }
-  const option = findStackOption(options, simulatorType, asvSoftware, controlLayer);
+  const option = findStackOption(options, simulatorType, asvSystem, controlLayer);
   if (option === undefined) {
     return { available: false, reason: "The backend does not know this combination." };
   }
   return { available: option.available, reason: option.reason };
 }
 
-/** An ASV software is available on a simulator when some control layer runs it there. */
-export function asvSoftwareChoice(
+/** An ASV system is available on a simulator when some control layer runs it there. */
+export function asvSystemChoice(
   options: StackOptionsPayload | null,
   simulatorType: GlobalSimulatorType,
-  asvSoftware: AsvSoftware
+  asvSystem: AsvSystem
 ): StackChoiceState {
-  const states = CONTROL_LAYERS.map((layer) => controlLayerChoice(options, simulatorType, asvSoftware, layer));
+  const states = CONTROL_LAYERS.map((layer) => controlLayerChoice(options, simulatorType, asvSystem, layer));
   if (states.some((state) => state.available)) {
     return { available: true, reason: "" };
   }
@@ -261,12 +267,12 @@ export function asvSoftwareChoice(
   return { available: false, reason: reasons.join("; ") };
 }
 
-/** Whether a real vessel can be steered by an ASV software: only the real vessel's own stacks count. */
-export function realVesselSoftwareChoice(options: StackOptionsPayload | null, asvSoftware: AsvSoftware): StackChoiceState {
+/** Whether a real vessel can be steered by an ASV system: only the real vessel's own stacks count. */
+export function realVesselSoftwareChoice(options: StackOptionsPayload | null, asvSystem: AsvSystem): StackChoiceState {
   if (options === null) {
-    return { available: REAL_VESSEL_ASV_SOFTWARE.includes(asvSoftware), reason: "" };
+    return { available: REAL_VESSEL_ASV_SYSTEM.includes(asvSystem), reason: "" };
   }
-  const option = findStackOption(options, REAL_VESSEL_SIMULATOR, asvSoftware, "real_vessel");
+  const option = findStackOption(options, REAL_VESSEL_SIMULATOR, asvSystem, "real_vessel");
   if (option === undefined) {
     return { available: false, reason: "The server does not offer real vessels." };
   }
@@ -274,8 +280,8 @@ export function realVesselSoftwareChoice(options: StackOptionsPayload | null, as
 }
 
 /**
- * The draft with a stack that runs: a real vessel keeps an ASV software that can steer it (replay
- * when its own cannot), a simulated vessel gets a control layer that runs its ASV software on the
+ * The draft with a stack that runs: a real vessel keeps an ASV system that can steer it (replay
+ * when its own cannot), a simulated vessel gets a control layer that runs its ASV system on the
  * simulator, when its own does not and another does.
  */
 export function normalizeDraftStack(
@@ -284,17 +290,17 @@ export function normalizeDraftStack(
   options: StackOptionsPayload | null
 ): VesselInitConnectionDraft {
   if (draft.context === "real") {
-    return realVesselSoftwareChoice(options, draft.asvSoftware).available ? draft : { ...draft, asvSoftware: "replay" };
+    return realVesselSoftwareChoice(options, draft.asvSystem).available ? draft : { ...draft, asvSystem: "replay" };
   }
-  if (draft.asvSoftware === "on_board") {
+  if (draft.asvSystem === "on_board") {
     // Simulated vessels bring no software of their own.
-    return normalizeDraftStack({ ...draft, asvSoftware: "replay" }, simulatorType, options);
+    return normalizeDraftStack({ ...draft, asvSystem: "replay" }, simulatorType, options);
   }
-  if (controlLayerChoice(options, simulatorType, draft.asvSoftware, draft.controlLayer).available) {
+  if (controlLayerChoice(options, simulatorType, draft.asvSystem, draft.controlLayer).available) {
     return draft;
   }
   const working = CONTROL_LAYERS.find(
-    (layer) => controlLayerChoice(options, simulatorType, draft.asvSoftware, layer).available
+    (layer) => controlLayerChoice(options, simulatorType, draft.asvSystem, layer).available
   );
   return working === undefined ? draft : { ...draft, controlLayer: working };
 }

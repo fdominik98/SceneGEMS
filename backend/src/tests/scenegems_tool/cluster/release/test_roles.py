@@ -61,8 +61,8 @@ def test_component_items_are_the_catalog_with_its_images():
     assert all(images[component] == list(component_images()[component]) for component in COMPONENTS)
     assert images["control_layer/ardupilot"] == [SITL_IMAGE]
     assert images["simulation_layer/gazebo"] == sorted([SCENARIO_EXECUTION_IMAGE, GAZEBO_IMAGE])
-    assert images["asv_software/replay"] == images["control_layer/custom"] == [SCENARIO_EXECUTION_IMAGE], "their containers start from the scenario execution image"
-    assert images["asv_software/usv_navigation"] == ["scenegems-usv-navigation:latest"], "a worker node that offers USV Navigation gets its image"
+    assert images["asv_system/replay"] == images["control_layer/custom"] == [SCENARIO_EXECUTION_IMAGE], "their containers start from the scenario execution image"
+    assert images["asv_system/usv_navigation"] == ["scenegems-usv-navigation:latest"], "a worker node that offers USV Navigation gets its image"
     assert images["control_layer/none"] == []
 
 

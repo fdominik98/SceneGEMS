@@ -55,4 +55,4 @@ Drag the cards to rearrange them; the arrangement is kept in this browser, and t
 
 ## The matrix
 
-Each row is an ASV software on a control layer, and each column a simulation layer under it. A cell says whether the stack is **available** or **not possible**, with the reason. An available stack also shows whether it runs as a cluster job (and on which runner) or as a live session only, its repeatability, and what it supports, such as wind and waves. The values of a stack are the weakest link over its layers and adapters.
+Each row is an ASV system on a control layer, and each column a simulation layer under it. A cell says whether the stack is **available** or **not possible**, with the reason. An available stack also shows whether it runs as a cluster job (and on which runner) or as a live session only, its repeatability, and what it supports, such as wind and waves. The values of a stack are the weakest link over its layers and adapters.

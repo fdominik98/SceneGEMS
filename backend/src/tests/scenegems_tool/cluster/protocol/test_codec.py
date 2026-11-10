@@ -38,7 +38,7 @@ def worker_node_frames(resources, instant):
             worker_node_name="lab-1",
             software_revision="4ac7ef2",
             slots=[SlotOffer(job_type=JobType.SIMULATION, slots=4), SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1)],
-            components=["asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"],
+            components=["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"],
             labels={"site": "lab"},
             resources=resources,
             fingerprints={"scenegems-scenario-execution": "abc123"},

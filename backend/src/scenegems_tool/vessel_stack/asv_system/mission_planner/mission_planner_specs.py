@@ -1,4 +1,4 @@
-"""Specs of the mission_planner ASV software: an operator or external software on a MAVLink port.
+"""Specs of the mission_planner ASV system: an operator or external software on a MAVLink port.
 
 Two adapters connect it to ArduPilot:
 
@@ -14,11 +14,11 @@ Two adapters connect it to ArduPilot:
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER
 
 MISSION_PLANNER_LAYER = LayerSpec(
-    layer=LayerRef.of(AsvSoftwareId.MISSION_PLANNER),
+    layer=LayerRef.of(AsvSystemId.MISSION_PLANNER),
     description="A human operator or external software on a MAVLink endpoint (the workbench's external control mode).",
     # A person in the loop is neither stepped by the simulation clock nor repeatable. The
     # pace stays the operator's choice, so it does not cap the speedup.
@@ -29,7 +29,7 @@ MISSION_PLANNER_LAYER = LayerSpec(
 
 MISSION_PLANNER_MAVLINK_PORT = AdapterSpec(
     id="mission_planner_mavlink_port",
-    source=LayerRef.of(AsvSoftwareId.MISSION_PLANNER),
+    source=LayerRef.of(AsvSystemId.MISSION_PLANNER),
     target=LayerRef.of(ControlLayerId.ARDUPILOT),
     description="Exposed MAVLink port: MAVProxy forwards each vessel to a UDP ground control station port, and ArduAgent sends the vessel toward its last waypoint.",
     capabilities=Capabilities(lockstep=False),
@@ -41,7 +41,7 @@ GCS_CONTAINER_PORT = 5770  # MAVProxy's TCP endpoint for the ground control stat
 
 MISSION_PLANNER_GCS_PORT = AdapterSpec(
     id="mission_planner_gcs_port",
-    source=LayerRef.of(AsvSoftwareId.MISSION_PLANNER),
+    source=LayerRef.of(AsvSystemId.MISSION_PLANNER),
     target=LayerRef.of(ControlLayerId.ARDUPILOT),
     description=(
         "One ground control station endpoint per vessel: MAVProxy on the vessel's SITL SERIAL1 listens on TCP, "

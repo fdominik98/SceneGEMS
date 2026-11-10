@@ -64,7 +64,7 @@ def test_the_worker_node_says_hello_under_its_name_without_any_pairing(fake_cont
     assert hello.worker_node_name == "test-worker-node"
     assert hello.software_revision == "test-revision"
     assert hello.slots == [SlotOffer(job_type=JobType.SCENE_GENERATION, slots=1), SlotOffer(job_type=JobType.SIMULATION, slots=2)]
-    assert hello.components == ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"]
+    assert hello.components == ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"]
     assert hello.labels == {"site": "lab"}
     assert hello.fingerprints == FINGERPRINTS
     assert hello.resources.cpus >= 1 and hello.resources.free_disk_mb > 0

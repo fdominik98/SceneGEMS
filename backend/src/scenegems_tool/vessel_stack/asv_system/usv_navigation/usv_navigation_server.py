@@ -1,4 +1,4 @@
-"""USV Navigation as a plug and play ASV software component: colav_automaton behind the lockstep wire protocol.
+"""USV Navigation as a plug and play ASV system component: colav_automaton behind the lockstep wire protocol.
 
 The image of this component (deploy/images/usv_navigation) holds colav_automaton, numpy, this
 file and contracts/lockstep_wire.py, and nothing else of SceneGEMS. So this file imports only
@@ -10,7 +10,7 @@ the start message; the config is UsvNavigationParameters in wire form
 
 Its report holds the automaton's transitions and when the goal was reached. Entry point:
 
-    python -m scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_server --port 11410
+    python -m scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server --port 11410
 
 UsvNavigator is the navigation step itself. The in-process participant
 (usv_navigation_participant.py) runs the same class, so a run gives the same commands whether USV
@@ -49,10 +49,10 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
-from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SOFTWARE, Message, Session, WireError, serve_component
+from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Message, Session, WireError, serve_component
 
 IMPLEMENTATION = "usv_navigation"
-DEFAULT_PORT = 11410  # contracts/stack_services.ASV_SOFTWARE_PORT, which this file cannot import
+DEFAULT_PORT = 11410  # contracts/stack_services.ASV_SYSTEM_PORT, which this file cannot import
 
 State = Tuple[float, float, float, float]  # x, y, speed, heading
 
@@ -154,7 +154,7 @@ class UsvNavigationSession(Session):
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    serve_component(ROLE_ASV_SOFTWARE, IMPLEMENTATION, UsvNavigationSession, argv, default_port=DEFAULT_PORT)
+    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, UsvNavigationSession, argv, default_port=DEFAULT_PORT)
 
 
 if __name__ == "__main__":

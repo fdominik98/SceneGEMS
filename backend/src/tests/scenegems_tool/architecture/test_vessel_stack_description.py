@@ -24,19 +24,19 @@ def test_every_registered_layer_and_adapter_is_a_node_or_an_edge(document):
     registry = default_registry()
     assert {node.id for node in document.nodes} == {spec.id for spec in registry.layers}
     assert {edge.id for edge in document.edges} == {spec.id for spec in registry.adapters}
-    assert {node.lane for node in document.nodes} == {"asv_software", "control_layer", "simulation_layer"}
+    assert {node.lane for node in document.nodes} == {"asv_system", "control_layer", "simulation_layer"}
 
 
 def test_the_rows_are_the_resolvers_matrix(document):
     matrix = default_resolver().availability_matrix()
     assert len(document.combinations) == len(matrix) == 64
     expected = {
-        (f"asv_software/{chain.stack.asv_software.value}", f"control_layer/{chain.stack.control_layer.value}", f"simulation_layer/{chain.stack.simulation_layer.value}")
+        (f"asv_system/{chain.stack.asv_system.value}", f"control_layer/{chain.stack.control_layer.value}", f"simulation_layer/{chain.stack.simulation_layer.value}")
         for chain in matrix
         if chain.available
     }
     assert {combination.path for combination in document.combinations if combination.status == "available"} == expected
-    ruled_out = next(combination for combination in document.combinations if combination.path == ("asv_software/replay", "control_layer/custom", "simulation_layer/kinematic"))
+    ruled_out = next(combination for combination in document.combinations if combination.path == ("asv_system/replay", "control_layer/custom", "simulation_layer/kinematic"))
     assert ruled_out.status == "unavailable" and "no adapter" in ruled_out.reasons[0]
 
 
@@ -73,10 +73,10 @@ def test_a_speedup_that_is_not_measured_says_so(document):
 def test_the_metamodel_comes_from_the_contracts(document):
     nodes = {node.id.split("/", 1)[1]: node for node in document.metamodel_nodes}
     roles = {node.lane for node in document.metamodel_nodes if node.kind == "role"}
-    assert roles == {"asv_software", "control_layer", "simulation_layer"}
+    assert roles == {"asv_system", "control_layer", "simulation_layer"}
     assert any("DockerSimulationLayer.finish(artifacts, request)" in member for member in nodes["runtime/docker_simulation_layer"].members)
     assert any("on_step(request, observation)" in member for member in nodes["runtime/lockstep_participant"].members)
-    assert any(member.startswith("LayerSpec(layer, description, capabilities") for member in nodes["layer/asv_software"].members)
+    assert any(member.startswith("LayerSpec(layer, description, capabilities") for member in nodes["layer/asv_system"].members)
     edges = {edge.id for edge in document.metamodel_edges}
     assert {META_ASV_TO_CONTROL, META_CONTROL_TO_SIMULATION} <= edges
     assert any("vessel_state:" in note and "heading_speed_cmd:" in note for note in document.notes)
@@ -104,12 +104,12 @@ def test_built_in_adapters_and_on_board_layers_are_marked(document):
     assert "built-in" in edges["sitl_internal_physics"].tags
     assert "built-in" not in edges["replay_arduagent_real_vessel"].tags
     nodes = {node.id: node for node in document.nodes}
-    assert any(fact.key == "on_board_asv_software" for fact in nodes["control_layer/real_vessel"].facts)
-    assert not any(fact.key == "on_board_asv_software" for fact in nodes["control_layer/ardupilot"].facts)
+    assert any(fact.key == "on_board_asv_system" for fact in nodes["control_layer/real_vessel"].facts)
+    assert not any(fact.key == "on_board_asv_system" for fact in nodes["control_layer/ardupilot"].facts)
 
 
-def _combination(document, asv_software, control_layer, simulation_layer):
-    path = (f"asv_software/{asv_software}", f"control_layer/{control_layer}", f"simulation_layer/{simulation_layer}")
+def _combination(document, asv_system, control_layer, simulation_layer):
+    path = (f"asv_system/{asv_system}", f"control_layer/{control_layer}", f"simulation_layer/{simulation_layer}")
     return next(combination for combination in document.combinations if combination.path == path)
 
 
@@ -139,6 +139,6 @@ def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
     assert images(edges["mission_planner_gcs_port"]) == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}"}
     replay_container = {"${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}"}
     assert images(edges["replay_mavlink_lockstep"]) == images(edges["replay_state_follower"]) == replay_container, "the vessel's replay container, and no MAVProxy or ArduAgent"
-    assert images(nodes["asv_software/usv_navigation"]) == {"${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"}
+    assert images(nodes["asv_system/usv_navigation"]) == {"${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"}
     assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the scenario execution image too"
     assert images(nodes["control_layer/none"]) == set(), "no controller, no container"

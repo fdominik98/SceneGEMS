@@ -7,7 +7,7 @@ from scenegems_tool.assurance.campaign import CampaignConfigRejected, ClassCatal
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import AssuranceStores, ClassSpec
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
@@ -34,7 +34,7 @@ def test_the_exit_campaign_has_70_classes_and_1050_cases():
     assert all(spec.content_hash == catalog.get(spec.class_id).content_hash for spec in validated.classes)
     assert [spec.class_id for spec in validated.classes[:2]] == ["2vessel_0obstacle_scenarios/fec0", "2vessel_0obstacle_scenarios/fec1"]
     (run,) = validated.runs
-    assert run.vessels[OWN_SHIP].asv_software == AsvSoftwareId.USV_NAVIGATION and run.vessels[TARGET_SHIP].asv_software == AsvSoftwareId.REPLAY
+    assert run.vessels[OWN_SHIP].asv_system == AsvSystemId.USV_NAVIGATION and run.vessels[TARGET_SHIP].asv_system == AsvSystemId.REPLAY
     assert (run.repeatability_tier, run.environment, run.warnings) == ("exact", {"wind_vector": None, "waves": None}, ())
     assert validated.config_hash == validated.config.config_hash() and validated.config_json == validated.config.to_json()
 
@@ -81,15 +81,15 @@ def test_the_resolver_refuses_waves_on_the_kinematic_layer():
 
 def test_a_stack_the_resolver_does_not_know_is_refused():
     reasons = _rejection(_config(execution={"runs": [{"stack": {"mode": "usv_navigation"}}]}), resolver=StackResolver(AdapterRegistry()))
-    assert "execution.runs.0: vessel own_ship (usv_navigation, none, kinematic): asv_software/usv_navigation is not registered" in reasons
+    assert "execution.runs.0: vessel own_ship (usv_navigation, none, kinematic): asv_system/usv_navigation is not registered" in reasons
 
 
 def test_vessel_stacks_per_mode():
     replay = _config().execution.runs[0].stack
-    assert {stack.asv_software for stack in vessel_stacks(replay).values()} == {AsvSoftwareId.REPLAY}
+    assert {stack.asv_system for stack in vessel_stacks(replay).values()} == {AsvSystemId.REPLAY}
     closed_loop = _config(execution={"runs": [{"stack": {"mode": "usv_navigation"}}]}).execution.runs[0].stack
     assert closed_loop.mode == KinematicMode.USV_NAVIGATION
-    assert vessel_stacks(closed_loop)[OWN_SHIP].asv_software == AsvSoftwareId.USV_NAVIGATION
+    assert vessel_stacks(closed_loop)[OWN_SHIP].asv_system == AsvSystemId.USV_NAVIGATION
 
 
 @pytest.mark.postgres
@@ -243,7 +243,7 @@ def test_sections_of_steps_not_run_are_not_checked():
     validated = _validate(config, artifacts, resolver=StackResolver(AdapterRegistry()))
     assert validated.runs == () and artifacts.read == []
     with_simulation = _partial(["scene_generation", "trajectory_generation", "simulation"], scope=[{"classes": [CLASS], "quota": 1}], execution={"runs": [{"stack": {"mode": "usv_navigation"}}]})
-    assert "asv_software/usv_navigation is not registered" in _partial_rejection(with_simulation, resolver=StackResolver(AdapterRegistry()))
+    assert "asv_system/usv_navigation is not registered" in _partial_rejection(with_simulation, resolver=StackResolver(AdapterRegistry()))
 
 
 def test_a_format_1_config_validates_as_before():

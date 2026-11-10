@@ -119,7 +119,7 @@ def worker_node_values(control_node: FakeControlNode, state_dir, **overrides) ->
         "SCENEGEMS_CONTROL_NODE_ID": control_node.control_node_id,
         "SCENEGEMS_WORKER_NODE_NAME": "test-worker-node",
         "SCENEGEMS_WORKER_NODE_SLOTS": "simulation:2,scene_generation:1",
-        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
+        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_WORKER_NODE_LABELS": "site=lab",
         "SCENEGEMS_WORKER_NODE_STATE_DIR": str(state_dir),
         "SCENEGEMS_SOFTWARE_REVISION": "test-revision",

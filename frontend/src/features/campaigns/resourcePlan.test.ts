@@ -18,8 +18,8 @@ import {
 } from "./resourcePlan";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
-const KINEMATIC_WORKER_NODE = ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring"];
-const SITL_WORKER_NODE = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+const KINEMATIC_WORKER_NODE = ["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "scene_generation", "trajectory_generation", "monitoring"];
+const SITL_WORKER_NODE = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
 
 function components(usable: readonly string[], stale: readonly string[] = []) {
   return [...usable.map((component) => ({ component, images: [], state: "usable" })), ...stale.map((component) => ({ component, images: [], state: "out_of_date" }))];
@@ -32,7 +32,7 @@ function workerNode(id: string, slots: Record<string, number>, overrides: Record
 }
 
 const PIPELINE = { scene_generation: 4, trajectory_generation: 4, simulation: 8, "monitoring.post_hoc": 4 };
-const KINEMATIC_COMPONENTS = ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"];
+const KINEMATIC_COMPONENTS = ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"];
 
 function config(runs: Record<string, unknown>[], resources: Record<string, unknown> = {}): Record<string, unknown> {
   return { trajectories: { generator: "monitor_driven_rrt" }, execution: { runs }, resources };
@@ -75,7 +75,7 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
     expect(required[2]).toMatchObject({ jobType: "simulation", stage: "simulate", components: SITL_WORKER_NODE, reason: "The run is simulated on ArduPilot SITL." });
     expect(requiredCapabilities(config([world, { ...world, name: "again" }]))[2].reason).toBe("Each of the 2 runs is simulated on Gazebo.");
     const navigation = requiredCapabilities(config([{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" } }]))[2];
-    expect(navigation.components).toEqual(["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(navigation.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
     expect(navigation.reason).toBe("The run is simulated on the kinematic layer with USV Navigation.");
   });
 
@@ -103,7 +103,7 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
   });
 
   it("does not count a component that is out of date on the worker node", () => {
-    const stale = workerNode("s", { simulation: 2 }, { out_of_date: true, components: components(["asv_software/replay", "control_layer/ardupilot"], ["simulation_layer/ardupilot_sim"]) });
+    const stale = workerNode("s", { simulation: 2 }, { out_of_date: true, components: components(["asv_system/replay", "control_layer/ardupilot"], ["simulation_layer/ardupilot_sim"]) });
     expect(workerNodeProblems(stale, {}), "the worker node's other components still work").toEqual([]);
     expect(planOfConfig(config([sitl], {}), [stale]).missing.map((capability) => capability.stage)).toContain("simulate");
   });

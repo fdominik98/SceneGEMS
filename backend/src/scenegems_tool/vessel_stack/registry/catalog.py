@@ -1,9 +1,9 @@
 """Default registry: every layer, adapter and ruled-out connection of design section 3.3.
 
-New ASV software, controllers or simulators are added by implementing their specs, their
+New ASV system, controllers or simulators are added by implementing their specs, their
 container (a server for the lockstep wire protocol, contracts/lockstep_wire.py, and the class
-that adds its service to a stack) and registering them here. An ASV software that a lockstep
-runner steps also gets its entry in asv_software/asv_software_runtime.py. A spec can be
+that adds its service to a stack) and registering them here. An ASV system that a lockstep
+runner steps also gets its entry in asv_system/asv_system_runtime.py. A spec can be
 registered as planned (SpecStatus.PLANNED) so the resolver answers its rows before it exists;
 since Phase 2 every "yes" row of the availability matrix is available.
 """
@@ -11,10 +11,10 @@ since Phase 2 every "yes" row of the availability matrix is available.
 from functools import lru_cache
 from typing import Mapping, Optional
 
-from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT, MISSION_PLANNER_LAYER, MISSION_PLANNER_MAVLINK_PORT
-from scenegems_tool.vessel_stack.asv_software.on_board.on_board_specs import ON_BOARD_LAYER
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER, REPLAY_LAYER, REPLAY_MAVLINK_LOCKSTEP, REPLAY_STATE_FOLLOWER, mavlink_link_runtime
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import (
+from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT, MISSION_PLANNER_LAYER, MISSION_PLANNER_MAVLINK_PORT
+from scenegems_tool.vessel_stack.asv_system.on_board.on_board_specs import ON_BOARD_LAYER
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER, REPLAY_LAYER, REPLAY_MAVLINK_LOCKSTEP, REPLAY_STATE_FOLLOWER, mavlink_link_runtime
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import (
     CUSTOM_CONTROLLER_HEADING_SPEED_INPUT,
     USV_NAVIGATION_IN_PROCESS,
     USV_NAVIGATION_LAYER,
@@ -22,7 +22,7 @@ from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_spec
     usv_navigation_participant_runtime,
 )
 from scenegems_tool.vessel_stack.contracts.adapter_spec import LayerSpec, UnsupportedConnection
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUPILOT_CONTROL_LAYER
 from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_specs import CUSTOM_CONTROL_LAYER, CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER, los_waypoint_follower_runtime
 from scenegems_tool.vessel_stack.control_layers.real_vessel.real_vessel_specs import (
@@ -39,9 +39,9 @@ from scenegems_tool.vessel_stack.simulation_layers.gazebo.gazebo_specs import AR
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_specs import KINEMATIC_COMMAND_INPUT, KINEMATIC_LAYER
 from scenegems_tool.vessel_stack.simulation_layers.real_vessel.real_vessel_specs import REAL_VESSEL_AUTOPILOT, REAL_VESSEL_SIMULATION_LAYER
 
-_USV_NAVIGATION = LayerRef.of(AsvSoftwareId.USV_NAVIGATION)
-_MISSION_PLANNER = LayerRef.of(AsvSoftwareId.MISSION_PLANNER)
-_ON_BOARD = LayerRef.of(AsvSoftwareId.ON_BOARD)
+_USV_NAVIGATION = LayerRef.of(AsvSystemId.USV_NAVIGATION)
+_MISSION_PLANNER = LayerRef.of(AsvSystemId.MISSION_PLANNER)
+_ON_BOARD = LayerRef.of(AsvSystemId.ON_BOARD)
 _ARDUPILOT = LayerRef.of(ControlLayerId.ARDUPILOT)
 _CUSTOM = LayerRef.of(ControlLayerId.CUSTOM)
 _NONE = LayerRef.of(ControlLayerId.NONE)
@@ -67,7 +67,7 @@ UNSUPPORTED_CONNECTIONS = (
     UnsupportedConnection(_CUSTOM, _KINEMATIC, "the kinematic sim integrates control internally"),
     # A real vessel is reached only through its ArduAgent, and covers the control and simulation roles itself.
     UnsupportedConnection(_USV_NAVIGATION, _REAL_VESSEL_CONTROL, "a real vessel is reached only through ArduAgent, which has no command for USV Navigation's heading and speed references"),
-    *(UnsupportedConnection(_ON_BOARD, control, "this control layer brings no ASV software of its own") for control in (_ARDUPILOT, _CUSTOM, _NONE)),
+    *(UnsupportedConnection(_ON_BOARD, control, "this control layer brings no ASV system of its own") for control in (_ARDUPILOT, _CUSTOM, _NONE)),
     *(UnsupportedConnection(_REAL_VESSEL_CONTROL, simulation, "a real vessel's autopilot drives only its own hull") for simulation in (_KINEMATIC, _GAZEBO, _ARDUPILOT_SIM)),
     *(UnsupportedConnection(control, _REAL_VESSEL_SIMULATION, "a real vessel is moved only by its own autopilot (control layer real_vessel)") for control in (_ARDUPILOT, _CUSTOM, _NONE)),
 )
@@ -82,7 +82,7 @@ def _kinematic_simulation():
 
 
 def _replay_follower():
-    from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
+    from scenegems_tool.vessel_stack.asv_system.replay.replay_follower import ReplayFollower
 
     return ReplayFollower
 
@@ -95,15 +95,15 @@ def _kinematic_simulation_layer():
 
 
 def _replay_container():
-    from scenegems_tool.vessel_stack.asv_software.replay.replay_service_generator import ReplayAsvSoftware
+    from scenegems_tool.vessel_stack.asv_system.replay.replay_service_generator import ReplayAsvSystem
 
-    return ReplayAsvSoftware
+    return ReplayAsvSystem
 
 
 def _usv_navigation_container():
-    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_service_generator import UsvNavigationAsvSoftware
+    from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_service_generator import UsvNavigationAsvSystem
 
-    return UsvNavigationAsvSoftware
+    return UsvNavigationAsvSystem
 
 
 def _ardupilot_control_layer():
@@ -147,7 +147,7 @@ def build_registry(measurements: Optional[Mapping[str, CapabilityMeasurement]] =
     registry.register_layer(ARDUPILOT_SIM_LAYER, docker=_ardupilot_sim_layer)
     registry.register_layer(REAL_VESSEL_SIMULATION_LAYER)
 
-    # An ASV software's container comes with the adapter that runs it: the routes a lockstep runner
+    # An ASV system's container comes with the adapter that runs it: the routes a lockstep runner
     # steps have one per vessel, ArduAgent's and Mission Planner's are started by the ArduPilot control layer.
     registry.register_adapter(REPLAY_STATE_FOLLOWER, runtime=_replay_follower, docker=_replay_container)
     registry.register_adapter(USV_NAVIGATION_IN_PROCESS, runtime=usv_navigation_participant_runtime, docker=_usv_navigation_container)

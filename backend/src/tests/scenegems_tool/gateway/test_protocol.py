@@ -22,7 +22,7 @@ from scenegems_tool.gateway.protocol import (
     make_trajectory_generation_result_message,
     simulation_config_from_body,
 )
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext
 
 BODY = {
@@ -122,7 +122,7 @@ class TestSimulationConfigFromBody:
         assert config.speedup == 2
         assert set(config.vessels) == {"0", "1", "2"}
         first = config.vessels["0"]
-        assert (first.stack.asv_software, first.stack.control_layer) == (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT)
+        assert (first.stack.asv_system, first.stack.control_layer) == (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT)
         assert first.connection.agent_name == "os" and first.connection.port == 14550
         assert first.adapter_ids == ("replay_arduagent_follower",)
 
@@ -134,12 +134,12 @@ class TestSimulationConfigFromBody:
         config = simulation_config_from_body(body)
         assert [config.vessels[agent_id].adapter_ids for agent_id in ("0", "1")] == [(), ()]
 
-    def test_asv_software_and_control_layer_choose_the_stack(self, body):
+    def test_asv_system_and_control_layer_choose_the_stack(self, body):
         body["simulatorType"] = "Gazebo"
-        body["connectionsByAgentId"]["0"].update(asvSoftware="usv_navigation", controlLayer="custom")
+        body["connectionsByAgentId"]["0"].update(asvSystem="usv_navigation", controlLayer="custom")
         del body["connectionsByAgentId"]["0"]["controlMode"]
         stack = simulation_config_from_body(body).vessels["0"].stack
-        assert (stack.asv_software, stack.control_layer, stack.simulation_layer) == (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
+        assert (stack.asv_system, stack.control_layer, stack.simulation_layer) == (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
 
     def test_kinematic_vessels_default_to_no_control_layer(self, body):
         body["simulatorType"] = "Kinematic"
@@ -153,12 +153,12 @@ class TestSimulationConfigFromBody:
 
     def test_a_real_vessel_runs_on_its_own_layers_whatever_the_simulator(self, body):
         real = simulation_config_from_body(body).vessels["2"]
-        assert (real.stack.asv_software, real.stack.control_layer, real.stack.simulation_layer) == (AsvSoftwareId.MISSION_PLANNER, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+        assert (real.stack.asv_system, real.stack.control_layer, real.stack.simulation_layer) == (AsvSystemId.MISSION_PLANNER, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
         assert real.adapter_ids == ()
 
     def test_a_real_vessel_may_leave_the_steering_to_its_on_board_software(self, body):
-        body["connectionsByAgentId"]["2"].update(asvSoftware="on_board", controlLayer="real_vessel")
-        assert simulation_config_from_body(body).vessels["2"].stack.asv_software == AsvSoftwareId.ON_BOARD
+        body["connectionsByAgentId"]["2"].update(asvSystem="on_board", controlLayer="real_vessel")
+        assert simulation_config_from_body(body).vessels["2"].stack.asv_system == AsvSystemId.ON_BOARD
 
     def test_a_real_vessel_cannot_name_another_control_layer(self, body):
         body["connectionsByAgentId"]["2"]["controlLayer"] = "ardupilot"
@@ -220,7 +220,7 @@ class TestRoundTrip:
             assert sent["context"] == connection["context"]
             assert sent["controlMode"] == connection["controlMode"]
             assert sent["controlLayer"] == ("real_vessel" if connection["context"] == "real" else "ardupilot")
-            assert sent["asvSoftware"] == {"autonomous": "replay", "external": "mission_planner"}[connection["controlMode"]]
+            assert sent["asvSystem"] == {"autonomous": "replay", "external": "mission_planner"}[connection["controlMode"]]
             assert sent["agentName"] == connection["agentName"]
             assert sent["topic"] == connection["topic"]
             assert sent["port"] == connection["port"]
@@ -239,7 +239,7 @@ class TestRoundTrip:
         """The scenario execution worker gets the body back, so a kinematic or USV Navigation instance must read back the same."""
         del body["connectionsByAgentId"]["2"]
         body["simulatorType"] = "Kinematic"
-        body["connectionsByAgentId"]["0"].update(asvSoftware="usv_navigation", controlLayer="none")
+        body["connectionsByAgentId"]["0"].update(asvSystem="usv_navigation", controlLayer="none")
         config = simulation_config_from_body(body)
         again = simulation_config_from_body(make_simulation_models_body(config))
         assert again.simulation_layer == SimulationLayerId.KINEMATIC

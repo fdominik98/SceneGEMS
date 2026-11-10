@@ -43,7 +43,7 @@ describe("SimulationInitControls", () => {
       .map((row) => row.querySelector(".sim-vessel-name")?.textContent);
     expect(names).toEqual(["os own ship", "ts1 target ship", "ts2 target ship"]);
     expect(screen.getByRole("combobox", { name: "Kind of os, own ship" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "ASV software of ts2, target ship" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "ASV system of ts2, target ship" })).toBeInTheDocument();
   });
 
   it("uses the same names and the default agent names in the agent connections", async () => {

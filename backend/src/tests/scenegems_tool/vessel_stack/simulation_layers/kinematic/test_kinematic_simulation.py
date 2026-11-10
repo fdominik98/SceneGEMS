@@ -2,7 +2,7 @@
 
 import pytest
 
-from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
+from scenegems_tool.vessel_stack.asv_system.replay.replay_follower import ReplayFollower
 from scenegems_tool.vessel_stack.contracts.clock import LockstepViolation, StepAck
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_lockstep

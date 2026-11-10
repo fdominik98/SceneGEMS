@@ -312,7 +312,7 @@ describe("parseServerMessage", () => {
   it("parses stack_options", () => {
     const combination = {
       simulatorType: "Kinematic",
-      asvSoftware: "replay",
+      asvSystem: "replay",
       controlLayer: "ardupilot",
       available: false,
       status: "unavailable",
@@ -327,7 +327,7 @@ describe("parseServerMessage", () => {
     const msg = parseServerMessage({
       type: "stack_options",
       simulatorTypes: ["Kinematic", "Gazebo", "ArduPilot Sim"],
-      asvSoftware: ["replay", "usv_navigation", "mission_planner"],
+      asvSystem: ["replay", "usv_navigation", "mission_planner"],
       controlLayers: ["ardupilot", "custom", "none"],
       combinations: [combination],
     });

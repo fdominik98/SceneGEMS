@@ -2,7 +2,7 @@
 
 The simulation instance builder (vessel_stack/simulation_docker_stack.py) resolves the
 instance through the registry, then asks the simulation layer and, per vessel, the control
-layer and the ASV software adapter for their part: each brings the containers it runs in. A
+layer and the ASV system adapter for their part: each brings the containers it runs in. A
 contributor is bound to its spec in the registry (registry/catalog.py, docker=); a layer that
 runs in no container of its own (control layer none) has none. Services appear in the compose
 file in the order they are added.
@@ -54,7 +54,7 @@ class DockerControlLayer(Protocol):
 
 
 @runtime_checkable
-class DockerAsvSoftware(Protocol):
-    """The container of one vessel's ASV software, added by the adapter that runs it."""
+class DockerAsvSystem(Protocol):
+    """The container of one vessel's ASV system, added by the adapter that runs it."""
 
     def add_vessel(self, artifacts: DockerStackArtifacts, request: DockerStackRequest, vessel_config: VesselConfig, vessel: ConcreteVessel, state: ActorState) -> None: ...

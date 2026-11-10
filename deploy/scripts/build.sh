@@ -136,7 +136,7 @@ build_simulation_images() {
     # USV Navigation is a component of its own: its image copies only its server and the wire protocol it serves.
     build_subsystem_if_stale "scenegems-usv-navigation:latest" "$SCRIPT_DIR/deploy/images/usv_navigation/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/usv_navigation" \
-        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/asv_software/usv_navigation/usv_navigation_server.py" \
+        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/asv_system/usv_navigation/usv_navigation_server.py" \
         "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py"
 }
 

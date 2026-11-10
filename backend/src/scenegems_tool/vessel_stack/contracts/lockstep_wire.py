@@ -1,7 +1,7 @@
 """Wire protocol between the containers of a vessel stack: one JSON object per line over TCP.
 
 Every layer of a vessel stack that SceneGEMS steps itself runs in its own container and serves
-this protocol: an ASV software, a controller or a simulator. The runner of the stack connects to
+this protocol: an ASV system, a controller or a simulator. The runner of the stack connects to
 each of them, owns the lockstep clock and carries the messages between them, so a component
 never talks to another one directly and needs to know nothing about the rest of the stack.
 
@@ -16,7 +16,7 @@ Common to every role:
     -> {"op": "close"}                      (no reply; the component waits for the next runner)
     <- {"op": "error", "message": ".."}     (a failed request; the connection ends)
 
-ASV software (ROLE_ASV_SOFTWARE), one container per vessel:
+ASV system (ROLE_ASV_SYSTEM), one container per vessel:
 
     -> {"op": "start", "seed": 7, "vessel": {"id": 0, "length": .., "max_speed": .., "max_acceleration": .., "max_angular_speed": ..},
         "config": {..}}                     (config belongs to the implementation)
@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 PROTOCOL_VERSION = 1
-ROLE_ASV_SOFTWARE = "asv_software"
+ROLE_ASV_SYSTEM = "asv_system"
 ROLE_CONTROLLER = "controller"
 ROLE_SIMULATOR = "simulator"
 

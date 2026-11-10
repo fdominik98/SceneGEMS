@@ -13,7 +13,7 @@ from typing import Dict
 
 import yaml
 
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance, wind_environment
@@ -43,7 +43,7 @@ def _instance(case: str) -> SimulationInstanceConfig:
         instance = stack_instance(layer, [0, 1], adapter_ids=["replay_arduagent_follower"])
         instance.vessels["1"] = VesselConfig(
             agent_id="1",
-            stack=VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, layer),
+            stack=VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, layer),
             connection=AgentConnection(agent_name="agent_1", topic="waraps/unit/surface/agent_1", port=14560),
             adapter_ids=("mission_planner_mavlink_port",),
         )

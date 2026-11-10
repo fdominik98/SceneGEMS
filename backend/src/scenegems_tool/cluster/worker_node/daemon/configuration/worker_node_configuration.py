@@ -9,7 +9,7 @@ Variables (deploy/worker_node/.env.example is the template):
     SCENEGEMS_WORKER_NODE_NAME           this worker node's name and worker node id on the control node and in Docker names
     SCENEGEMS_WORKER_NODE_SLOTS          job types with slots, for example simulation:4,scene_generation:1
     SCENEGEMS_WORKER_NODE_COMPONENTS     what the worker node runs, comma separated (cluster/fingerprints/components.py), for example
-                                  asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation
+                                  asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation
     SCENEGEMS_WORKER_NODE_LABELS         optional key=value pairs, for example gpu=true,site=lab
     SCENEGEMS_WORKER_NODE_MACHINE        optional, the name of the machine the worker node runs on (the deployment tool writes it); shown in the UI
     SCENEGEMS_WORKER_NODE_STATE_DIR      folder on the worker node's volume for the artifact cache
@@ -179,7 +179,7 @@ def _slots_and_components(get, required, parsed, problems: List[str]) -> Tuple[O
     if get(REPLACED_CAPABILITIES_VARIABLE):
         problems.append(
             f"{REPLACED_CAPABILITIES_VARIABLE} is replaced by SCENEGEMS_WORKER_NODE_SLOTS (job types with slots, for example simulation:2,scene_generation:1) "
-            "and SCENEGEMS_WORKER_NODE_COMPONENTS (what the worker node runs them with, for example asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation)"
+            "and SCENEGEMS_WORKER_NODE_COMPONENTS (what the worker node runs them with, for example asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation)"
         )
     slots_text = required("SCENEGEMS_WORKER_NODE_SLOTS")
     slots = parsed("SCENEGEMS_WORKER_NODE_SLOTS", parse_slots, slots_text, None) if slots_text else None

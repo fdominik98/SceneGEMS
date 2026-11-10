@@ -2,7 +2,7 @@
 
 The Gazebo lockstep runner (gz_lockstep_runner.run_gz_lockstep) calls a CustomControllerLink
 exactly as it calls a TwinThrustAutopilot in its own process. MissionGuidance is the lockstep
-participant of a vessel whose ASV software hands the controller a waypoint mission: it starts the
+participant of a vessel whose ASV system hands the controller a waypoint mission: it starts the
 software, passes its mission on, and from then on the controller steers by itself.
 """
 
@@ -10,7 +10,7 @@ import dataclasses
 from typing import Any, Dict, Optional
 
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.vessel_stack.asv_software.asv_software_link import AsvSoftwareLink
+from scenegems_tool.vessel_stack.asv_system.asv_system_link import AsvSystemLink
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_CONTROLLER, Endpoint, LineClient, WireError, state_row
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
@@ -59,21 +59,21 @@ class CustomControllerLink:
 
 
 class MissionGuidance:
-    """Lockstep participant of a vessel whose ASV software gives its controller a waypoint mission."""
+    """Lockstep participant of a vessel whose ASV system gives its controller a waypoint mission."""
 
-    def __init__(self, asv_software: AsvSoftwareLink, controller: CustomControllerLink):
-        self.participant_id = asv_software.participant_id
-        self._asv_software = asv_software
+    def __init__(self, asv_system: AsvSystemLink, controller: CustomControllerLink):
+        self.participant_id = asv_system.participant_id
+        self._asv_system = asv_system
         self._controller = controller
 
     def start(self, seed: int) -> None:
-        self._asv_software.start(seed)
-        if self._asv_software.mission is None:
+        self._asv_system.start(seed)
+        if self._asv_system.mission is None:
             raise WireError(f"{self.participant_id} handed over no waypoint mission")
-        self._controller.load_mission(self._asv_software.mission, seed)
+        self._controller.load_mission(self._asv_system.mission, seed)
 
     def on_step(self, request: StepRequest, observation: VesselStateObservation) -> HeadingSpeedCommand:
         return self._controller.guide(request, observation)
 
     def report(self) -> Dict[str, Any]:
-        return self._asv_software.report()
+        return self._asv_system.report()

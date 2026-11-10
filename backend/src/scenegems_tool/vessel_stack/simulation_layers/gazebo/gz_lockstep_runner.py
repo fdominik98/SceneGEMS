@@ -1,9 +1,9 @@
-"""Lockstep runner of the custom control layer on Gazebo: ASV software, autopilot and physics on one clock.
+"""Lockstep runner of the custom control layer on Gazebo: ASV system, autopilot and physics on one clock.
 
 Every vessel has an ASV participant (the line-of-sight waypoint follower for replay, USV
 Navigation for usv_navigation) and a TwinThrustAutopilot with gains from its generated hull.
 Both come from a hosting (vessel_stack/hosting.py): built in this process, or the vessel's ASV
-software and controller containers, which this runner then carries the messages between.
+system and controller containers, which this runner then carries the messages between.
 The world is paused and advances only through the gz-transport actuator (gz_transport_actuator.py):
 
     for every scenario step of dt:
@@ -34,11 +34,11 @@ import numpy as np
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
 from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepParticipant, StepAck, derive_seed
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, TwinThrustAutopilot
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
@@ -193,17 +193,17 @@ def _step_commands(clock: LockstepClock, participants: Mapping[int, LockstepPart
 
 def gz_custom_instance(
     trajectories: Trajectories,
-    asv_software: Optional[Mapping[int, AsvSoftwareId]] = None,
+    asv_system: Optional[Mapping[int, AsvSystemId]] = None,
     *,
     environment: Optional[EnvironmentConfig] = None,
     speedup: int = 1,
 ) -> SimulationInstanceConfig:
-    """A Gazebo instance where every vessel runs on the custom control layer; replay unless asv_software names another per vessel id.
+    """A Gazebo instance where every vessel runs on the custom control layer; replay unless asv_system names another per vessel id.
 
     Agent names (and so model names) are vessel_<id>. Feed it to build_simulation_docker_stack_artifacts
     for the stack and to run_gz_custom for the run.
     """
-    asv_software = dict(asv_software or {})
+    asv_system = dict(asv_system or {})
     return SimulationInstanceConfig(
         simulation_layer=SimulationLayerId.GAZEBO,
         environment=environment or EnvironmentConfig.calm(),
@@ -211,7 +211,7 @@ def gz_custom_instance(
         vessels={
             str(vessel.id): VesselConfig(
                 agent_id=str(vessel.id),
-                stack=VesselStackConfig(asv_software.get(vessel.id, AsvSoftwareId.REPLAY), ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
+                stack=VesselStackConfig(asv_system.get(vessel.id, AsvSystemId.REPLAY), ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
                 connection=AgentConnection(agent_name=f"vessel_{vessel.id}", topic="", port=None),
             )
             for vessel in trajectories.initial_scene.vessels
@@ -238,8 +238,8 @@ def run_gz_custom(
     """Run every simulated vessel on a running Gazebo stack with the custom controller, through the registry.
 
     The instance is validated as an unattended run (machine names the host for per-host limits).
-    hosting decides where each vessel's ASV software and autopilot run: in this process by default,
-    in the vessel's ASV software and controller containers with ContainerHosting. Replay hands the
+    hosting decides where each vessel's ASV system and autopilot run: in this process by default,
+    in the vessel's ASV system and controller containers with ContainerHosting. Replay hands the
     controller its trajectory as a waypoint mission, which the controller's line-of-sight follower
     steers; USV Navigation (parameters from its trajectory unless given) sets the autopilot's
     heading and speed every step. host and port reach the gz-transport actuator in the Gazebo
@@ -266,14 +266,14 @@ def run_gz_custom(
             vessel = scene.get_by_id(agent_id)
             if not isinstance(vessel, ConcreteVessel):
                 raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
-            software = vessel_config.stack.asv_software
-            if software == AsvSoftwareId.USV_NAVIGATION:
+            software = vessel_config.stack.asv_system
+            if software == AsvSystemId.USV_NAVIGATION:
                 navigation_parameters[vessel.id] = parameters_for(vessel, trajectories, dt, usv_navigation_parameters)
             agent_name = vessel_config.require_connection().agent_name
             request = ParticipantRequest(
                 vessel=vessel,
                 agent_name=agent_name,
-                asv_software=software,
+                asv_system=software,
                 adapter=resolution.chains[agent_id].asv_adapter,
                 trajectories=trajectories,
                 dt=dt,

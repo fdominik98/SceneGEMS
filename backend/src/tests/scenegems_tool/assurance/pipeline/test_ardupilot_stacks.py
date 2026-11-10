@@ -18,9 +18,9 @@ from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
 SIMULATE, MONITOR, CALIBRATE = PipelineStage.SIMULATE, PipelineStage.MONITOR, PipelineStage.CALIBRATE
 SIMULATION = JobType.SIMULATION
-ON_KINEMATIC = ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic")
-ON_SITL = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
-ON_GAZEBO = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+ON_KINEMATIC = ("asv_system/replay", "control_layer/none", "simulation_layer/kinematic")
+ON_SITL = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+ON_GAZEBO = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
 KINEMATIC = {"monitor": "post_hoc"}
 SITL = {"stack": {"simulation_layer": "ardupilot_sim"}, "monitor": "post_hoc"}
 GAZEBO = {"stack": {"simulation_layer": "gazebo", "speedup": 4, "dt": 2, "steps": 20, "geofence": {"latitude": 58.5, "longitude": 15.5, "radius_meters": 40}}, "monitor": "live", "seed": 77}
@@ -56,7 +56,7 @@ def test_a_stage_lists_the_components_its_runs_need():
 
 def test_usv_navigation_on_the_kinematic_layer_needs_replay_too_for_the_targets():
     graph = _graph({"stack": {"simulation_layer": "kinematic", "mode": "usv_navigation"}})
-    assert graph.run_components(0) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic")
+    assert graph.run_components(0) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic")
 
 
 @pytest.mark.parametrize("run", [KINEMATIC, {"stack": {"simulation_layer": "kinematic", "mode": "usv_navigation"}}, SITL, GAZEBO])
@@ -172,7 +172,7 @@ USV_NAVIGATION = {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "
 SITL_USV_NAVIGATION = {"stack": {"simulation_layer": "ardupilot_sim", "mode": "usv_navigation", "usv_navigation": USV_NAVIGATION}, "monitor": "live"}
 CUSTOM = {"stack": {"simulation_layer": "gazebo", "control_layer": "custom"}, "environment": {"wind_vector": [0.0, 3.0, 0.0]}, "monitor": "post_hoc"}
 CUSTOM_USV_NAVIGATION = {"stack": {"simulation_layer": "gazebo", "control_layer": "custom", "mode": "usv_navigation", "dt": 2, "steps": 20}, "monitor": "live", "seed": 9}
-ON_CUSTOM = ("asv_software/replay", "control_layer/custom", "simulation_layer/gazebo")
+ON_CUSTOM = ("asv_system/replay", "control_layer/custom", "simulation_layer/gazebo")
 
 
 @pytest.mark.parametrize("run", [SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION])
@@ -182,9 +182,9 @@ def test_the_new_stacks_components_are_the_ones_the_control_node_computes_from_t
 
 def test_the_new_stacks_need_their_layers_images_and_are_bounded():
     graph = _graph(SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION)
-    assert graph.run_components(0) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+    assert graph.run_components(0) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
     assert graph.run_components(1) == ON_CUSTOM
-    assert graph.run_components(2) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
+    assert graph.run_components(2) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
     assert [graph.run_tier(run) for run in range(3)] == ["bounded"] * 3
     assert required_fingerprints(graph.run_components(1), EXPECTED) == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}), "no SITL"
     assert graph.stage_needs(SIMULATE) == [(SIMULATION, graph.run_components(run)) for run in range(3)]

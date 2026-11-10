@@ -1,7 +1,7 @@
-"""The availability matrix: all 64 (ASV software, control layer, simulation layer) triples against design section 3.3.
+"""The availability matrix: all 64 (ASV system, control layer, simulation layer) triples against design section 3.3.
 
-The 27 triples of the three simulators and the three ASV software SceneGEMS runs are the design's table. The
-real vessel (its own control and simulation layer) and on_board ASV software add the rest: only the real
+The 27 triples of the three simulators and the three ASV system SceneGEMS runs are the design's table. The
+real vessel (its own control and simulation layer) and on_board ASV system add the rest: only the real
 vessel's own stacks exist, every other row names why not.
 """
 
@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 import pytest
 
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, SpecStatus
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
 from scenegems_tool.vessel_stack.registry.catalog import build_registry, default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
@@ -27,7 +27,7 @@ RULED_OUT = {
     "custom_ardupilot_sim": "SITL physics only accepts ArduPilot control",
     "kinematic": "the kinematic sim integrates control internally",
     "usv_navigation_real_vessel": "has no command for USV Navigation's heading and speed references",
-    "on_board": "this control layer brings no ASV software of its own",
+    "on_board": "this control layer brings no ASV system of its own",
     "real_vessel_control": "a real vessel's autopilot drives only its own hull",
     "real_vessel_simulation": "a real vessel is moved only by its own autopilot",
 }
@@ -75,7 +75,7 @@ EXPECTED: Dict[Tuple[str, str, str], Tuple[str, str, List[str]]] = {
 
 
 def _ruled_out_by_the_new_layers(asv: str, control: str, simulation: str) -> List[str]:
-    """Every other row with a new layer: on_board needs a layer that brings ASV software, the real
+    """Every other row with a new layer: on_board needs a layer that brings ASV system, the real
     vessel's autopilot moves only its own hull, and only that autopilot moves it."""
     reasons = []
     if asv == "on_board" and control != "real_vessel":
@@ -96,7 +96,7 @@ for _asv in ("replay", "usv_navigation", "mission_planner", "on_board"):
 
 
 def triple(chain) -> Tuple[str, str, str]:
-    return (chain.stack.asv_software.value, chain.stack.control_layer.value, chain.stack.simulation_layer.value)
+    return (chain.stack.asv_system.value, chain.stack.control_layer.value, chain.stack.simulation_layer.value)
 
 
 @pytest.fixture(scope="module")
@@ -105,7 +105,7 @@ def matrix():
 
 
 def test_expected_table_covers_every_role_combination():
-    every_triple = {(asv.value, control.value, simulation.value) for asv in AsvSoftwareId for control in ControlLayerId for simulation in SimulationLayerId}
+    every_triple = {(asv.value, control.value, simulation.value) for asv in AsvSystemId for control in ControlLayerId for simulation in SimulationLayerId}
     assert len(every_triple) == 64
     assert set(EXPECTED) == every_triple
 
@@ -192,8 +192,8 @@ def test_built_in_adapters_join_the_layers_of_one_integration():
     assert built_in == {"sitl_internal_physics", "real_vessel_autopilot"}
 
 
-def test_only_the_real_vessel_brings_on_board_asv_software():
-    assert [layer.id for layer in build_registry({}).layers if layer.on_board_asv_software] == ["control_layer/real_vessel"]
+def test_only_the_real_vessel_brings_on_board_asv_system():
+    assert [layer.id for layer in build_registry({}).layers if layer.on_board_asv_system] == ["control_layer/real_vessel"]
 
 
 def test_planned_chain_lists_the_planned_specs():
@@ -202,7 +202,7 @@ def test_planned_chain_lists_the_planned_specs():
     registry.register_adapter(
         AdapterSpec(
             id="planned_probe",
-            source=LayerRef.of(AsvSoftwareId.USV_NAVIGATION),
+            source=LayerRef.of(AsvSystemId.USV_NAVIGATION),
             target=LayerRef.of(ControlLayerId.ARDUPILOT),
             description="A planned adapter for this test.",
             status=SpecStatus.PLANNED,
@@ -210,7 +210,7 @@ def test_planned_chain_lists_the_planned_specs():
         ),
         default=True,
     )
-    chain = StackResolver(registry).resolve(VesselStackConfig(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO))
+    chain = StackResolver(registry).resolve(VesselStackConfig(AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO))
     assert chain.status == "planned (phase 3)"
     assert {spec.id for spec in chain.planned_specs} == {"planned_probe"}
 
@@ -233,7 +233,7 @@ def test_replay_on_the_custom_controller_runs_through_the_waypoint_follower_and_
 
 
 def test_resolving_with_an_adapter_alternative_changes_the_asv_adapter():
-    stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+    stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
     chain = default_resolver().resolve(stack, ["replay_arduagent_follower"])
     assert chain.available
     assert chain.asv_adapter.id == "replay_arduagent_follower"
@@ -242,14 +242,14 @@ def test_resolving_with_an_adapter_alternative_changes_the_asv_adapter():
 
 
 def test_unknown_adapter_id_is_a_reason():
-    stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+    stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
     chain = default_resolver().resolve(stack, ["no_such_adapter"])
     assert not chain.available
     assert "adapter no_such_adapter is not registered" in chain.reason
 
 
 def test_adapter_of_another_connection_is_a_reason():
-    stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+    stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
     chain = default_resolver().resolve(stack, ["kinematic_command_input"])
     assert not chain.available
     assert "kinematic_command_input connects control_layer/none to simulation_layer/kinematic, which is not part of" in chain.reason

@@ -1,7 +1,7 @@
 """The custom controller as a component of a vessel stack: one vessel's autopilot in its own container.
 
 The runner gives it the vessel, the autopilot's gains (derived from the hull the simulator
-generated) and, when the ASV software hands over a waypoint mission, that mission. Then, for
+generated) and, when the ASV system hands over a waypoint mission, that mission. Then, for
 every control step, it turns the hull's observation and the heading and speed setpoint into the
 two thrusts (TwinThrustAutopilot). With a mission, the controller's line-of-sight follower
 (LosWaypointFollower) computes the setpoint of every scenario step from the vessel's state.

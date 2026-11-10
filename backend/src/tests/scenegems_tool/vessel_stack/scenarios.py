@@ -16,7 +16,7 @@ from scenegems_tool.vessel_stack.calibration.reference_scenarios import (  # noq
     encounter_trajectories,
     make_vessel,
 )
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import (
     AgentConnection,
@@ -42,7 +42,7 @@ def mqtt_connection() -> MQttConnectionInfo:
 def stack_instance(
     simulation_layer: SimulationLayerId,
     vessel_ids: Sequence[int],
-    asv_software: AsvSoftwareId = AsvSoftwareId.REPLAY,
+    asv_system: AsvSystemId = AsvSystemId.REPLAY,
     control_layer: ControlLayerId = ControlLayerId.ARDUPILOT,
     *,
     environment: EnvironmentConfig | None = None,
@@ -50,7 +50,7 @@ def stack_instance(
     adapter_ids: Sequence[str] = (),
 ) -> SimulationInstanceConfig:
     """An instance with the same triple on every vessel, each with an agent connection."""
-    stack = VesselStackConfig(asv_software=asv_software, control_layer=control_layer, simulation_layer=simulation_layer)
+    stack = VesselStackConfig(asv_system=asv_system, control_layer=control_layer, simulation_layer=simulation_layer)
     return SimulationInstanceConfig(
         simulation_layer=simulation_layer,
         environment=environment or EnvironmentConfig.calm(),

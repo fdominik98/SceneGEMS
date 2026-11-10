@@ -1,27 +1,27 @@
-"""Runner side of an ASV software container: a LockstepParticipant over the lockstep wire protocol.
+"""Runner side of an ASV system container: a LockstepParticipant over the lockstep wire protocol.
 
-A lockstep runner steps an AsvSoftwareLink exactly as it steps a participant in its own process.
-The link works for every ASV software: what differs between them is the start config
-(asv_software_runtime.AsvSoftwareRuntime.start_config) and the image behind the endpoint.
+A lockstep runner steps an AsvSystemLink exactly as it steps a participant in its own process.
+The link works for every ASV system: what differs between them is the start config
+(asv_system_runtime.AsvSystemRuntime.start_config) and the image behind the endpoint.
 """
 
 from typing import Any, Dict, Optional
 
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest, asv_software_runtime, vessel_limits
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest, asv_system_runtime, vessel_limits
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
-from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SOFTWARE, Endpoint, LineClient, WireError, state_row, state_rows
+from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Endpoint, LineClient, WireError, state_row, state_rows
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 
 
-class AsvSoftwareLink:
+class AsvSystemLink:
     def __init__(self, endpoint: Endpoint, request: ParticipantRequest):
         self.participant_id = request.participant_id
         self.mission: Optional[Dict[str, Any]] = None  # set by start for software that hands over a waypoint mission
         self._vessel = vessel_limits(request.vessel)
-        self._config = asv_software_runtime(request.asv_software).start_config(request)
-        self._client = LineClient(endpoint, ROLE_ASV_SOFTWARE)
+        self._config = asv_system_runtime(request.asv_system).start_config(request)
+        self._client = LineClient(endpoint, ROLE_ASV_SYSTEM)
 
-    def connect(self, timeout_s: float = 300.0) -> "AsvSoftwareLink":
+    def connect(self, timeout_s: float = 300.0) -> "AsvSystemLink":
         self._client.connect(timeout_s)
         return self
 

@@ -3,7 +3,7 @@ import shlex
 import numpy as np
 
 from scenegems_tool.messaging.mqtt_agent_client import MqttAgentClient
-from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT
+from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT
 from scenegems_tool.vessel_stack.contracts.local_frame import to_true_north
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER, SITL_CONTAINER
 from utils.file_system_utils import SITL_ENTRYPOINT_CONTAINER_PATH, docker_volume_path, runtime_assets_volume_mount

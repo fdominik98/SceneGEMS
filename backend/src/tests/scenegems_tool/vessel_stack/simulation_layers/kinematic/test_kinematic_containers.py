@@ -5,7 +5,7 @@ import pytest
 from scenegems_tool.vessel_stack.contracts.clock import LockstepViolation, StepAck
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_SIMULATOR, Endpoint, LineClient, LineServer, WireError
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
 from scenegems_tool.vessel_stack.contracts.stack_services import KINEMATIC_SIM_SERVICE
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import kinematic_instance, run_kinematic_closed_loop, run_kinematic_instance, run_kinematic_replay
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_link import KinematicSimLink
@@ -82,7 +82,7 @@ class TestRunsInContainers:
     def test_usv_navigation_gives_the_in_process_run_bit_for_bit(self, encounter):
         trajectories = encounter_trajectories(encounter, 900)
         in_process = run_kinematic_closed_loop(trajectories)
-        with loopback_hosting(kinematic_instance(trajectories, {0: AsvSoftwareId.USV_NAVIGATION})) as hosting:
+        with loopback_hosting(kinematic_instance(trajectories, {0: AsvSystemId.USV_NAVIGATION})) as hosting:
             contained = run_kinematic_closed_loop(trajectories, hosting=hosting)
         assert contained.state_digest() == in_process.state_digest()
         assert contained.run_record == in_process.run_record, "the transitions and the arrival travel in the software's report"

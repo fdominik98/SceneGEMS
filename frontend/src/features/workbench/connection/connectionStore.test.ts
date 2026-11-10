@@ -58,9 +58,22 @@ describe("connection form migration", () => {
     expect(migrated.clientBroker).toBe("10.0.0.8");
   });
 
+  it("moves the control node broker's profile from its v3 key, so the address left in the form is not dialled", () => {
+    const migrated = migrate({ ...FORM, agentBroker: "broker", clientBroker: "broker", selectedPreset: "master_broker" }, 3);
+    expect(migrated.selectedPreset).toBe("control_node_broker");
+    expect(connection.buildConnectMessage(migrated)).toMatchObject({ use_control_node_broker: true });
+  });
+
+  it("keeps the other v3 profiles", () => {
+    expect(migrate({ ...FORM, selectedPreset: "waraps_tls_broker" }, 3).selectedPreset).toBe("waraps_tls_broker");
+    const typed = migrate({ ...FORM, selectedPreset: "" }, 3);
+    expect(typed.selectedPreset).toBe("");
+    expect(typed.clientBroker).toBe("10.0.0.8");
+  });
+
   it("does not touch a state that is already on the current version", () => {
     const current = { ...FORM, selectedPreset: "" as const };
-    expect(migrate(current, 3)).toBe(current);
+    expect(migrate(current, 4)).toBe(current);
   });
 });
 

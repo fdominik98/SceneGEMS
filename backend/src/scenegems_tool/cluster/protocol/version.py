@@ -26,9 +26,12 @@ result field that holds a list (ArtifactField.many) is stored as one artifact pe
 Version 8: the master is the control node and a node is a worker node. The fields follow: control_node_id
 (Hello, Welcome), worker_node_id, allowed_worker_nodes; the control socket is /cluster/worker-node/control and
 the artifact routes read the X-Worker-Node-Id header.
+
+Version 9: the ASV software of a vessel stack is its ASV system. A vessel's stack names it asv_system, and the
+components are asv_system/replay and asv_system/usv_navigation.
 """
 
-PROTOCOL_VERSION = 8
+PROTOCOL_VERSION = 9
 
 
 class ProtocolVersionMismatch(ValueError):

@@ -2,7 +2,7 @@
 
 A worker node's capability is a set of components (SCENEGEMS_WORKER_NODE_COMPONENTS). The vessel stack
 components are the campaign layers of the vessel stack matrix, named as LayerRef names them
-(asv_software/replay, control_layer/ardupilot, simulation_layer/gazebo, ...); the subsystem
+(asv_system/replay, control_layer/ardupilot, simulation_layer/gazebo, ...); the subsystem
 components are design_space_exploration, scene_generation, trajectory_generation, monitoring and calibration.
 
 A job requires components (JobRequirements.components): a simulation every layer of every
@@ -12,7 +12,7 @@ component (cluster/release/roles.py), the deployment tool installs the images of
 it is given per worker node, and the control node judges a worker node out of date per component.
 
 A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image):
-every layer runs in a container of its own. An ASV software adds those of the adapters that run it on the
+every layer runs in a container of its own. An ASV system adds those of the adapters that run it on the
 runners' stacks, and a simulation layer adds the scenario execution image the simulation runner runs in. The
 simulation job's runners and the vessel stacks each runs are declared here too (RUNNER_STACKS), so
 the Capabilities page can name the runner of a stack without loading the job modules. The registry
@@ -24,7 +24,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING, Collection, Dict, Iterable, Optional, Set, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerImplementationId, LayerRef, Role, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerImplementationId, LayerRef, Role, SimulationLayerId
 from utils.image_names import tagged
 
 if TYPE_CHECKING:
@@ -38,12 +38,12 @@ SCENARIO_EXECUTION_IMAGE = tagged("scenegems-scenario-execution-subsystem")
 MONITORING_IMAGE = tagged("scenegems-monitoring-subsystem")
 
 ComponentId = str
-StackTriple = Tuple[AsvSoftwareId, ControlLayerId, SimulationLayerId]
+StackTriple = Tuple[AsvSystemId, ControlLayerId, SimulationLayerId]
 
 # The layers of the vessel stacks campaigns run, in catalog order
 STACK_LAYERS: Tuple[LayerImplementationId, ...] = (
-    AsvSoftwareId.REPLAY,
-    AsvSoftwareId.USV_NAVIGATION,
+    AsvSystemId.REPLAY,
+    AsvSystemId.USV_NAVIGATION,
     ControlLayerId.NONE,
     ControlLayerId.ARDUPILOT,
     ControlLayerId.CUSTOM,
@@ -98,18 +98,18 @@ class SimulationRunner(str, Enum):
 # not workbench only. A stack no runner names runs on the workbench only, as a live session.
 RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
     SimulationRunner.KINEMATIC: (
-        (AsvSoftwareId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
-        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
+        (AsvSystemId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
+        (AsvSystemId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
     ),
     SimulationRunner.ARDUPILOT: (
-        (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
-        (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
-        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
-        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+        (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+        (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+        (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+        (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
     ),
     SimulationRunner.GAZEBO_CUSTOM: (
-        (AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
-        (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
+        (AsvSystemId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
+        (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
     ),
 }
 
@@ -158,13 +158,13 @@ def _layer_images(layer: LayerImplementationId) -> Tuple[str, ...]:
     role = LayerRef.of(layer).role
     if role == Role.SIMULATION_LAYER:
         images.add(SCENARIO_EXECUTION_IMAGE)  # the simulation runner
-    elif role == Role.ASV_SOFTWARE:
+    elif role == Role.ASV_SYSTEM:
         images.update(_asv_adapter_images(layer))
     return tuple(sorted(images))
 
 
-def _asv_adapter_images(asv_software: LayerImplementationId) -> Set[str]:
-    """The images of the adapters that run an ASV software on the stacks the simulation runners run (the vessel's replay container)."""
+def _asv_adapter_images(asv_system: LayerImplementationId) -> Set[str]:
+    """The images of the adapters that run an ASV system on the stacks the simulation runners run (the vessel's replay container)."""
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 
@@ -172,9 +172,9 @@ def _asv_adapter_images(asv_software: LayerImplementationId) -> Set[str]:
     images: Set[str] = set()
     for stacks in RUNNER_STACKS.values():
         for software, control_layer, simulation_layer in stacks:
-            if software != asv_software:
+            if software != asv_system:
                 continue
-            adapter = resolver.resolve(VesselStackConfig(asv_software=software, control_layer=control_layer, simulation_layer=simulation_layer)).asv_adapter
+            adapter = resolver.resolve(VesselStackConfig(asv_system=software, control_layer=control_layer, simulation_layer=simulation_layer)).asv_adapter
             if adapter is not None:
                 images.update(container.default_image for container in adapter.containers)
     return images
@@ -201,8 +201,8 @@ def stack_images(stacks: Iterable[StackTriple]) -> Tuple[str, ...]:
 
     resolver = default_resolver()
     images: Set[str] = set()
-    for asv_software, control_layer, simulation_layer in stacks:
-        stack = VesselStackConfig(asv_software=asv_software, control_layer=control_layer, simulation_layer=simulation_layer)
+    for asv_system, control_layer, simulation_layer in stacks:
+        stack = VesselStackConfig(asv_system=asv_system, control_layer=control_layer, simulation_layer=simulation_layer)
         chain = resolver.resolve(stack)
         if not chain.available:
             raise JobStackError(f"({stack}) is not available in the vessel stack matrix: {chain.reason}")
@@ -213,7 +213,7 @@ def stack_images(stacks: Iterable[StackTriple]) -> Tuple[str, ...]:
 
 
 def _triple(stack: "VesselStackConfig") -> StackTriple:
-    return (stack.asv_software, stack.control_layer, stack.simulation_layer)
+    return (stack.asv_system, stack.control_layer, stack.simulation_layer)
 
 
 def runner_of_stack(stack: "VesselStackConfig") -> Optional[SimulationRunner]:

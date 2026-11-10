@@ -38,9 +38,9 @@ const runStackParameters = [
   parameter("steps", "integer", "number of steps; the trajectories' timespan when absent", { minimum: 1 }),
 ];
 
-const triple = (software: string) => ({ asv_software: software, control_layer: "none", simulation_layer: "kinematic" });
-const ardupilotTriple = { asv_software: "replay", control_layer: "ardupilot", simulation_layer: "ardupilot_sim" };
-const customTriple = { asv_software: "replay", control_layer: "custom", simulation_layer: "gazebo" };
+const triple = (software: string) => ({ asv_system: software, control_layer: "none", simulation_layer: "kinematic" });
+const ardupilotTriple = { asv_system: "replay", control_layer: "ardupilot", simulation_layer: "ardupilot_sim" };
+const customTriple = { asv_system: "replay", control_layer: "custom", simulation_layer: "gazebo" };
 const lockstepParameters = [
   parameter("dt", "number", "time step of the run in whole seconds", { unit: "s", exclusive_minimum: 0 }),
   parameter("steps", "integer", "number of steps; the trajectories' timespan when absent", { minimum: 1 }),
@@ -125,7 +125,7 @@ export const sampleCatalogStacks = {
       reasons: [],
       repeatability_tier: "bounded",
       supports_early_stop: false,
-      vessels: { own_ship: { ...ardupilotTriple, asv_software: "usv_navigation" }, target_ship: ardupilotTriple },
+      vessels: { own_ship: { ...ardupilotTriple, asv_system: "usv_navigation" }, target_ship: ardupilotTriple },
       environment: { wind: "unsupported", waves: "unsupported", interactive_only: false },
       parameters: [parameter("speedup", "integer", "SITL's requested pace as a multiple of real time", { default: 1, minimum: 1 }), ...lockstepParameters],
       groups: [usvNavigationGroup],
@@ -159,7 +159,7 @@ export const sampleCatalogStacks = {
       reasons: [],
       repeatability_tier: "bounded",
       supports_early_stop: false,
-      vessels: { own_ship: { ...customTriple, asv_software: "usv_navigation" }, target_ship: customTriple },
+      vessels: { own_ship: { ...customTriple, asv_system: "usv_navigation" }, target_ship: customTriple },
       environment: { wind: "supported", waves: "supported", interactive_only: false },
       parameters: lockstepParameters,
       groups: [usvNavigationGroup],
@@ -167,7 +167,7 @@ export const sampleCatalogStacks = {
   ],
   unavailable_stacks: [
     {
-      asv_software: "ardupilot",
+      asv_system: "ardupilot",
       control_layer: "none",
       simulation_layer: "gazebo",
       status: "planned",
@@ -177,7 +177,7 @@ export const sampleCatalogStacks = {
       reasons: ["the Gazebo adapter is not built yet"],
     },
     {
-      asv_software: "replay",
+      asv_system: "replay",
       control_layer: "none",
       simulation_layer: "ardupilot",
       status: "available",

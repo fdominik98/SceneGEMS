@@ -20,7 +20,7 @@ export function sampleWorkerNode(overrides: Record<string, unknown> = {}): Recor
       simulation: { slots: 8, slots_in_use: 8 },
     },
     components: [
-      { component: "asv_software/replay", images: [], state: "usable" },
+      { component: "asv_system/replay", images: [], state: "usable" },
       { component: "control_layer/none", images: [], state: "usable" },
       { component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" },
       { component: "scene_generation", images: ["scenegems-scene-generation-subsystem:latest"], state: "usable" },

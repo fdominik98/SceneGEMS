@@ -69,7 +69,7 @@ class LiveRunSetup:
         for agent_id, vessel in config.vessels.items():
             vessels[agent_id] = {
                 "context": vessel.context.value,
-                "asv_software": vessel.stack.asv_software.value,
+                "asv_system": vessel.stack.asv_system.value,
                 "control_layer": vessel.stack.control_layer.value,
                 "simulation_layer": vessel.stack.simulation_layer.value,
                 "adapter_ids": list(vessel.adapter_ids),

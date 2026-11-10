@@ -1,7 +1,7 @@
 """The workbench's simulation stack: one compose stack per live session.
 
 It holds the generated vessel stack, every layer in its own container (the simulator of the
-scenario, and per vessel its controller and its ASV software: Gazebo or the kinematic simulator,
+scenario, and per vessel its controller and its ASV system: Gazebo or the kinematic simulator,
 SITL or the custom controller, ArduAgent with MAVProxy, replay or USV Navigation), and the
 scenario execution service, which the workbench drives over MQTT. Every live session has its own
 scope (InstanceScope.live_session: worker node `workbench`, instance `live-<session>`), and the
@@ -40,7 +40,7 @@ from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_im
 from scenegems_tool.gateway.protocol import make_simulation_models_body
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenario_execution_service import SCENARIO_EXECUTION_SERVICE_TOPIC
-from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT
+from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import gcs_mavproxy_service_name

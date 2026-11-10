@@ -1,13 +1,13 @@
-"""How each ASV software runs as a lockstep participant: in the runner's process, or in its own container.
+"""How each ASV system runs as a lockstep participant: in the runner's process, or in its own container.
 
-An ASV software that SceneGEMS steps has two ways to run, and both give the same commands:
+An ASV system that SceneGEMS steps has two ways to run, and both give the same commands:
 
 - in process: a LockstepParticipant built in the caller's process (tests, calibration);
 - in its container: the software's server answers the lockstep wire protocol, and the runner
-  holds an AsvSoftwareLink to it. The start config it gets is the software's own.
+  holds an AsvSystemLink to it. The start config it gets is the software's own.
 
-To add an ASV software: write its participant (or its server, for software that lives only in
-its image), give it a ContainerSpec and a service generator, and add one AsvSoftwareRuntime to
+To add an ASV system: write its participant (or its server, for software that lives only in
+its image), give it a ContainerSpec and a service generator, and add one AsvSystemRuntime to
 _RUNTIME_LOADERS here. The lockstep runners and the hosting (vessel_stack/hosting.py) need no change.
 """
 
@@ -20,24 +20,24 @@ from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant
 from scenegems_tool.vessel_stack.contracts.ports import Port
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
 
 
 @dataclass(frozen=True)
 class ParticipantRequest:
-    """One vessel's ASV software in one run."""
+    """One vessel's ASV system in one run."""
 
     vessel: ConcreteVessel
     agent_name: str  # names the vessel's services on the stack network (contracts/stack_services.py)
-    asv_software: AsvSoftwareId
-    adapter: AdapterSpec  # from the ASV software to the vessel's control layer
+    asv_system: AsvSystemId
+    adapter: AdapterSpec  # from the ASV system to the vessel's control layer
     trajectories: Trajectories
     dt: float
     parameters: Optional[Any] = None  # the software's own parameters, where it has any (UsvNavigationParameters)
 
     @property
     def participant_id(self) -> str:
-        return f"{self.asv_software.value}/{self.vessel.id}"
+        return f"{self.asv_system.value}/{self.vessel.id}"
 
     @property
     def reference_states(self) -> List[ActorState]:
@@ -50,13 +50,13 @@ class ParticipantRequest:
 
 
 @dataclass(frozen=True)
-class AsvSoftwareRuntime:
+class AsvSystemRuntime:
     in_process: Callable[[ParticipantRequest], LockstepParticipant]
     start_config: Callable[[ParticipantRequest], Dict[str, Any]]  # the config of the wire protocol's start message
 
 
 def vessel_limits(vessel: ConcreteVessel) -> Dict[str, Any]:
-    """The vessel block of the wire protocol's start message: what any ASV software may need to know about its vessel."""
+    """The vessel block of the wire protocol's start message: what any ASV system may need to know about its vessel."""
     return {
         "id": vessel.id,
         "length": float(vessel.length),
@@ -67,26 +67,26 @@ def vessel_limits(vessel: ConcreteVessel) -> Dict[str, Any]:
 
 
 # Loaders import on first use, so naming a software never imports the code that runs it.
-def _replay() -> AsvSoftwareRuntime:
-    from scenegems_tool.vessel_stack.asv_software.replay.replay_server import replay_in_process, replay_start_config
+def _replay() -> AsvSystemRuntime:
+    from scenegems_tool.vessel_stack.asv_system.replay.replay_server import replay_in_process, replay_start_config
 
-    return AsvSoftwareRuntime(in_process=replay_in_process, start_config=replay_start_config)
-
-
-def _usv_navigation() -> AsvSoftwareRuntime:
-    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_participant import usv_navigation_in_process, usv_navigation_start_config
-
-    return AsvSoftwareRuntime(in_process=usv_navigation_in_process, start_config=usv_navigation_start_config)
+    return AsvSystemRuntime(in_process=replay_in_process, start_config=replay_start_config)
 
 
-_RUNTIME_LOADERS: Dict[AsvSoftwareId, Callable[[], AsvSoftwareRuntime]] = {
-    AsvSoftwareId.REPLAY: _replay,
-    AsvSoftwareId.USV_NAVIGATION: _usv_navigation,
+def _usv_navigation() -> AsvSystemRuntime:
+    from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_participant import usv_navigation_in_process, usv_navigation_start_config
+
+    return AsvSystemRuntime(in_process=usv_navigation_in_process, start_config=usv_navigation_start_config)
+
+
+_RUNTIME_LOADERS: Dict[AsvSystemId, Callable[[], AsvSystemRuntime]] = {
+    AsvSystemId.REPLAY: _replay,
+    AsvSystemId.USV_NAVIGATION: _usv_navigation,
 }
 
 
-def asv_software_runtime(asv_software: AsvSoftwareId) -> AsvSoftwareRuntime:
-    loader = _RUNTIME_LOADERS.get(asv_software)
+def asv_system_runtime(asv_system: AsvSystemId) -> AsvSystemRuntime:
+    loader = _RUNTIME_LOADERS.get(asv_system)
     if loader is None:
-        raise LookupError(f"{asv_software.value} is not stepped by a lockstep runner")
+        raise LookupError(f"{asv_system.value} is not stepped by a lockstep runner")
     return loader()

@@ -6,7 +6,7 @@ import pytest
 
 from concrete_level.models.concrete_actors import ConcreteVessel
 from scenegems_tool.subsystems.scenario_execution.lockstep_simulation_driver import LockstepSimulationDriver, uses_lockstep_driver
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig
 from scenegems_tool.vessel_stack.control_layers.custom.hull_surge_yaw_model import HullState, HullSurgeYawModel
 from scenegems_tool.vessel_stack.registry.catalog import build_registry
@@ -36,8 +36,8 @@ def run(driver, stop=None):
     return scenes
 
 
-def kinematic(trajectories, speedup=1, asv_software=AsvSoftwareId.REPLAY):
-    return stack_instance(SimulationLayerId.KINEMATIC, [vessel.id for vessel in trajectories.initial_scene.vessels], asv_software, ControlLayerId.NONE, speedup=speedup)
+def kinematic(trajectories, speedup=1, asv_system=AsvSystemId.REPLAY):
+    return stack_instance(SimulationLayerId.KINEMATIC, [vessel.id for vessel in trajectories.initial_scene.vessels], asv_system, ControlLayerId.NONE, speedup=speedup)
 
 
 class TestChoice:
@@ -84,7 +84,7 @@ class TestKinematic:
 
     def test_usv_navigation_steers_its_vessel(self):
         trajectories = straight_trajectories(timespan=30)
-        scenes = run(LockstepSimulationDriver(kinematic(trajectories, speedup=1000, asv_software=AsvSoftwareId.USV_NAVIGATION), trajectories, GEOFENCE))
+        scenes = run(LockstepSimulationDriver(kinematic(trajectories, speedup=1000, asv_system=AsvSystemId.USV_NAVIGATION), trajectories, GEOFENCE))
         vessel = trajectories.initial_scene.vessels[0]
         assert scenes[-1][1][vessel].x > 100.0
 
@@ -124,7 +124,7 @@ class TestMavlink:
         trajectories = encounter_trajectories("head_on", 6)
         instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1])
         operated = instance.vessels["1"]
-        operated.stack = type(operated.stack)(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+        operated.stack = type(operated.stack)(AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
         scenes = run(LockstepSimulationDriver(instance, trajectories, GEOFENCE, resolver=resolver))
         assert [clock for clock, _ in scenes] == [float(t) for t in range(7)]
         assert all(isinstance(actor, ConcreteVessel) for actor in scenes[-1][1].actors)

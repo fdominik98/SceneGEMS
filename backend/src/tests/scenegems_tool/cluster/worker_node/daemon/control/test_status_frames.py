@@ -19,7 +19,7 @@ def frames(fingerprints=lambda: {"image:latest": "abc"}, machine=None) -> Status
         worker_node_name="worker-1",
         software_revision="0123abc",
         slots={JobType.SIMULATION: 4, JobType.MONITORING_POST_HOC: 1},
-        components=frozenset({"monitoring", "simulation_layer/kinematic", "asv_software/replay", "control_layer/none"}),
+        components=frozenset({"monitoring", "simulation_layer/kinematic", "asv_system/replay", "control_layer/none"}),
         labels={"site": "lab"},
         resources=lambda: RESOURCES,
         fingerprints=fingerprints,
@@ -32,7 +32,7 @@ def test_hello_names_the_worker_node_its_slots_images_and_running_leases():
     hello = frames().hello()
     assert (hello.worker_node_id, hello.worker_node_name, hello.software_revision) == ("worker-1-abc123", "worker-1", "0123abc")
     assert hello.slots == [SlotOffer(job_type=JobType.MONITORING_POST_HOC, slots=1), SlotOffer(job_type=JobType.SIMULATION, slots=4)]
-    assert hello.components == ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "monitoring"], "in catalog order"
+    assert hello.components == ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "monitoring"], "in catalog order"
     assert hello.labels == {"site": "lab"} and hello.resources == RESOURCES
     assert hello.fingerprints == {"image:latest": "abc"}
     assert hello.running_lease_ids == ["lease-2", "lease-7"]

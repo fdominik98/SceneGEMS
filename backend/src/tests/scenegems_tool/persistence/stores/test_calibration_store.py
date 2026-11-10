@@ -4,7 +4,7 @@ from scenegems_tool.persistence.stores import NewCalibrationResult
 
 pytestmark = pytest.mark.postgres
 
-STACK = {"asv_software": "replay", "control_layer": "ardupilot", "simulation_layer": "ardupilot_sim", "adapter": "replay_mavlink_lockstep"}
+STACK = {"asv_system": "replay", "control_layer": "ardupilot", "simulation_layer": "ardupilot_sim", "adapter": "replay_mavlink_lockstep"}
 FINGERPRINTS = {"scenegems-sitl": "fp-sitl", "scenegems-scenario-execution": "fp-execution"}
 CALM = {"wind_vector": None, "waves": None, "speedup": 5}
 
@@ -44,7 +44,7 @@ def test_results_per_reference_scenario_and_environment(stores):
 
 
 def test_an_exact_stack(stores):
-    exact = stores.calibrations.upsert(_result(stack={"asv_software": "replay", "control_layer": "none", "simulation_layer": "kinematic"}, exact=True, deviation_bound_m=None, envelope=None))
+    exact = stores.calibrations.upsert(_result(stack={"asv_system": "replay", "control_layer": "none", "simulation_layer": "kinematic"}, exact=True, deviation_bound_m=None, envelope=None))
     assert (exact.exact, exact.deviation_bound_m, exact.envelope) == (True, None, {})
 
 

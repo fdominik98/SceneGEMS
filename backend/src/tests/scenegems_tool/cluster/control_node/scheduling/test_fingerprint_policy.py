@@ -56,7 +56,7 @@ def test_without_a_release_nothing_is_leased_and_the_error_says_why(tmp_path):
     assert missing.state == ListingState.FAILED and "cannot read the release file" in missing.error
 
 
-GAZEBO_COMPONENTS = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+GAZEBO_COMPONENTS = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
 
 
 def test_a_submission_gets_the_fingerprints_of_its_components_images():
@@ -99,7 +99,7 @@ def test_worker_node_mismatches_cover_the_images_of_its_components_only():
 
 def test_a_gazebo_worker_node_needs_the_gazebo_image_and_a_sitl_worker_node_does_not():
     sitl_only = {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}
-    sitl = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]
+    sitl = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]
     assert worker_node_mismatches(_worker_node(sitl, sitl_only), EXPECTED) == []
     missing = worker_node_mismatches(_worker_node(GAZEBO_COMPONENTS, sitl_only), EXPECTED)
     assert [(mismatch.image, mismatch.missing) for mismatch in missing] == [(image_repository(GAZEBO_IMAGE), True)]
@@ -108,10 +108,10 @@ def test_a_gazebo_worker_node_needs_the_gazebo_image_and_a_sitl_worker_node_does
 
 
 def test_a_component_is_stale_when_one_of_its_images_differs():
-    components = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"]
+    components = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"]
     worker_node = _worker_node(components, {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "old"})
     assert stale_components(worker_node.components, worker_node_mismatches(worker_node, EXPECTED)) == {"simulation_layer/gazebo"}
     runner_stale = _worker_node(components, {SCENARIO_EXECUTION_IMAGE: "old", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"})
-    in_the_scenario_execution_image = {"asv_software/replay", "simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"}  # the replay containers and the runner
+    in_the_scenario_execution_image = {"asv_system/replay", "simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"}  # the replay containers and the runner
     assert stale_components(runner_stale.components, worker_node_mismatches(runner_stale, EXPECTED)) == in_the_scenario_execution_image
     assert stale_components(components, []) == frozenset()

@@ -35,7 +35,7 @@ def test_a_worker_node_lacks_the_components_of_a_job_it_does_not_offer(worker_no
 
     from scenegems_tool.cluster.protocol.jobs import JobRequirements
 
-    job = make_job(JobType.SIMULATION, {}).model_copy(update={"requirements": JobRequirements(components=["asv_software/replay", "simulation_layer/gazebo"])})
+    job = make_job(JobType.SIMULATION, {}).model_copy(update={"requirements": JobRequirements(components=["asv_system/replay", "simulation_layer/gazebo"])})
     assert worker_node.lacks(job) == [], "a worker node that names no components (the workbench) runs anything"
-    kinematic = replace(worker_node, components=frozenset({"asv_software/replay", "control_layer/none", "simulation_layer/kinematic"}))
+    kinematic = replace(worker_node, components=frozenset({"asv_system/replay", "control_layer/none", "simulation_layer/kinematic"}))
     assert kinematic.lacks(job) == ["simulation_layer/gazebo"]

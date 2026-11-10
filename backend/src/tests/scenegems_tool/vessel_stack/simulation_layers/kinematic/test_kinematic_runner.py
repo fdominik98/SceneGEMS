@@ -43,7 +43,7 @@ class TestReplay:
     def test_run_record_names_the_stack_specs_and_tier(self, head_on):
         record = run_kinematic_replay(head_on).run_record
         assert record["stack"] == str(KINEMATIC_REPLAY_STACK) == "replay, none, kinematic"
-        assert record["specs"] == ["asv_software/replay", "replay_state_follower", "control_layer/none", "kinematic_command_input", "simulation_layer/kinematic"]
+        assert record["specs"] == ["asv_system/replay", "replay_state_follower", "control_layer/none", "kinematic_command_input", "simulation_layer/kinematic"]
         assert record["repeatability_tier"] == "exact"
         assert record["dt"] == 1.0
         assert record["steps"] == 120

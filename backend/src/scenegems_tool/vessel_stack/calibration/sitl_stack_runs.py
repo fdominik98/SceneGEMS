@@ -12,7 +12,7 @@ compose file to run several repeats side by side on one host:
   (every host path in the generated files is rewritten to it);
 - each SITL serial port, or the gz-transport actuator's port, is published on a host port of its own, which the run connects to;
 - fixed container names and the Gazebo host port are dropped, so repeats do not collide;
-- the ASV software and controller containers of the vessels are left out: the measurement runs on the host, outside the
+- the ASV system and controller containers of the vessels are left out: the measurement runs on the host, outside the
   stack's network, and hosts those layers in its own process (vessel_stack/hosting.py, InProcessHosting). They compute
   the same commands there, but a campaign's hop from its runner to each container is not part of what is measured.
 
@@ -50,13 +50,13 @@ import yaml
 
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.calibration.measured_entry import MeasuredEntry, evidence, host_label
 from scenegems_tool.vessel_stack.calibration.reference_scenarios import REFERENCE_RUNS, reference_run
 from scenegems_tool.vessel_stack.calibration.repeat_analysis import DeviationSummary, TrackingSummary, TrackSamples, achieved_speedup, repeat_deviation, tracking_error
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import is_participant_service
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import MavlinkLink
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import MavlinkRunResult, mavlink_instance, run_mavlink_stack
@@ -301,11 +301,11 @@ def prepare_run_folder(
 ) -> Tuple[str, Dict[str, str], Any]:
     """Generate the stack of one repeat under `folder`. Returns the compose file, the endpoint by agent id and the instance."""
     environment = run_environment(spec)
-    asv_software = {vessel.id: AsvSoftwareId.USV_NAVIGATION for vessel in trajectories.initial_scene.vessels} if spec.drive == "usv_navigation" else None
+    asv_system = {vessel.id: AsvSystemId.USV_NAVIGATION for vessel in trajectories.initial_scene.vessels} if spec.drive == "usv_navigation" else None
     if spec.custom:
-        instance = gz_custom_instance(trajectories, asv_software, environment=environment, speedup=spec.speedup)
+        instance = gz_custom_instance(trajectories, asv_system, environment=environment, speedup=spec.speedup)
     else:
-        instance = mavlink_instance(trajectories, spec.simulation_layer, asv_software, environment=environment, speedup=spec.speedup)
+        instance = mavlink_instance(trajectories, spec.simulation_layer, asv_system, environment=environment, speedup=spec.speedup)
     connection = MQttConnectionInfo(user="", password="", agent_broker="broker", client_broker="broker", port=1883, tls_connection=False, allow_certificates=False)
     pending_writes, compose = build_simulation_docker_stack_artifacts(instance, trajectories, connection, GEOFENCE, embedded_in_subsystem=True)
 
@@ -319,7 +319,7 @@ def prepare_run_folder(
             file.write(_rewrite(content, replacements))
 
     compose = _rewrite(copy.deepcopy(compose), replacements)
-    # The measurement drives the run from this process on the host and hosts every vessel's ASV software and controller there.
+    # The measurement drives the run from this process on the host and hosts every vessel's ASV system and controller there.
     compose["services"] = {name: service for name, service in compose["services"].items() if not is_participant_service(name)}
     mount = f"{os.path.abspath(assets).replace(chr(92), '/')}:{CONTAINER_ASSETS}:ro"
     endpoints: Dict[str, str] = {}

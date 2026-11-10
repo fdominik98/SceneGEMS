@@ -9,8 +9,8 @@ import type { ClusterResources } from "./stepTypes";
 import { StepHarness } from "./wizardTestHarness";
 import { draftOf } from "./wizardTestData";
 
-const SITL = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
-const GAZEBO_ONLY = ["asv_software/replay", "control_layer/custom", "simulation_layer/gazebo"];
+const SITL = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+const GAZEBO_ONLY = ["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo"];
 
 function workerNode(id: string, slots: Record<string, number>, offered: readonly string[]): WorkerNodeView {
   const usage = Object.fromEntries(Object.entries(slots).map(([jobType, count]) => [jobType, { slots: count, slots_in_use: 0 }]));

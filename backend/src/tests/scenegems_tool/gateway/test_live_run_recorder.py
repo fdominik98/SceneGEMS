@@ -30,7 +30,7 @@ from scenegems_tool.gateway.live_run_recorder import (
 from scenegems_tool.persistence.artifacts.file_artifact_store import FileArtifactStore
 from scenegems_tool.persistence.artifacts.recorded_artifacts import RecordedArtifacts
 from scenegems_tool.persistence.schema import ArtifactHolderKind, CampaignActualState, CampaignDesiredState, CampaignKind, CampaignOrigin
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig, VesselStackConfig, WaveConfig
 from tests.scenegems_tool.gateway.conftest import settle
 from tests.scenegems_tool.persistence.artifacts.fake_artifact_records import InMemoryArtifactRecords
@@ -139,7 +139,7 @@ class TestRecordedRuns:
         assert run.stack["simulation_layer"] == "ardupilot_sim" and run.stack["speedup"] == 2
         assert run.stack["vessels"]["1"] == {
             "context": "simulation",
-            "asv_software": "replay",
+            "asv_system": "replay",
             "control_layer": "ardupilot",
             "simulation_layer": "ardupilot_sim",
             "adapter_ids": ["replay_arduagent_follower"],
@@ -332,7 +332,7 @@ class TestSetup:
     def test_a_real_vessel_has_no_repeatability_and_no_agent_stack_is_invented(self):
         config = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
         config.vessels["1"].context = AgentContext.REAL
-        config.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+        config.vessels["1"].stack = VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
         config.vessels["1"].adapter_ids = ()
         setup = live_setup(config)
         assert setup.repeatability_tier() == "none"

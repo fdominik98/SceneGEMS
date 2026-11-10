@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StackOptionsPayload, StackOptionWire } from "../../../domain/simulation/wireTypes";
-import { asvSoftwareChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
+import { asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
 
 const vessels: VesselDescriptor[] = [
   { id: "os", isOwnShip: true },
@@ -13,16 +13,16 @@ describe("simulationInitConfig", () => {
     const drafts = buildInitialVesselConnectionDrafts(vessels);
     expect(drafts[0]?.agentName).toBe("os_sim");
     expect(drafts[0]?.topic).toBe("waraps/unit/surface/simulation/os_sim");
-    expect(drafts[0]?.asvSoftware).toBe("replay");
+    expect(drafts[0]?.asvSystem).toBe("replay");
     expect(drafts[0]?.controlLayer).toBe("ardupilot");
     expect(drafts[0]?.context).toBe("simulation");
     expect(drafts[0]?.port).toBe(14570);
     expect(drafts[1]?.agentName).toBe("ts1_sim");
-    expect(drafts[1]?.asvSoftware).toBe("replay");
+    expect(drafts[1]?.asvSystem).toBe("replay");
     expect(drafts[1]?.context).toBe("simulation");
     expect(drafts[1]?.port).toBe(14571);
     expect(drafts[2]?.agentName).toBe("ts2_sim");
-    expect(drafts[2]?.asvSoftware).toBe("replay");
+    expect(drafts[2]?.asvSystem).toBe("replay");
     expect(drafts[2]?.context).toBe("simulation");
     expect(drafts[2]?.port).toBe(14572);
   });
@@ -33,9 +33,9 @@ describe("simulationInitConfig", () => {
       { id: "3", isOwnShip: false },
     ]);
     expect(drafts[0]?.port).toBe(14570);
-    expect(drafts[0]?.asvSoftware).toBe("mission_planner");
+    expect(drafts[0]?.asvSystem).toBe("mission_planner");
     expect(drafts[1]?.port).toBe(14573);
-    expect(drafts[1]?.asvSoftware).toBe("replay");
+    expect(drafts[1]?.asvSystem).toBe("replay");
   });
 
   it("normalizes context labels used in topics", () => {
@@ -47,7 +47,7 @@ describe("simulationInitConfig", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "simulation",
-      asvSoftware: "replay",
+      asvSystem: "replay",
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
@@ -57,7 +57,7 @@ describe("simulationInitConfig", () => {
     expect(map).toEqual({
       os: {
         context: "simulation",
-        asvSoftware: "replay",
+        asvSystem: "replay",
         controlLayer: "ardupilot",
         controlMode: "autonomous",
         agentName: "os_sim",
@@ -71,7 +71,7 @@ describe("simulationInitConfig", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "real",
-      asvSoftware: "mission_planner",
+      asvSystem: "mission_planner",
       controlLayer: "ardupilot",
       agentName: "os_real",
       topic: "waraps/unit/surface/real/os_real",
@@ -81,7 +81,7 @@ describe("simulationInitConfig", () => {
     expect(map).toEqual({
       os: {
         context: "real",
-        asvSoftware: "mission_planner",
+        asvSystem: "mission_planner",
         controlLayer: "real_vessel",
         controlMode: "external",
         agentName: "os_real",
@@ -95,7 +95,7 @@ describe("simulationInitConfig", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "simulation",
-      asvSoftware: "replay",
+      asvSystem: "replay",
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
@@ -110,7 +110,7 @@ describe("simulationInitConfig", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "simulation",
-      asvSoftware: "replay",
+      asvSystem: "replay",
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
@@ -139,24 +139,32 @@ describe("simulationInitConfig", () => {
 
   it("sends no ArduAgent control mode for USV Navigation", () => {
     const [draft] = buildInitialVesselConnectionDrafts([{ id: "1", isOwnShip: false }]);
-    const map = buildInitializeSimulationConnectionsByAgentIdMap([{ ...draft!, asvSoftware: "usv_navigation", controlLayer: "custom" }]);
-    expect(map["1"]).toMatchObject({ asvSoftware: "usv_navigation", controlLayer: "custom" });
+    const map = buildInitializeSimulationConnectionsByAgentIdMap([{ ...draft!, asvSystem: "usv_navigation", controlLayer: "custom" }]);
+    expect(map["1"]).toMatchObject({ asvSystem: "usv_navigation", controlLayer: "custom" });
     expect("controlMode" in map["1"]!).toBe(false);
   });
 
-  it("upgrades settings saved with a control mode to the ASV software it names", () => {
+  it("upgrades settings saved with a control mode to the ASV system it names", () => {
     const generated = buildInitialVesselConnectionDrafts([{ id: "1", isOwnShip: false }]);
     const legacy = [{ vesselId: "1", controlMode: "external", agentName: "ts1_sim" }] as unknown as PersistedVesselConnectionDraft[];
     const [restored] = mergePersistedVesselSettings(legacy, generated);
-    expect(restored?.asvSoftware).toBe("mission_planner");
+    expect(restored?.asvSystem).toBe("mission_planner");
     expect(restored).not.toHaveProperty("controlMode");
+  });
+
+  it("keeps a choice saved while the ASV system was called the ASV software", () => {
+    const generated = buildInitialVesselConnectionDrafts([{ id: "1", isOwnShip: false }]);
+    const legacy = [{ vesselId: "1", asvSoftware: "usv_navigation", agentName: "ts1_sim" }] as unknown as PersistedVesselConnectionDraft[];
+    const [restored] = mergePersistedVesselSettings(legacy, generated);
+    expect(restored?.asvSystem).toBe("usv_navigation");
+    expect(restored).not.toHaveProperty("asvSoftware");
   });
 });
 
-function option(simulatorType: string, asvSoftware: StackOptionWire["asvSoftware"], controlLayer: StackOptionWire["controlLayer"], reason = ""): StackOptionWire {
+function option(simulatorType: string, asvSystem: StackOptionWire["asvSystem"], controlLayer: StackOptionWire["controlLayer"], reason = ""): StackOptionWire {
   return {
     simulatorType,
-    asvSoftware,
+    asvSystem,
     controlLayer,
     available: reason === "",
     status: reason === "" ? "available" : "unavailable",
@@ -172,7 +180,7 @@ function option(simulatorType: string, asvSoftware: StackOptionWire["asvSoftware
 
 const OPTIONS: StackOptionsPayload = {
   simulatorTypes: ["Kinematic", "Gazebo", "ArduPilot Sim"],
-  asvSoftware: ["replay", "usv_navigation", "mission_planner"],
+  asvSystem: ["replay", "usv_navigation", "mission_planner"],
   controlLayers: ["ardupilot", "custom", "none"],
   combinations: [
     option("Kinematic", "replay", "none"),
@@ -196,9 +204,9 @@ describe("stack choices from the resolver's options", () => {
     });
   });
 
-  it("disables an ASV software no control layer runs, with every distinct reason in the control layer column's order", () => {
-    expect(asvSoftwareChoice(OPTIONS, "Kinematic", "replay").available).toBe(true);
-    const missionPlanner = asvSoftwareChoice(OPTIONS, "Kinematic", "mission_planner");
+  it("disables an ASV system no control layer runs, with every distinct reason in the control layer column's order", () => {
+    expect(asvSystemChoice(OPTIONS, "Kinematic", "replay").available).toBe(true);
+    const missionPlanner = asvSystemChoice(OPTIONS, "Kinematic", "mission_planner");
     expect(missionPlanner.available).toBe(false);
     expect(missionPlanner.reason).toBe(
       "the kinematic sim integrates control internally; the custom controller has no MAVLink; control layer none has no MAVLink endpoint"
@@ -209,13 +217,13 @@ describe("stack choices from the resolver's options", () => {
     expect(controlLayerChoice(null, "Kinematic", "replay", "ardupilot").available).toBe(true);
   });
 
-  it("switches a vessel to a control layer that runs its ASV software on the simulator", () => {
+  it("switches a vessel to a control layer that runs its ASV system on the simulator", () => {
     const [draft] = buildInitialVesselConnectionDrafts([{ id: "1", isOwnShip: false }]);
     expect(normalizeDraftStack(draft!, "Kinematic", OPTIONS).controlLayer).toBe("none");
     expect(normalizeDraftStack(draft!, "Gazebo", OPTIONS)).toBe(draft);
   });
 
-  it("leaves a vessel whose ASV software nothing runs as it is, for the backend to refuse with its reason", () => {
+  it("leaves a vessel whose ASV system nothing runs as it is, for the backend to refuse with its reason", () => {
     const [draft] = buildInitialVesselConnectionDrafts([{ id: "0", isOwnShip: true }]);
     expect(normalizeDraftStack(draft!, "Kinematic", OPTIONS)).toBe(draft);
   });
@@ -252,10 +260,10 @@ describe("real vessel choices", () => {
 
   it("gives a real vessel software that can steer it, and a simulated one software it runs", () => {
     const [draft] = buildInitialVesselConnectionDrafts([{ id: "0", isOwnShip: true }]);
-    const real = { ...draft!, context: "real" as const, asvSoftware: "usv_navigation" as const };
-    expect(normalizeDraftStack(real, "Gazebo", REAL_OPTIONS).asvSoftware).toBe("replay");
-    const onBoard = { ...real, asvSoftware: "on_board" as const };
+    const real = { ...draft!, context: "real" as const, asvSystem: "usv_navigation" as const };
+    expect(normalizeDraftStack(real, "Gazebo", REAL_OPTIONS).asvSystem).toBe("replay");
+    const onBoard = { ...real, asvSystem: "on_board" as const };
     expect(normalizeDraftStack(onBoard, "Gazebo", REAL_OPTIONS)).toBe(onBoard);
-    expect(normalizeDraftStack({ ...onBoard, context: "simulation" }, "Kinematic", REAL_OPTIONS)).toMatchObject({ asvSoftware: "replay", controlLayer: "none" });
+    expect(normalizeDraftStack({ ...onBoard, context: "simulation" }, "Kinematic", REAL_OPTIONS)).toMatchObject({ asvSystem: "replay", controlLayer: "none" });
   });
 });

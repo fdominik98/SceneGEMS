@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from scenegems_tool.vessel_stack.asv_software.replay.line_of_sight import MAX_BIAS_CORRECTION, TURN_LIMITED_LOOKAHEAD, LineOfSight, catch_up_speed
+from scenegems_tool.vessel_stack.asv_system.replay.line_of_sight import MAX_BIAS_CORRECTION, TURN_LIMITED_LOOKAHEAD, LineOfSight, catch_up_speed
 from tests.scenegems_tool.vessel_stack.scenarios import make_vessel
 
 SHIP = make_vessel(0, True, length=100.0, max_speed=12.9, max_angular_speed=0.008)

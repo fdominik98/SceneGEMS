@@ -10,10 +10,10 @@ UsvNavigationParameters.
 from typing import Any, Dict, List, Optional, Tuple
 
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_server import UsvNavigator, participant_id
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import USV_NAVIGATION_IN_PROCESS
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server import UsvNavigator, participant_id
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import USV_NAVIGATION_IN_PROCESS
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 

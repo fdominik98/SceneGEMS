@@ -47,7 +47,7 @@ from scenegems_tool.vessel_stack.registry.resolver import ChainResolution, Stack
 
 DOCUMENT_ID = "vessel_stack"
 META_PREFIX = f"{DOCUMENT_ID}/"
-META_ASV_TO_CONTROL = f"{META_PREFIX}adapter/asv_software_to_control_layer"
+META_ASV_TO_CONTROL = f"{META_PREFIX}adapter/asv_system_to_control_layer"
 META_CONTROL_TO_SIMULATION = f"{META_PREFIX}adapter/control_layer_to_simulation_layer"
 META_PARTICIPANT = f"{META_PREFIX}runtime/lockstep_participant"
 META_DOCKER_CONTROL = f"{META_PREFIX}runtime/docker_control_layer"
@@ -55,11 +55,11 @@ META_DOCKER_SIMULATION = f"{META_PREFIX}runtime/docker_simulation_layer"
 META_CLOCK = f"{META_PREFIX}runtime/lockstep_clock"
 
 _LANE_TEXT = {
-    Role.ASV_SOFTWARE: ("ASV software", "Decides where the vessel goes."),
+    Role.ASV_SYSTEM: ("ASV system", "Decides where the vessel goes."),
     Role.CONTROL_LAYER: ("Control layer", "Turns that decision into actuation."),
     Role.SIMULATION_LAYER: ("Simulation layer", "Moves the vessel and the world around it."),
 }
-_META_ADAPTER_BY_UPPER_ROLE = {Role.ASV_SOFTWARE: META_ASV_TO_CONTROL, Role.CONTROL_LAYER: META_CONTROL_TO_SIMULATION}
+_META_ADAPTER_BY_UPPER_ROLE = {Role.ASV_SYSTEM: META_ASV_TO_CONTROL, Role.CONTROL_LAYER: META_CONTROL_TO_SIMULATION}
 
 _CAPABILITY_LABELS = {
     "faster_than_real_time": "Faster than real time",
@@ -148,8 +148,8 @@ def _layer_node(registry: AdapterRegistry, spec: LayerSpec) -> ArchitectureNode:
     tags = ("docker",) if spec.containers else ("in-process",)
     if spec.capabilities.interactive_only:
         tags += ("interactive",)
-    if spec.on_board_asv_software:
-        facts += (Fact("on_board_asv_software", "On board ASV software", True, GROUP_PROPERTY, note="the vessel can run with ASV software on_board"),)
+    if spec.on_board_asv_system:
+        facts += (Fact("on_board_asv_system", "On board ASV system", True, GROUP_PROPERTY, note="the vessel can run with ASV system on_board"),)
     return ArchitectureNode(
         id=spec.id,
         lane=spec.layer.role.value,
@@ -213,7 +213,7 @@ def _combination(chain: ChainResolution) -> Combination:
     if chain.available:
         facts = (*facts, cluster_job_fact(chain))
     return Combination(
-        path=(f"asv_software/{stack.asv_software.value}", f"control_layer/{stack.control_layer.value}", f"simulation_layer/{stack.simulation_layer.value}"),
+        path=(f"asv_system/{stack.asv_system.value}", f"control_layer/{stack.control_layer.value}", f"simulation_layer/{stack.simulation_layer.value}"),
         status=status,
         reasons=chain.reasons,
         facts=facts,
@@ -246,24 +246,24 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
     layer_members = (f"LayerSpec({spec_fields})", "measured values: an entry under the spec id in measured_capabilities.yaml")
     nodes = (
         MetamodelNode(
-            _meta_layer_id(Role.ASV_SOFTWARE),
-            Role.ASV_SOFTWARE.value,
-            "ASV software layer",
+            _meta_layer_id(Role.ASV_SYSTEM),
+            Role.ASV_SYSTEM.value,
+            "ASV system layer",
             "The software that decides where a vessel goes: it reads the vessel's state and issues heading and speed commands, waypoints or MAVLink missions.",
             KIND_ROLE,
-            (*layer_members, "AsvSoftwareId member", "a runtime bound by a loader in registry/catalog.py"),
+            (*layer_members, "AsvSystemId member", "a runtime bound by a loader in registry/catalog.py"),
             (
-                "Add an AsvSoftwareId member and a LayerSpec in <impl>_specs.py, serve the software over the lockstep wire protocol (contracts/lockstep_wire.py) "
+                "Add an AsvSystemId member and a LayerSpec in <impl>_specs.py, serve the software over the lockstep wire protocol (contracts/lockstep_wire.py) "
                 "in a container of its own, register it in registry/catalog.py with the class that adds that container to a stack, connect it to a control "
-                "layer with an adapter, and add its entry to asv_software/asv_software_runtime.py."
+                "layer with an adapter, and add its entry to asv_system/asv_system_runtime.py."
             ),
-            "scenegems_tool/vessel_stack/asv_software",
+            "scenegems_tool/vessel_stack/asv_system",
         ),
         MetamodelNode(
             _meta_layer_id(Role.CONTROL_LAYER),
             Role.CONTROL_LAYER.value,
             "Control layer",
-            "Turns the ASV software's decision into actuator commands. The none layer stands for a simulation that integrates control itself.",
+            "Turns the ASV system's decision into actuator commands. The none layer stands for a simulation that integrates control itself.",
             KIND_ROLE,
             (*layer_members, "ControlLayerId member", "a runtime bound by a loader in registry/catalog.py"),
             "Add a ControlLayerId member, a LayerSpec and a DockerControlLayer that adds the controller's container per vessel, and register both in registry/catalog.py (docker=).",
@@ -288,10 +288,10 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
         ),
         MetamodelNode(
             META_PARTICIPANT,
-            Role.ASV_SOFTWARE.value,
+            Role.ASV_SYSTEM.value,
             "Lockstep participant",
             (
-                "How ASV software takes part in a run: the clock asks every participant for its command at each step. "
+                "How ASV system takes part in a run: the clock asks every participant for its command at each step. "
                 "The runner holds a link to the software's container, which answers over the lockstep wire protocol."
             ),
             KIND_INTERFACE,
@@ -333,10 +333,10 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
     edges = (
         MetamodelEdge(
             META_ASV_TO_CONTROL,
-            _meta_layer_id(Role.ASV_SOFTWARE),
+            _meta_layer_id(Role.ASV_SYSTEM),
             _meta_layer_id(Role.CONTROL_LAYER),
-            "ASV software to control layer",
-            "Carries the ASV software's commands to the control layer. The resolver finds one adapter per connection, or the ruled-out connection with its reason.",
+            "ASV system to control layer",
+            "Carries the ASV system's commands to the control layer. The resolver finds one adapter per connection, or the ruled-out connection with its reason.",
             "adapter",
             (f"AdapterSpec({adapter_fields})", "source and target LayerRefs one role apart", "capabilities of the connection", "register_adapter(spec, runtime, default=...)"),
             "Define an AdapterSpec for the pair in the implementation's specs module and register it; a second adapter on the same pair needs default=True or False. Rule a pair out with an UnsupportedConnection and its reason.",
@@ -371,7 +371,7 @@ def vessel_stack_document(registry: Optional[AdapterRegistry] = None, resolver: 
     return ArchitectureDocument(
         id=DOCUMENT_ID,
         title="Vessel stack",
-        summary="Every vessel runs on a stack of three layers: ASV software, control layer and simulation layer. Adapters connect an implementation of one layer to an implementation of the next, and a stack exists when the adapters on its path do. One integration may cover several layers through built-in adapters, as ArduPilot does with SITL and a real vessel with its own autopilot.",
+        summary="Every vessel runs on a stack of three layers: ASV system, control layer and simulation layer. Adapters connect an implementation of one layer to an implementation of the next, and a stack exists when the adapters on its path do. One integration may cover several layers through built-in adapters, as ArduPilot does with SITL and a real vessel with its own autopilot.",
         lanes=tuple(Lane(role.value, *_LANE_TEXT[role]) for role in STACK_ROLE_ORDER),
         metamodel_nodes=metamodel_nodes,
         metamodel_edges=metamodel_edges,

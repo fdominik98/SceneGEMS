@@ -5,7 +5,7 @@ import pytest
 from scenegems_tool.assurance.campaign import CampaignConfigError, CampaignConfigRejected, campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CustomStackConfig
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
 CLASS = "2vessel_0obstacle_scenarios/fec0"
 WAVES = {"amplitude": 0.5, "period": 5.0, "steepness": 0.0, "direction": [1.0, 0.0]}
@@ -54,11 +54,11 @@ def test_invalid_custom_stacks_are_rejected_with_the_reason(run, reason):
     assert reason in _reasons(run)
 
 
-@pytest.mark.parametrize("mode, own_ship", [("replay", AsvSoftwareId.REPLAY), ("usv_navigation", AsvSoftwareId.USV_NAVIGATION)])
+@pytest.mark.parametrize("mode, own_ship", [("replay", AsvSystemId.REPLAY), ("usv_navigation", AsvSystemId.USV_NAVIGATION)])
 def test_the_runs_vessels_are_on_the_custom_controller(mode, own_ship):
     stacks = vessel_stacks(_config(_run(stack={"mode": mode})).execution.runs[0].stack)
-    assert (stacks[OWN_SHIP].asv_software, stacks[OWN_SHIP].control_layer, stacks[OWN_SHIP].simulation_layer) == (own_ship, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
-    assert (stacks[TARGET_SHIP].asv_software, stacks[TARGET_SHIP].control_layer) == (AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM)
+    assert (stacks[OWN_SHIP].asv_system, stacks[OWN_SHIP].control_layer, stacks[OWN_SHIP].simulation_layer) == (own_ship, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
+    assert (stacks[TARGET_SHIP].asv_system, stacks[TARGET_SHIP].control_layer) == (AsvSystemId.REPLAY, ControlLayerId.CUSTOM)
 
 
 @pytest.mark.parametrize("mode", ["replay", "usv_navigation"])

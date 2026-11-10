@@ -27,7 +27,7 @@ When something is missing (no input trajectories, no machine on the cluster that
 | Simulator | The simulation layer every simulated vessel shares: Kinematic, ArduPilot Sim or Gazebo |
 | Pace | The real-time factor of a live session or of a run on ArduPilot; a kinematic or custom controller run on the cluster takes **Watch at** instead |
 | Seed | On the cluster: the base seed of the entry; empty for a random one |
-| Vessel table | Per vessel: **Kind** (simulated or real vessel), **ASV software** and **control layer**. Choices the server rules out are disabled with the reason. A real vessel is its own control layer and physics, reached through its ArduAgent; it is steered by Replay or Mission Planner, or left to its own software (**On board**). |
+| Vessel table | Per vessel: **Kind** (simulated or real vessel), **ASV system** and **control layer**. Choices the server rules out are disabled with the reason. A real vessel is its own control layer and physics, reached through its ArduAgent; it is steered by Replay or Mission Planner, or left to its own software (**On board**). |
 | Wind and waves | Wind and waves (simulated vessels only) |
 | Agent connections | MQTT agent names, topics and MAVLink ports of a live session |
 | Gazebo models | Gazebo only: load, export or clear a vessel's SDF model, or ask the server for the models it would make; the server makes one otherwise |

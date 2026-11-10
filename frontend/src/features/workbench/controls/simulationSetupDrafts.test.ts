@@ -6,12 +6,12 @@ import { useSimulationSetupRequestStore } from "./simulationSetupRequest";
 const drafts = buildInitialVesselConnectionDrafts([
   { id: "0", isOwnShip: true },
   { id: "1", isOwnShip: false },
-]).map((draft) => ({ ...draft, asvSoftware: "mission_planner" as const, controlLayer: "ardupilot" as const }));
+]).map((draft) => ({ ...draft, asvSystem: "mission_planner" as const, controlLayer: "ardupilot" as const }));
 
 describe("a loaded run's setup", () => {
   it("replays every vessel on the kinematic layer", () => {
     const applied = applySetupRequestToDrafts(drafts, "replay", new Set(["0"]));
-    expect(applied.map((draft) => [draft.asvSoftware, draft.controlLayer, draft.context])).toEqual([
+    expect(applied.map((draft) => [draft.asvSystem, draft.controlLayer, draft.context])).toEqual([
       ["replay", "none", "simulation"],
       ["replay", "none", "simulation"],
     ]);
@@ -19,12 +19,12 @@ describe("a loaded run's setup", () => {
 
   it("steers the own ship with USV Navigation", () => {
     const applied = applySetupRequestToDrafts(drafts, "usv_navigation", new Set(["0"]));
-    expect(applied.map((draft) => draft.asvSoftware)).toEqual(["usv_navigation", "replay"]);
+    expect(applied.map((draft) => draft.asvSystem)).toEqual(["usv_navigation", "replay"]);
   });
 
   it("replays every vessel on ArduPilot when the run was an ArduPilot run", () => {
     const applied = applySetupRequestToDrafts(drafts, "replay", new Set(["0"]), "ardupilot");
-    expect(applied.map((draft) => [draft.asvSoftware, draft.controlLayer, draft.context])).toEqual([
+    expect(applied.map((draft) => [draft.asvSystem, draft.controlLayer, draft.context])).toEqual([
       ["replay", "ardupilot", "simulation"],
       ["replay", "ardupilot", "simulation"],
     ]);

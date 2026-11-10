@@ -21,7 +21,7 @@ VALID = {
     "SCENEGEMS_CONTROL_NODE_ID": "lab-control-node",
     "SCENEGEMS_WORKER_NODE_NAME": "worker-1",
     "SCENEGEMS_WORKER_NODE_SLOTS": "simulation:4,scene_generation:1",
-    "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
+    "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
     "SCENEGEMS_WORKER_NODE_STATE_DIR": "/var/lib/scenegems-worker-node",
 }
 
@@ -43,7 +43,7 @@ def test_a_complete_configuration_parses():
     assert configuration.worker_node_id == configuration.worker_node_name == "worker-1"
     assert (configuration.broker_host, configuration.broker_port) == ("192.168.1.10", 1883)
     assert configuration.slots == {JobType.SIMULATION: 4, JobType.SCENE_GENERATION: 1}
-    assert configuration.components == {"asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"}
+    assert configuration.components == {"asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"}
     assert configuration.labels == {"gpu": "true", "site": "lab"}
     assert configuration.state_dir == Path("/var/lib/scenegems-worker-node")
     assert configuration.reference_geofence == DEFAULT_REFERENCE_GEOFENCE
@@ -188,7 +188,7 @@ def test_the_capabilities_variable_of_earlier_releases_is_refused_naming_its_rep
 
 
 def test_components_are_the_catalogs():
-    assert parse_components(" control_layer/ardupilot , simulation_layer/gazebo,asv_software/replay ") == {"control_layer/ardupilot", "simulation_layer/gazebo", "asv_software/replay"}
+    assert parse_components(" control_layer/ardupilot , simulation_layer/gazebo,asv_system/replay ") == {"control_layer/ardupilot", "simulation_layer/gazebo", "asv_system/replay"}
     with pytest.raises(ValueError, match="unknown component 'simulation.kinematic'"):
         parse_components("simulation.kinematic")
     with pytest.raises(ValueError, match="listed twice"):
@@ -199,7 +199,7 @@ def test_components_are_the_catalogs():
 
 def test_a_job_type_with_slots_needs_a_component_that_serves_it():
     assert slots_without_components({JobType.SIMULATION: 1, JobType.MONITORING_POST_HOC: 1}, frozenset({"simulation_layer/gazebo", "monitoring"})) == []
-    problems = slots_without_components({JobType.SIMULATION: 1, JobType.CALIBRATION_DEVIATION: 1}, frozenset({"asv_software/replay", "control_layer/ardupilot"}))
+    problems = slots_without_components({JobType.SIMULATION: 1, JobType.CALIBRATION_DEVIATION: 1}, frozenset({"asv_system/replay", "control_layer/ardupilot"}))
     assert problems[0].startswith("simulation needs a simulation layer among SCENEGEMS_WORKER_NODE_COMPONENTS")
     assert problems[1] == "calibration.deviation needs the component calibration among SCENEGEMS_WORKER_NODE_COMPONENTS"
     with pytest.raises(ConfigurationError, match="SCENEGEMS_WORKER_NODE_SLOTS: monitoring.post_hoc needs the component monitoring"):

@@ -1,13 +1,13 @@
 """The simulation job's ardupilot runner: replay or USV Navigation over the lockstep MAVLink adapters, on a SITL or Gazebo stack per job.
 
 The payload's simulation_layer decides the layer: ardupilot_sim runs SITL's own physics, gazebo
-SITL's JSON backend against a Gazebo world. Its mode decides the ASV software, as the kinematic
+SITL's JSON backend against a Gazebo world. Its mode decides the ASV system, as the kinematic
 runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv_navigation puts
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
 replay. The worker node resolves the instance, generates the vessel stack into the job's folder and adds
 a runner from the scenario execution image on the stack network (vessel_job_stack.py). Every
-vessel has its SITL and its ASV software container; the runner steps the ASV software, sends its
+vessel has its SITL and its ASV system container; the runner steps the ASV system, sends its
 commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 
 Observed live, the runner forwards each step's observed states as frames, at most a bounded
@@ -43,7 +43,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK  # noqa: F401  (the network of every service of the job's stack)
 
 if TYPE_CHECKING:
@@ -65,10 +65,10 @@ class ArduPilotSimulationLayer(str, Enum):
 def vessel_stacks(simulation_layer: ArduPilotSimulationLayer, mode: KinematicMode = KinematicMode.REPLAY) -> Tuple[StackTriple, ...]:
     """The vessel stacks a run on the layer runs: replay on ArduPilot for the vessels that replay, USV Navigation for the own ship in mode usv_navigation."""
     layer = SimulationLayerId(simulation_layer.value)
-    replay = (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, layer)
+    replay = (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, layer)
     if mode == KinematicMode.REPLAY:
         return (replay,)
-    return (replay, (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, layer))
+    return (replay, (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, layer))
 
 
 class ArduPilotSimulationPayload(ProtocolModel):
@@ -116,19 +116,19 @@ def _instance(payload: ArduPilotSimulationPayload):
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import mavlink_instance
 
     trajectories = to_trajectories(payload.trajectories)
-    asv_software: Dict[int, AsvSoftwareId] = {}
+    asv_system: Dict[int, AsvSystemId] = {}
     parameters = {}
     if payload.mode == KinematicMode.USV_NAVIGATION:
         own = own_ship(trajectories.initial_scene, payload.own_ship_id)
-        asv_software[own.id] = AsvSoftwareId.USV_NAVIGATION
+        asv_system[own.id] = AsvSystemId.USV_NAVIGATION
         if payload.usv_navigation is not None:
             parameters[own.id] = payload.usv_navigation.to_parameters()
-    instance = mavlink_instance(trajectories, SimulationLayerId(payload.simulation_layer.value), asv_software, environment=EnvironmentConfig.calm(seed=payload.seed), speedup=payload.speedup)
+    instance = mavlink_instance(trajectories, SimulationLayerId(payload.simulation_layer.value), asv_system, environment=EnvironmentConfig.calm(seed=payload.seed), speedup=payload.speedup)
     return trajectories, instance, parameters
 
 
 def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: ArduPilotSimulationPayload) -> JobStack:
-    """The job's stack: SITL and an ASV software container per vessel, Gazebo on the gazebo layer, and the runner."""
+    """The job's stack: SITL and an ASV system container per vessel, Gazebo on the gazebo layer, and the runner."""
     try:
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
@@ -212,9 +212,9 @@ def observed_trajectories(trajectories, result, dt: float, state_of: Callable[[A
 
 
 def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None) -> JobResultData:
-    """The in-container part: step every vessel's ASV software container, drive its SITL in lockstep and describe the run; observation forwards its states live.
+    """The in-container part: step every vessel's ASV system container, drive its SITL in lockstep and describe the run; observation forwards its states live.
 
-    hosting is where the ASV software runs: the stack's containers unless given (vessel_stack/hosting.py).
+    hosting is where the ASV system runs: the stack's containers unless given (vessel_stack/hosting.py).
     """
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt, run_mavlink_stack
     from scenegems_tool.vessel_stack.hosting import in_stack_hosting

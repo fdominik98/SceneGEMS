@@ -1,6 +1,6 @@
 """Declarative specs of the adapter graph.
 
-Nodes are layer implementations (LayerSpec): one ASV software, control layer or simulation
+Nodes are layer implementations (LayerSpec): one ASV system, control layer or simulation
 layer. Edges are adapters (AdapterSpec) that connect an implementation of one role to an
 implementation of the next role down the stack. A connection the design rules out is
 declared as an UnsupportedConnection, so the resolver can say why it is missing.
@@ -70,9 +70,9 @@ class LayerSpec:
     containers: Tuple[ContainerSpec, ...] = ()
     status: SpecStatus = SpecStatus.AVAILABLE
     planned_phase: Optional[int] = None
-    # The layer brings the vessel's own ASV software, so the vessel can run with ASV software
+    # The layer brings the vessel's own ASV system, so the vessel can run with ASV system
     # on_board. Only such a layer may be the target of an adapter from on_board (the registry checks it).
-    on_board_asv_software: bool = False
+    on_board_asv_system: bool = False
 
     @property
     def id(self) -> str:

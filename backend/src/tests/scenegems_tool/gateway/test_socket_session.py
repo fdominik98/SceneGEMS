@@ -17,7 +17,7 @@ from scenegems_tool.gateway.live_run_recorder import OpenedEntry
 from scenegems_tool.gateway.protocol import SimulationStatus
 from scenegems_tool.gateway.socket_session import NO_TRAJECTORIES_MESSAGE, SocketSession, control_node_broker, control_node_broker_label
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselStackConfig
 from scenegems_tool.workbench.empty_subsystem_integration_session import EmptySubsystemIntegrationSession
 from tests.scenegems_tool.gateway.conftest import settle
@@ -207,9 +207,9 @@ class TestSimulationConfigValidation:
         assert "Gazebo needs actuator commands" in error
 
     async def test_with_a_real_vessel_usv_navigation_is_refused_since_arduagent_cannot_drive_it(self, session, loaded, websocket):
-        config = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_software=AsvSoftwareId.USV_NAVIGATION)
+        config = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_system=AsvSystemId.USV_NAVIGATION)
         config.vessels["1"].context = AgentContext.REAL
-        config.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.ON_BOARD, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+        config.vessels["1"].stack = VesselStackConfig(AsvSystemId.ON_BOARD, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
         session.set_simulation_session(config)
         await settle()
         assert loaded.initialized == []
@@ -217,7 +217,7 @@ class TestSimulationConfigValidation:
         assert "ArduAgent drives every simulated vessel, and it cannot drive vessel 0 (usv_navigation, ardupilot, ardupilot_sim)" in error
 
     async def test_simulated_vessels_alone_may_run_any_available_stack(self, session, loaded, websocket):
-        session.set_simulation_session(stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_software=AsvSoftwareId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM))
+        session.set_simulation_session(stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM))
         await settle()
         assert len(loaded.initialized) == 1
         assert not [payload for payload in websocket.sent if payload["type"] == "error"]

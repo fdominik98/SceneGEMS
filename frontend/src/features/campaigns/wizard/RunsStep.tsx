@@ -31,9 +31,9 @@ function UnavailableStacks({ catalog }: { catalog: CatalogStacks }) {
           </li>
         ))}
         {others.map((stack) => {
-          const name = `${stack.asv_software} on ${stack.simulation_layer}${stack.control_layer !== "none" ? ` with ${stack.control_layer}` : ""}`;
+          const name = `${stack.asv_system} on ${stack.simulation_layer}${stack.control_layer !== "none" ? ` with ${stack.control_layer}` : ""}`;
           return (
-            <li key={`${stack.asv_software}-${stack.control_layer}-${stack.simulation_layer}`}>
+            <li key={`${stack.asv_system}-${stack.control_layer}-${stack.simulation_layer}`}>
               <strong>{name}</strong>
               <span className="wiz-unavailable-status">{stack.status}</span>
               <span className="wiz-unavailable-reasons">{stack.reasons.join("; ") || "no reason given"}</span>

@@ -11,13 +11,13 @@ Present now:
     messaging/      MQTT clients and services that carry subsystem traffic
     subsystems/     one package per subsystem
         scene_generation/, trajectory_generation/, monitoring/, scenario_execution/
-    vessel_stack/   ASV software, control layer and simulation layer as adapters, each layer in its own container
+    vessel_stack/   ASV system, control layer and simulation layer as adapters, each layer in its own container
         contracts/              roles, ports, capabilities, adapter specs, clock, stack config, the wire protocol
                                 between a stack's containers (lockstep_wire.py) and their names (stack_services.py)
         registry/               adapter registry, resolver, measured capability data
         simulation_layers/      kinematic/ (one simulator container per scenario), gazebo/ (generators), ardupilot_sim/
         control_layers/         ardupilot/ (SITL per vessel), custom/ (a controller container per vessel)
-        asv_software/           replay/ and usv_navigation/ (a container per vessel; USV Navigation in its own image),
+        asv_system/           replay/ and usv_navigation/ (a container per vessel; USV Navigation in its own image),
                                 mission_planner/ (specs)
         hosting.py              where a run's layers are: the stack's containers, or the caller's process (tests, calibration)
     cluster/        distributed integration layer

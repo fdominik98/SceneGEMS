@@ -22,7 +22,7 @@ export function controlValue(stack: CatalogStack): CatalogValue {
 
 /** The mode is what the own ship runs: the other vessels replay in every stack. */
 export function softwareValue(stack: CatalogStack): CatalogValue {
-  return componentValue("asv_software", stack.mode);
+  return componentValue("asv_system", stack.mode);
 }
 
 const TIERS: readonly CatalogValue[] = [

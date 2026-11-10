@@ -5,7 +5,7 @@ import math
 import pytest
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import (
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import (
     DEFAULT_CONTROL_HORIZON_STEPS,
     DEFAULT_PRESCRIBED_TIME_S,
     UPSTREAM_DCPA_BETA1_M,

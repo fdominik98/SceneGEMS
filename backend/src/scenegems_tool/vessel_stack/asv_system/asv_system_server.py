@@ -1,6 +1,6 @@
-"""Serves a LockstepParticipant as an ASV software component over the lockstep wire protocol.
+"""Serves a LockstepParticipant as an ASV system component over the lockstep wire protocol.
 
-For ASV software that is part of the SceneGEMS backend (replay). Software that lives in an image
+For ASV system that is part of the SceneGEMS backend (replay). Software that lives in an image
 of its own serves the protocol itself (usv_navigation/usv_navigation_server.py).
 """
 

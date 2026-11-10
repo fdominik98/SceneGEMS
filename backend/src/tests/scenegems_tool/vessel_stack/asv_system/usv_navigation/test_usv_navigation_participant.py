@@ -4,8 +4,8 @@ import math
 from typing import Mapping, Optional
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_participant import UsvNavigationParticipant
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_participant import UsvNavigationParticipant
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.ports import VesselStateObservation
 from tests.scenegems_tool.vessel_stack.scenarios import SPEED, make_vessel

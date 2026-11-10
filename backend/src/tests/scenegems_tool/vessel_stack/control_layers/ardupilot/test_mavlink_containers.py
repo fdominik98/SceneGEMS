@@ -1,8 +1,8 @@
-"""The MAVLink lockstep runner with every vessel's ASV software in its container: the run it gives in process."""
+"""The MAVLink lockstep runner with every vessel's ASV system in its container: the run it gives in process."""
 
 import pytest
 
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, SimulationLayerId
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import mavlink_instance, run_mavlink_stack
 from scenegems_tool.vessel_stack.registry.catalog import build_registry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
@@ -28,8 +28,8 @@ def resolver():
     return StackResolver(registry)
 
 
-@pytest.mark.parametrize("own_ship", [AsvSoftwareId.REPLAY, AsvSoftwareId.USV_NAVIGATION])
-def test_the_run_with_asv_software_containers_is_the_run_in_process(resolver, own_ship):
+@pytest.mark.parametrize("own_ship", [AsvSystemId.REPLAY, AsvSystemId.USV_NAVIGATION])
+def test_the_run_with_asv_system_containers_is_the_run_in_process(resolver, own_ship):
     trajectories = encounter_trajectories("head_on", 30)
     instance = mavlink_instance(trajectories, SimulationLayerId.ARDUPILOT_SIM, {0: own_ship})
     in_process = run_mavlink_stack(trajectories, instance, GEOFENCE, resolver=resolver, steps=30)
@@ -42,8 +42,8 @@ def test_the_run_with_asv_software_containers_is_the_run_in_process(resolver, ow
     assert {key: value for key, value in contained.run_record.items() if key != "achieved_speedup"} == stable
 
 
-def test_the_asv_software_is_reached_before_sitl_is_engaged(resolver):
-    """SITL runs free once its link connects, so a missing ASV software container must fail the run before that."""
+def test_the_asv_system_is_reached_before_sitl_is_engaged(resolver):
+    """SITL runs free once its link connects, so a missing ASV system container must fail the run before that."""
     from scenegems_tool.vessel_stack.contracts.lockstep_wire import WireError
     from scenegems_tool.vessel_stack.hosting import ContainerHosting
 
@@ -51,6 +51,6 @@ def test_the_asv_software_is_reached_before_sitl_is_engaged(resolver):
     instance = mavlink_instance(trajectories, SimulationLayerId.ARDUPILOT_SIM)
     with loopback_hosting(instance) as hosting:
         endpoints = dict(hosting._endpoints)
-    with pytest.raises(WireError, match="no asv_software at"):
+    with pytest.raises(WireError, match="no asv_system at"):
         run_mavlink_stack(trajectories, instance, GEOFENCE, resolver=resolver, steps=30, hosting=ContainerHosting(endpoints, connect_timeout_s=0.3))
     assert FakeLink.connections == [], "no SITL link was connected"

@@ -535,7 +535,7 @@ def test_worker_node_availability_needs_the_components_up_to_date(harness):
     from dataclasses import replace
 
     (worker_node,) = harness.worker_nodes
-    gazebo = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+    gazebo = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
     assert worker_node.runs(JobType.SIMULATION, gazebo, {}, {})
     assert not replace(worker_node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SIMULATION, gazebo, {}, {})
     assert replace(worker_node, stale_components=frozenset({"simulation_layer/gazebo"})).runs(JobType.SCENE_GENERATION, ("scene_generation",), {}, {}), "the other components still work"

@@ -372,7 +372,7 @@ export function useSimulationWorkflow() {
         setStreamStatus(status);
         if (status === "connected") {
           setError(null);
-          // The simulator, ASV software and control layer choices come from the backend's stack resolver.
+          // The simulator, ASV system and control layer choices come from the backend's stack resolver.
           client.send({ type: "query_stack_options" });
           return;
         }

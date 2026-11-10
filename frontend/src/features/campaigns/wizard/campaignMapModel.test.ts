@@ -194,8 +194,8 @@ describe("what the cards say", () => {
 });
 
 describe("the settings of the whole campaign", () => {
-  const KINEMATIC_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], stage: "simulate", reason: "the runs" };
-  const GAZEBO_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], stage: "simulate", reason: "the runs" };
+  const KINEMATIC_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], stage: "simulate", reason: "the runs" };
+  const GAZEBO_RUNS: RequiredCapability = { jobType: "simulation", components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"], stage: "simulate", reason: "the runs" };
   const plan = (missing: RequiredCapability[]): ResourcePlan => ({
     required: [],
     coverage: [],

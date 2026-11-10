@@ -7,7 +7,7 @@ review the diff of the data files and commit them with the change.
 
 import pytest
 
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselStackConfig
 from scenegems_tool.vessel_stack.simulation_docker_stack import SIMULATION_COMPOSE_PROJECT, build_simulation_docker_stack_artifacts
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
@@ -107,7 +107,7 @@ def test_arduagent_containers_of_simulated_vessels_get_the_session_prefix():
 def test_arduagent_containers_next_to_a_real_vessel_stay_unscoped():
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
     instance.vessels["1"].context = AgentContext.REAL
-    instance.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+    instance.vessels["1"].stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
     instance.vessels["1"].adapter_ids = ("replay_arduagent_real_vessel",)
     environments = _arduagent_environments(instance, mqtt_connection().with_topic_prefix(SESSION_PREFIX))
     assert list(environments) == ["agent_0_arduagent"], "the real vessel runs its own ArduAgent"

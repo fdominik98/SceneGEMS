@@ -26,9 +26,9 @@ from tests.scenegems_tool.persistence.stores.builders import make_resources
 from utils.image_names import image_repository
 
 SIMULATION = JobType.SIMULATION
-KINEMATIC_WORKER_NODE = ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation")
-SITL_WORKER_NODE = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
-GAZEBO_WORKER_NODE = ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+KINEMATIC_WORKER_NODE = ("asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation")
+SITL_WORKER_NODE = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+GAZEBO_WORKER_NODE = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
 
 
 def _submit(on_loop, plane, job_type=SCENE, **fields):
@@ -179,7 +179,7 @@ def test_a_submission_needs_the_components_of_its_payload_and_their_images(plane
     assert stores.jobs.get(gazebo_job.job_id).requirements.components == list(GAZEBO_WORKER_NODE)
     assert stores.jobs.get(gazebo_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"})
     assert stores.jobs.get(sitl_job.job_id).requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"})
-    assert stores.jobs.get(usv_job.job_id).requirements.components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]
+    assert stores.jobs.get(usv_job.job_id).requirements.components == ["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]
     assert stores.jobs.get(scene_job.job_id).requirements.components == ["scene_generation"], "the control node sets the components from the payload"
 
 

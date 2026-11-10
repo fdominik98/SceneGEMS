@@ -3,7 +3,7 @@
 import pytest
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.asv_software.replay.path_simplification import simplify_state_path
+from scenegems_tool.vessel_stack.asv_system.replay.path_simplification import simplify_state_path
 
 
 def states(points):

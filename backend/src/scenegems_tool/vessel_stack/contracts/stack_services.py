@@ -11,11 +11,11 @@ from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig
 
 STACK_NETWORK = "maritime_net"  # the network every service of a vessel stack is on
-ASV_SOFTWARE_PORT = 11410
+ASV_SYSTEM_PORT = 11410
 CONTROLLER_PORT = 11420
 KINEMATIC_SIM_PORT = 11430
 KINEMATIC_SIM_SERVICE = "kinematic_sim"
-_ASV_SOFTWARE_SUFFIX = "_asv_software"  # after the agent's name, as its _mavproxy and _arduagent services are named
+_ASV_SYSTEM_SUFFIX = "_asv_system"  # after the agent's name, as its _mavproxy and _arduagent services are named
 _CONTROLLER_SUFFIX = "_controller"
 
 
@@ -34,16 +34,16 @@ def stack_agent_name(vessel_config: VesselConfig) -> str:
     return vessel_config.connection.agent_name if vessel_config.connection is not None else f"vessel_{vessel_config.agent_id}"
 
 
-def asv_software_service_name(agent_name: str) -> str:
-    return f"{agent_name}{_ASV_SOFTWARE_SUFFIX}"
+def asv_system_service_name(agent_name: str) -> str:
+    return f"{agent_name}{_ASV_SYSTEM_SUFFIX}"
 
 
 def controller_service_name(agent_name: str) -> str:
     return f"{agent_name}{_CONTROLLER_SUFFIX}"
 
 
-def asv_software_endpoint(agent_name: str) -> Endpoint:
-    return Endpoint(asv_software_service_name(agent_name), ASV_SOFTWARE_PORT)
+def asv_system_endpoint(agent_name: str) -> Endpoint:
+    return Endpoint(asv_system_service_name(agent_name), ASV_SYSTEM_PORT)
 
 
 def controller_endpoint(agent_name: str) -> Endpoint:
@@ -55,8 +55,8 @@ def kinematic_sim_endpoint() -> Endpoint:
 
 
 def is_participant_service(service_name: str) -> bool:
-    """Whether a service of a stack is a vessel's ASV software or controller component (a caller that hosts them itself leaves them out)."""
-    return service_name.endswith((_ASV_SOFTWARE_SUFFIX, _CONTROLLER_SUFFIX))
+    """Whether a service of a stack is a vessel's ASV system or controller component (a caller that hosts them itself leaves them out)."""
+    return service_name.endswith((_ASV_SYSTEM_SUFFIX, _CONTROLLER_SUFFIX))
 
 
 def component_command(container: ContainerSpec, port: int) -> List[str]:

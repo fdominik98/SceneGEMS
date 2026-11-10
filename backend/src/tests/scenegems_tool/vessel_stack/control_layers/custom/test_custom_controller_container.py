@@ -8,7 +8,7 @@ from scenegems_tool.vessel_stack.calibration.reference_scenarios import referenc
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_CONTROLLER, Endpoint, LineServer, WireError
 from scenegems_tool.vessel_stack.contracts.ports import VesselStateObservation
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
 from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_link import CustomControllerLink
 from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server import CustomControllerSession
@@ -91,11 +91,11 @@ def fake_gazebo(monkeypatch, trajectories, vessel):
     monkeypatch.setattr(gz_lockstep_runner, "GzLockstepLink", link)
 
 
-@pytest.mark.parametrize("asv_software", [AsvSoftwareId.REPLAY, AsvSoftwareId.USV_NAVIGATION])
-def test_a_gazebo_run_with_every_layer_in_its_container_is_the_run_in_process(monkeypatch, run, asv_software):
+@pytest.mark.parametrize("asv_system", [AsvSystemId.REPLAY, AsvSystemId.USV_NAVIGATION])
+def test_a_gazebo_run_with_every_layer_in_its_container_is_the_run_in_process(monkeypatch, run, asv_system):
     trajectories, vessel = run
     fake_gazebo(monkeypatch, trajectories, vessel)
-    instance = gz_custom_instance(trajectories, {0: asv_software})
+    instance = gz_custom_instance(trajectories, {0: asv_system})
     in_process = run_gz_custom(trajectories, instance, steps=30)
     with loopback_hosting(instance) as hosting:
         contained = run_gz_custom(trajectories, instance, steps=30, hosting=hosting)

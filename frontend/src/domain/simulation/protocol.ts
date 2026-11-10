@@ -621,19 +621,19 @@ const simulationStatusSchema = z.object({
   groundControlPortsByAgentId: z.record(z.string(), z.number().int().positive()).optional().default({}),
 });
 
-const asvSoftwareSchema = z.enum(["replay", "usv_navigation", "mission_planner", "on_board"]);
+const asvSystemSchema = z.enum(["replay", "usv_navigation", "mission_planner", "on_board"]);
 const controlLayerSchema = z.enum(["ardupilot", "custom", "none", "real_vessel"]);
 const supportSchema = z.enum(["supported", "unmeasured", "unsupported"]).nullable();
 
 const stackOptionsSchema = z.object({
   type: z.literal("stack_options"),
   simulatorTypes: z.array(z.string()),
-  asvSoftware: z.array(asvSoftwareSchema),
+  asvSystem: z.array(asvSystemSchema),
   controlLayers: z.array(controlLayerSchema),
   combinations: z.array(
     z.object({
       simulatorType: z.string(),
-      asvSoftware: asvSoftwareSchema,
+      asvSystem: asvSystemSchema,
       controlLayer: controlLayerSchema,
       available: z.boolean(),
       status: z.string(),

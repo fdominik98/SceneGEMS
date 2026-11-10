@@ -50,5 +50,5 @@ def test_a_job_needs_its_subsystem_component_or_its_vessels_layers():
     assert payload_components(JobType.TRAJECTORY_GENERATION, valid_payload(JobType.TRAJECTORY_GENERATION)) == ("trajectory_generation",)
     assert payload_components(JobType.MONITORING_POST_HOC, valid_payload(JobType.MONITORING_POST_HOC)) == ("monitoring",)
     assert payload_components(JobType.CALIBRATION_DEVIATION, valid_payload(JobType.CALIBRATION_DEVIATION)) == ("calibration",)
-    assert payload_components(JobType.SIMULATION, valid_payload(JobType.SIMULATION)) == ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic")
-    assert payload_components(JobType.SIMULATION, ardupilot_payload("gazebo")) == ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+    assert payload_components(JobType.SIMULATION, valid_payload(JobType.SIMULATION)) == ("asv_system/replay", "control_layer/none", "simulation_layer/kinematic")
+    assert payload_components(JobType.SIMULATION, ardupilot_payload("gazebo")) == ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")

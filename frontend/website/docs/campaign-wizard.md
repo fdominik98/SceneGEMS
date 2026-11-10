@@ -127,7 +127,7 @@ Both apply to each FEC of the entry or file on its own.
 
 #### Seeds
 
-The base seed on the Policy page is where the case seeds start: case k of every FEC gets the base seed + k, and an item (a scene or trajectories a later start takes) gets the base seed + its number in the list. Every step of a case uses its seed: scene generation, trajectory generation and each run, with the ASV software in it. A run can set its own seed on the Simulation page instead. The same config and base seed give the same cases again. The review repeats the base seed, and Campaign History shows it in the header of the entry.
+The base seed on the Policy page is where the case seeds start: case k of every FEC gets the base seed + k, and an item (a scene or trajectories a later start takes) gets the base seed + its number in the list. Every step of a case uses its seed: scene generation, trajectory generation and each run, with the ASV system in it. A run can set its own seed on the Simulation page instead. The same config and base seed give the same cases again. The review repeats the base seed, and Campaign History shows it in the header of the entry.
 
 ### Trajectory generation and simulation
 

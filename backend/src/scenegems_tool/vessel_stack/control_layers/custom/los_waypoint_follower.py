@@ -1,4 +1,4 @@
-"""Line-of-sight waypoint follower of the custom controller: how it serves the replay ASV software.
+"""Line-of-sight waypoint follower of the custom controller: how it serves the replay ASV system.
 
 The replay software hands the custom controller its trajectory as a waypoint mission: every
 reference state is a waypoint, with the time the reference passes it. The follower steers by the
@@ -6,7 +6,7 @@ path's geometry and keeps the speed by its timing:
 
 - heading: toward the point one lookahead along the path ahead of the vessel's projection onto
   it, moved across the path by the integral against a constant bias such as sideslip in a
-  current or wind drift (asv_software/replay/line_of_sight.py gives the lookahead and the
+  current or wind drift (asv_system/replay/line_of_sight.py gives the lookahead and the
   integral). On a straight leg this is the line of sight, course - atan((e + i) / lookahead).
   Ahead of a turn the point is already round the corner, so the vessel starts turning before
   the path does, by about the time its yaw rate takes to build up: a reference turning at the
@@ -26,7 +26,7 @@ import numpy as np
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.vessel_stack.asv_software.replay.line_of_sight import STRAIGHT_PATH_TOLERANCE, LineOfSight, catch_up_speed
+from scenegems_tool.vessel_stack.asv_system.replay.line_of_sight import STRAIGHT_PATH_TOLERANCE, LineOfSight, catch_up_speed
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from utils.math_utils import heading_diff

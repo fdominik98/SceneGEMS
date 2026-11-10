@@ -1,7 +1,7 @@
 """Clock contract: one authoritative simulated clock per simulation instance.
 
 The simulation layer owns the clock. For every step it publishes a request to step to the
-target time, every participant (ASV software, control layer) computes its command for the
+target time, every participant (ASV system, control layer) computes its command for the
 step and acknowledges it, and only then does the simulation advance. Nothing in this
 contract reads the wall clock, so pace is limited by compute alone. Simulated time is
 derived from the integer step index, never accumulated, so it is exact for a fixed dt.

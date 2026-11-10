@@ -7,7 +7,7 @@ from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
-from scenegems_tool.vessel_stack.asv_software.replay.replay_mission import cap_mission_trajectories, replay_mission_waypoints
+from scenegems_tool.vessel_stack.asv_system.replay.replay_mission import cap_mission_trajectories, replay_mission_waypoints
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS, arduagent_control_mode
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -96,7 +96,7 @@ class SimulationParser:
                 vessel=vessel,
                 mqtt_connection=agent_connection,
                 topic=agent_config.topic,
-                control_mode=arduagent_control_mode(vessel_config.stack.asv_software),
+                control_mode=arduagent_control_mode(vessel_config.stack.asv_system),
                 agent_name=agent_config.agent_name,
                 reference_geofence=parent_client.reference_geofence,
                 initial_state=state,

@@ -41,7 +41,7 @@ export const catalogParameterSchema = z.object({
 });
 
 const stackTripleSchema = z.object({
-  asv_software: z.string(),
+  asv_system: z.string(),
   control_layer: z.string(),
   simulation_layer: z.string(),
 });
@@ -84,7 +84,7 @@ export const catalogStackSchema = z.object({
 });
 
 export const unavailableStackSchema = z.object({
-  asv_software: z.string(),
+  asv_system: z.string(),
   control_layer: z.string(),
   simulation_layer: z.string(),
   status: z.string(),

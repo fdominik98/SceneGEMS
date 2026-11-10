@@ -1,12 +1,12 @@
 """Roles of a vessel stack and the implementations each role can have.
 
-A vessel stack is a triple: the ASV software decides where the vessel goes, the control
+A vessel stack is a triple: the ASV system decides where the vessel goes, the control
 layer turns that decision into actuation, and the simulation layer moves the vessel. The
 enum values are the ids used in configuration, in the registry and in run records.
 
 One integration may cover several roles, joined by built-in adapters (AdapterSpec.built_in):
 ArduPilot is a control layer and, through SITL, a simulation layer; a real vessel is its own
-control layer and simulation layer, and may bring its own ASV software (on_board).
+control layer and simulation layer, and may bring its own ASV system (on_board).
 """
 
 from dataclasses import dataclass
@@ -15,16 +15,16 @@ from typing import Union
 
 
 class Role(str, Enum):
-    ASV_SOFTWARE = "asv_software"
+    ASV_SYSTEM = "asv_system"
     CONTROL_LAYER = "control_layer"
     SIMULATION_LAYER = "simulation_layer"
 
 
-class AsvSoftwareId(str, Enum):
+class AsvSystemId(str, Enum):
     REPLAY = "replay"  # follows the generated trajectory
     USV_NAVIGATION = "usv_navigation"
     MISSION_PLANNER = "mission_planner"  # an operator or external software on a MAVLink port
-    ON_BOARD = "on_board"  # the vessel's own software, brought by the layer below (LayerSpec.on_board_asv_software)
+    ON_BOARD = "on_board"  # the vessel's own software, brought by the layer below (LayerSpec.on_board_asv_system)
 
 
 class ControlLayerId(str, Enum):
@@ -41,15 +41,15 @@ class SimulationLayerId(str, Enum):
     REAL_VESSEL = "real_vessel"  # the physical vessel in the water, outside the simulation instance
 
 
-LayerImplementationId = Union[AsvSoftwareId, ControlLayerId, SimulationLayerId]
+LayerImplementationId = Union[AsvSystemId, ControlLayerId, SimulationLayerId]
 
 _ROLE_BY_IMPLEMENTATION_TYPE = {
-    AsvSoftwareId: Role.ASV_SOFTWARE,
+    AsvSystemId: Role.ASV_SYSTEM,
     ControlLayerId: Role.CONTROL_LAYER,
     SimulationLayerId: Role.SIMULATION_LAYER,
 }
 
-STACK_ROLE_ORDER = (Role.ASV_SOFTWARE, Role.CONTROL_LAYER, Role.SIMULATION_LAYER)
+STACK_ROLE_ORDER = (Role.ASV_SYSTEM, Role.CONTROL_LAYER, Role.SIMULATION_LAYER)
 
 
 @dataclass(frozen=True)

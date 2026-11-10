@@ -1,4 +1,4 @@
-"""Replay ASV software as a lockstep participant on the heading_speed_cmd port."""
+"""Replay ASV system as a lockstep participant on the heading_speed_cmd port."""
 
 import math
 from typing import Optional, Sequence
@@ -7,8 +7,8 @@ import numpy as np
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.vessel_stack.asv_software.replay.line_of_sight import STRAIGHT_PATH_TOLERANCE, LineOfSight, catch_up_speed
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_STATE_FOLLOWER
+from scenegems_tool.vessel_stack.asv_system.replay.line_of_sight import STRAIGHT_PATH_TOLERANCE, LineOfSight, catch_up_speed
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_STATE_FOLLOWER
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from utils.math_utils import heading_diff, rotate_heading

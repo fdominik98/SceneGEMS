@@ -12,8 +12,8 @@ export const SIMULATION_JOB = "simulation";
 
 /** Every component in catalog order. */
 export const COMPONENTS = [
-  "asv_software/replay",
-  "asv_software/usv_navigation",
+  "asv_system/replay",
+  "asv_system/usv_navigation",
   "control_layer/none",
   "control_layer/ardupilot",
   "control_layer/custom",
@@ -28,8 +28,8 @@ export const COMPONENTS = [
 ] as const;
 
 const COMPONENT_LABELS: Record<string, string> = {
-  "asv_software/replay": "Replay",
-  "asv_software/usv_navigation": "USV Navigation",
+  "asv_system/replay": "Replay",
+  "asv_system/usv_navigation": "USV Navigation",
   "control_layer/none": "No control layer",
   "control_layer/ardupilot": "ArduPilot",
   "control_layer/custom": "Custom controller",
@@ -75,8 +75,8 @@ const IMPLIED_CONTROL_LAYERS: Record<string, string> = { kinematic: "none", ardu
 
 /** Replay on the layers for every vessel, and USV Navigation for the own ship in mode usv_navigation. */
 function layerComponents(controlLayer: string, simulationLayer: string, mode: unknown): string[] {
-  const replay = ["asv_software/replay", `control_layer/${controlLayer}`, `simulation_layer/${simulationLayer}`];
-  return orderedComponents(mode === "usv_navigation" ? [...replay, "asv_software/usv_navigation"] : replay);
+  const replay = ["asv_system/replay", `control_layer/${controlLayer}`, `simulation_layer/${simulationLayer}`];
+  return orderedComponents(mode === "usv_navigation" ? [...replay, "asv_system/usv_navigation"] : replay);
 }
 
 /**

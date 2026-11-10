@@ -35,7 +35,7 @@ OPERATOR_PORT = 15174
 CONTROL_NODE_PARAMETERS = {"SCENEGEMS_API_PORT": "18443", "SCENEGEMS_BROKER_PORT": "18883", "SCENEGEMS_OPERATOR_PORT": str(OPERATOR_PORT), "POSTGRES_HOST_PORT": "15432"}
 WORKER_NODE_PARAMETERS = {
     "SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
-    "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
+    "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,asv_system/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
 }
 STRAIGHT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in range(5)]
 RRT_CLASSES = [f"2vessel_0obstacle_scenarios/fec{index}" for index in (5, 6)]

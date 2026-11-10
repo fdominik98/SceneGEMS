@@ -11,7 +11,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicSimulationPayload
 from tests.scenegems_tool.cluster.payloads import ardupilot_payload, valid_payload
 
-KINEMATIC = ("asv_software/replay", "control_layer/none", "simulation_layer/kinematic")
+KINEMATIC = ("asv_system/replay", "control_layer/none", "simulation_layer/kinematic")
 
 
 def test_every_runner_has_a_module_and_the_catalog_names_its_stacks():
@@ -47,9 +47,9 @@ def test_the_components_are_every_layer_of_every_vessels_stack():
         return required_components(SimulationPayload.model_validate(payload))
 
     assert components(valid_payload(JobType.SIMULATION)) == KINEMATIC
-    assert components(valid_payload(JobType.SIMULATION, mode="usv_navigation")) == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/none", "simulation_layer/kinematic")
-    assert components(ardupilot_payload("ardupilot_sim")) == ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
-    assert components(ardupilot_payload("gazebo")) == ("asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+    assert components(valid_payload(JobType.SIMULATION, mode="usv_navigation")) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic")
+    assert components(ardupilot_payload("ardupilot_sim")) == ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+    assert components(ardupilot_payload("gazebo")) == ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
 
 
 def test_every_payload_stack_is_one_its_runner_declares():

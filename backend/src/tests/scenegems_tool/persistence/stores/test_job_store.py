@@ -184,8 +184,8 @@ def test_claim_matches_labels(job_store, worker_node_store):
 
 
 def test_claim_matches_components(job_store, worker_node_store):
-    gazebo = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
-    worker_node_store.register(make_hello("sitl", slots={SCENE: 5}, components=["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]))
+    gazebo = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"]
+    worker_node_store.register(make_hello("sitl", slots={SCENE: 5}, components=["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]))
     worker_node_store.register(make_hello("world", slots={SCENE: 5}, components=gazebo + ["scene_generation"]))
     job = job_store.submit(make_submission(requirements=JobRequirements(components=gazebo))).job
     assert job_store.get(job.job_id).requirements.components == gazebo

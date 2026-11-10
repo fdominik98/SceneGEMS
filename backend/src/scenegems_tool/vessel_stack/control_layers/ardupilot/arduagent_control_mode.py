@@ -1,4 +1,4 @@
-"""ArduAgent's control mode for the ASV software that drives an ArduPilot vessel.
+"""ArduAgent's control mode for the ASV system that drives an ArduPilot vessel.
 
 MqttAgentClient and the scenario execution worker speak these modes: autonomous uploads
 the trajectory as a mission to follow, external sends the vessel toward its last waypoint
@@ -8,9 +8,9 @@ vessel's own software steers and ArduAgent only reports where it is.
 
 from typing import Dict
 
-from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import MISSION_PLANNER_MAVLINK_PORT
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId
+from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_MAVLINK_PORT
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
 from scenegems_tool.vessel_stack.control_layers.real_vessel.real_vessel_specs import (
     MISSION_PLANNER_ARDUAGENT_REAL_VESSEL,
     ON_BOARD_ARDUAGENT_REAL_VESSEL,
@@ -33,14 +33,14 @@ ARDUAGENT_ADAPTER_IDS = frozenset(
 
 ON_BOARD_CONTROL_MODE = "on_board"
 
-_ARDUAGENT_CONTROL_MODES: Dict[AsvSoftwareId, str] = {
-    AsvSoftwareId.REPLAY: "autonomous",
-    AsvSoftwareId.MISSION_PLANNER: "external",
-    AsvSoftwareId.ON_BOARD: ON_BOARD_CONTROL_MODE,
+_ARDUAGENT_CONTROL_MODES: Dict[AsvSystemId, str] = {
+    AsvSystemId.REPLAY: "autonomous",
+    AsvSystemId.MISSION_PLANNER: "external",
+    AsvSystemId.ON_BOARD: ON_BOARD_CONTROL_MODE,
 }
 
 
-def arduagent_control_mode(asv_software: AsvSoftwareId) -> str:
-    if asv_software not in _ARDUAGENT_CONTROL_MODES:
-        raise ValueError(f"ArduAgent has no control mode for ASV software {asv_software.value}")
-    return _ARDUAGENT_CONTROL_MODES[asv_software]
+def arduagent_control_mode(asv_system: AsvSystemId) -> str:
+    if asv_system not in _ARDUAGENT_CONTROL_MODES:
+        raise ValueError(f"ArduAgent has no control mode for ASV system {asv_system.value}")
+    return _ARDUAGENT_CONTROL_MODES[asv_system]

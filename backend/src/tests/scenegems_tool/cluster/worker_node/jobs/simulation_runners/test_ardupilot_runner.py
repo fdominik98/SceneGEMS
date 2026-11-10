@@ -31,7 +31,7 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
     vessel_services = [key for key in services if key.startswith("vessel_")]
-    assert sorted(vessel_services) == ["vessel_0", "vessel_0_asv_software", "vessel_1", "vessel_1_asv_software"], "SITL and a replay container per vessel"
+    assert sorted(vessel_services) == ["vessel_0", "vessel_0_asv_system", "vessel_1", "vessel_1_asv_system"], "SITL and a replay container per vessel"
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
@@ -73,15 +73,15 @@ def usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer="ard
 
 
 @pytest.mark.parametrize("layer", ["ardupilot_sim", "gazebo"])
-def test_usv_navigation_gets_a_sitl_and_its_asv_software_per_vessel(instances_folder, worker_node, make_job, head_on_trajectories, layer):
-    """Every vessel has a SITL service and its ASV software container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
+def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_folder, worker_node, make_job, head_on_trajectories, layer):
+    """Every vessel has a SITL service and its ASV system container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"vessel_0", "vessel_1", "vessel_0_asv_software", "vessel_1_asv_software", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"vessel_0", "vessel_1", "vessel_0_asv_system", "vessel_1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
     assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
-    assert "scenegems-usv-navigation" in services["vessel_0_asv_software"]["image"]
-    assert "scenegems-scenario-execution-subsystem" in services["vessel_1_asv_software"]["image"]
+    assert "scenegems-usv-navigation" in services["vessel_0_asv_system"]["image"]
+    assert "scenegems-scenario-execution-subsystem" in services["vessel_1_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -95,10 +95,10 @@ def test_the_payloads_mode_names_its_vessel_stacks(make_job, head_on_trajectorie
     from scenegems_tool.cluster.worker_node.jobs.job_types import payload_components
 
     payload_data = {"runner": "ardupilot", "simulation_layer": layer, "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE}
-    assert payload_components(JobType.SIMULATION, payload_data) == ("asv_software/replay", "control_layer/ardupilot", f"simulation_layer/{layer}")
+    assert payload_components(JobType.SIMULATION, payload_data) == ("asv_system/replay", "control_layer/ardupilot", f"simulation_layer/{layer}")
     assert payload_components(JobType.SIMULATION, {**payload_data, "mode": "usv_navigation"}) == (
-        "asv_software/replay",
-        "asv_software/usv_navigation",
+        "asv_system/replay",
+        "asv_system/usv_navigation",
         "control_layer/ardupilot",
         f"simulation_layer/{layer}",
     )
@@ -262,7 +262,7 @@ def test_static_obstacles_stay_in_every_step_scene(head_on_trajectories):
 
 
 def _asv_adapters(instance):
-    return {agent_id: (vessel.stack.asv_software.value, vessel.adapter_ids) for agent_id, vessel in instance.vessels.items()}
+    return {agent_id: (vessel.stack.asv_system.value, vessel.adapter_ids) for agent_id, vessel in instance.vessels.items()}
 
 
 def test_replay_puts_every_vessel_on_the_replay_adapter(fake_sitl, make_job, head_on_trajectories):

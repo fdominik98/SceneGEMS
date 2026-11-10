@@ -70,6 +70,9 @@ const LEGACY_PRESETS: Record<string, MqttConnectionPresetKey> = {
   live_mqtt_connection: "waraps_tls_broker",
 };
 
+/** The key of the control node broker's profile in v3, when the control node was called the master. */
+const V3_CONTROL_NODE_BROKER_PRESET = "master_broker";
+
 /**
  * Persisted MQTT broker form. Lives in a store (not component state) so both the
  * Connections page and the global auto-connect logic can read it.
@@ -116,17 +119,22 @@ export const useConnectionStore = create<ConnectionFormState>()(
     }),
     {
       name: "scenegems:connection-form",
-      version: 3,
+      version: 4,
       // Zustand calls this with the stored state object (already unwrapped) and merges
       // the return value onto the store. v3: the profiles of the single-machine stack are
       // gone; the control node's own broker replaces them and is the default. A hand-typed
-      // address ("" profile) always survives.
+      // address ("" profile) always survives. v4: the control node broker's profile has its
+      // present key; under the v3 key the form would send the address fields left in it.
       migrate: (persistedState, version): ConnectionPersisted => {
-        if (version >= 3 || !persistedState || typeof persistedState !== "object") {
+        if (version >= 4 || !persistedState || typeof persistedState !== "object") {
           return persistedState as ConnectionPersisted;
         }
         const state = persistedState as Omit<ConnectionPersisted, "selectedPreset"> & { selectedPreset?: string };
         const preset = state.selectedPreset ?? "";
+        if (version === 3) {
+          const selectedPreset = preset === V3_CONTROL_NODE_BROKER_PRESET ? CONTROL_NODE_BROKER_PRESET : (preset as ConnectionPersisted["selectedPreset"]);
+          return { ...state, selectedPreset };
+        }
         return { ...state, selectedPreset: preset === "" ? "" : (LEGACY_PRESETS[preset] ?? CONTROL_NODE_BROKER_PRESET) };
       },
       partialize: (state): ConnectionPersisted => ({

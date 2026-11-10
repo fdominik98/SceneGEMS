@@ -1,6 +1,6 @@
 """Clock-stepped MAVLink link to one ArduPilot SITL vessel, the runtime of adapter replay_mavlink_lockstep.
 
-The link carries the heading_speed_cmd of an in-process ASV software into the ardupilot
+The link carries the heading_speed_cmd of an in-process ASV system into the ardupilot
 control layer and reports vessel states and the clock back. It never paces itself on the
 wall clock: every streamed message carries SITL's own time (time_boot_ms), and the lockstep
 runner (mavlink_lockstep_runner.py) acts when that time crosses a simulation-time step

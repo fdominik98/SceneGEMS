@@ -1,9 +1,9 @@
-"""The workbench vocabulary (simulatorType, asvSoftware, controlLayer, and the older controlMode) and the stack triples it maps to."""
+"""The workbench vocabulary (simulatorType, asvSystem, controlLayer, and the older controlMode) and the stack triples it maps to."""
 
 import pytest
 
 from scenegems_tool.gateway.workbench_stack_mapping import (
-    asv_software_from_control_mode,
+    asv_system_from_control_mode,
     control_mode_label,
     default_control_layer,
     simulation_layer_from_simulator_type,
@@ -11,7 +11,7 @@ from scenegems_tool.gateway.workbench_stack_mapping import (
     workbench_adapter_ids,
     workbench_stack,
 )
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
 
 class TestSimulatorType:
@@ -30,30 +30,30 @@ class TestSimulatorType:
 
 
 class TestControlMode:
-    @pytest.mark.parametrize("label,software", [("autonomous", AsvSoftwareId.REPLAY), ("external", AsvSoftwareId.MISSION_PLANNER)])
-    def test_modes_map_to_asv_software(self, label, software):
-        assert asv_software_from_control_mode(label) == software
+    @pytest.mark.parametrize("label,software", [("autonomous", AsvSystemId.REPLAY), ("external", AsvSystemId.MISSION_PLANNER)])
+    def test_modes_map_to_asv_system(self, label, software):
+        assert asv_system_from_control_mode(label) == software
         assert control_mode_label(software) == label
 
     def test_control_mode_is_case_sensitive(self):
         with pytest.raises(ValueError, match="Unknown controlMode 'Autonomous'; expected one of autonomous, external"):
-            asv_software_from_control_mode("Autonomous")
+            asv_system_from_control_mode("Autonomous")
 
     def test_usv_navigation_has_no_arduagent_mode(self):
-        assert control_mode_label(AsvSoftwareId.USV_NAVIGATION) is None
+        assert control_mode_label(AsvSystemId.USV_NAVIGATION) is None
 
 
 class TestStack:
-    def test_asv_software_and_control_layer_name_the_triple(self):
+    def test_asv_system_and_control_layer_name_the_triple(self):
         stack = workbench_stack("Gazebo", "usv_navigation", "custom")
-        assert (stack.asv_software, stack.control_layer, stack.simulation_layer) == (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
+        assert (stack.asv_system, stack.control_layer, stack.simulation_layer) == (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
 
-    def test_an_older_client_names_the_asv_software_by_control_mode(self):
+    def test_an_older_client_names_the_asv_system_by_control_mode(self):
         stack = workbench_stack("ArduPilot Sim", None, None, "external")
-        assert (stack.asv_software, stack.control_layer, stack.simulation_layer) == (AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+        assert (stack.asv_system, stack.control_layer, stack.simulation_layer) == (AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
 
-    def test_asv_software_wins_over_control_mode(self):
-        assert workbench_stack("Gazebo", "usv_navigation", None, "autonomous").asv_software == AsvSoftwareId.USV_NAVIGATION
+    def test_asv_system_wins_over_control_mode(self):
+        assert workbench_stack("Gazebo", "usv_navigation", None, "autonomous").asv_system == AsvSystemId.USV_NAVIGATION
 
     @pytest.mark.parametrize(
         "layer,control", [(SimulationLayerId.KINEMATIC, ControlLayerId.NONE), (SimulationLayerId.GAZEBO, ControlLayerId.ARDUPILOT), (SimulationLayerId.ARDUPILOT_SIM, ControlLayerId.ARDUPILOT)]
@@ -65,9 +65,9 @@ class TestStack:
     @pytest.mark.parametrize(
         "asv,control,message",
         [
-            ("pilot", None, "Unknown asvSoftware 'pilot'; expected one of replay, usv_navigation, mission_planner"),
+            ("pilot", None, "Unknown asvSystem 'pilot'; expected one of replay, usv_navigation, mission_planner"),
             ("replay", "pid", "Unknown controlLayer 'pid'"),
-            (None, None, "needs an asvSoftware"),
+            (None, None, "needs an asvSystem"),
         ],
     )
     def test_unknown_or_missing_values_are_rejected(self, asv, control, message):

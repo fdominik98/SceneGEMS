@@ -32,9 +32,9 @@ describe("workbench resources", () => {
   });
 
   it("counts a simulation only on machines with every component of the plan", () => {
-    const gazebo = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
+    const gazebo = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
     const kinematic = jobTypeResources(feed([sampleWorkerNode()]), "simulation");
-    expect([kinematic.components, kinematic.workerNodes, kinematic.slots, kinematic.blocker]).toEqual([["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"], 1, 8, null]);
+    expect([kinematic.components, kinematic.workerNodes, kinematic.slots, kinematic.blocker]).toEqual([["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], 1, 8, null]);
     const missing = jobTypeResources(feed([sampleWorkerNode()]), "simulation", gazebo);
     expect(missing.blocker).toBe("No machine of the active cluster offers simulation with Replay, ArduPilot and Gazebo.");
     const withGazebo = sampleWorkerNode({ worker_node_id: "g", components: gazebo.map((component) => ({ component, images: [], state: "usable" })) });

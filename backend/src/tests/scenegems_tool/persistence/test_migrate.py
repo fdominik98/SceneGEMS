@@ -1,4 +1,5 @@
 import importlib
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -59,10 +60,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0013"]
+    assert scripts.get_heads() == ["0014"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -120,6 +121,7 @@ def test_offline_upgrade_renders_the_tables(capsys):
     assert "ALTER TABLE job RENAME allowed_nodes TO allowed_worker_nodes" in sql
     assert "ALTER TABLE worker_node_capability RENAME CONSTRAINT fk_node_capability_node_id_node TO fk_worker_node_capability_worker_node_id_worker_node" in sql
     assert "ALTER INDEX ix_node_last_seen_at RENAME TO ix_worker_node_last_seen_at" in sql
+    assert "UPDATE worker_node_component SET component = 'asv_system/' || substr(component, 14) WHERE starts_with(component, 'asv_software/')" in sql
     assert "WHERE state = 'queued'" in sql
     assert "ALTER TABLE job ADD COLUMN available_at" in sql
     assert "UPDATE job SET available_at = submitted_at" in sql
@@ -142,7 +144,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0013"
+            assert MigrationContext.configure(connection).get_current_revision() == "0014"
     finally:
         engine.dispose()
 
@@ -718,6 +720,51 @@ def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(
             assert connection.execute(text("SELECT slots FROM node_capability WHERE node_id = 'node-1'")).scalar_one() == 2
             assert connection.execute(text("SELECT allowed_nodes FROM job WHERE id = 'job-1'")).scalar_one() == ["node-1"]
             assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p1'")).scalar_one() == {"resources": {"nodes": ["node-1"], "priority": 2}}
+        command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0014_renames_the_stored_asv_system_names_and_back(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0013")
+    at = datetime(2026, 11, 10, 9, 30, tzinfo=timezone.utc)
+    payload = {"vessels": [{"id": 0, "stack": {"asv_software": "replay", "control_layer": "none"}}], "note": "asv_software stays in plain text"}
+    engine = create_engine(empty_database_url)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO worker_node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('worker-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(
+                text("INSERT INTO worker_node_component (worker_node_id, component) VALUES ('worker-1', 'asv_software/replay'), ('worker-1', 'asv_software/usv_navigation'), ('worker-1', 'control_layer/none')")
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+                    " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at, required_components)"
+                    " VALUES ('job-1', 'simulation', CAST(:payload AS jsonb), '{}', '{}', 0, 0, 0, 3, 'key-1', 'queued', 0, 0, :at, :at, :at, CAST(:components AS jsonb))"
+                ),
+                {"at": at, "payload": json.dumps(payload), "components": '["asv_software/replay", "control_layer/none"]'},
+            )
+        command.upgrade(config, "0014")
+        with engine.connect() as connection:
+            components = connection.execute(text("SELECT component FROM worker_node_component ORDER BY component")).scalars().all()
+            assert components == ["asv_system/replay", "asv_system/usv_navigation", "control_layer/none"]
+            assert connection.execute(text("SELECT required_components FROM job WHERE id = 'job-1'")).scalar_one() == ["asv_system/replay", "control_layer/none"]
+            stored = connection.execute(text("SELECT payload FROM job WHERE id = 'job-1'")).scalar_one()
+            assert stored == {"vessels": [{"id": 0, "stack": {"asv_system": "replay", "control_layer": "none"}}], "note": "asv_software stays in plain text"}
+        command.downgrade(config, "0013")
+        with engine.connect() as connection:
+            components = connection.execute(text("SELECT component FROM worker_node_component ORDER BY component")).scalars().all()
+            assert components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none"]
+            assert connection.execute(text("SELECT required_components FROM job WHERE id = 'job-1'")).scalar_one() == ["asv_software/replay", "control_layer/none"]
+            assert connection.execute(text("SELECT payload FROM job WHERE id = 'job-1'")).scalar_one() == payload
         command.upgrade(config, "head")
     finally:
         engine.dispose()

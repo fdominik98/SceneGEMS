@@ -1,4 +1,4 @@
-"""The replay ASV software as a component of a vessel stack, and how a run configures it.
+"""The replay ASV system as a component of a vessel stack, and how a run configures it.
 
 Replay follows the generated trajectory of its vessel. Towards a control layer that takes heading
 and speed commands it commands every step (ReplayFollower). Towards the custom controller it hands
@@ -9,20 +9,20 @@ the trajectory over as a waypoint mission, which the controller's line-of-sight 
 
 Entry point of the container:
 
-    python -m scenegems_tool.vessel_stack.asv_software.replay.replay_server --port 11410
+    python -m scenegems_tool.vessel_stack.asv_system.replay.replay_server --port 11410
 """
 
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_software.asv_software_server import ParticipantSession
-from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
+from scenegems_tool.vessel_stack.asv_system.asv_system_server import ParticipantSession
+from scenegems_tool.vessel_stack.asv_system.replay.replay_follower import ReplayFollower
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant
-from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SOFTWARE, Message, serve_component, state_row
+from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Message, serve_component, state_row
 from scenegems_tool.vessel_stack.contracts.ports import Port
-from scenegems_tool.vessel_stack.contracts.stack_services import ASV_SOFTWARE_PORT
+from scenegems_tool.vessel_stack.contracts.stack_services import ASV_SYSTEM_PORT
 
 IMPLEMENTATION = "replay"
 
@@ -60,7 +60,7 @@ class ReplaySession(ParticipantSession):
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    serve_component(ROLE_ASV_SOFTWARE, IMPLEMENTATION, ReplaySession, argv, default_port=ASV_SOFTWARE_PORT)
+    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, ReplaySession, argv, default_port=ASV_SYSTEM_PORT)
 
 
 if __name__ == "__main__":

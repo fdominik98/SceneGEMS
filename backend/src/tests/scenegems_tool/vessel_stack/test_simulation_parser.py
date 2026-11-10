@@ -7,7 +7,7 @@ import pytest
 from concrete_level.models.actor_state import ActorState
 from scenegems_tool.messaging.mqtt_agent_client import ExecutionState
 from scenegems_tool.vessel_stack import simulation_parser
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_parser import SimulationParser
@@ -83,13 +83,13 @@ def test_replay_vessels_run_the_autonomous_control_mode():
 
 
 def test_mission_planner_vessels_run_the_external_control_mode():
-    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_software=AsvSoftwareId.MISSION_PLANNER, adapter_ids=["mission_planner_mavlink_port"])
+    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_system=AsvSystemId.MISSION_PLANNER, adapter_ids=["mission_planner_mavlink_port"])
     assert {client.control_mode for client in parser_for(instance).clients} == {"external"}
 
 
 def test_mission_planner_on_its_ground_station_port_is_not_an_arduagent_vessel():
     """The default Mission Planner adapter has no ArduAgent; the lockstep driver runs those instances."""
-    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_software=AsvSoftwareId.MISSION_PLANNER)
+    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_system=AsvSystemId.MISSION_PLANNER)
     with pytest.raises(StackUnavailableError, match="vessel 0 uses mission_planner_gcs_port"):
         parser_for(instance)
 
@@ -126,7 +126,7 @@ def test_a_vessel_that_is_not_in_the_scene_is_rejected():
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], adapter_ids=ARDUAGENT)
     instance.vessels["7"] = VesselConfig(
         agent_id="7",
-        stack=VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+        stack=VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
         connection=instance.vessels["0"].connection,
         adapter_ids=tuple(ARDUAGENT),
     )
@@ -195,7 +195,7 @@ def test_the_agents_of_an_instance_of_simulated_vessels_use_the_session_prefix()
 def test_with_a_real_vessel_every_agent_client_keeps_the_unscoped_wara_ps_topics():
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=ARDUAGENT)
     instance.vessels["1"].context = AgentContext.REAL
-    instance.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+    instance.vessels["1"].stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
     instance.vessels["1"].adapter_ids = ("replay_arduagent_real_vessel",)
     session_connection = mqtt_connection().with_topic_prefix(SESSION_PREFIX)
     parser = parser_for(instance, connection=session_connection)

@@ -3,7 +3,7 @@
 Every simulation runner builds its stack here. The instance is resolved first, so a stack the
 worker node cannot run fails the job before anything starts. The vessel stack then brings its
 containers (vessel_stack/simulation_docker_stack.py): the simulator of the scenario, and per
-vessel its controller and its ASV software. The runner, from the scenario execution image, joins
+vessel its controller and its ASV system. The runner, from the scenario execution image, joins
 their network and steps them (vessel_stack/hosting.py, ContainerHosting).
 
 The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the

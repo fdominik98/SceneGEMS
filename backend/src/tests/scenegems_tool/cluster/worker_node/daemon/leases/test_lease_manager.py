@@ -58,7 +58,7 @@ class Clock:
 
 class FakeWorkerNode:
     worker_node_id = "n1"
-    components = frozenset({"asv_software/replay", "control_layer/none", "simulation_layer/kinematic"})
+    components = frozenset({"asv_system/replay", "control_layer/none", "simulation_layer/kinematic"})
 
     def __init__(self, clock) -> None:
         self.observations = JobObservations(clock)
@@ -117,7 +117,7 @@ def test_offers_beyond_the_slots_and_unknown_types_are_rejected(manager, sender,
 def test_an_offer_needing_a_component_the_worker_node_lacks_is_rejected(manager, sender, jobs):
     from scenegems_tool.cluster.protocol.jobs import JobRequirements
 
-    gazebo = make_job("job-g").model_copy(update={"requirements": JobRequirements(components=["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"])})
+    gazebo = make_job("job-g").model_copy(update={"requirements": JobRequirements(components=["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"])})
     manager.on_offer(make_offer("g", gazebo))
     (reject,) = sender.of(LeaseReject)
     assert reject.reason == "this worker node does not offer the components control_layer/ardupilot, simulation_layer/gazebo"

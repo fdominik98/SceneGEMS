@@ -6,7 +6,7 @@ collects one command and one acknowledgement per participant, and lets the simul
 advance. A run is bit-identical across repeats and processes for the same inputs.
 
 The simulation and the participants come from a hosting (vessel_stack/hosting.py): built in this
-process, or the kinematic simulator's container and every vessel's ASV software container. The
+process, or the kinematic simulator's container and every vessel's ASV system container. The
 run is the same either way, digest included.
 
 An optional step observer sees the recorded states after the start and after every step,
@@ -24,11 +24,11 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import COLAV_AUTOMATON_COMMIT
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import COLAV_AUTOMATON_COMMIT
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant, StepAck, derive_seed
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import stack_agent_name
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting, participant_reports
@@ -36,9 +36,9 @@ from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import InstanceResolution, StackResolver
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation import KinematicSimulation
 
-KINEMATIC_REPLAY_STACK = VesselStackConfig(asv_software=AsvSoftwareId.REPLAY, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
-KINEMATIC_USV_NAVIGATION_STACK = VesselStackConfig(asv_software=AsvSoftwareId.USV_NAVIGATION, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
-_KINEMATIC_STACKS = {AsvSoftwareId.REPLAY: KINEMATIC_REPLAY_STACK, AsvSoftwareId.USV_NAVIGATION: KINEMATIC_USV_NAVIGATION_STACK}
+KINEMATIC_REPLAY_STACK = VesselStackConfig(asv_system=AsvSystemId.REPLAY, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
+KINEMATIC_USV_NAVIGATION_STACK = VesselStackConfig(asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
+_KINEMATIC_STACKS = {AsvSystemId.REPLAY: KINEMATIC_REPLAY_STACK, AsvSystemId.USV_NAVIGATION: KINEMATIC_USV_NAVIGATION_STACK}
 
 # Called with the step index (0 for the initial states) and the states in actor order after
 # that step; returning True ends the run after the step.
@@ -82,7 +82,7 @@ class KinematicInstanceRun:
     result: KinematicRunResult
     resolution: InstanceResolution
     parameters: Mapping[int, UsvNavigationParameters]  # of the vessels on USV Navigation, by vessel id
-    reports: Mapping[int, Mapping[str, Any]]  # what each ASV software reported, by vessel id
+    reports: Mapping[int, Mapping[str, Any]]  # what each ASV system reported, by vessel id
 
     @property
     def stacks(self) -> Dict[str, str]:
@@ -145,13 +145,13 @@ def run_lockstep(simulation: KinematicSimulation, participants: Mapping[int, Loc
     )
 
 
-def kinematic_instance(trajectories: Trajectories, asv_software: Optional[Mapping[int, AsvSoftwareId]] = None, *, environment: Optional[EnvironmentConfig] = None) -> SimulationInstanceConfig:
-    """A kinematic instance of every vessel of the trajectories; replay unless asv_software names another per vessel id."""
-    asv_software = dict(asv_software or {})
+def kinematic_instance(trajectories: Trajectories, asv_system: Optional[Mapping[int, AsvSystemId]] = None, *, environment: Optional[EnvironmentConfig] = None) -> SimulationInstanceConfig:
+    """A kinematic instance of every vessel of the trajectories; replay unless asv_system names another per vessel id."""
+    asv_system = dict(asv_system or {})
     return SimulationInstanceConfig(
         simulation_layer=SimulationLayerId.KINEMATIC,
         environment=environment or EnvironmentConfig.calm(),
-        vessels={str(vessel.id): VesselConfig(agent_id=str(vessel.id), stack=_KINEMATIC_STACKS[asv_software.get(vessel.id, AsvSoftwareId.REPLAY)]) for vessel in trajectories.initial_scene.vessels},
+        vessels={str(vessel.id): VesselConfig(agent_id=str(vessel.id), stack=_KINEMATIC_STACKS[asv_system.get(vessel.id, AsvSystemId.REPLAY)]) for vessel in trajectories.initial_scene.vessels},
     )
 
 
@@ -167,10 +167,10 @@ def run_kinematic_instance(
     attended: bool = False,
     on_step: Optional[StepObserver] = None,
 ) -> KinematicInstanceRun:
-    """Run every simulated vessel of a kinematic instance in lockstep, each on the ASV software of its stack.
+    """Run every simulated vessel of a kinematic instance in lockstep, each on the ASV system of its stack.
 
     The instance and its environment are validated by the resolver first, so wind or waves are
-    rejected with a reason. hosting decides where the simulator and the ASV software run: in this
+    rejected with a reason. hosting decides where the simulator and the ASV system run: in this
     process by default, in the stack's containers with ContainerHosting. A vessel on USV Navigation
     takes its parameters from usv_navigation_parameters (by vessel id), else from its generated
     trajectory. dt defaults to the trajectory time step and steps to its timespan. The run seed is
@@ -188,14 +188,14 @@ def run_kinematic_instance(
             vessel = scene.get_by_id(agent_id)
             if not isinstance(vessel, ConcreteVessel):
                 raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
-            software = vessel_config.stack.asv_software
-            if software == AsvSoftwareId.USV_NAVIGATION:
+            software = vessel_config.stack.asv_system
+            if software == AsvSystemId.USV_NAVIGATION:
                 parameters[vessel.id] = parameters_for(vessel, trajectories, dt, usv_navigation_parameters)
-            participants[vessel.id] = hosting.asv_software(
+            participants[vessel.id] = hosting.asv_system(
                 ParticipantRequest(
                     vessel=vessel,
                     agent_name=stack_agent_name(vessel_config),
-                    asv_software=software,
+                    asv_system=software,
                     adapter=resolution.chains[agent_id].asv_adapter,
                     trajectories=trajectories,
                     dt=dt,
@@ -253,7 +253,7 @@ def run_kinematic_closed_loop(
     own = scene.os if own_ship_id is None else next((vessel for vessel in scene.vessels if vessel.id == own_ship_id), None)
     if own is None:
         raise ValueError(f"No vessel with id {own_ship_id} in the scene")
-    instance = kinematic_instance(trajectories, {own.id: AsvSoftwareId.USV_NAVIGATION}, environment=environment)
+    instance = kinematic_instance(trajectories, {own.id: AsvSystemId.USV_NAVIGATION}, environment=environment)
     given = {own.id: usv_navigation_parameters} if usv_navigation_parameters is not None else None
     run = run_kinematic_instance(trajectories, instance, dt=dt, steps=steps, usv_navigation_parameters=given, hosting=hosting, resolver=resolver, on_step=on_step)
     navigation = run.reports.get(own.id, {})

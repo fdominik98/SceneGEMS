@@ -5,7 +5,7 @@ import pytest
 
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import RepeatabilityTier
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig, WaveConfig
 from scenegems_tool.vessel_stack.registry.catalog import build_registry, default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
@@ -17,7 +17,7 @@ ARDUPILOT_SIM = SimulationLayerId.ARDUPILOT_SIM
 NONE = ControlLayerId.NONE
 ARDUPILOT = ControlLayerId.ARDUPILOT
 CUSTOM = ControlLayerId.CUSTOM
-REAL_VESSEL_STACK = VesselStackConfig(AsvSoftwareId.ON_BOARD, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
+REAL_VESSEL_STACK = VesselStackConfig(AsvSystemId.ON_BOARD, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
 
 
 def with_real_vessel(instance: SimulationInstanceConfig) -> SimulationInstanceConfig:
@@ -58,7 +58,7 @@ class TestInstanceShape:
         registry.register_adapter(
             AdapterSpec(
                 id="planned_probe",
-                source=LayerRef.of(AsvSoftwareId.USV_NAVIGATION),
+                source=LayerRef.of(AsvSystemId.USV_NAVIGATION),
                 target=LayerRef.of(ControlLayerId.ARDUPILOT),
                 description="A planned adapter for this test.",
                 status=SpecStatus.PLANNED,
@@ -66,7 +66,7 @@ class TestInstanceShape:
             ),
             default=True,
         )
-        resolution = StackResolver(registry).resolve_instance(stack_instance(GAZEBO, [0], asv_software=AsvSoftwareId.USV_NAVIGATION))
+        resolution = StackResolver(registry).resolve_instance(stack_instance(GAZEBO, [0], asv_system=AsvSystemId.USV_NAVIGATION))
         assert not resolution.accepted
         assert "planned_probe is planned for phase 3 and not implemented yet" in resolution.reason
 
@@ -113,7 +113,7 @@ class TestInstanceShape:
 
     def test_a_real_vessel_on_simulator_layers_is_rejected(self, resolver):
         instance = stack_instance(GAZEBO, [0])
-        stack = VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.CUSTOM, KINEMATIC)
+        stack = VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.CUSTOM, KINEMATIC)
         instance.vessels["9"] = VesselConfig(agent_id="9", stack=stack, context=AgentContext.REAL)
         resolution = resolver.resolve_instance(instance)
         assert not resolution.accepted
@@ -141,7 +141,7 @@ class TestInstanceShape:
 
     def test_capabilities_are_the_weakest_link_over_all_vessels(self, resolver):
         instance = stack_instance(ARDUPILOT_SIM, [0])
-        instance.vessels["1"] = VesselConfig(agent_id="1", stack=VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ARDUPILOT, ARDUPILOT_SIM))
+        instance.vessels["1"] = VesselConfig(agent_id="1", stack=VesselStackConfig(AsvSystemId.MISSION_PLANNER, ARDUPILOT, ARDUPILOT_SIM))
         resolution = resolver.resolve_instance(instance)
         assert resolution.accepted
         assert resolution.capabilities.interactive_only
@@ -157,14 +157,14 @@ class TestInstanceShape:
 
 class TestAttended:
     def test_mission_planner_is_accepted_attended(self, resolver):
-        instance = stack_instance(GAZEBO, [0], asv_software=AsvSoftwareId.MISSION_PLANNER)
+        instance = stack_instance(GAZEBO, [0], asv_system=AsvSystemId.MISSION_PLANNER)
         assert resolver.resolve_instance(instance, attended=True).accepted
 
     def test_mission_planner_is_rejected_unattended_with_the_note(self, resolver):
-        instance = stack_instance(GAZEBO, [0], asv_software=AsvSoftwareId.MISSION_PLANNER)
+        instance = stack_instance(GAZEBO, [0], asv_system=AsvSystemId.MISSION_PLANNER)
         resolution = resolver.resolve_instance(instance, attended=False)
         assert not resolution.accepted
-        assert "asv_software/mission_planner is interactive only and is rejected for unattended runs: a person drives the vessel" in resolution.reason
+        assert "asv_system/mission_planner is interactive only and is rejected for unattended runs: a person drives the vessel" in resolution.reason
 
     def test_replay_is_accepted_unattended(self, resolver):
         assert resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0]), attended=False).accepted

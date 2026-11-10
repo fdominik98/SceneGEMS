@@ -5,7 +5,7 @@ hosting for every layer they step, and step what they get the same way:
 
 - InProcessHosting builds the layers in the caller's process. Tests and the calibration
   measurements use it; it needs no Docker.
-- ContainerHosting connects to the stack's containers, one per layer: an ASV software and a
+- ContainerHosting connects to the stack's containers, one per layer: an ASV system and a
   controller container per vessel and one simulator per scenario. Cluster jobs and live sessions
   use it; simulation_docker_stack.py generates the services it connects to.
 
@@ -18,13 +18,13 @@ A hosting is used for one run and closed after it.
 from typing import Any, Iterable, List, Mapping, Optional, Protocol, Tuple
 
 from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest, asv_software_runtime
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest, asv_system_runtime
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
 from scenegems_tool.vessel_stack.contracts.stack_services import (
     KINEMATIC_SIM_SERVICE,
-    asv_software_endpoint,
-    asv_software_service_name,
+    asv_system_endpoint,
+    asv_system_service_name,
     controller_endpoint,
     controller_service_name,
     kinematic_sim_endpoint,
@@ -34,8 +34,8 @@ DEFAULT_CONNECT_TIMEOUT_S = 300.0
 
 
 class StackHosting(Protocol):
-    def asv_software(self, request: ParticipantRequest) -> LockstepParticipant:
-        """The lockstep participant of one vessel's ASV software."""
+    def asv_system(self, request: ParticipantRequest) -> LockstepParticipant:
+        """The lockstep participant of one vessel's ASV system."""
 
     def kinematic_simulation(self, initial_scene: ConcreteScene, dt: float, participant_ids: Iterable[str]) -> Any:
         """The kinematic simulator of a scenario, with KinematicSimulation's interface."""
@@ -48,8 +48,8 @@ class StackHosting(Protocol):
 
 
 class InProcessHosting:
-    def asv_software(self, request: ParticipantRequest) -> LockstepParticipant:
-        return asv_software_runtime(request.asv_software).in_process(request)
+    def asv_system(self, request: ParticipantRequest) -> LockstepParticipant:
+        return asv_system_runtime(request.asv_system).in_process(request)
 
     def kinematic_simulation(self, initial_scene: ConcreteScene, dt: float, participant_ids: Iterable[str]) -> Any:
         from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation import KinematicSimulation
@@ -59,7 +59,7 @@ class InProcessHosting:
     def custom_control(self, request: ParticipantRequest, gains: Any) -> Tuple[LockstepParticipant, Any]:
         from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import TwinThrustAutopilot
 
-        return self.asv_software(request), TwinThrustAutopilot(gains)
+        return self.asv_system(request), TwinThrustAutopilot(gains)
 
     def close(self) -> None:
         pass
@@ -78,11 +78,11 @@ class ContainerHosting:
         self._connect_timeout_s = connect_timeout_s
         self._links: List[Any] = []
 
-    def asv_software(self, request: ParticipantRequest) -> LockstepParticipant:
-        from scenegems_tool.vessel_stack.asv_software.asv_software_link import AsvSoftwareLink
+    def asv_system(self, request: ParticipantRequest) -> LockstepParticipant:
+        from scenegems_tool.vessel_stack.asv_system.asv_system_link import AsvSystemLink
 
-        endpoint = self._endpoint(asv_software_service_name(request.agent_name), asv_software_endpoint(request.agent_name))
-        return self._connected(AsvSoftwareLink(endpoint, request))
+        endpoint = self._endpoint(asv_system_service_name(request.agent_name), asv_system_endpoint(request.agent_name))
+        return self._connected(AsvSystemLink(endpoint, request))
 
     def kinematic_simulation(self, initial_scene: ConcreteScene, dt: float, participant_ids: Iterable[str]) -> Any:
         from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_link import KinematicSimLink
@@ -94,8 +94,8 @@ class ContainerHosting:
 
         endpoint = self._endpoint(controller_service_name(request.agent_name), controller_endpoint(request.agent_name))
         controller = self._connected(CustomControllerLink(endpoint, request.vessel, gains))
-        asv_software = self.asv_software(request)
-        return (MissionGuidance(asv_software, controller) if request.hands_over_mission else asv_software), controller
+        asv_system = self.asv_system(request)
+        return (MissionGuidance(asv_system, controller) if request.hands_over_mission else asv_system), controller
 
     def close(self) -> None:
         for link in self._links:
@@ -116,7 +116,7 @@ def in_stack_hosting() -> StackHosting:
 
 
 def participant_reports(participants: Mapping[int, LockstepParticipant]) -> Mapping[int, Mapping[str, Any]]:
-    """What each ASV software reports for the run record, by vessel id; software without a report is left out. Call it before the hosting is closed."""
+    """What each ASV system reports for the run record, by vessel id; software without a report is left out. Call it before the hosting is closed."""
     reports = {}
     for vessel_id, participant in sorted(participants.items()):
         report = getattr(participant, "report", None)

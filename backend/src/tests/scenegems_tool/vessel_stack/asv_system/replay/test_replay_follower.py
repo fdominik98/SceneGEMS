@@ -5,8 +5,8 @@ import math
 import pytest
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.asv_software.replay.line_of_sight import MAX_BIAS_CORRECTION
-from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
+from scenegems_tool.vessel_stack.asv_system.replay.line_of_sight import MAX_BIAS_CORRECTION
+from scenegems_tool.vessel_stack.asv_system.replay.replay_follower import ReplayFollower
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.ports import VesselStateObservation
 from tests.scenegems_tool.vessel_stack.scenarios import make_vessel

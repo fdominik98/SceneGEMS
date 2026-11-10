@@ -18,8 +18,8 @@ import pytest
 from colav_automaton.guards.conditions import classify_encounter
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_participant import UsvNavigationParticipant
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_participant import UsvNavigationParticipant
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import KinematicRunResult, run_kinematic_closed_loop, run_lockstep
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation import KinematicSimulation
 from tests.scenegems_tool.vessel_stack.scenarios import ENCOUNTER_TARGETS, SPEED, encounter_trajectories, make_vessel

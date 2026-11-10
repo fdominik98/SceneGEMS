@@ -23,7 +23,7 @@ from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_sta
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.subsystems.scenario_execution import empty_simulation_session
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselStackConfig
 from tests.scenegems_tool.vessel_stack.scenarios import encounter_trajectories, stack_instance
 from utils.file_system_utils import docker_volume_path
@@ -100,24 +100,24 @@ def test_the_scenario_execution_service_joins_the_vessel_network_to_drive_the_lo
     assert "maritime_net" in _unified(VESSEL_STACK, config)["services"][SERVICE_NAME]["networks"]
 
 
-def test_a_kinematic_session_has_its_simulator_and_an_asv_software_container_per_vessel():
+def test_a_kinematic_session_has_its_simulator_and_an_asv_system_container_per_vessel():
     trajectories = encounter_trajectories("head_on", 20)
     instance = stack_instance(SimulationLayerId.KINEMATIC, [0, 1], control_layer=ControlLayerId.NONE)
-    instance.vessels["0"].stack = VesselStackConfig(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
+    instance.vessels["0"].stack = VesselStackConfig(AsvSystemId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
     _, stack = session_stack.build_simulation_docker_stack_artifacts(instance, trajectories, _connection(), GEOFENCE, embedded_in_subsystem=True, gen_folder=session_stack.session_gen_folder(SCOPE))
     compose = _unified(stack, instance)
-    assert list(compose["services"]) == ["agent_0_asv_software", "agent_1_asv_software", "kinematic_sim", SERVICE_NAME], "named by the vessels' agents"
+    assert list(compose["services"]) == ["agent_0_asv_system", "agent_1_asv_system", "kinematic_sim", SERVICE_NAME], "named by the vessels' agents"
     service = compose["services"][SERVICE_NAME]
-    assert service["depends_on"] == ["agent_0_asv_software", "agent_1_asv_software", "kinematic_sim"]
+    assert service["depends_on"] == ["agent_0_asv_system", "agent_1_asv_system", "kinematic_sim"]
     assert "maritime_net" in service["networks"], "the service steps the containers on the stack's network"
-    assert "scenegems-usv-navigation" in compose["services"]["agent_0_asv_software"]["image"]
+    assert "scenegems-usv-navigation" in compose["services"]["agent_0_asv_system"]["image"]
     assert compose["services"]["kinematic_sim"]["container_name"] == SCOPE.container_name("kinematic_sim")
 
 
 def test_mission_planner_vessels_on_their_ground_station_port_are_found_by_their_mavproxy():
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1])
     operated = instance.vessels["1"]
-    operated.stack = VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
+    operated.stack = VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM)
     assert ground_control_services(instance) == {"1": "agent_1_mavproxy"}
     operated.adapter_ids = ("mission_planner_mavlink_port",)
     assert ground_control_services(instance) == {}, "ArduAgent's external mode forwards to a fixed UDP port instead"
@@ -125,7 +125,7 @@ def test_mission_planner_vessels_on_their_ground_station_port_are_found_by_their
 
 def test_only_the_ground_station_ports_are_published_on_the_host():
     instance = stack_instance(SimulationLayerId.GAZEBO, [0, 1])
-    instance.vessels["1"].stack = VesselStackConfig(AsvSoftwareId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)
+    instance.vessels["1"].stack = VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)
     _, stack = session_stack.build_simulation_docker_stack_artifacts(
         instance, encounter_trajectories("head_on", 20), _connection(), GEOFENCE, embedded_in_subsystem=True, gen_folder=session_stack.session_gen_folder(SCOPE)
     )
@@ -145,7 +145,7 @@ class FakeProject:
 
 
 def test_the_published_ground_station_ports_are_reported_by_agent_id():
-    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_software=AsvSoftwareId.MISSION_PLANNER)
+    instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_system=AsvSystemId.MISSION_PLANNER)
     reported = []
     stack = SimulationSessionStack.__new__(SimulationSessionStack)
     stack.project = FakeProject({"agent_0_mavproxy": 49153})

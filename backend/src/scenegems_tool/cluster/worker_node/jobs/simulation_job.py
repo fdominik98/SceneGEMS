@@ -12,7 +12,7 @@ The payload is the runner's payload model, chosen by its runner field (simulatio
                usv_navigation, environment)
 
 Every runner runs on a stack per job in which each layer has its own container: one simulator for
-the scenario, and per vessel its controller and its ASV software (simulation_runners/vessel_job_stack.py).
+the scenario, and per vessel its controller and its ASV system (simulation_runners/vessel_job_stack.py).
 The runner's container owns the clock and carries the messages between them.
 
 The kinematic and ardupilot runners keep the fields, observation, live monitor and result they had

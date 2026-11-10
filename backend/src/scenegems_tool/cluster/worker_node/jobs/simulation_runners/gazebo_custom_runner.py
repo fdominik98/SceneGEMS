@@ -6,7 +6,7 @@ own_ship_id names another vessel) on USV Navigation and the others on replay, as
 runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
 scenario execution image on the stack network (vessel_job_stack.py). Every vessel has its ASV
-software container and its controller container. The stack has no SITL: the Gazebo service starts
+system container and its controller container. The stack has no SITL: the Gazebo service starts
 paused with the gz-transport actuator listening (GZ_START_PAUSED, GZ_ACTUATOR_PORT), and the
 runner steps the world itself and carries the messages between the containers
 (gz_lockstep_runner.run_gz_custom), so a worker node with the Gazebo layer and no SITL runs it.
@@ -40,7 +40,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
@@ -54,10 +54,10 @@ ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories
 
 def vessel_stacks(mode: KinematicMode = KinematicMode.REPLAY) -> Tuple[StackTriple, ...]:
     """The vessel stacks a run of the mode runs: replay on the custom controller, USV Navigation for the own ship in mode usv_navigation."""
-    replay = (AsvSoftwareId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
+    replay = (AsvSystemId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
     if mode == KinematicMode.REPLAY:
         return (replay,)
-    return (replay, (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO))
+    return (replay, (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO))
 
 
 class GazeboCustomSimulationPayload(ProtocolModel):
@@ -114,19 +114,19 @@ def _instance(payload: GazeboCustomSimulationPayload):
     from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import gz_custom_instance
 
     trajectories = to_trajectories(payload.trajectories)
-    asv_software: Dict[int, AsvSoftwareId] = {}
+    asv_system: Dict[int, AsvSystemId] = {}
     parameters = {}
     if payload.mode == KinematicMode.USV_NAVIGATION:
         own = own_ship(trajectories.initial_scene, payload.own_ship_id)
-        asv_software[own.id] = AsvSoftwareId.USV_NAVIGATION
+        asv_system[own.id] = AsvSystemId.USV_NAVIGATION
         if payload.usv_navigation is not None:
             parameters[own.id] = payload.usv_navigation.to_parameters()
-    instance = gz_custom_instance(trajectories, asv_software, environment=payload.environment.to_environment(payload.seed))
+    instance = gz_custom_instance(trajectories, asv_system, environment=payload.environment.to_environment(payload.seed))
     return trajectories, instance, parameters
 
 
 def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: GazeboCustomSimulationPayload) -> JobStack:
-    """The job's stack: the paused Gazebo service with the world and the vessel models, a controller and an ASV software container per vessel, and the runner."""
+    """The job's stack: the paused Gazebo service with the world and the vessel models, a controller and an ASV system container per vessel, and the runner."""
     try:
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
@@ -144,9 +144,9 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload
 def execute(
     job: JobSpec, payload: GazeboCustomSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None
 ) -> JobResultData:
-    """The in-container part: step the world with every vessel's ASV software and controller containers and describe the run; observation paces it and forwards its states.
+    """The in-container part: step the world with every vessel's ASV system and controller containers and describe the run; observation paces it and forwards its states.
 
-    hosting is where the ASV software and the controllers run: the stack's containers unless given (vessel_stack/hosting.py).
+    hosting is where the ASV system and the controllers run: the stack's containers unless given (vessel_stack/hosting.py).
     """
     from scenegems_tool.vessel_stack.hosting import in_stack_hosting
     from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import run_gz_custom

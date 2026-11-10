@@ -26,7 +26,7 @@ from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B
 
 pytestmark = pytest.mark.postgres
 
-STACK = {"own_ship": {"asv_software": "usv_navigation", "control_layer": "none", "simulation_layer": "kinematic"}}
+STACK = {"own_ship": {"asv_system": "usv_navigation", "control_layer": "none", "simulation_layer": "kinematic"}}
 
 
 def _cases(stores, campaign, class_id, count):

@@ -3,7 +3,7 @@
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from scenegems_tool.messaging.mqtt_agent_client import MqttAgentClient
-from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT
+from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT
 from scenegems_tool.vessel_stack.contracts.docker_stack import DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig
@@ -28,7 +28,7 @@ class ArduPilotControlLayer:
             vessel=vessel,
             mqtt_connection=request.mqtt_connection,
             topic=connection.topic,
-            control_mode=arduagent_control_mode(vessel_config.stack.asv_software) if arduagent else "",
+            control_mode=arduagent_control_mode(vessel_config.stack.asv_system) if arduagent else "",
             agent_name=connection.agent_name,
             reference_geofence=request.reference_geofence,
             initial_state=state,
@@ -56,7 +56,7 @@ class ArduPilotControlLayer:
         sitl_internal_physics = vessel_config.stack.simulation_layer == SimulationLayerId.ARDUPILOT_SIM
         services = generate_vessel_service(agent_stub, connection.port, params_file, request.simulation.speedup, sitl_internal_physics)
         if not arduagent:
-            # The ASV software talks MAVLink to SITL's SERIAL0 itself (mavlink_link.py), so the
+            # The ASV system talks MAVLink to SITL's SERIAL0 itself (mavlink_link.py), so the
             # vessel gets SITL only: no MAVProxy and no ArduAgent. A Mission Planner vessel adds
             # MAVProxy with the operator's ground control station endpoint.
             services = {connection.agent_name: services[connection.agent_name]}

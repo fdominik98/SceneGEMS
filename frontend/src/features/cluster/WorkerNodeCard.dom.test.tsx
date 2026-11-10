@@ -35,7 +35,7 @@ describe("WorkerNodeCard image mismatches", () => {
       out_of_date: true,
       fingerprint_mismatches: [{ image: "scenegems-gazebo-harmonic:latest", required: "fp-gazebo-123456", actual: "fp-old" }],
       components: [
-        { component: "asv_software/replay", images: [], state: "usable" },
+        { component: "asv_system/replay", images: [], state: "usable" },
         { component: "simulation_layer/gazebo", images: ["scenegems-gazebo-harmonic:latest"], state: "out_of_date" },
       ],
     });

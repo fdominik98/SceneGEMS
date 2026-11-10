@@ -48,7 +48,7 @@ def test_hello_lists_slots_and_components(resources):
         worker_node_name="lab-1",
         software_revision="4ac7ef2",
         slots=[SlotOffer(job_type=JobType.SIMULATION, slots=4)],
-        components=["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"],
+        components=["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"],
         resources=resources,
     )
     assert hello.slots[0].slots == 4 and hello.components[2] == "simulation_layer/kinematic"

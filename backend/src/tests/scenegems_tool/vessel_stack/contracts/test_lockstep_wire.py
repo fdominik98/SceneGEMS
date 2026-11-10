@@ -9,7 +9,7 @@ import pytest
 
 from concrete_level.models.actor_state import ActorState
 from scenegems_tool.vessel_stack.contracts import lockstep_wire
-from scenegems_tool.vessel_stack.contracts.lockstep_wire import PROTOCOL_VERSION, ROLE_ASV_SOFTWARE, ROLE_SIMULATOR, Endpoint, LineClient, LineServer, Session, WireError, state_row, state_rows
+from scenegems_tool.vessel_stack.contracts.lockstep_wire import PROTOCOL_VERSION, ROLE_ASV_SYSTEM, ROLE_SIMULATOR, Endpoint, LineClient, LineServer, Session, WireError, state_row, state_rows
 
 
 class EchoSession(Session):
@@ -46,8 +46,8 @@ def test_hello_names_the_protocol_the_role_and_the_implementation(server):
 
 
 def test_a_component_of_another_role_is_refused(server):
-    with pytest.raises(WireError, match="expected a asv_software"):
-        connect(server, role=ROLE_ASV_SOFTWARE)
+    with pytest.raises(WireError, match="expected a asv_system"):
+        connect(server, role=ROLE_ASV_SYSTEM)
 
 
 def test_nothing_listening_fails_after_the_timeout():

@@ -14,7 +14,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 from scenegems_tool.assurance.campaign.config_validation import OWN_SHIP, TARGET_SHIP, vessel_stacks
 from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import DEFAULT_REFERENCE_GEOFENCE
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationLayer
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
@@ -161,7 +161,7 @@ def test_the_live_monitor_and_repeats_are_allowed_on_ardupilot():
 def test_both_layers_resolve_as_replay_on_ardupilot_in_the_bounded_tier(layer):
     stack = _config(_run(layer)).execution.runs[0].stack
     for vessel in vessel_stacks(stack).values():
-        assert (vessel.asv_software, vessel.control_layer, vessel.simulation_layer) == (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId(layer))
+        assert (vessel.asv_system, vessel.control_layer, vessel.simulation_layer) == (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId(layer))
     assert set(vessel_stacks(stack)) == {OWN_SHIP, TARGET_SHIP}
     validated = validate_campaign_config(_config(_run(layer)))
     (resolved,) = validated.runs
@@ -173,8 +173,8 @@ def test_both_layers_resolve_as_replay_on_ardupilot_in_the_bounded_tier(layer):
 def test_usv_navigation_steers_the_own_ship_on_ardupilot_in_the_bounded_tier(layer):
     stack = _config(_run(layer, stack={"mode": "usv_navigation"})).execution.runs[0].stack
     stacks = vessel_stacks(stack)
-    assert (stacks[OWN_SHIP].asv_software, stacks[OWN_SHIP].control_layer) == (AsvSoftwareId.USV_NAVIGATION, ControlLayerId.ARDUPILOT)
-    assert (stacks[TARGET_SHIP].asv_software, stacks[TARGET_SHIP].control_layer) == (AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT)
+    assert (stacks[OWN_SHIP].asv_system, stacks[OWN_SHIP].control_layer) == (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT)
+    assert (stacks[TARGET_SHIP].asv_system, stacks[TARGET_SHIP].control_layer) == (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT)
     (resolved,) = validate_campaign_config(_config(_run(layer, stack={"mode": "usv_navigation"}))).runs
     assert resolved.repeatability_tier == "bounded"
 

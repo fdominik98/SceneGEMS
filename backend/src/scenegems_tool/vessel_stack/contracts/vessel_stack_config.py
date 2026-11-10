@@ -1,7 +1,7 @@
 """Typed configuration of a simulation instance: environment plus one stack triple per vessel.
 
 All vessels of one instance share one simulation layer instance and one clock, and each
-vessel has its own (ASV software, control layer, simulation layer) triple. The registry
+vessel has its own (ASV system, control layer, simulation layer) triple. The registry
 resolver validates a configuration before anything is built from it.
 """
 
@@ -11,17 +11,17 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
 
 @dataclass(frozen=True)
 class VesselStackConfig:
-    asv_software: AsvSoftwareId
+    asv_system: AsvSystemId
     control_layer: ControlLayerId
     simulation_layer: SimulationLayerId
 
     def __str__(self) -> str:
-        return f"{self.asv_software.value}, {self.control_layer.value}, {self.simulation_layer.value}"
+        return f"{self.asv_system.value}, {self.control_layer.value}, {self.simulation_layer.value}"
 
 
 @dataclass
@@ -84,7 +84,7 @@ class AgentConnection:
 @dataclass
 class VesselConfig:
     agent_id: str
-    # A real vessel's stack is (ASV software, real_vessel, real_vessel): its own autopilot and hull,
+    # A real vessel's stack is (ASV system, real_vessel, real_vessel): its own autopilot and hull,
     # commanded through its ArduAgent by replay or Mission Planner, or left to its on_board software.
     stack: VesselStackConfig
     context: AgentContext = AgentContext.SIMULATION

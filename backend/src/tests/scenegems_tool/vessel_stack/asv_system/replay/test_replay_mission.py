@@ -1,6 +1,6 @@
 """replay_mission: the ArduAgent mission shaped from a generated trajectory."""
 
-from scenegems_tool.vessel_stack.asv_software.replay.replay_mission import REPLAY_MISSION_MAX_SCENES, cap_mission_trajectories, replay_mission_waypoints
+from scenegems_tool.vessel_stack.asv_system.replay.replay_mission import REPLAY_MISSION_MAX_SCENES, cap_mission_trajectories, replay_mission_waypoints
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, straight_trajectories
 
 

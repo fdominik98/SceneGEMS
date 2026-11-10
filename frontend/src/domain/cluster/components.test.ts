@@ -15,8 +15,8 @@ import {
 } from "./components";
 import { workerNodeViewSchema } from "./schemas";
 
-const GAZEBO = ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
-const CUSTOM = ["asv_software/replay", "control_layer/custom", "simulation_layer/gazebo"];
+const GAZEBO = ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"];
+const CUSTOM = ["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo"];
 
 function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots: Record<string, number> = { simulation: 2 }) {
   return workerNodeViewSchema.parse(
@@ -30,32 +30,32 @@ function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots:
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
     expect(COMPONENTS).toHaveLength(13);
-    expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_software/replay", "monitoring", "gpu"])).toEqual(["asv_software/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
+    expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_system/replay", "monitoring", "gpu"])).toEqual(["asv_system/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
     expect(componentLabel("simulation_layer/ardupilot_sim")).toBe("ArduPilot SITL");
     expect(componentLabel("gpu")).toBe("gpu");
     expect(describeComponents(GAZEBO)).toBe("Replay, ArduPilot and Gazebo");
   });
 
   it("derives a run's components from its stack section as the stage graph does", () => {
-    expect(runStackComponents(undefined)).toEqual(["asv_software/replay", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(runStackComponents(undefined)).toEqual(["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"]);
     expect(runStackComponents({ simulation_layer: "kinematic", mode: "usv_navigation" })).toEqual([
-      "asv_software/replay",
-      "asv_software/usv_navigation",
+      "asv_system/replay",
+      "asv_system/usv_navigation",
       "control_layer/none",
       "simulation_layer/kinematic",
     ]);
     expect(runStackComponents({ simulation_layer: "gazebo", speedup: 2 })).toEqual(GAZEBO);
     expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "ardupilot" })).toEqual(GAZEBO);
     expect(runStackComponents({ simulation_layer: "ardupilot_sim", mode: "usv_navigation" })).toEqual([
-      "asv_software/replay",
-      "asv_software/usv_navigation",
+      "asv_system/replay",
+      "asv_system/usv_navigation",
       "control_layer/ardupilot",
       "simulation_layer/ardupilot_sim",
     ]);
     expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom" })).toEqual(CUSTOM);
     expect(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" })).toEqual([
-      "asv_software/replay",
-      "asv_software/usv_navigation",
+      "asv_system/replay",
+      "asv_system/usv_navigation",
       "control_layer/custom",
       "simulation_layer/gazebo",
     ]);
@@ -67,7 +67,7 @@ describe("the component catalog", () => {
     expect(simulationPayloadComponents({ runner: "gazebo_custom" })).toEqual(CUSTOM);
     expect(simulationPayloadComponents({ runner: "gazebo_custom", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }));
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", mode: "usv_navigation" }));
-    expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
+    expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
     expect(jobComponents("monitoring.post_hoc")).toEqual(["monitoring"]);
     expect(jobComponents("calibration.deviation")).toEqual(["calibration"]);
     expect(jobComponents("future.kind")).toEqual([]);
@@ -77,7 +77,7 @@ describe("the component catalog", () => {
 describe("a worker node's components", () => {
   it("runs a job with slots for its type and every component usable", () => {
     const workerNode = workerNodeWith([
-      ["asv_software/replay", "usable"],
+      ["asv_system/replay", "usable"],
       ["control_layer/ardupilot", "usable"],
       ["simulation_layer/gazebo", "out_of_date"],
       ["simulation_layer/ardupilot_sim", "usable"],
@@ -86,7 +86,7 @@ describe("a worker node's components", () => {
     expect(isWhollyOutOfDate(workerNode)).toBe(false);
     expect(listsJob(workerNode, "simulation", GAZEBO)).toBe(true);
     expect(offersJob(workerNode, "simulation", GAZEBO)).toBe(false);
-    expect(offersJob(workerNode, "simulation", ["asv_software/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"])).toBe(true);
+    expect(offersJob(workerNode, "simulation", ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"])).toBe(true);
     expect(offersJob(workerNode, "monitoring.post_hoc", [])).toBe(false);
   });
 

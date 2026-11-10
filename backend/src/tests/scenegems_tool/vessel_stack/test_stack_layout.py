@@ -2,15 +2,15 @@
 
 import pytest
 
-from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSoftware, DockerControlLayer, DockerSimulationLayer
+from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSystem, DockerControlLayer, DockerSimulationLayer
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import (
-    ASV_SOFTWARE_PORT,
+    ASV_SYSTEM_PORT,
     CONTROLLER_PORT,
     KINEMATIC_SIM_PORT,
-    asv_software_endpoint,
-    asv_software_service_name,
+    asv_system_endpoint,
+    asv_system_service_name,
     controller_endpoint,
     controller_service_name,
     is_participant_service,
@@ -41,58 +41,58 @@ def images_of(instance) -> dict:
 
 
 class TestEveryLayerHasItsContainer:
-    """Per stack: one simulator for the scenario, and per vessel its controller and its ASV software."""
+    """Per stack: one simulator for the scenario, and per vessel its controller and its ASV system."""
 
     def test_kinematic_with_replay(self):
         assert images_of(kinematic_instance(TRAJECTORIES)) == {
-            "vessel_0_asv_software": SCENARIO_EXECUTION,
-            "vessel_1_asv_software": SCENARIO_EXECUTION,
+            "vessel_0_asv_system": SCENARIO_EXECUTION,
+            "vessel_1_asv_system": SCENARIO_EXECUTION,
             "kinematic_sim": SCENARIO_EXECUTION,
         }, "control layer none is the absence of a controller, so it has no container"
 
     def test_kinematic_with_usv_navigation_on_the_own_ship(self):
-        assert images_of(kinematic_instance(TRAJECTORIES, {0: AsvSoftwareId.USV_NAVIGATION})) == {
-            "vessel_0_asv_software": USV_NAVIGATION,
-            "vessel_1_asv_software": SCENARIO_EXECUTION,
+        assert images_of(kinematic_instance(TRAJECTORIES, {0: AsvSystemId.USV_NAVIGATION})) == {
+            "vessel_0_asv_system": USV_NAVIGATION,
+            "vessel_1_asv_system": SCENARIO_EXECUTION,
             "kinematic_sim": SCENARIO_EXECUTION,
         }
 
     def test_gazebo_with_the_custom_controller(self):
-        instance = stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_software=AsvSoftwareId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM)
+        instance = stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM)
         assert images_of(instance) == {
             "agent_0_controller": SCENARIO_EXECUTION,
-            "agent_0_asv_software": USV_NAVIGATION,
+            "agent_0_asv_system": USV_NAVIGATION,
             "agent_1_controller": SCENARIO_EXECUTION,
-            "agent_1_asv_software": USV_NAVIGATION,
+            "agent_1_asv_system": USV_NAVIGATION,
             "gazebo": GAZEBO,
         }
 
-    @pytest.mark.parametrize("asv_software, asv_image", [(AsvSoftwareId.REPLAY, SCENARIO_EXECUTION), (AsvSoftwareId.USV_NAVIGATION, USV_NAVIGATION)])
-    def test_ardupilot_on_its_own_physics(self, asv_software, asv_image):
-        instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_software=asv_software)
-        assert images_of(instance) == {"agent_0": SITL, "agent_0_asv_software": asv_image}, "SITL is the controller and the simulator of its vessel"
+    @pytest.mark.parametrize("asv_system, asv_image", [(AsvSystemId.REPLAY, SCENARIO_EXECUTION), (AsvSystemId.USV_NAVIGATION, USV_NAVIGATION)])
+    def test_ardupilot_on_its_own_physics(self, asv_system, asv_image):
+        instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], asv_system=asv_system)
+        assert images_of(instance) == {"agent_0": SITL, "agent_0_asv_system": asv_image}, "SITL is the controller and the simulator of its vessel"
 
     def test_ardupilot_on_gazebo(self):
         instance = stack_instance(SimulationLayerId.GAZEBO, [0])
-        assert images_of(instance) == {"agent_0": SITL, "agent_0_asv_software": SCENARIO_EXECUTION, "gazebo": GAZEBO}
+        assert images_of(instance) == {"agent_0": SITL, "agent_0_asv_system": SCENARIO_EXECUTION, "gazebo": GAZEBO}
 
-    def test_through_arduagent_the_asv_software_is_arduagent_itself(self):
+    def test_through_arduagent_the_asv_system_is_arduagent_itself(self):
         instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], adapter_ids=("replay_arduagent_follower",))
         assert set(services_of(instance)) == {"agent_0", "agent_0_mavproxy", "agent_0_arduagent"}, "no replay container next to ArduAgent"
 
 
 class TestComponentServices:
     def test_a_component_listens_on_the_stack_network_only(self):
-        services = services_of(kinematic_instance(TRAJECTORIES, {0: AsvSoftwareId.USV_NAVIGATION}))
+        services = services_of(kinematic_instance(TRAJECTORIES, {0: AsvSystemId.USV_NAVIGATION}))
         for service in services.values():
             assert service["networks"] == ["maritime_net"]
             assert "ports" not in service and "volumes" not in service, "the runner sends a component what it needs when it starts it"
         assert services["kinematic_sim"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_server", "--port", str(KINEMATIC_SIM_PORT)]
-        assert services["vessel_1_asv_software"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_software.replay.replay_server", "--port", str(ASV_SOFTWARE_PORT)]
-        assert services["vessel_0_asv_software"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_server", "--port", str(ASV_SOFTWARE_PORT)]
+        assert services["vessel_1_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", str(ASV_SYSTEM_PORT)]
+        assert services["vessel_0_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server", "--port", str(ASV_SYSTEM_PORT)]
 
     def test_the_runner_finds_each_component_by_its_service_name(self):
-        assert asv_software_endpoint("agent_3") == Endpoint(asv_software_service_name("agent_3"), ASV_SOFTWARE_PORT) == Endpoint("agent_3_asv_software", 11410)
+        assert asv_system_endpoint("agent_3") == Endpoint(asv_system_service_name("agent_3"), ASV_SYSTEM_PORT) == Endpoint("agent_3_asv_system", 11410)
         assert controller_endpoint("agent_3") == Endpoint(controller_service_name("agent_3"), CONTROLLER_PORT) == Endpoint("agent_3_controller", 11420)
         assert kinematic_sim_endpoint() == Endpoint("kinematic_sim", 11430)
 
@@ -101,7 +101,7 @@ class TestComponentServices:
         assert stack_agent_name(stack_instance(SimulationLayerId.GAZEBO, [1]).vessels["1"]) == "agent_1"
 
     def test_participant_services_are_told_from_the_others(self):
-        assert is_participant_service("agent_0_asv_software") and is_participant_service("agent_0_controller")
+        assert is_participant_service("agent_0_asv_system") and is_participant_service("agent_0_controller")
         assert not any(is_participant_service(name) for name in ("agent_0", "asv_0", "gazebo", "kinematic_sim", "agent_0_mavproxy", "agent_0_arduagent"))
 
 
@@ -114,12 +114,12 @@ class TestRegistryBindings:
             "simulation_layer/ardupilot_sim": DockerSimulationLayer,
             "control_layer/ardupilot": DockerControlLayer,
             "control_layer/custom": DockerControlLayer,
-            "replay_state_follower": DockerAsvSoftware,
-            "replay_mavlink_lockstep": DockerAsvSoftware,
-            "custom_controller_waypoint_follower": DockerAsvSoftware,
-            "usv_navigation_in_process": DockerAsvSoftware,
-            "usv_navigation_mavlink_lockstep": DockerAsvSoftware,
-            "custom_controller_heading_speed_input": DockerAsvSoftware,
+            "replay_state_follower": DockerAsvSystem,
+            "replay_mavlink_lockstep": DockerAsvSystem,
+            "custom_controller_waypoint_follower": DockerAsvSystem,
+            "usv_navigation_in_process": DockerAsvSystem,
+            "usv_navigation_mavlink_lockstep": DockerAsvSystem,
+            "custom_controller_heading_speed_input": DockerAsvSystem,
         }
         for spec_id, kind in kinds.items():
             assert isinstance(registry.docker(spec_id)(), kind), spec_id
@@ -130,13 +130,13 @@ class TestRegistryBindings:
 
     def test_the_container_specs_name_what_the_services_run(self):
         resolver = default_resolver()
-        chain = resolver.resolve(VesselStackConfig(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO))
+        chain = resolver.resolve(VesselStackConfig(AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO))
         images = {container.image for spec in chain.specs for container in spec.containers}
         assert images == {USV_NAVIGATION, SCENARIO_EXECUTION, GAZEBO}
         usv_navigation = chain.specs[0].containers[0]
         assert usv_navigation.build_fingerprint_sources == (
             "deploy/images/usv_navigation",
-            "backend/src/scenegems_tool/vessel_stack/asv_software/usv_navigation/usv_navigation_server.py",
+            "backend/src/scenegems_tool/vessel_stack/asv_system/usv_navigation/usv_navigation_server.py",
             "backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py",
         ), "the image copies exactly these two source files"
 

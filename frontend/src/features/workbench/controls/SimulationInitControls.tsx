@@ -13,9 +13,9 @@ import type { SimulationSetup } from "../cluster/simulationJobs";
 import { applySetupRequestToDrafts, applySimulationModels } from "./simulationSetupDrafts";
 import { useSimulationSetupRequestStore } from "./simulationSetupRequest";
 import {
-  ASV_SOFTWARE,
-  ASV_SOFTWARE_LABELS,
-  asvSoftwareChoice,
+  ASV_SYSTEM,
+  ASV_SYSTEM_LABELS,
+  asvSystemChoice,
   buildInitializeSimulationConnectionsByAgentIdMap,
   buildInitialVesselConnectionDrafts,
   CONTROL_LAYER_LABELS,
@@ -23,12 +23,12 @@ import {
   controlLayerChoice,
   mergePersistedVesselSettings,
   normalizeDraftStack,
-  REAL_VESSEL_ASV_SOFTWARE,
+  REAL_VESSEL_ASV_SYSTEM,
   realVesselSoftwareChoice,
   round2,
   toPersistedVesselDrafts,
   toTopicSegment,
-  type AsvSoftware,
+  type AsvSystem,
   type ControlLayer,
   DEFAULT_SIMULATION_SPEED,
   GLOBAL_SIMULATOR_TYPES,
@@ -194,7 +194,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
   const receivedSimulationModels = usePlaybackStore((s) => s.receivedSimulationModels);
   const stackOptions = usePlaybackStore((s) => s.stackOptions);
   // The drafts as shown and sent: a simulator that does not run a vessel's control layer gets one
-  // that runs its ASV software. The stored drafts keep the user's choice for the other simulators.
+  // that runs its ASV system. The stored drafts keep the user's choice for the other simulators.
   const stackDrafts = useMemo(
     () => vesselConnectionDrafts.map((draft) => normalizeDraftStack(draft, simulatorType, stackOptions)),
     [vesselConnectionDrafts, simulatorType, stackOptions]
@@ -263,7 +263,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
       vessels: stackDrafts.map((draft) => ({
         vesselId: draft.vesselId,
         context: draft.context,
-        asvSoftware: draft.asvSoftware,
+        asvSystem: draft.asvSystem,
         controlLayer: draft.controlLayer,
         isOwnShip: ownShipIds.has(draft.vesselId),
       })),
@@ -378,7 +378,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
             <tr>
               <th>Vessel</th>
               <th>Kind</th>
-              <th>ASV software</th>
+              <th>ASV system</th>
               <th>Control layer</th>
             </tr>
           </thead>
@@ -386,7 +386,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
             {vesselsWithKind ? (
               stackDrafts.map((draft) => {
                 const real = draft.context === "real";
-                const softwareChoices = real ? REAL_VESSEL_ASV_SOFTWARE : ASV_SOFTWARE;
+                const softwareChoices = real ? REAL_VESSEL_ASV_SYSTEM : ASV_SYSTEM;
                 const name = vesselText(draft.vesselId, ownShipIds.has(draft.vesselId));
                 return (
                   <tr key={draft.vesselId}>
@@ -401,16 +401,16 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                     </td>
                     <td>
                       <select
-                        aria-label={`ASV software of ${name}`}
-                        value={draft.asvSoftware}
+                        aria-label={`ASV system of ${name}`}
+                        value={draft.asvSystem}
                         disabled={disabled}
-                        onChange={(e) => updateConnection(draft.vesselId, "asvSoftware", e.target.value as AsvSoftware)}
+                        onChange={(e) => updateConnection(draft.vesselId, "asvSystem", e.target.value as AsvSystem)}
                       >
                         {softwareChoices.map((software) => {
-                          const choice = real ? realVesselSoftwareChoice(stackOptions, software) : asvSoftwareChoice(stackOptions, simulatorType, software);
+                          const choice = real ? realVesselSoftwareChoice(stackOptions, software) : asvSystemChoice(stackOptions, simulatorType, software);
                           return (
                             <option key={software} value={software} disabled={!choice.available} title={choice.reason}>
-                              {ASV_SOFTWARE_LABELS[software]}
+                              {ASV_SYSTEM_LABELS[software]}
                             </option>
                           );
                         })}
@@ -426,11 +426,11 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                           aria-label={`Control layer of ${name}`}
                           value={draft.controlLayer}
                           disabled={disabled}
-                          title={controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, draft.controlLayer).reason}
+                          title={controlLayerChoice(stackOptions, simulatorType, draft.asvSystem, draft.controlLayer).reason}
                           onChange={(e) => updateConnection(draft.vesselId, "controlLayer", e.target.value as ControlLayer)}
                         >
                           {CONTROL_LAYERS.map((layer) => {
-                            const choice = controlLayerChoice(stackOptions, simulatorType, draft.asvSoftware, layer);
+                            const choice = controlLayerChoice(stackOptions, simulatorType, draft.asvSystem, layer);
                             return (
                               <option key={layer} value={layer} disabled={!choice.available} title={choice.reason}>
                                 {CONTROL_LAYER_LABELS[layer]}

@@ -1,7 +1,7 @@
 import { SIMULATION_JOB, simulationPayloadComponents } from "../../../domain/cluster/components";
 import type { JobSubmission } from "../../../domain/cluster/operatorApi";
 import type { ReferenceGeofence } from "../connection/referenceGeofence";
-import type { AsvSoftware, ControlLayer, GlobalSimulatorType, SimulationContext } from "../controls/simulationInitConfig";
+import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } from "../controls/simulationInitConfig";
 
 /**
  * Where a workbench simulation runs. A setup a runner of the cluster's simulation job runs goes
@@ -25,7 +25,7 @@ export type RunMode = "replay" | "usv_navigation";
 export interface SimulationVesselSetup {
   vesselId: string;
   context: SimulationContext;
-  asvSoftware: AsvSoftware;
+  asvSystem: AsvSystem;
   controlLayer: ControlLayer;
   isOwnShip: boolean;
 }
@@ -88,12 +88,12 @@ type ControlLayerOfPlan = "none" | "ardupilot" | "custom";
 
 /** The run mode of vessels that all sit on one control layer: replay, or USV Navigation on the own ship alone; null when no runner takes it. */
 function modeOf(vessels: readonly SimulationVesselSetup[]): Pick<KinematicRunPlan, "mode" | "ownShipId"> | null {
-  const navigators = vessels.filter((vessel) => vessel.asvSoftware !== "replay");
+  const navigators = vessels.filter((vessel) => vessel.asvSystem !== "replay");
   if (navigators.length === 0) {
     return { mode: "replay", ownShipId: null };
   }
   const ownShip = navigators[0];
-  if (navigators.length === 1 && ownShip.isOwnShip && ownShip.asvSoftware === "usv_navigation") {
+  if (navigators.length === 1 && ownShip.isOwnShip && ownShip.asvSystem === "usv_navigation") {
     const ownShipId = Number.parseInt(ownShip.vesselId, 10);
     return { mode: "usv_navigation", ownShipId: Number.isFinite(ownShipId) ? ownShipId : null };
   }
@@ -117,7 +117,7 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   if (vessels.some((vessel) => vessel.context === "real")) {
     return { where: "session", reason: "A real vessel joins only a live session over the MQTT broker." };
   }
-  if (vessels.some((vessel) => vessel.asvSoftware === "mission_planner")) {
+  if (vessels.some((vessel) => vessel.asvSystem === "mission_planner")) {
     return { where: "session", reason: "Mission Planner is flown from the desktop in a live session." };
   }
   if (vessels.length === 0) {

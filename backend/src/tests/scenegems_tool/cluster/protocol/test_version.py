@@ -22,8 +22,9 @@ def test_mismatch_message_names_both_versions_and_the_fix():
     assert "same SceneGEMS revision" in message
 
 
-def test_the_worker_node_terminology_is_version_8():
+def test_the_asv_system_terminology_is_version_9():
     # Version 6: slots and components in the Hello, components in the requirements, one simulation job type.
     # Version 7: the design_space_exploration job type, and list result fields stored as one artifact per item; an older worker node is refused by its version
     # Version 8: control node and worker node in the field names, the control socket path and the artifact header
-    assert PROTOCOL_VERSION == 8
+    # Version 9: asv_system as the key of a vessel's stack and in the component ids
+    assert PROTOCOL_VERSION == 9

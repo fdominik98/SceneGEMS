@@ -1,19 +1,19 @@
-/** ASV software of a vessel stack (backend `AsvSoftwareId`). */
+/** ASV system of a vessel stack (backend `AsvSystemId`). */
 /** on_board: the vessel's own software steers it (a real vessel); SceneGEMS runs none. */
-export type AsvSoftwareWire = "replay" | "usv_navigation" | "mission_planner" | "on_board";
+export type AsvSystemWire = "replay" | "usv_navigation" | "mission_planner" | "on_board";
 /** Control layer of a vessel stack (backend `ControlLayerId`). */
 /** real_vessel: a real vessel's own autopilot, which is also its simulation layer ("Real vessel"). */
 export type ControlLayerWire = "ardupilot" | "custom" | "none" | "real_vessel";
 
 /**
  * Per-agent connection info for `initialize_simulation` (matches server TypedDict).
- * `asvSoftware` and `controlLayer` choose the vessel's stack; `controlMode` is ArduAgent's mode
- * for the same ASV software (absent for USV Navigation, which ArduAgent cannot drive).
+ * `asvSystem` and `controlLayer` choose the vessel's stack; `controlMode` is ArduAgent's mode
+ * for the same ASV system (absent for USV Navigation, which ArduAgent cannot drive).
  */
 export type SimulationConnectionInfo =
   | {
       context: "simulation";
-      asvSoftware?: AsvSoftwareWire;
+      asvSystem?: AsvSystemWire;
       controlLayer?: ControlLayerWire;
       controlMode?: "autonomous" | "external";
       agentName: string;
@@ -27,7 +27,7 @@ export type SimulationConnectionInfo =
     }
   | {
       context: "real";
-      asvSoftware?: AsvSoftwareWire;
+      asvSystem?: AsvSystemWire;
       controlLayer?: ControlLayerWire;
       controlMode?: "autonomous" | "external";
       agentName: string;
@@ -68,10 +68,10 @@ export interface SimulationModelsPayload {
   connectionsByAgentId: Record<string, SimulationConnectionInfo>;
 }
 
-/** One (simulator, ASV software, control layer) combination of the backend's stack resolver. */
+/** One (simulator, ASV system, control layer) combination of the backend's stack resolver. */
 export interface StackOptionWire {
   simulatorType: string;
-  asvSoftware: AsvSoftwareWire;
+  asvSystem: AsvSystemWire;
   controlLayer: ControlLayerWire;
   available: boolean;
   /** "available", "planned (phase n)" or "unavailable". */
@@ -90,7 +90,7 @@ export interface StackOptionWire {
 
 export interface StackOptionsPayload {
   simulatorTypes: string[];
-  asvSoftware: AsvSoftwareWire[];
+  asvSystem: AsvSystemWire[];
   controlLayers: ControlLayerWire[];
   combinations: StackOptionWire[];
 }

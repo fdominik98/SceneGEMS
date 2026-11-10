@@ -3,12 +3,12 @@
 import pytest
 
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec, UnsupportedConnection
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.catalog import default_registry
 from scenegems_tool.vessel_stack.registry.measured_capabilities import parse_capability_measurement
 
-REPLAY = LayerRef.of(AsvSoftwareId.REPLAY)
+REPLAY = LayerRef.of(AsvSystemId.REPLAY)
 NONE = LayerRef.of(ControlLayerId.NONE)
 ARDUPILOT = LayerRef.of(ControlLayerId.ARDUPILOT)
 KINEMATIC = LayerRef.of(SimulationLayerId.KINEMATIC)
@@ -32,7 +32,7 @@ class TestRegistration:
         assert registry.layer(KINEMATIC) is None
 
     def test_duplicate_layer_fails(self, registry):
-        with pytest.raises(ValueError, match="Spec asv_software/replay is already registered"):
+        with pytest.raises(ValueError, match="Spec asv_system/replay is already registered"):
             registry.register_layer(LayerSpec(layer=REPLAY, description="again"))
 
     def test_duplicate_adapter_id_fails(self, registry):
@@ -42,7 +42,7 @@ class TestRegistration:
 
     def test_adapter_and_layer_ids_share_one_namespace(self, registry):
         with pytest.raises(ValueError, match="already registered"):
-            registry.register_adapter(adapter("asv_software/replay", ARDUPILOT, KINEMATIC))
+            registry.register_adapter(adapter("asv_system/replay", ARDUPILOT, KINEMATIC))
 
     def test_first_adapter_of_a_connection_is_the_default(self, registry):
         registry.register_adapter(adapter("first"))
@@ -50,7 +50,7 @@ class TestRegistration:
 
     def test_second_adapter_on_a_connection_must_say_whether_it_is_the_default(self, registry):
         registry.register_adapter(adapter("first"))
-        with pytest.raises(ValueError, match="both connect asv_software/replay to control_layer/none; pass default=True or default=False"):
+        with pytest.raises(ValueError, match="both connect asv_system/replay to control_layer/none; pass default=True or default=False"):
             registry.register_adapter(adapter("second"))
 
     def test_alternative_does_not_replace_the_default(self, registry):
@@ -190,22 +190,22 @@ class TestDefaultRegistry:
             assert registry.unsupported_between(source, target) is not None
 
 
-class TestOnBoardAsvSoftware:
-    ON_BOARD = LayerRef.of(AsvSoftwareId.ON_BOARD)
+class TestOnBoardAsvSystem:
+    ON_BOARD = LayerRef.of(AsvSystemId.ON_BOARD)
 
-    def test_an_adapter_from_on_board_needs_a_layer_that_brings_asv_software(self, registry):
+    def test_an_adapter_from_on_board_needs_a_layer_that_brings_asv_system(self, registry):
         registry.register_layer(LayerSpec(layer=self.ON_BOARD, description="on board"))
-        with pytest.raises(ValueError, match="leaves the vessel to on board ASV software, but control_layer/none is not registered with on_board_asv_software"):
+        with pytest.raises(ValueError, match="leaves the vessel to on board ASV system, but control_layer/none is not registered with on_board_asv_system"):
             registry.register_adapter(adapter("on_board_probe", self.ON_BOARD, NONE))
 
-    def test_a_layer_that_brings_asv_software_accepts_it(self):
+    def test_a_layer_that_brings_asv_system_accepts_it(self):
         registry = AdapterRegistry()
         hosting = LayerRef.of(ControlLayerId.REAL_VESSEL)
         registry.register_layer(LayerSpec(layer=self.ON_BOARD, description="on board"))
-        registry.register_layer(LayerSpec(layer=hosting, description="hosts its own software", on_board_asv_software=True))
+        registry.register_layer(LayerSpec(layer=hosting, description="hosts its own software", on_board_asv_system=True))
         assert registry.register_adapter(adapter("on_board_probe", self.ON_BOARD, hosting)).target == hosting
 
     def test_an_unregistered_target_is_refused_too(self):
         registry = AdapterRegistry()
-        with pytest.raises(ValueError, match="on_board_asv_software"):
+        with pytest.raises(ValueError, match="on_board_asv_system"):
             registry.register_adapter(adapter("on_board_probe", self.ON_BOARD, NONE))

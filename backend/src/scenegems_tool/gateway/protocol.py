@@ -67,11 +67,11 @@ class QueryStackOptionsMessage(TypedDict):
 
 
 class StackOptionsMessage(TypedDict):
-    """Every (simulatorType, asvSoftware, controlLayer) the resolver knows, with whether the workbench can run it and why not."""
+    """Every (simulatorType, asvSystem, controlLayer) the resolver knows, with whether the workbench can run it and why not."""
 
     type: Literal["stack_options"]
     simulatorTypes: List[str]
-    asvSoftware: List[str]
+    asvSystem: List[str]
     controlLayers: List[str]
     combinations: List[Dict[str, Any]]
 
@@ -90,9 +90,9 @@ class ResetSimulationMessage(TypedDict):
 
 class SimulationConnectionInfo(TypedDict):
     context: str
-    # The agent's stack: asvSoftware and controlLayer (AsvSoftwareId and ControlLayerId values). An
-    # older client sends only controlMode (autonomous or external), which names the ASV software.
-    asvSoftware: NotRequired[str]
+    # The agent's stack: asvSystem and controlLayer (AsvSystemId and ControlLayerId values). An
+    # older client sends only controlMode (autonomous or external), which names the ASV system.
+    asvSystem: NotRequired[str]
     controlLayer: NotRequired[str]
     controlMode: NotRequired[str]
     agentName: str
@@ -354,7 +354,7 @@ def _parse_agent_context(connection: SimulationConnectionInfo) -> AgentContext:
 def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanceConfig:
     """Convert an inbound simulation-models body (initialize_simulation /
     generate_simulation_models / simulation_models) into a typed simulation instance.
-    simulatorType and each agent's asvSoftware and controlLayer (or controlMode) become one
+    simulatorType and each agent's asvSystem and controlLayer (or controlMode) become one
     stack triple per vessel; a real agent's stack is on its own layers (real_vessel), and an
     instance with a real vessel selects the ArduAgent adapters (see gateway.workbench_stack_mapping)."""
     wave = body["wave"]
@@ -368,7 +368,7 @@ def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanc
     stacks = {
         agent_id: workbench_stack(
             simulator_type,
-            connection.get("asvSoftware"),
+            connection.get("asvSystem"),
             connection.get("controlLayer"),
             connection.get("controlMode"),
             real_vessel=contexts[agent_id] == AgentContext.REAL,
@@ -404,14 +404,14 @@ def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanc
 def _connection_info(vessel: VesselConfig) -> SimulationConnectionInfo:
     info = SimulationConnectionInfo(
         context=vessel.context.value,
-        asvSoftware=vessel.stack.asv_software.value,
+        asvSystem=vessel.stack.asv_system.value,
         controlLayer=vessel.stack.control_layer.value,
         agentName=vessel.require_connection().agent_name,
         topic=vessel.require_connection().topic,
         port=vessel.require_connection().port,
         gazeboVesselModel=vessel.gazebo_vessel_model,
     )
-    control_mode = control_mode_label(vessel.stack.asv_software)
+    control_mode = control_mode_label(vessel.stack.asv_system)
     if control_mode is not None:
         info["controlMode"] = control_mode
     return info

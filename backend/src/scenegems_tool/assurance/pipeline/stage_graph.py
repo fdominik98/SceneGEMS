@@ -107,7 +107,7 @@ def run_stack_components(stack: StackConfig) -> Tuple[ComponentId, ...]:
     """The components a run on this stack needs: every layer of every vessel's stack (the own ship's and the targets'), as the simulation job computes them from its payload."""
     from scenegems_tool.assurance.campaign.config_validation import vessel_stacks
 
-    return stack_components((vessel.asv_software, vessel.control_layer, vessel.simulation_layer) for vessel in vessel_stacks(stack).values())
+    return stack_components((vessel.asv_system, vessel.control_layer, vessel.simulation_layer) for vessel in vessel_stacks(stack).values())
 
 
 @dataclass(frozen=True)

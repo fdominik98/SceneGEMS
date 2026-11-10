@@ -42,7 +42,7 @@ function simulatedWhere(components: readonly string[]): string {
   const layer = components.find((component) => component.startsWith("simulation_layer/"));
   const layerWhere = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
   const where = components.includes("control_layer/custom") ? `on the custom controller with ${layerWhere.replace(/^on /, "")}` : layerWhere;
-  return components.includes("asv_software/usv_navigation") ? `${where} with USV Navigation` : where;
+  return components.includes("asv_system/usv_navigation") ? `${where} with USV Navigation` : where;
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {

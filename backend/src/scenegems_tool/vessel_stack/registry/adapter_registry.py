@@ -11,7 +11,7 @@ A spec can have two bindings, both loaded on first use:
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, Tuple, TypeVar
 
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec, UnsupportedConnection
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, LayerRef
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, LayerRef
 from scenegems_tool.vessel_stack.registry.measured_capabilities import CapabilityMeasurement
 
 # Classes are bound through loaders so that resolving a stack never imports the code that
@@ -19,7 +19,7 @@ from scenegems_tool.vessel_stack.registry.measured_capabilities import Capabilit
 RuntimeLoader = Callable[[], Any]
 _Connection = Tuple[LayerRef, LayerRef]
 _Spec = TypeVar("_Spec", LayerSpec, AdapterSpec)
-_ON_BOARD = LayerRef.of(AsvSoftwareId.ON_BOARD)
+_ON_BOARD = LayerRef.of(AsvSystemId.ON_BOARD)
 
 
 class AdapterRegistry:
@@ -52,8 +52,8 @@ class AdapterRegistry:
             raise ValueError(f"Adapter {spec.id} connects {spec.source} to {spec.target}, which is declared unsupported")
         if spec.source == _ON_BOARD:
             target = self._layers.get(spec.target)
-            if target is None or not target.on_board_asv_software:
-                raise ValueError(f"Adapter {spec.id} leaves the vessel to on board ASV software, but {spec.target} is not registered with on_board_asv_software")
+            if target is None or not target.on_board_asv_system:
+                raise ValueError(f"Adapter {spec.id} leaves the vessel to on board ASV system, but {spec.target} is not registered with on_board_asv_system")
         self._claim_id(spec.id)
         spec = self._measured(spec)
         connection_adapters = self._alternatives.setdefault(connection, [])

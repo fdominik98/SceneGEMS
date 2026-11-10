@@ -3,7 +3,7 @@
 The instance is resolved first, so an unavailable stack or an unsupported environment is
 rejected before anything is generated. Then every layer brings its own containers: the
 simulation layer one simulator for the scenario, and per vessel the control layer its
-controller and the ASV software adapter its ASV software (contracts/docker_stack.py).
+controller and the ASV system adapter its ASV system (contracts/docker_stack.py).
 """
 
 import json
@@ -19,7 +19,7 @@ from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
-from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSoftware, DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
+from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSystem, DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.roles import LayerRef
 from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK
@@ -87,7 +87,7 @@ def build_simulation_docker_stack_artifacts(
         contributors = (
             simulation_layer,
             _contributor(registry, str(LayerRef.of(vessel_config.stack.control_layer)), DockerControlLayer),
-            _contributor(registry, asv_adapter.id, DockerAsvSoftware) if asv_adapter is not None else None,
+            _contributor(registry, asv_adapter.id, DockerAsvSystem) if asv_adapter is not None else None,
         )
         for contributor in contributors:
             if contributor is not None:

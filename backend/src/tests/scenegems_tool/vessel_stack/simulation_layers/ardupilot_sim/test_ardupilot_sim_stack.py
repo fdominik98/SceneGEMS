@@ -2,14 +2,14 @@
 
 import pytest
 
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, SimulationLayerId
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
 from tests.scenegems_tool.vessel_stack.sdf import parse_params, parse_sdf, plugins
 
 
 def test_there_is_no_simulator_service(ardupilot_sim_stack):
-    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_0_asv_software", "agent_1", "agent_1_asv_software"], "SITL and the replay container of each vessel"
+    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_0_asv_system", "agent_1", "agent_1_asv_system"], "SITL and the replay container of each vessel"
     assert "gazebo" not in ardupilot_sim_stack.compose["services"]
 
 
@@ -80,7 +80,7 @@ class TestMissionPlannerGroundStation:
 
     @pytest.fixture(scope="class")
     def services(self):
-        instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_software=AsvSoftwareId.MISSION_PLANNER)
+        instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], asv_system=AsvSystemId.MISSION_PLANNER)
         _, compose = build_simulation_docker_stack_artifacts(instance, encounter_trajectories("head_on", 60), mqtt_connection(), GEOFENCE)
         return compose["services"]
 

@@ -6,7 +6,7 @@ import pytest
 from scenegems_tool.vessel_stack.contracts.adapter_spec import UPSTREAM_PINS_FILE, AdapterSpec, ContainerSpec, LayerSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, Port
-from scenegems_tool.vessel_stack.contracts.roles import STACK_ROLE_ORDER, AsvSoftwareId, ControlLayerId, LayerRef, Role, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.roles import STACK_ROLE_ORDER, AsvSystemId, ControlLayerId, LayerRef, Role, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import (
     AgentConnection,
     AgentContext,
@@ -20,7 +20,7 @@ from scenegems_tool.vessel_stack.contracts.vessel_stack_config import (
 
 class TestRoles:
     def test_layer_ref_knows_its_role_from_the_implementation_type(self):
-        assert LayerRef.of(AsvSoftwareId.REPLAY) == LayerRef(Role.ASV_SOFTWARE, "replay")
+        assert LayerRef.of(AsvSystemId.REPLAY) == LayerRef(Role.ASV_SYSTEM, "replay")
         assert LayerRef.of(ControlLayerId.NONE) == LayerRef(Role.CONTROL_LAYER, "none")
         assert LayerRef.of(SimulationLayerId.GAZEBO) == LayerRef(Role.SIMULATION_LAYER, "gazebo")
 
@@ -28,28 +28,28 @@ class TestRoles:
         assert str(LayerRef.of(SimulationLayerId.ARDUPILOT_SIM)) == "simulation_layer/ardupilot_sim"
 
     def test_same_implementation_name_in_two_roles_is_two_refs(self):
-        assert LayerRef(Role.CONTROL_LAYER, "none") != LayerRef(Role.ASV_SOFTWARE, "none")
+        assert LayerRef(Role.CONTROL_LAYER, "none") != LayerRef(Role.ASV_SYSTEM, "none")
 
     def test_stack_order_is_asv_control_simulation(self):
-        assert STACK_ROLE_ORDER == (Role.ASV_SOFTWARE, Role.CONTROL_LAYER, Role.SIMULATION_LAYER)
+        assert STACK_ROLE_ORDER == (Role.ASV_SYSTEM, Role.CONTROL_LAYER, Role.SIMULATION_LAYER)
 
     def test_supported_implementations(self):
-        assert {item.value for item in AsvSoftwareId} == {"replay", "usv_navigation", "mission_planner", "on_board"}
+        assert {item.value for item in AsvSystemId} == {"replay", "usv_navigation", "mission_planner", "on_board"}
         assert {item.value for item in ControlLayerId} == {"ardupilot", "custom", "none", "real_vessel"}
         assert {item.value for item in SimulationLayerId} == {"kinematic", "gazebo", "ardupilot_sim", "real_vessel"}
 
     def test_ids_are_strings(self):
-        assert AsvSoftwareId("replay") is AsvSoftwareId.REPLAY
+        assert AsvSystemId("replay") is AsvSystemId.REPLAY
         assert SimulationLayerId.GAZEBO == "gazebo"
 
 
 class TestSpecs:
     def test_layer_spec_id_is_the_layer_ref(self):
-        assert LayerSpec(layer=LayerRef.of(AsvSoftwareId.REPLAY), description="x").id == "asv_software/replay"
+        assert LayerSpec(layer=LayerRef.of(AsvSystemId.REPLAY), description="x").id == "asv_system/replay"
 
     def test_adapter_spec_exposes_both_ends(self):
-        spec = AdapterSpec(id="a", source=LayerRef.of(AsvSoftwareId.REPLAY), target=LayerRef.of(ControlLayerId.NONE), description="x")
-        assert (spec.from_role, spec.from_impl, spec.to_role, spec.to_impl) == (Role.ASV_SOFTWARE, "replay", Role.CONTROL_LAYER, "none")
+        spec = AdapterSpec(id="a", source=LayerRef.of(AsvSystemId.REPLAY), target=LayerRef.of(ControlLayerId.NONE), description="x")
+        assert (spec.from_role, spec.from_impl, spec.to_role, spec.to_impl) == (Role.ASV_SYSTEM, "replay", Role.CONTROL_LAYER, "none")
 
     def test_note_for_a_capability(self):
         spec = LayerSpec(layer=LayerRef.of(SimulationLayerId.GAZEBO), description="x", restriction_notes=(("waves", "no waves"),))
@@ -66,7 +66,7 @@ class TestSpecs:
         assert spec.capabilities == Capabilities(), "specs are immutable"
 
     def test_specs_default_to_available(self):
-        assert LayerSpec(layer=LayerRef.of(AsvSoftwareId.REPLAY), description="x").status == SpecStatus.AVAILABLE
+        assert LayerSpec(layer=LayerRef.of(AsvSystemId.REPLAY), description="x").status == SpecStatus.AVAILABLE
 
     def test_container_fingerprint_sources_include_the_pins_file(self):
         container = ContainerSpec(image="img", build_fingerprint_source="deploy/images/sitl", entrypoint="/x", upstream_pins_file=UPSTREAM_PINS_FILE)
@@ -119,7 +119,7 @@ class TestEnvironmentConfig:
 
 class TestVesselConfig:
     def stack(self):
-        return VesselStackConfig(AsvSoftwareId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)
+        return VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO)
 
     def test_stack_prints_as_the_triple(self):
         assert str(self.stack()) == "replay, ardupilot, gazebo"

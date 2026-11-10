@@ -13,7 +13,7 @@ def configuration(tmp_path, **changes) -> WorkerNodeConfiguration:
         "SCENEGEMS_CONTROL_NODE_ID": "lab-control-node",
         "SCENEGEMS_WORKER_NODE_NAME": "worker-1",
         "SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:3,simulation:2",
-        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
+        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_WORKER_NODE_STATE_DIR": str(tmp_path / "state"),
         "SCENEGEMS_DOCKER_NETWORK": "scenegems-worker-node-lab-control-node-worker-1",
         "SCENEGEMS_WORKER_NODE_REFERENCE_GEOFENCE": "57.7,11.9,2000",

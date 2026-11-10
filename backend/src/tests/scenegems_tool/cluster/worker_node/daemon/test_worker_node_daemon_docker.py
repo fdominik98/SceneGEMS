@@ -108,7 +108,7 @@ def _worker_node_container(cluster, tmp_path_factory):
         "SCENEGEMS_BROKER_PORT": str(cluster.broker_port),
         "SCENEGEMS_WORKER_NODE_NAME": worker_node_name,
         "SCENEGEMS_WORKER_NODE_SLOTS": "simulation:2,scene_generation:1",
-        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_software/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
+        "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
         "SCENEGEMS_WORKER_NODE_LABELS": "test=docker",
         "SCENEGEMS_IMAGE_TAG": WORKER_NODE_IMAGE_TAG,  # the worker node image; the subsystem images come by their variables
         "SCENEGEMS_SOFTWARE_REVISION": "docker-test",

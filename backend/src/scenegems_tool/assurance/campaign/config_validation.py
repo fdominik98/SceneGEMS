@@ -36,9 +36,9 @@ from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError,
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import ClassSpec
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig, WaveConfig
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
@@ -83,8 +83,8 @@ class ValidatedCampaign:
         return sum(spec.quota for spec in self.classes)
 
 
-# The lockstep MAVLink adapter of each ASV software on ArduPilot, as the ardupilot runner's instance names them (mavlink_lockstep_runner.mavlink_instance)
-ARDUPILOT_ADAPTERS = {AsvSoftwareId.REPLAY: REPLAY_MAVLINK_LOCKSTEP.id, AsvSoftwareId.USV_NAVIGATION: USV_NAVIGATION_MAVLINK_LOCKSTEP.id}
+# The lockstep MAVLink adapter of each ASV system on ArduPilot, as the ardupilot runner's instance names them (mavlink_lockstep_runner.mavlink_instance)
+ARDUPILOT_ADAPTERS = {AsvSystemId.REPLAY: REPLAY_MAVLINK_LOCKSTEP.id, AsvSystemId.USV_NAVIGATION: USV_NAVIGATION_MAVLINK_LOCKSTEP.id}
 
 
 def _layers(stack: StackConfig) -> Tuple[ControlLayerId, SimulationLayerId]:
@@ -98,15 +98,15 @@ def _layers(stack: StackConfig) -> Tuple[ControlLayerId, SimulationLayerId]:
 def vessel_stacks(stack: StackConfig) -> Dict[str, VesselStackConfig]:
     """The triple of the own ship and of the target ships for a run's stack: every vessel replays, and in mode usv_navigation the own ship runs USV Navigation."""
     control_layer, simulation_layer = _layers(stack)
-    replay = VesselStackConfig(AsvSoftwareId.REPLAY, control_layer, simulation_layer)
+    replay = VesselStackConfig(AsvSystemId.REPLAY, control_layer, simulation_layer)
     if stack.mode == KinematicMode.USV_NAVIGATION:
-        return {OWN_SHIP: VesselStackConfig(AsvSoftwareId.USV_NAVIGATION, control_layer, simulation_layer), TARGET_SHIP: replay}
+        return {OWN_SHIP: VesselStackConfig(AsvSystemId.USV_NAVIGATION, control_layer, simulation_layer), TARGET_SHIP: replay}
     return {OWN_SHIP: replay, TARGET_SHIP: replay}
 
 
 def _vessel_config(agent_id: str, stack: VesselStackConfig, run_stack: StackConfig) -> VesselConfig:
     """A vessel of the run's instance; on ArduPilot the lockstep adapter is named, as the ardupilot runner's instance names it."""
-    adapters = (ARDUPILOT_ADAPTERS[stack.asv_software],) if isinstance(run_stack, ArdupilotStackConfig) else ()
+    adapters = (ARDUPILOT_ADAPTERS[stack.asv_system],) if isinstance(run_stack, ArdupilotStackConfig) else ()
     return VesselConfig(agent_id=agent_id, stack=stack, adapter_ids=adapters)
 
 

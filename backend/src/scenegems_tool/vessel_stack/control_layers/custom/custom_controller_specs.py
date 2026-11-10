@@ -7,10 +7,10 @@ through the gz-transport actuator adapter (simulation_layers/gazebo/gz_transport
 which steps the paused world, so controller and physics share one clock.
 """
 
-from scenegems_tool.vessel_stack.asv_software.replay.replay_specs import REPLAY_CONTAINER
+from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_CONTAINER
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec
 from scenegems_tool.vessel_stack.contracts.ports import Port
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef
 from scenegems_tool.vessel_stack.contracts.stack_services import backend_component_container
 
 CUSTOM_CONTROLLER_CONTAINER = backend_component_container("scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server")
@@ -28,7 +28,7 @@ CUSTOM_CONTROL_LAYER = LayerSpec(
 
 CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER = AdapterSpec(
     id="custom_controller_waypoint_follower",
-    source=LayerRef.of(AsvSoftwareId.REPLAY),
+    source=LayerRef.of(AsvSystemId.REPLAY),
     target=LayerRef.of(ControlLayerId.CUSTOM),
     description=(
         "Line-of-sight waypoint follower inside the custom controller (los_waypoint_follower.py): the replay container hands the replayed trajectory "
