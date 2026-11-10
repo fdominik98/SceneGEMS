@@ -33,6 +33,8 @@ describe("the chain of the map", () => {
   it("draws the whole chain left to right with arrows from the input to the review", () => {
     const map = buildCampaignMap(draftOf(), context());
     expect(map.cards.map((card) => [card.id, card.kind, card.page])).toEqual([
+      // The default draft does not explore the design space: the first step of the chain is drawn as not run
+      ["skipped:design_space_exploration", "skipped", "steps"],
       ["input", "input", "input"],
       ["scene_generation", "stage", "scenes"],
       ["trajectory_generation", "stage", "trajectories"],
@@ -74,10 +76,11 @@ describe("the chain of the map", () => {
 
   it("draws the steps a later start skips before the input and the steps an early stop leaves after the review", () => {
     const later = buildCampaignMap(draftOf((draft) => void (draft.steps = ["trajectory_generation"])), context());
-    expect(later.cards.map((card) => card.id)).toEqual(["skipped:scene_generation", "input", "trajectory_generation", "review", "skipped:simulation"]);
+    expect(later.cards.map((card) => card.id)).toEqual(["skipped:design_space_exploration", "skipped:scene_generation", "input", "trajectory_generation", "review", "skipped:simulation"]);
     expect(later.edges.map((edge) => edge.id)).toEqual(["input->trajectory_generation", "trajectory_generation->review"]);
     const skipped = later.cards.filter((card) => card.kind === "skipped");
     expect(skipped.map((card) => [card.page, texts(card.facts)])).toEqual([
+      ["steps", ["Not run"]],
       ["steps", ["Not run"]],
       ["steps", ["Not run"]],
     ]);
@@ -120,13 +123,14 @@ describe("what the cards say", () => {
   });
 
   it("asks for input while nothing is chosen, and counts scenario files and items by source", () => {
-    const empty = buildCampaignMap(draftOf(), context()).cards[0];
+    const inputCard = (map: ReturnType<typeof buildCampaignMap>) => map.cards.find((card) => card.id === "input") as (typeof map.cards)[number];
+    const empty = inputCard(buildCampaignMap(draftOf(), context()));
     expect(empty.facts).toEqual([{ text: "Nothing chosen yet", tone: "warn" }]);
 
     const withFile = draftOf((draft) => {
       draft.input.scenarios = [{ id: "f", fileName: "a.problem", name: "a", ref: { sha256: "c".repeat(64), size_bytes: 1, kind: "functional_scenario" }, quota: 3, failureBudget: 0, uploadedAt: 0 }];
     });
-    expect(texts(buildCampaignMap(withFile, context()).cards[0].facts)).toEqual(["1 scenario file", "3 cases to complete"]);
+    expect(texts(inputCard(buildCampaignMap(withFile, context())).facts)).toEqual(["1 scenario file", "3 cases to complete"]);
 
     const scenes = draftOf((draft) => {
       draft.steps = ["trajectory_generation", "simulation"];
@@ -145,11 +149,12 @@ describe("what the cards say", () => {
       }),
       context()
     );
-    expect(texts(map.cards[1].facts)).toEqual(["Post hoc monitor", "At most 60 s per scene", "Low TCPA enforced"]);
-    expect(texts(map.cards[2].facts)).toEqual(["Monitor-guided planner", "1 parameter changed", "No monitor"]);
+    const card = (of: ReturnType<typeof buildCampaignMap>, id: string) => of.cards.find((entry) => entry.id === id) as (typeof of.cards)[number];
+    expect(texts(card(map, "scene_generation").facts)).toEqual(["Post hoc monitor", "At most 60 s per scene", "Low TCPA enforced"]);
+    expect(texts(card(map, "trajectory_generation").facts)).toEqual(["Monitor-guided planner", "1 parameter changed", "No monitor"]);
 
     const unknown = buildCampaignMap(draftOf((draft) => void (draft.trajectories.generator = "unheard_of")), context());
-    expect(unknown.cards[2].facts[0]).toEqual({ text: "unheard_of", tone: "bad" });
+    expect(card(unknown, "trajectory_generation").facts[0]).toEqual({ text: "unheard_of", tone: "bad" });
   });
 
   it("names each run by its name, stack, monitor and repeats", () => {
@@ -284,6 +289,56 @@ describe("drawingOffset", () => {
 describe("card sizes", () => {
   it("keeps every card of a step as wide as the others", () => {
     const map = buildCampaignMap(draftOf(), context());
-    expect(new Set(map.cards.map((card) => card.width))).toEqual(new Set([CARD_WIDTH]));
+    expect(new Set(map.cards.filter((card) => card.kind !== "skipped").map((card) => card.width))).toEqual(new Set([CARD_WIDTH]));
+  });
+});
+
+describe("a campaign that explores the design space", () => {
+  const explores = (change: (draft: WizardDraft) => void = () => undefined) =>
+    draftOf((draft) => {
+      draft.steps = ["design_space_exploration", "scene_generation"];
+      draft.exploration.specification = "class OS.";
+      draft.exploration.scope = "TS = 2, StaticObstacle = 0";
+      draft.exploration.quota = 2;
+      change(draft);
+    });
+
+  it("draws the exploration first, after the input, opening its page", () => {
+    const map = buildCampaignMap(explores(), context());
+    expect(map.cards.map((card) => [card.id, card.kind, card.page])).toEqual([
+      ["input", "input", "input"],
+      ["design_space_exploration", "stage", "exploration"],
+      ["scene_generation", "stage", "scenes"],
+      ["review", "review", "review"],
+      ["skipped:trajectory_generation", "skipped", "steps"],
+      ["skipped:simulation", "skipped", "steps"],
+    ]);
+    expect(map.edges.map((edge) => edge.id)).toEqual(["input->design_space_exploration", "design_space_exploration->scene_generation", "scene_generation->review"]);
+  });
+
+  it("says the scope and the cap, and that the input and the cases come from the exploration", () => {
+    const map = buildCampaignMap(explores(), context());
+    const card = (id: string) => map.cards.find((entry) => entry.id === id) as (typeof map.cards)[number];
+    expect(texts(card("design_space_exploration").facts)).toEqual(["Scope TS = 2, StaticObstacle = 0", "At most 1000 FECs"]);
+    expect(texts(card("input").facts)).toEqual(["None: the FECs come from the exploration"]);
+    expect(texts(card("review").facts)).toEqual(["Not checked on the master", "2 cases per explored FEC"]);
+    expect(plannedCases(explores(), classes)).toBeNull();
+  });
+
+  it("warns about a missing specification and an invalid scope, and says every FEC without a cap", () => {
+    const map = buildCampaignMap(
+      explores((draft) => {
+        draft.exploration.specification = " ";
+        draft.exploration.scope = "TS = 3..1";
+        draft.exploration.maxFecs = null;
+      }),
+      context()
+    );
+    const facts = map.cards.find((entry) => entry.id === "design_space_exploration")?.facts ?? [];
+    expect(facts).toEqual([
+      { text: "No specification yet", tone: "warn" },
+      { text: "The scope is not valid", tone: "warn" },
+      { text: "Every FEC", tone: "muted" },
+    ]);
   });
 });

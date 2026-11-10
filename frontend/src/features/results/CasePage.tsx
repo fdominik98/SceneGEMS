@@ -3,7 +3,7 @@ import { Disclosure } from "../../components/Disclosure";
 import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import type { CampaignStep, CaseDetail, RunRecord } from "../../domain/cluster/schemas";
 import { CaseJobsTable, RunRecordCard, StateChip, VerdictCard } from "./CaseParts";
-import { caseStepRows, describeStepVerdict } from "./stepViews";
+import { caseStepRows, describeStepVerdict, RESULT_STEPS } from "./stepViews";
 import { RecordedRun } from "./RecordedRun";
 import { caseNumber, formatTime, runLabel, shortClassId, stageLabel } from "./resultsFormat";
 import { useCaseDetail } from "./useResultsData";
@@ -24,7 +24,9 @@ function CaseSteps({ detail, steps }: { detail: CaseDetail; steps: readonly Camp
     <section className="results-panel" aria-label="Steps of the case">
       <header className="results-panel-head">
         <h3>Steps</h3>
-        <span className="meta">{steps.length} of 3 executed</span>
+        <span className="meta">
+          {steps.filter((step) => (RESULT_STEPS as readonly CampaignStep[]).includes(step)).length} of {RESULT_STEPS.length} executed
+        </span>
       </header>
       <div className="results-table-wrap">
         <table className="results-table results-table--plain" aria-label="Monitor result summary of each step">

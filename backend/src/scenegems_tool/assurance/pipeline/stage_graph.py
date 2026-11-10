@@ -1,6 +1,13 @@
 """The stages a case passes through, the jobs they run, and the case's bookkeeping of them.
 
-Per case, the stages of the steps the campaign runs (config.steps), in chain order:
+A campaign that runs design_space_exploration has one case that is not a scenario: the
+exploration case, the one case of the class exploration. Its only stage is
+
+    explore_design_space    design_space_exploration job; its result creates the campaign's other
+                            classes, explored/<index>, one per FEC found
+
+and it is ready once that job succeeded. Every other case passes the stages of the other steps
+the campaign runs (config.steps), in chain order:
 
     scene_generation:
       generate_scene          scene_generation job
@@ -19,9 +26,9 @@ Per case, the stages of the steps the campaign runs (config.steps), in chain ord
                               simulation's monitor section (live) or as unmonitored (empty)
 
 A format 1 config runs the full chain without the scene and trajectory monitors, so its cases
-pass the stages they always did. The first configured step takes the case's input: the class
-content or a functional scenario's reference (scene generation), an item's reference (later
-steps). A monitor of a scene or trajectory set runs beside the next step, which needs only the
+pass the stages they always did. The first step a case runs takes the case's input: the class
+content, a functional scenario's reference or an explored FEC's (scene generation), an item's
+reference (later steps). A monitor of a scene or trajectory set runs beside the next step, which needs only the
 generated output, not its verdict.
 
 A run's verdict judges its repeat 0; the other repeats exist for the calibration. Every repeat
@@ -49,11 +56,13 @@ from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConf
 from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, ComponentId, stack_components
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind
+from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID
 
 # Later stages run first, so started cases finish depth first and their artifacts live briefly. These
 # are the offsets without the scene and trajectory monitors; stage_priority_offsets puts those between
 # their neighbours.
 STAGE_PRIORITY_OFFSET = {
+    PipelineStage.EXPLORE_DESIGN_SPACE: 0,
     PipelineStage.GENERATE_SCENE: 0,
     PipelineStage.GENERATE_TRAJECTORIES: 1,
     PipelineStage.SIMULATE: 2,
@@ -61,6 +70,7 @@ STAGE_PRIORITY_OFFSET = {
     PipelineStage.CALIBRATE: 4,
 }
 STAGE_JOB_TYPES = {
+    PipelineStage.EXPLORE_DESIGN_SPACE: JobType.DESIGN_SPACE_EXPLORATION,
     PipelineStage.GENERATE_SCENE: JobType.SCENE_GENERATION,
     PipelineStage.MONITOR_SCENE: JobType.MONITORING_POST_HOC,
     PipelineStage.GENERATE_TRAJECTORIES: JobType.TRAJECTORY_GENERATION,
@@ -84,7 +94,9 @@ def stage_priority_offsets(scene_monitored: bool = False, trajectories_monitored
     if trajectories_monitored:
         chain.append(PipelineStage.MONITOR_TRAJECTORIES)
     chain += [PipelineStage.SIMULATE, PipelineStage.MONITOR, PipelineStage.CALIBRATE]
-    return {stage: offset for offset, stage in enumerate(chain)}
+    offsets = {stage: offset for offset, stage in enumerate(chain)}
+    offsets[PipelineStage.EXPLORE_DESIGN_SPACE] = 0  # the exploration runs alone, before any case exists
+    return offsets
 
 
 # A job type and the components a node needs to run one of its jobs: what the stall check looks for
@@ -135,6 +147,7 @@ class Step:
         return cls(stage, run_index, repeat_index)
 
 
+EXPLORATION_STEP = Step(PipelineStage.EXPLORE_DESIGN_SPACE)
 SCENE_STEP = Step(PipelineStage.GENERATE_SCENE)
 SCENE_MONITOR_STEP = Step(PipelineStage.MONITOR_SCENE)
 TRAJECTORIES_STEP = Step(PipelineStage.GENERATE_TRAJECTORIES)
@@ -193,6 +206,10 @@ class StageGraph:
         self.config = config
         self.steps = tuple(config.steps)
         self.first_step: CampaignStep = config.first_step
+        self.explores = config.runs_step(CampaignStep.DESIGN_SPACE_EXPLORATION)
+        # The steps a scenario's case runs: all but the exploration, which is the exploration case's alone
+        self.case_steps = tuple(step for step in self.steps if step != CampaignStep.DESIGN_SPACE_EXPLORATION)
+        self.first_case_step: Optional[CampaignStep] = self.case_steps[0] if self.case_steps else None
         # Runs exist only when the campaign simulates; a format 2 config keeps the default execution section otherwise
         self.runs: tuple = config.execution.runs if config.runs_step(CampaignStep.SIMULATION) else ()
         self.scene_monitored = config.runs_step(CampaignStep.SCENE_GENERATION) and config.scene_generation.monitor == MonitorImplementation.POST_HOC
@@ -205,10 +222,14 @@ class StageGraph:
     def is_last(self, step: CampaignStep) -> bool:
         return self.steps[-1] == step
 
-    def first_stage(self) -> PipelineStage:
-        """The stage a new case starts at."""
+    def first_stage(self, class_id: Optional[str] = None) -> Optional[PipelineStage]:
+        """The stage a new case of the class starts at: the exploration for the exploration class, else the first stage of the first step cases run (None when the campaign only explores)."""
+        if class_id == EXPLORATION_CLASS_ID and self.explores:
+            return PipelineStage.EXPLORE_DESIGN_SPACE
+        if self.first_case_step is None:
+            return None
         return {CampaignStep.SCENE_GENERATION: PipelineStage.GENERATE_SCENE, CampaignStep.TRAJECTORY_GENERATION: PipelineStage.GENERATE_TRAJECTORIES, CampaignStep.SIMULATION: PipelineStage.SIMULATE}[
-            self.first_step
+            self.first_case_step
         ]
 
     def monitored_steps(self) -> List[StepKind]:

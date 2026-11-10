@@ -6,7 +6,9 @@ import type { CampaignPreset } from "../../../domain/cluster/presetsApi";
 import { CatalogDialog } from "./CatalogDialog";
 import type { BuilderCatalog } from "./configBuilder";
 import { describeSteps, PRESET_CATALOG, presetFacts, scopeTags, type PresetFacts } from "./presetCatalog";
-import { draftFromConfig, draftHasEntries, presetConfigOf } from "./presetDraft";
+import { useDesignSpaceDefault } from "../useCampaignData";
+import { DEFAULT_SPECIFICATION_LABEL } from "../../workbench/designSpace/DesignSpaceSpecificationEditor";
+import { draftFromConfig, draftHasEntries, presetConfigOf, withDefaultSpecification } from "./presetDraft";
 import { useCampaignPresets, useDeleteCampaignPreset, useSaveCampaignPreset } from "./useCampaignPresets";
 import type { WizardDraft } from "./wizardState";
 
@@ -70,6 +72,8 @@ export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
   const presets = useCampaignPresets();
   const save = useSaveCampaignPreset();
   const remove = useDeleteCampaignPreset();
+  // A preset that explores the design space may leave the specification to the master: the draft starts from its default
+  const designSpaceDefault = useDesignSpaceDefault();
   const [browsing, setBrowsing] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -85,7 +89,7 @@ export function PresetBar({ draft, catalog, classes, onLoad }: PresetBarProps) {
     if (draftHasEntries(draft) && !window.confirm(`Replace the current draft with the preset "${preset.name}"?`)) {
       return;
     }
-    onLoad(draftFromConfig(preset.config, catalog));
+    onLoad(withDefaultSpecification(draftFromConfig(preset.config, catalog), designSpaceDefault.data, DEFAULT_SPECIFICATION_LABEL));
     setBrowsing(false);
     setNotice(`Started from the preset "${preset.name}". Adjust it, then create the campaign.`);
   };

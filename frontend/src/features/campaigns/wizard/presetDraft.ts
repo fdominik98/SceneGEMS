@@ -1,10 +1,14 @@
 import { buildCampaignConfig, findGenerator, type BuilderCatalog, type ConfigObject } from "./configBuilder";
-import { CHAIN, normalizeSteps } from "./stepPlan";
+import { normalizeNewlines } from "../../../domain/cluster/presetsApi";
+import { IMPLIED_STEPS } from "../../../domain/cluster/schemas";
+import { DEFAULT_EXPLORATION_QUOTA, DEFAULT_EXPLORATION_TIMEOUT_S, DEFAULT_MAX_FECS, designSpaceSectionOf } from "../../../domain/designSpace/designSpaceConfig";
+import { normalizeSteps } from "./stepPlan";
 import {
   DEFAULT_CAMPAIGN_SEED,
   DEFAULT_SCENE_GENERATION_TIMEOUT_S,
   DEFAULT_TRAJECTORY_TIMEOUT_S,
   emptyDraft,
+  emptyExploration,
   emptyRun,
   emptyScopeEntry,
   newEntryId,
@@ -73,6 +77,23 @@ function domainOf(config: ConfigObject): WizardDraft["domain"] {
     obstacleTypes: text("obstacle_types"),
     sceneGenerationTimeoutS: numberOr(domain.scene_generation_timeout_s, DEFAULT_SCENE_GENERATION_TIMEOUT_S),
     enforceLowTcpa: domain.enforce_low_tcpa === true,
+  };
+}
+
+/** The design space exploration section; a config without one keeps the draft's defaults. */
+function explorationOf(config: ConfigObject): WizardDraft["exploration"] {
+  const section = designSpaceSectionOf(config);
+  if (section === null) {
+    return emptyExploration();
+  }
+  return {
+    specification: section.specification,
+    specificationLabel: null,
+    scope: section.scope,
+    maxFecs: section.max_fecs === undefined ? DEFAULT_MAX_FECS : section.max_fecs,
+    timeoutS: section.timeout_s ?? DEFAULT_EXPLORATION_TIMEOUT_S,
+    quota: section.quota ?? DEFAULT_EXPLORATION_QUOTA,
+    failureBudget: failureBudgetOf(section.failure_budget),
   };
 }
 
@@ -166,7 +187,7 @@ function policyOf(config: ConfigObject): WizardDraft["policy"] {
 /** The draft a preset's config describes. Runs need the stack catalog to find their stack; a stack the master does not offer leaves the run without one. */
 export function draftFromConfig(source: Record<string, unknown>, catalog: BuilderCatalog): WizardDraft {
   const config = record(source);
-  const steps = Array.isArray(config.steps) ? normalizeSteps(config.steps) : [...CHAIN];
+  const steps = Array.isArray(config.steps) ? normalizeSteps(config.steps) : [...IMPLIED_STEPS];
   const runs = list(record(config.execution).runs).map((item) => runOf(item, catalog));
   return {
     ...emptyDraft(),
@@ -176,6 +197,7 @@ export function draftFromConfig(source: Record<string, unknown>, catalog: Builde
     sceneMonitor: record(config.scene_generation).monitor === "post_hoc" ? "post_hoc" : "empty",
     trajectoryMonitor: record(config.trajectories).monitor === "post_hoc" ? "post_hoc" : "empty",
     scope: scopeOf(config),
+    exploration: explorationOf(config),
     domain: domainOf(config),
     trajectories: trajectoriesOf(config, catalog),
     runs: runs.length > 0 ? runs : [emptyRun()],
@@ -194,13 +216,26 @@ export function presetConfigOf(draft: WizardDraft, catalog: BuilderCatalog): Con
   return config;
 }
 
-/** Whether the draft holds entries a preset would replace (the operator is asked first): a name, a description, classes or input. */
+/**
+ * A draft whose design space exploration names no specification (a preset that leaves it to the master)
+ * starts from the master's default, so the wizard shows and sends what will run; without a default the
+ * editor stays empty and the exploration page reports it.
+ */
+export function withDefaultSpecification(draft: WizardDraft, shipped: { specification: string } | null | undefined, label: string): WizardDraft {
+  if (!draft.steps.includes("design_space_exploration") || draft.exploration.specification.trim() !== "" || !shipped) {
+    return draft;
+  }
+  return { ...draft, exploration: { ...draft.exploration, specification: normalizeNewlines(shipped.specification), specificationLabel: label } };
+}
+
+/** Whether the draft holds entries a preset would replace (the operator is asked first): a name, a description, classes, input or an explored specification. */
 export function draftHasEntries(draft: WizardDraft): boolean {
   return (
     draft.name.trim() !== "" ||
     draft.description.trim() !== "" ||
     draft.scope.some((entry) => entry.classes.length > 0 || entry.patterns.length > 0) ||
     draft.input.scenarios.length > 0 ||
-    draft.input.items.length > 0
+    draft.input.items.length > 0 ||
+    (draft.steps.includes("design_space_exploration") && draft.exploration.specification.trim() !== "")
   );
 }

@@ -1,7 +1,15 @@
 """How a case moves: one job event at a time, in the engine's transaction, with optimistic versions.
 
-A case starts active at the stage of the campaign's first configured step, from its input:
-a catalog class's content or a functional scenario given as content (generate_scene), an
+The exploration case of a campaign that explores the design space (the one case of the class
+exploration) starts at explore_design_space. When its job succeeds, every FEC it found
+becomes a class explored/<index> of the campaign, pinned by its functional scenario artifact
+(which the exploration case holds), with the quota and failure budget of the config; the
+classes are open when later steps run their cases and complete at once otherwise. The
+exploration case is then ready and is completed without a verdict. An exploration that finds
+no FEC drops the case, which abandons its class and so ends the campaign.
+
+Every other case starts active at the stage of the first step cases run, from its input:
+a catalog class's content, a functional scenario given as content or an explored FEC (generate_scene), an
 item's scene (generate_trajectories) or an item's trajectories (simulate). An item case
 records the item's hash and source (input_artifact, input_source); a scenario case the
 scenario's hash. The case moves through the stage graph as its jobs succeed: each success
@@ -44,11 +52,12 @@ from typing import Any, Dict, List, Mapping, Optional, Set, Tuple
 from sqlalchemy.orm import Session
 
 from scenegems_tool.assurance.campaign.campaign_config import CampaignStep, InputItem, RetentionPolicy
+from scenegems_tool.assurance.campaign.campaign_inputs import explored_class_spec
 from scenegems_tool.assurance.pipeline import retention
 from scenegems_tool.assurance.pipeline.campaign_context import CampaignContext, CampaignContexts
 from scenegems_tool.assurance.pipeline.payload_builder import PayloadError
 from scenegems_tool.assurance.pipeline.pipeline_queries import job_facts, unfinished_jobs_of_cases
-from scenegems_tool.assurance.pipeline.stage_graph import GENERATION_MONITORS, SCENE_MONITOR_STEP, SCENE_STEP, TRAJECTORIES_MONITOR_STEP, TRAJECTORIES_STEP, CaseProgress, Step
+from scenegems_tool.assurance.pipeline.stage_graph import EXPLORATION_STEP, GENERATION_MONITORS, SCENE_MONITOR_STEP, SCENE_STEP, TRAJECTORIES_MONITOR_STEP, TRAJECTORIES_STEP, CaseProgress, Step
 from scenegems_tool.assurance.pipeline.verdicts import (
     ResultError,
     is_sensitive,
@@ -62,15 +71,35 @@ from scenegems_tool.assurance.pipeline.verdicts import (
     release_job_references,
     step_roles,
 )
-from scenegems_tool.cluster.protocol.artifacts import is_reference
+from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobState
-from scenegems_tool.persistence.schema import ArtifactHolderKind, CampaignClassState, CaseState, JobEventKind, MonitorImplementation, PipelineStage, RunSource, StepKind, VerdictState
-from scenegems_tool.persistence.stores import UNSET, AssuranceStores, CaseConflict, CaseRecord, NewCase, PipelineJobEvent
+from scenegems_tool.persistence.schema import (
+    ArtifactHolderKind,
+    CampaignClassState,
+    CampaignEventKind,
+    CaseState,
+    JobEventKind,
+    MonitorImplementation,
+    PipelineStage,
+    RunSource,
+    StepKind,
+    VerdictState,
+)
+from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID, UNSET, AssuranceStores, CaseConflict, CaseRecord, NewCase, PipelineJobEvent
 
 logger = logging.getLogger(__name__)
 
 SUCCEEDED, FAILED, CANCELLED = "succeeded", "failed", "cancelled"
 RECORDED = "recorded"  # the outcome of a simulate step that ran outside the cluster
+NO_LATER_STEP = "the campaign runs no step after the exploration"  # why the explored FECs of such a campaign are complete at once
+# What an exploration's stop reason says about the FECs it returned
+STOP_REASONS = {
+    "exhausted": "every FEC of the design space",
+    "unsatisfiable": "the specification has no model",
+    "cap_reached": "the cap was reached, there may be more",
+    "timeout": "the time limit ended the exploration, there may be more",
+    "stopped": "the exploration was stopped, there may be more",
+}
 
 
 @dataclass(frozen=True)
@@ -152,13 +181,13 @@ class CaseMachine:
         if not planned:
             return []
         created = self.stores.cases.create_cases(context.campaign_id, [self._new_case(context, class_id, index) for class_id, index in planned], session=self.session)
-        first = context.graph.first_step.value.replace("_", " ")
         for case in created:
             self.outbox.touched_classes.add((context.campaign_id, case.class_id))
             try:
                 self._intents(context, case, self._first_steps(context, case))
             except PayloadError as error:
-                self.end(context, case, CaseState.FAILED, f"the {first} payload could not be built: {error}")
+                first = CampaignStep.DESIGN_SPACE_EXPLORATION if case.class_id == EXPLORATION_CLASS_ID else context.graph.first_case_step
+                self.end(context, case, CaseState.FAILED, f"the {first.value.replace('_', ' ')} payload could not be built: {error}")
         self.outbox.cases_started += len(created)
         return created
 
@@ -170,20 +199,22 @@ class CaseMachine:
             case_index=index,
             seed=context.config.case_seed(class_id, index),
             config_version=context.campaign.config_version,
-            stage=context.graph.first_stage(),
+            stage=context.graph.first_stage(class_id),
             input_artifact=input_artifact,
             input_source=input_source,
         )
 
     def _first_steps(self, context: CampaignContext, case: CaseRecord) -> List[Tuple[Step, Dict[str, Any]]]:
-        """The jobs a new case starts with: its first configured step's, from its input."""
+        """The jobs a new case starts with: the exploration's for the exploration case, else those of the first step cases run, from the case's input."""
         builder, graph = context.builder, context.graph
-        if graph.first_step == CampaignStep.SCENE_GENERATION:
-            return [(SCENE_STEP, builder.scene_generation(case.class_id, context.content_hashes[case.class_id], case.seed))]
+        if case.class_id == EXPLORATION_CLASS_ID and graph.explores:
+            return [(EXPLORATION_STEP, builder.design_space_exploration(case.seed))]
+        if graph.first_case_step == CampaignStep.SCENE_GENERATION:
+            return [(SCENE_STEP, builder.scene_generation(case.class_id, context.content_hashes[case.class_id], case.seed, context.explored.get(case.class_id)))]
         item = context.input_of(case.class_id)
         if not isinstance(item, InputItem):
             raise PayloadError(f"FEC {case.class_id} has no input item")
-        if graph.first_step == CampaignStep.TRAJECTORY_GENERATION:
+        if graph.first_case_step == CampaignStep.TRAJECTORY_GENERATION:
             return [(TRAJECTORIES_STEP, builder.trajectory_generation_of_item(case.seed, item))]
         return [(simulate, builder.simulation_of_item(case.seed, simulate.run_index, item)) for simulate in graph.simulate_steps()]
 
@@ -219,6 +250,7 @@ class CaseMachine:
         result = event.job_result or {}
         try:
             handler = {
+                PipelineStage.EXPLORE_DESIGN_SPACE: self._design_space_explored,
                 PipelineStage.GENERATE_SCENE: self._scene_generated,
                 PipelineStage.MONITOR_SCENE: self._generation_monitored,
                 PipelineStage.GENERATE_TRAJECTORIES: self._trajectories_generated,
@@ -230,6 +262,40 @@ class CaseMachine:
             handler(context, case, progress, step, event, result)
         except (ResultError, PayloadError) as error:
             self.end(context, case, CaseState.FAILED, f"{step.name} job {event.job_id}: {error}", progress)
+
+    def _design_space_explored(self, context: CampaignContext, case: CaseRecord, progress: CaseProgress, step: Step, event: PipelineJobEvent, result: Mapping[str, Any]) -> None:
+        """The exploration's result: one class per FEC found, pinned by its functional scenario artifact, and the exploration case ready."""
+        section = context.config.design_space_exploration
+        if section is None:
+            raise ResultError("the campaign has no design_space_exploration section")
+        scenarios, fecs = result.get("functional_scenarios"), result.get("fecs")
+        if not isinstance(scenarios, list) or not isinstance(fecs, list) or len(scenarios) != len(fecs):
+            raise ResultError("the exploration returned no list of FECs with their functional scenarios")
+        stop_reason = str(result.get("stop_reason") or "")
+        outcome = STOP_REASONS.get(stop_reason, stop_reason or "no stop reason given")
+        if not scenarios:
+            message = f": {result['message']}" if result.get("message") else ""
+            self.end(context, case, CaseState.DROPPED, f"the exploration found no FEC ({outcome}){message}", progress)
+            return
+        specs = []
+        for index, (scenario, counts) in enumerate(zip(scenarios, fecs)):
+            if not is_reference(scenario):
+                raise ResultError("the exploration's FECs were not stored as artifacts (the node has no artifact transport)")
+            reference = scenario if isinstance(scenario, ArtifactRef) else ArtifactRef.model_validate(scenario)
+            vessels, obstacles = int(counts.get("vessel_count", 0)), int(counts.get("obstacle_count", 0))
+            if vessels < 1:
+                raise ResultError(f"FEC {index} of the exploration declares no vessel (OS or TS), so no scene can be generated for it")
+            specs.append(explored_class_spec(index, reference.sha256, vessels, obstacles, section))
+        # The exploration case holds every FEC's artifact (roles functional_scenarios:<index>), so the sweep keeps them
+        record_references(self.stores, self.session, result, ArtifactHolderKind.CASE, case.case_id, context.campaign_id, event.job_id)
+        runs_on = context.graph.first_case_step is not None
+        self.stores.cases.add_classes(context.campaign_id, specs, closed_reason=None if runs_on else NO_LATER_STEP, session=self.session)
+        self.contexts.forget_classes(context.campaign_id)
+        detail = {"explored": {"fecs": len(specs), "stop_reason": stop_reason, "complete": bool(result.get("complete")), "outcome": outcome}}
+        self.stores.campaigns.append_event(context.campaign_id, CampaignEventKind.NOTE, detail, class_id=case.class_id, session=self.session)
+        self._move(case, stage=PipelineStage.VERDICT, progress=progress.to_json())
+        self.outbox.touched_classes.add((context.campaign_id, case.class_id))
+        logger.info("Campaign %s explored %d FECs (%s)", context.campaign_id, len(specs), outcome)
 
     def _scene_generated(self, context: CampaignContext, case: CaseRecord, progress: CaseProgress, step: Step, event: PipelineJobEvent, result: Mapping[str, Any]) -> None:
         roles = record_references(self.stores, self.session, result, ArtifactHolderKind.CASE, case.case_id, context.campaign_id, event.job_id)
@@ -358,7 +424,14 @@ class CaseMachine:
     # Ends
 
     def complete(self, context: CampaignContext, case: CaseRecord) -> CaseRecord:
-        """Writes the ready case's verdicts (of its monitored scene and trajectory steps, then of its runs), applies retention and completes it."""
+        """Writes the ready case's verdicts (of its monitored scene and trajectory steps, then of its runs), applies retention and completes it.
+
+        The exploration case has no verdict and keeps its artifacts: the FECs it found are the campaign's classes.
+        """
+        if case.class_id == EXPLORATION_CLASS_ID and context.graph.explores:
+            moved = self._move(case, state=CaseState.COMPLETE, stage=PipelineStage.VERDICT, reason=None)
+            self.outbox.touched_classes.add((context.campaign_id, case.class_id))
+            return moved
         progress = CaseProgress(case.progress)
         step_states: Dict[StepKind, VerdictState] = {}
         for step_kind in context.graph.monitored_steps():

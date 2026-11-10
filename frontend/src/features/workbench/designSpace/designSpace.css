@@ -1,0 +1,185 @@
+/* The design space exploration page: the specification editor, the scope field and the list of explored FECs. */
+
+.design-space-sidebar .scene-editor-panel h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+.design-space-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1;
+  min-height: 0;
+}
+
+.design-space-editor .scene-editor-problem-codemirror {
+  flex: 1;
+  min-height: 200px;
+  min-width: 0;
+}
+
+.scope-input {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.scope-input-field {
+  width: 100%;
+  min-width: 16ch;
+  font-family: var(--font-mono);
+}
+
+.scope-input-message {
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+
+.scope-input-message:empty {
+  display: none;
+}
+
+.step-scope {
+  align-items: flex-start;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.fec-progress {
+  width: 100%;
+  max-width: 320px;
+}
+
+/* The centre pane: the list beside the selected FEC's text, stacked when narrow. */
+.fec-browser {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-3);
+  box-sizing: border-box;
+}
+
+.fec-browser--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fec-browser--empty .empty-state {
+  max-width: 560px;
+}
+
+@media (max-width: 900px) {
+  .fec-browser {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(240px, 1fr) minmax(240px, 1fr);
+  }
+}
+
+.fec-browser-list,
+.fec-browser-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  min-width: 0;
+}
+
+.fec-summary {
+  margin: 0;
+  font-weight: 600;
+}
+
+.fec-summary-note {
+  margin: 0;
+}
+
+.fec-list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+}
+
+.fec-list:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.fec-list-space {
+  position: relative;
+  width: 100%;
+}
+
+.fec-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.fec-row:hover {
+  background: var(--bg-control-hover);
+}
+
+.fec-row.is-selected {
+  background: var(--accent-bg);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.fec-row-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fec-row-id {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.fec-row-counts {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.fec-row-relations {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+}
+
+.fec-row-relations.is-pending {
+  color: var(--text-faint);
+}
+
+.fec-detail-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.fec-browser-detail .scene-editor-problem-codemirror {
+  flex: 1;
+  min-height: 160px;
+}

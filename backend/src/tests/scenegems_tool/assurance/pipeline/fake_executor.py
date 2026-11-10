@@ -8,8 +8,9 @@ runs, so a payload that names an artifact nobody stored fails the test.
 
 What a job returns is scripted per case (class id, case index) with a CaseScript: an invalid
 scene, a partial or missing trajectory, a failed verdict (of every monitor, or of the scene,
-trajectory or run monitor alone), a failure of some stage (retryable or not). Unscripted
-cases pass every stage. A case of an input class gets its input from the artifact store: the
+trajectory or run monitor alone), a failure of some stage (retryable or not), the FECs a
+design space exploration finds and why it stopped. Unscripted
+cases pass every stage; an unscripted exploration finds three FECs. A case of an input class gets its input from the artifact store: the
 scenario's text, an item's scene or trajectories, as the node resolves them.
 """
 
@@ -18,7 +19,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import DESIGN_SPACE_EXPLORATION_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.node.jobs.job_types import artifact_input_fields, artifact_result_fields
 from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference, json_pointer, resolve_references, store_results
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
@@ -30,6 +31,7 @@ from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 from tests.scenegems_tool.persistence.stores.builders import make_hello
 
 EXPECTED = {
+    DESIGN_SPACE_EXPLORATION_IMAGE: "fp-exploration",
     SCENE_GENERATION_IMAGE: "fp-scene",
     TRAJECTORY_GENERATION_IMAGE: "fp-trajectory",
     SCENARIO_EXECUTION_IMAGE: "fp-execution",
@@ -54,6 +56,8 @@ class CaseScript:
     tier: str = "exact"  # the repeatability tier the simulation reports
     omit_tier: bool = False  # the simulation reports none
     stopped_early_at: Optional[int] = None  # the live monitor's early stop
+    explored: Optional[List[str]] = None  # the exploration case: the FEC texts it finds (three FECs when None)
+    stop_reason: str = "exhausted"  # the exploration case: why the exploration stopped
 
 
 class FakeArtifactStore:
@@ -65,7 +69,8 @@ class FakeArtifactStore:
     def put(self, field, data: bytes) -> ArtifactRef:
         sha = hashlib.sha256(data).hexdigest()
         self.documents[sha] = data
-        return ArtifactRef(sha256=sha, size_bytes=len(data), kind=field.kind)
+        media_type = "text/plain; charset=utf-8" if field.content.value == "text" else "application/json"  # as the node's artifact transport names it
+        return ArtifactRef(sha256=sha, size_bytes=len(data), kind=field.kind, media_type=media_type)
 
     def load(self, reference: ArtifactRef) -> bytes:
         return self.documents[reference.sha256]
@@ -149,10 +154,11 @@ class FakeExecutor:
     def _record_uploads(self, job, result: Mapping[str, Any]) -> None:
         """What the master's artifact route does on an upload: the artifact's record and the job's reference to it."""
         for declared in artifact_result_fields(job.job_type):
-            value = result.get(declared.name)
-            if is_reference(value):
-                self.stores.artifacts.insert_if_absent(value["sha256"], value["kind"], value["size_bytes"], value["media_type"])
-                self.stores.artifacts.add_reference(value["sha256"], ArtifactHolderKind.JOB, job.job_id, f"result:{declared.name}")
+            stored = result.get(declared.name)
+            for value in stored if declared.many and isinstance(stored, list) else [stored]:
+                if is_reference(value):
+                    self.stores.artifacts.insert_if_absent(value["sha256"], value["kind"], value["size_bytes"], value["media_type"])
+                    self.stores.artifacts.add_reference(value["sha256"], ArtifactHolderKind.JOB, job.job_id, f"result:{declared.name}")
 
     def _finish(self, lease: Lease, stage: PipelineStage, key, outcome: JobOutcome, result: Optional[dict] = None, error: Optional[str] = None, retryable: bool = False) -> Report:
         job = lease.job
@@ -175,8 +181,41 @@ def _input_text(executor: FakeExecutor, case) -> str:
     return executor.artifacts.documents[case.input_artifact].decode("utf-8")
 
 
+def fec_text(index: int, target_ships: int = 1, obstacles: int = 0) -> str:
+    """A functional scenario as an exploration returns it, as far as the counts read it: the own ship, the target ships and the obstacles."""
+    lines = [f"// FEC {index}", "declare os.", "OS(os)."]
+    lines += [f"TS(ts{number})." for number in range(1, target_ships + 1)]
+    lines += [f"StaticObstacle(obst{number})." for number in range(1, obstacles + 1)]
+    return "\n".join(lines) + "\n"
+
+
+DEFAULT_EXPLORED = [fec_text(0), fec_text(1), fec_text(2, target_ships=2, obstacles=1)]
+
+
+def _exploration(executor: FakeExecutor, script: CaseScript, case, payload) -> Dict[str, Any]:
+    assert payload["random_seed"] == case.seed, "the exploration runs with the exploration case's seed"
+    assert payload["problem"] and payload["scopes"], "the exploration gets the specification and the scope's entries"
+    texts = DEFAULT_EXPLORED if script.explored is None else script.explored
+    from scenegems_tool.subsystems.design_space_exploration.design_space import count_instances
+
+    counts = [count_instances(text) for text in texts]
+    return {
+        "stop_reason": script.stop_reason,
+        "complete": script.stop_reason in ("exhausted", "unsatisfiable"),
+        "models_found": len(texts),
+        "max_models": payload.get("max_models"),
+        "random_seed": payload["random_seed"],
+        "elapsed_s": 1.0,
+        "message": "the partial model is inconsistent" if script.stop_reason == "unsatisfiable" else None,
+        "fecs": [{"index": index, "vessel_count": vessels, "obstacle_count": obstacles} for index, (vessels, obstacles) in enumerate(counts)],
+        "functional_scenarios": list(texts),
+    }
+
+
 def _scene(executor: FakeExecutor, script: CaseScript, case, payload) -> Dict[str, Any]:
     assert payload["seed"] == case.seed, "scene generation runs with the case seed"
+    if case.class_id.startswith("explored/"):
+        assert payload["functional_scenario_content"] == _input_text(executor, case), "scene generation gets the explored FEC's functional scenario"
     if case.class_id.startswith("scenario/"):
         assert payload["functional_scenario_content"] == _input_text(executor, case), "scene generation gets the scenario given as content"
     evaluation_data = {"best_scene": {"case": f"{case.class_id}#{case.case_index}"}, "random_seed": payload["seed"]}
@@ -275,6 +314,7 @@ def _calibration(executor: FakeExecutor, script: CaseScript, case, payload) -> D
 
 
 RESULTS: Dict[PipelineStage, Callable[..., Dict[str, Any]]] = {
+    PipelineStage.EXPLORE_DESIGN_SPACE: _exploration,
     PipelineStage.GENERATE_SCENE: _scene,
     PipelineStage.MONITOR_SCENE: lambda *arguments: _monitoring(*arguments, stage=PipelineStage.MONITOR_SCENE),
     PipelineStage.GENERATE_TRAJECTORIES: _trajectories,

@@ -8,6 +8,7 @@ const ENTRIES_SHOWN = 20;
 const OUTPUTS_SHOWN = 20;
 
 const STEP_OUTPUT: Record<CampaignStep, string> = {
+  design_space_exploration: "FECs",
   scene_generation: "scenes",
   trajectory_generation: "trajectory sets",
   simulation: "runs",

@@ -1,4 +1,4 @@
-enum VesselType {CargoShip, Tanker, OSPassengerShip
+enum VesselType {CargoShip, Tanker, OSPassengerShip,
                  ContainerShip, PassengerShip,
                  FishingShip, MotorVessel,
                  SailingVessel, MilitaryVessel, MiniUSV}

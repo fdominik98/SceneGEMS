@@ -25,6 +25,10 @@ from scenegems_tool.persistence.schema import (
     VerdictState,
 )
 
+# The classes of a campaign that explores the design space: the exploration itself, and one class per FEC it finds
+EXPLORATION_CLASS_ID = "exploration"
+EXPLORED_CLASS_PREFIX = "explored/"
+
 
 @dataclass(frozen=True)
 class ClassSpec:
@@ -235,13 +239,16 @@ class OutputArtifact:
 class OutputRecord:
     """One output of one step of a case: its scene, its trajectories, or one simulated run (one row per case without runs yet).
 
+    The outputs of a design space exploration are the FECs it found, one row per explored class: case_id is the
+    exploration case, case_index the FEC's index, the artifact its functional scenario.
+
     valid says the step gave a usable output: the output exists and the case did not drop at
     the step. complete is the trajectories' completeness (None for scenes). verdict_state,
     failed_rules, first_failure_time_s, encounters and encounter_roles are the step's verdict,
     None while the step has none (or is not monitored).
     """
 
-    step: StepKind
+    step: Optional[StepKind]  # None for a FEC a design space exploration found, which no verdict judges
     case_id: int
     case_index: int
     class_id: str
@@ -259,6 +266,8 @@ class OutputRecord:
     first_failure_time_s: Optional[float] = None
     encounters: Optional[Dict[str, List[str]]] = None
     encounter_roles: Optional[Dict[str, Dict[str, Dict[str, List[str]]]]] = None
+    vessel_count: Optional[int] = None  # an explored FEC's counts; None for the outputs of the other steps
+    obstacle_count: Optional[int] = None
 
 
 @dataclass(frozen=True)

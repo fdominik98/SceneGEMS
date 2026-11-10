@@ -32,6 +32,12 @@ def test_runner_without_networks_has_no_network():
     assert "networks" not in service
 
 
+def test_a_runner_image_with_its_own_program_gets_its_command_and_environment():
+    service = runner_service("scenegems-design-space-exploration-subsystem:latest", command=["generate-models", "job"], environment={})
+    assert (service["command"], service["environment"], service["network_mode"]) == (["generate-models", "job"], {}, "none")
+    assert runner_service("image")["environment"] == {"PYTHONUNBUFFERED": "1"}  # the Python job main's, unless one is given
+
+
 def test_every_container_of_a_job_stack_has_a_bounded_log():
     services = scope_services(SCOPE, {RUNNER_SERVICE: runner_service("image"), "sitl_0": {"image": "sitl"}, "gazebo": {"image": "gazebo", "logging": {"driver": "local"}}})
     assert services[RUNNER_SERVICE]["logging"] == {"driver": "json-file", "options": {"max-size": "10m", "max-file": "3"}}

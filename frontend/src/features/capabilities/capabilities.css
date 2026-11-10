@@ -908,3 +908,276 @@
     display: none;
   }
 }
+
+/* The view bar of a part: the views, what the shown one is for, and its options */
+
+.cap-viewbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.cap-view-hint {
+  flex: 1 1 320px;
+  margin: 0;
+  max-width: 90ch;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Overview: the chain of parts */
+
+.cap-overview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.cap-overview-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size);
+  font-weight: 700;
+}
+
+.cap-overview-lead {
+  margin: 0 0 var(--space-4);
+  max-width: 90ch;
+  color: var(--text-muted);
+}
+
+.cap-chain {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+}
+
+.cap-chain-step {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 196px;
+}
+
+/* A master that states no chain: the parts side by side, without arrows or numbers */
+.cap-chain--plain {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+  overflow-x: visible;
+}
+
+/* What one step hands to the next: an arrow with the handed thing above it */
+.cap-chain-link {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column-reverse;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 72px;
+  padding: 0 var(--space-1);
+}
+
+.cap-chain-arrow {
+  position: relative;
+  width: 100%;
+  height: 2px;
+  background: var(--accent);
+}
+
+.cap-chain-arrow::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: 0;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid var(--accent);
+}
+
+.cap-chain-carries {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.cap-support {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 520px));
+  gap: var(--space-3);
+}
+
+.cap-part {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.cap-part--support {
+  border-style: dashed;
+}
+
+.cap-part-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.cap-part-number {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgb(var(--accent-strong-rgb) / 0.16);
+  color: var(--accent-strong);
+  font-weight: 700;
+  font-size: var(--font-size-sm);
+}
+
+.cap-part-names {
+  min-width: 0;
+}
+
+.cap-part-title {
+  margin: 0;
+  font-size: var(--font-size);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.cap-part-sub {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* The card says what the part is in a few lines; the part's own page has the whole text */
+.cap-part-summary {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+.cap-part-facts {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  margin: 0;
+}
+
+.cap-part-facts > div {
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+  font-size: var(--font-size-sm);
+}
+
+.cap-part-facts dt {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.cap-part-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cap-part-offer--ok {
+  color: var(--ok-text);
+}
+
+.cap-part-offer--warn {
+  color: var(--warn-text);
+}
+
+.cap-part-offer--neutral {
+  color: var(--text-muted);
+}
+
+.cap-part-open {
+  align-self: flex-start;
+  min-height: var(--control-height);
+  padding: 0 var(--space-4);
+}
+
+.cap-reading-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3) var(--space-5);
+  margin: 0;
+}
+
+.cap-reading-list dt {
+  font-weight: 600;
+}
+
+.cap-reading-list dd {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+/* Narrow: the chain runs top to bottom */
+@media (max-width: 1100px) {
+  .cap-chain {
+    flex-direction: column;
+    overflow-x: visible;
+  }
+
+  .cap-chain-step {
+    min-width: 0;
+  }
+
+  .cap-chain-link {
+    flex-direction: row;
+    width: auto;
+    height: 44px;
+    padding: 0 0 0 var(--space-5);
+    justify-content: flex-start;
+    gap: var(--space-3);
+  }
+
+  .cap-chain-arrow {
+    width: 2px;
+    height: 100%;
+  }
+
+  .cap-chain-arrow::after {
+    top: auto;
+    right: -4px;
+    bottom: 0;
+    border-top: 8px solid var(--accent);
+    border-right: 5px solid transparent;
+    border-bottom: 0;
+    border-left: 5px solid transparent;
+  }
+}
+
+/* The shown tab and view keep their highlight under the pointer */
+.cap-tab.active:hover,
+.cap-view.active:hover {
+  color: var(--bg);
+  background: var(--accent);
+}

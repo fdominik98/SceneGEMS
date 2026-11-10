@@ -47,3 +47,28 @@ monitoring/mqtt_service:
     Windows host. Frame values equal the in-process output. Slower than in process
     (1,425 scenes per second) because every batch crosses the broker and waits for its
     acknowledgement.
+
+design_space_exploration/refinery:
+  facts:
+    - key: fecs_one_target_ship
+      label: One target ship
+      value: 7
+      unit: FECs in 5.4 s
+      note: scope TS = 1, StaticObstacle = 0; the two-vessel family of the catalog
+    - key: fecs_two_target_ships
+      label: Two target ships
+      value: 28
+      unit: FECs in 6.7 s
+      note: scope TS = 2, StaticObstacle = 0; the three-vessel family of the catalog
+    - key: fecs_two_target_ships_one_obstacle
+      label: Two target ships, one obstacle
+      value: 28
+      unit: FECs in 6.8 s
+      note: scope TS = 2, StaticObstacle = 1
+  evidence: >-
+    2026-11-10, Docker on a Windows host: generate-models generate on the default specification,
+    image built from Refinery 9c5a22c. Every run ended exhausted, so the counts are the whole
+    design space, and they equal the catalog's (7, 28, 28). The times are the generator's own
+    elapsed time and include loading the problem; about 5 s of each is the start of the JVM and
+    the loading. The seven FECs of one target ship have the same shapes as the catalog's
+    (FunctionalScenario.fec_shape_hash).

@@ -121,9 +121,34 @@ function buildItem(item: InputItemDraft): ConfigObject {
   return { name: item.name.trim(), ref: buildRef(item.ref), source: { ...item.source } };
 }
 
-/** The input section: scenario files for a campaign that starts with scene generation, items for one that starts later. */
+/**
+ * The design space exploration section: the specification inline, the scope, the search's limits
+ * (`max_fecs` null for every FEC) and what each explored FEC needs when later steps run.
+ */
+function buildExploration(draft: WizardDraft): ConfigObject {
+  const exploration = draft.exploration;
+  // An empty specification is left out: the master then explores its default (a preset may name none)
+  const section: ConfigObject = {};
+  if (exploration.specification.trim().length > 0) {
+    section.specification = normalizeNewlines(exploration.specification);
+  }
+  section.scope = exploration.scope.trim();
+  section.max_fecs = exploration.maxFecs;
+  put(section, "timeout_s", exploration.timeoutS);
+  put(section, "quota", exploration.quota);
+  put(section, "failure_budget", exploration.failureBudget);
+  return section;
+}
+
+/**
+ * The input section: scenario files for a campaign that starts with scene generation, items for one
+ * that starts later, none for one that starts with the design space exploration (its FECs come from it).
+ */
 function buildInput(draft: WizardDraft): ConfigObject {
   const input: ConfigObject = {};
+  if (firstStep(draft.steps) === "design_space_exploration") {
+    return input;
+  }
   if (firstStep(draft.steps) === "scene_generation") {
     if (draft.input.scenarios.length > 0) {
       input.functional_scenarios = draft.input.scenarios.map(buildScenario);
@@ -286,7 +311,8 @@ function buildPolicy(draft: WizardDraft): ConfigObject {
 
 /**
  * The config the draft describes (format 3: a scope entry lists its FECs under `fecs`). Sections of steps the campaign does not run are left out,
- * and the scope only goes in when the campaign starts with scene generation. A run with an unknown
+ * and the scope only goes in when the campaign starts with scene generation (one that starts with the design space exploration has
+ * neither scope nor input). A run with an unknown
  * stack gets the layer only; `checkDraft` reports it.
  */
 export function buildCampaignConfig(draft: WizardDraft, catalog: BuilderCatalog): ConfigObject {
@@ -304,6 +330,9 @@ export function buildCampaignConfig(draft: WizardDraft, catalog: BuilderCatalog)
   const input = buildInput(plan);
   if (Object.keys(input).length > 0) {
     config.input = input;
+  }
+  if (runsStep(steps, "design_space_exploration")) {
+    config.design_space_exploration = buildExploration(plan);
   }
   const domain = buildDomain(plan);
   if (Object.keys(domain).length > 0) {

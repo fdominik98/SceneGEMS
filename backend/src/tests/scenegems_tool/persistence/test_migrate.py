@@ -56,10 +56,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0011"]
+    assert scripts.get_heads() == ["0012"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -77,11 +77,12 @@ def test_revision_enum_values_match_the_code():
     # The revisions spell the CHECK constraint values out; a new enum value needs a new revision.
     # Each enum is checked against the latest revision that names its values.
     first, second, fifth, eighth = _revision("0001_cluster_tables"), _revision("0002_campaigns"), _revision("0005_partial_campaigns"), _revision("0008_split_ardupilot_simulation")
-    ninth = _revision("0009_simulation_job_and_node_components")
+    ninth, twelfth = _revision("0009_simulation_job_and_node_components"), _revision("0012_design_space_exploration")
     assert set(first.JOB_TYPES) == set(second.PREVIOUS_JOB_TYPES)
     assert set(second.JOB_TYPES) == set(eighth.PREVIOUS_JOB_TYPES)
     assert set(eighth.JOB_TYPES) == set(ninth.PREVIOUS_JOB_TYPES)
-    assert set(ninth.JOB_TYPES) == _values(JobType)
+    assert set(ninth.JOB_TYPES) == set(twelfth.PREVIOUS_JOB_TYPES)
+    assert set(twelfth.JOB_TYPES) == _values(JobType)
     assert set(first.JOB_STATES) == _values(JobState)
     assert set(first.NODE_STATUSES) == _values(NodeStatus)
     assert set(first.JOB_EVENT_KINDS) == _values(JobEventKind)
@@ -89,7 +90,8 @@ def test_revision_enum_values_match_the_code():
     assert set(second.CAMPAIGN_ACTUAL_STATES) == _values(CampaignActualState)
     assert set(second.CAMPAIGN_CLASS_STATES) == _values(CampaignClassState)
     assert set(second.PIPELINE_STAGES) == set(fifth.PREVIOUS_PIPELINE_STAGES)
-    assert set(fifth.PIPELINE_STAGES) == _values(PipelineStage)
+    assert set(fifth.PIPELINE_STAGES) == set(twelfth.PREVIOUS_PIPELINE_STAGES)
+    assert set(twelfth.PIPELINE_STAGES) == _values(PipelineStage)
     assert set(second.CASE_STATES) == _values(CaseState)
     assert set(second.TRAJECTORY_GENERATORS) == _values(TrajectoryGeneratorImplementation)
     assert set(second.MONITORS) == _values(MonitorImplementation)
@@ -98,7 +100,8 @@ def test_revision_enum_values_match_the_code():
     assert set(second.ARTIFACT_HOLDER_KINDS) == set(fifth.PREVIOUS_ARTIFACT_HOLDER_KINDS)
     assert set(fifth.ARTIFACT_HOLDER_KINDS) == _values(ArtifactHolderKind)
     assert set(fifth.CAMPAIGN_KINDS) == _values(CampaignKind)
-    assert set(fifth.CAMPAIGN_ORIGINS) == _values(CampaignOrigin)
+    assert set(fifth.CAMPAIGN_ORIGINS) == set(twelfth.PREVIOUS_CAMPAIGN_ORIGINS)
+    assert set(twelfth.CAMPAIGN_ORIGINS) == _values(CampaignOrigin)
     assert set(fifth.STEP_KINDS) == _values(StepKind)
     assert set(fifth.RUN_SOURCES) == _values(RunSource)
     assert fifth.KIND_OF_ORIGIN == KIND_OF_ORIGIN_CHECK
@@ -131,7 +134,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0011"
+            assert MigrationContext.configure(connection).get_current_revision() == "0012"
     finally:
         engine.dispose()
 
@@ -595,5 +598,63 @@ def test_revision_0011_adds_nullable_encounter_roles_that_existing_verdicts_lack
             connection.execute(text("""UPDATE verdict SET encounter_roles = '{"OS_0 - TS_1": {"HEAD_ON": {"give_way": ["OS_0", "TS_1"], "stand_on": []}}}'"""))
         command.downgrade(config, "0010")
         assert "encounter_roles" not in {column["name"] for column in inspect(engine).get_columns("verdict")}
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_the_design_space_exploration_values_come_and_go_with_revision_0012(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0011")
+    engine = create_engine(empty_database_url)
+    now = datetime(2026, 11, 10, 9, 0, tzinfo=timezone.utc)
+    job = (
+        "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+        " idempotency_key, state, attempt, failed_attempts, submitted_at, updated_at, available_at)"
+        " VALUES (:id, :job_type, '{}', '{}', '{}', 0, 0, 0, 3, :id, 'queued', 0, 0, :at, :at, :at)"
+    )
+    campaign = (
+        "INSERT INTO campaign (id, name, kind, origin, desired_state, actual_state, config_version, pinned_fingerprints, created_at, updated_at)"
+        " VALUES (:id, 'explore', :kind, :origin, 'running', 'created', 1, '{}', :at, :at)"
+    )
+    campaign_class = (
+        "INSERT INTO campaign_class (campaign_id, class_id, content_hash, vessel_count, obstacle_count, quota, failure_budget, complete_count, dropped_count, in_flight_count, state, created_at, updated_at)"
+        " VALUES (:campaign, :class_id, :hash, :vessels, 0, 1, 0, 0, 0, 0, 'open', :at, :at)"
+    )
+    case = (
+        "INSERT INTO scenario_case (campaign_id, class_id, case_index, seed, config_version, stage, state, version, progress, created_at, updated_at)"
+        " VALUES (:campaign, :class_id, 0, 1, 1, :stage, 'active', 1, '{}', :at, :at)"
+    )
+    explored = {"campaign": "explored", "class_id": "exploration", "hash": "a" * 64, "vessels": 0, "at": now}
+    try:
+        with engine.connect() as connection:  # before the revision none of the new values is accepted
+            for statement, values in (
+                (job, {"id": "job-old", "job_type": "design_space_exploration", "at": now}),
+                (campaign, {"id": "old", "kind": "workbench", "origin": "design_space_exploration", "at": now}),
+            ):
+                with pytest.raises(IntegrityError):
+                    connection.execute(text(statement), values)
+                connection.rollback()
+        command.upgrade(config, "0012")
+        with engine.begin() as connection:
+            connection.execute(text(job), {"id": "job-explore", "job_type": "design_space_exploration", "at": now})
+            connection.execute(text(job), {"id": "job-scene", "job_type": "scene_generation", "at": now})
+            connection.execute(text(campaign), {"id": "explored", "kind": "campaign", "origin": "wizard", "at": now})
+            connection.execute(text(campaign), {"id": "entry", "kind": "workbench", "origin": "design_space_exploration", "at": now})
+            connection.execute(text(campaign), {"id": "plain", "kind": "campaign", "origin": "wizard", "at": now})
+            connection.execute(text(campaign_class), explored)
+            connection.execute(text(campaign_class), {**explored, "campaign": "plain", "class_id": "2vessel_0obstacle_scenarios/fec0", "vessels": 2})
+            connection.execute(text(case), {"campaign": "explored", "class_id": "exploration", "stage": "explore_design_space", "at": now})
+        command.downgrade(config, "0011")
+        with engine.connect() as connection:  # what an older release cannot read is gone, the rest stays
+            assert connection.execute(text("SELECT id FROM campaign ORDER BY id")).scalars().all() == ["plain"]
+            assert connection.execute(text("SELECT id FROM job ORDER BY id")).scalars().all() == ["job-scene"]
+            assert connection.execute(text("SELECT count(*) FROM scenario_case")).scalar_one() == 0
+            with pytest.raises(IntegrityError):
+                connection.execute(text(campaign_class), {**explored, "campaign": "plain", "class_id": "exploration"})
+            connection.rollback()
+        command.upgrade(config, "head")
+        with engine.begin() as connection:
+            connection.execute(text(campaign_class), {**explored, "campaign": "plain", "class_id": "exploration"})
     finally:
         engine.dispose()

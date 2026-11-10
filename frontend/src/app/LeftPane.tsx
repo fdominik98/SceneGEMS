@@ -36,6 +36,18 @@ function DomainConfigIcon(props: IconProps) {
   );
 }
 
+function DesignSpaceExplorationIcon(props: IconProps) {
+  return (
+    <svg {...iconBaseProps(props)}>
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+      <circle cx="17.5" cy="17.5" r="3" />
+      <line x1="19.7" y1="19.7" x2="22" y2="22" />
+    </svg>
+  );
+}
+
 function SceneGenerationIcon(props: IconProps) {
   return (
     <svg {...iconBaseProps(props)}>
@@ -171,8 +183,9 @@ interface NavEntry<T> {
   Icon: (props: IconProps) => ReactElement;
 }
 
-/** The workbench views in the order of the workflow: generate a scene, plan trajectories, simulate. */
+/** The workbench views in the order of the workflow: explore the design space, generate a scene, plan trajectories, simulate. */
 const WORKBENCH_ITEMS: NavEntry<WorkbenchView>[] = [
+  { id: "designSpaceExploration", label: "Design Space Exploration", hint: "Find the scenario classes", Icon: DesignSpaceExplorationIcon },
   { id: "sceneGeneration", label: "Scene Generation", hint: "Create a starting scene", Icon: SceneGenerationIcon },
   { id: "trajectoryGeneration", label: "Trajectory Generation", hint: "Plan the vessel routes", Icon: TrajectoryGenerationIcon },
   { id: "simulation", label: "Simulation", hint: "Watch the scenario play", Icon: SimulationIcon },

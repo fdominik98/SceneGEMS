@@ -302,3 +302,81 @@ def test_count_outputs_takes_the_filters_of_list_outputs(stores, step_outputs):
             assert stores.cases.count_outputs(campaign_id, step, **keywords) == len(stores.cases.list_outputs(campaign_id, step, **keywords)), (step, keywords)
     assert [stores.cases.count_outputs(campaign_id, step) for step in StepKind] == [4, 2, 3]
     assert [output.case_id for output in stores.cases.list_outputs(campaign_id, StepKind.SCENE, limit=2, offset=1)] == [step_outputs.a1.case_id, step_outputs.a2.case_id]
+
+
+# Classes added while the campaign runs: the FECs of a design space exploration
+
+
+def _explored_specs(stores, count=2, quota=2):
+    from scenegems_tool.persistence.stores import ClassSpec
+
+    specs = []
+    for index in range(count):
+        sha = sha256_of(f"explored fec {index}")
+        stores.artifacts.insert_if_absent(sha, "functional_scenario", 40 + index, "text/plain; charset=utf-8")
+        specs.append(ClassSpec(f"explored/{index:05d}", sha, 2 + index, index, quota, 1))
+    return specs
+
+
+def test_added_classes_are_open_and_take_cases(stores, campaign, clock):
+    specs = _explored_specs(stores)
+    added = stores.cases.add_classes(campaign.campaign_id, specs)
+    assert [(record.class_id, record.state, record.quota, record.failure_budget, record.vessel_count, record.obstacle_count) for record in added] == [
+        ("explored/00000", CampaignClassState.OPEN, 2, 1, 2, 0),
+        ("explored/00001", CampaignClassState.OPEN, 2, 1, 3, 1),
+    ]
+    assert all(record.finished_at is None and (record.complete_count, record.dropped_count, record.in_flight_count) == (0, 0, 0) for record in added)
+    (case,) = stores.cases.create_cases(campaign.campaign_id, [NewCase("explored/00001", 0, 7, input_artifact=specs[1].content_hash)])
+    assert _counts(stores, campaign.campaign_id, "explored/00001") == ClassCounts(complete=0, dropped=0, in_flight=1) and case.input_artifact == specs[1].content_hash
+    assert {record.class_id for record in stores.cases.list_classes(campaign.campaign_id)} == {CLASS_A, CLASS_B, "explored/00000", "explored/00001"}
+
+
+def test_classes_added_closed_are_complete_at_once_and_take_no_case(stores, campaign):
+    (closed,) = stores.cases.add_classes(campaign.campaign_id, _explored_specs(stores, count=1), closed_reason="the campaign runs no step after the exploration")
+    assert (closed.state, closed.state_reason, closed.finished_at is not None) == (CampaignClassState.COMPLETE, "the campaign runs no step after the exploration", True)
+    with pytest.raises(ClassStateConflict):
+        stores.cases.create_cases(campaign.campaign_id, [NewCase("explored/00000", 0, 1)])
+
+
+def test_a_class_is_added_once_and_needs_a_sha256_hash(stores, campaign):
+    from scenegems_tool.persistence.stores import ClassSpec
+
+    specs = _explored_specs(stores, count=1)
+    stores.cases.add_classes(campaign.campaign_id, specs)
+    with pytest.raises(IntegrityError):
+        stores.cases.add_classes(campaign.campaign_id, specs)
+    with pytest.raises(ValueError):
+        stores.cases.add_classes(campaign.campaign_id, [ClassSpec("explored/00007", "not a hash", 2, 0, 1, 0)])
+
+
+def test_the_explored_fecs_are_listed_in_index_order_with_their_artifact_once_the_exploration_case_exists(stores, campaign):
+    specs = _explored_specs(stores, count=3)
+    stores.cases.add_classes(campaign.campaign_id, specs)
+    assert stores.cases.list_explored(campaign.campaign_id) == []  # no exploration case: nothing was explored
+    assert stores.cases.count_explored(campaign.campaign_id) == 3
+    stores.cases.add_classes(campaign.campaign_id, [type(specs[0])("exploration", sha256_of("the exploration"), 0, 0, 1, 0)])
+    (exploration,) = stores.cases.create_cases(campaign.campaign_id, [NewCase("exploration", 0, 7, stage=PipelineStage.EXPLORE_DESIGN_SPACE)])
+    outputs = stores.cases.list_explored(campaign.campaign_id)
+    assert [(output.class_id, output.case_index, output.case_id, output.vessel_count, output.obstacle_count) for output in outputs] == [
+        ("explored/00000", 0, exploration.case_id, 2, 0),
+        ("explored/00001", 1, exploration.case_id, 3, 1),
+        ("explored/00002", 2, exploration.case_id, 4, 2),
+    ]
+    assert outputs[1].artifact == OutputArtifact(specs[1].content_hash, 41, "functional_scenario", "text/plain; charset=utf-8")
+    assert all(output.step is None and output.valid and output.state == CaseState.COMPLETE and output.verdict_state is None for output in outputs)
+    assert [output.class_id for output in stores.cases.list_explored(campaign.campaign_id, limit=1, offset=2)] == ["explored/00002"]
+    # the catalog classes of the campaign are not explored FECs
+    assert all(output.class_id.startswith("explored/") for output in outputs)
+
+
+def test_the_exploration_case_is_no_output_of_the_other_steps(stores, campaign):
+    from scenegems_tool.persistence.stores import ClassSpec
+
+    stores.cases.add_classes(campaign.campaign_id, [ClassSpec("exploration", sha256_of("the exploration"), 0, 0, 1, 0)])
+    (exploration,) = stores.cases.create_cases(campaign.campaign_id, [NewCase("exploration", 0, 7, stage=PipelineStage.EXPLORE_DESIGN_SPACE)])
+    (scenario,) = _create(stores, campaign)
+    stores.cases.move_case(exploration.case_id, exploration.version, stage=PipelineStage.VERDICT, state=CaseState.COMPLETE)
+    for step in StepKind:
+        assert exploration.case_id not in {output.case_id for output in stores.cases.list_outputs(campaign.campaign_id, step)}
+    assert [output.case_id for output in stores.cases.list_outputs(campaign.campaign_id, StepKind.SCENE)] == [scenario.case_id]
+    assert stores.cases.count_outputs(campaign.campaign_id, StepKind.SCENE) == 1

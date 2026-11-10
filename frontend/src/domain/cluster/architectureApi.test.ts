@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { sampleStackDocument } from "../../test/fixtures/architectureDocuments";
+import { sampleStackDocument, sampleStackDocumentWithoutChain } from "../../test/fixtures/architectureDocuments";
 import { architectureSchema, getArchitecture } from "./architectureApi";
 import { createOperatorClient, OperatorApiError } from "./operatorApi";
 
@@ -15,6 +15,20 @@ describe("architecture schema", () => {
     const parsed = architectureSchema.parse({ schema_version: 1, documents: [sampleStackDocument()] });
     expect(parsed.documents[0].combinations).toHaveLength(6);
     expect(parsed.documents[0].nodes[4].evidence).toContain("12-core");
+  });
+
+  it("reads the place of a part in the chain", () => {
+    const parsed = architectureSchema.parse({ schema_version: 2, documents: [sampleStackDocument()] }).documents[0];
+    expect([parsed.role, parsed.step, parsed.takes, parsed.gives, parsed.job_types]).toEqual(["step", "Stacking", "parts", "a stack", ["simulation"]]);
+  });
+
+  it("gives a document of a master from before the overview an empty place in the chain", () => {
+    const parsed = architectureSchema.parse({ schema_version: 1, documents: [sampleStackDocumentWithoutChain()] }).documents[0];
+    expect([parsed.role, parsed.step, parsed.takes, parsed.gives, parsed.job_types]).toEqual(["step", "", "", "", []]);
+  });
+
+  it("refuses a role it does not know", () => {
+    expect(architectureSchema.safeParse({ schema_version: 2, documents: [{ ...sampleStackDocument(), role: "extra" }] }).success).toBe(false);
   });
 
   it("accepts a fact that is a number, a string, a boolean or null", () => {

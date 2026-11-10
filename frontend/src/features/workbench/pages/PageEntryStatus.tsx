@@ -47,7 +47,7 @@ export function PageEntryStatus({ store }: { store: PageStore }) {
   if (loaded !== null) {
     return (
       <p className="step-line page-entry-status">
-        {loaded.caseIndex !== undefined ? `Case ${loaded.caseIndex + 1}` : "A case"}
+        {loaded.step === "design_space_exploration" ? "The exploration" : loaded.caseIndex !== undefined ? `Case ${loaded.caseIndex + 1}` : "A case"}
         {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""} of <EntryLink campaignId={loaded.campaignId} />
       </p>
     );

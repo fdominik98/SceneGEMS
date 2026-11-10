@@ -1,4 +1,4 @@
-import { CAMPAIGN_STEPS, type CampaignStep } from "../../../domain/cluster/schemas";
+import { CAMPAIGN_STEPS, IMPLIED_STEPS, type CampaignStep } from "../../../domain/cluster/schemas";
 import type { WizardStepId } from "./wizardState";
 
 /**
@@ -10,6 +10,7 @@ import type { WizardStepId } from "./wizardState";
 export const CHAIN: readonly CampaignStep[] = CAMPAIGN_STEPS;
 
 export const CAMPAIGN_STEP_LABELS: Record<CampaignStep, string> = {
+  design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   simulation: "Simulation",
@@ -17,6 +18,7 @@ export const CAMPAIGN_STEP_LABELS: Record<CampaignStep, string> = {
 
 /** What each step produces, in the words the Steps step uses. */
 export const CAMPAIGN_STEP_OUTPUTS: Record<CampaignStep, string> = {
+  design_space_exploration: "FECs",
   scene_generation: "scenes",
   trajectory_generation: "trajectories",
   simulation: "simulated runs",
@@ -29,11 +31,14 @@ export function stepRange(first: CampaignStep, last: CampaignStep): CampaignStep
   return CHAIN.slice(from, to + 1);
 }
 
-/** The steps as the config states them: only known steps, once each, in chain order; the whole chain when none is left. */
+/**
+ * The steps as the config states them: only known steps, once each, in chain order; when none is
+ * left, the chain a config without steps runs (without the design space exploration).
+ */
 export function normalizeSteps(steps: readonly unknown[] | undefined): CampaignStep[] {
   const chosen = CHAIN.filter((step) => steps?.includes(step));
   if (chosen.length === 0) {
-    return [...CHAIN];
+    return [...IMPLIED_STEPS];
   }
   // A gap would be refused by the master: close it
   return stepRange(chosen[0], chosen[chosen.length - 1]);
@@ -55,6 +60,9 @@ export function runsStep(steps: readonly CampaignStep[], step: CampaignStep): bo
 /** The wizard steps a campaign with these steps goes through, in order. Steps not run hide their own pages. */
 export function visibleWizardSteps(steps: readonly CampaignStep[]): WizardStepId[] {
   const shown: WizardStepId[] = ["steps", "input", "domain"];
+  if (runsStep(steps, "design_space_exploration")) {
+    shown.push("exploration");
+  }
   if (runsStep(steps, "scene_generation")) {
     shown.push("scenes");
   }
@@ -68,11 +76,13 @@ export function visibleWizardSteps(steps: readonly CampaignStep[]): WizardStepId
   return shown;
 }
 
-/** What the first step takes as input. */
-export type InputKind = "catalog_or_scenarios" | "scenes" | "trajectories";
+/** What the first step takes as input; the design space exploration takes none (its FECs come from the exploration). */
+export type InputKind = "explored" | "catalog_or_scenarios" | "scenes" | "trajectories";
 
 export function inputKindOf(steps: readonly CampaignStep[]): InputKind {
   switch (firstStep(steps)) {
+    case "design_space_exploration":
+      return "explored";
     case "scene_generation":
       return "catalog_or_scenarios";
     case "trajectory_generation":

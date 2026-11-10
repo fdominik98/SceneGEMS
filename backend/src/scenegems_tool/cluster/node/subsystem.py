@@ -7,6 +7,7 @@ from utils.image_names import tagged
 
 
 class Subsystem(str, Enum):
+    DESIGN_SPACE_EXPLORATION = "design_space_exploration"
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     MONITORING = "monitoring"
@@ -14,6 +15,7 @@ class Subsystem(str, Enum):
 
 
 _DEFAULT_IMAGES = {
+    Subsystem.DESIGN_SPACE_EXPLORATION: tagged("scenegems-design-space-exploration-subsystem"),
     Subsystem.SCENE_GENERATION: tagged("scenegems-scene-generation-subsystem"),
     Subsystem.TRAJECTORY_GENERATION: tagged("scenegems-trajectory-generation-subsystem"),
     Subsystem.MONITORING: tagged("scenegems-monitoring-subsystem"),
@@ -21,6 +23,7 @@ _DEFAULT_IMAGES = {
 }
 # Environment variables that replace a default image, for the workbench and the node alike.
 IMAGE_ENVIRONMENT_VARIABLES = {
+    Subsystem.DESIGN_SPACE_EXPLORATION: "DESIGN_SPACE_EXPLORATION_IMAGE",
     Subsystem.SCENE_GENERATION: "SCENE_GENERATION_IMAGE",
     Subsystem.TRAJECTORY_GENERATION: "TRAJECTORY_GENERATION_IMAGE",
     Subsystem.MONITORING: "MONITORING_IMAGE",

@@ -10,6 +10,10 @@ move_case raises CaseConflict and changes nothing. A final case (complete, dropp
 cancelled) keeps its state; its other fields (artifacts after retention, progress) may
 still change.
 
+A campaign that explores the design space gets its classes while it runs: add_classes writes
+one class per FEC the exploration found (open when later steps run them, closed at once
+otherwise), and list_explored lists them as the exploration's outputs.
+
 The outputs of a step (list_outputs) are what the history browses: per case its scene or
 its trajectories, or per run record its state log, with the step's verdict. A case belongs
 to a step's outputs once it reached the step (its stage is the step's or a later one) or
@@ -27,7 +31,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.schema import ArtifactRow, CampaignClassRow, CampaignClassState, CaseState, PipelineStage, RunRecordRow, ScenarioCaseRow, StepKind, VerdictRow
 from scenegems_tool.persistence.schema.artifact_tables import require_sha256_hex
-from scenegems_tool.persistence.stores.campaign_records import CaseRecord, ClassCounts, ClassRecord, NewCase, OutputArtifact, OutputRecord
+from scenegems_tool.persistence.stores.campaign_records import EXPLORATION_CLASS_ID, EXPLORED_CLASS_PREFIX, CaseRecord, ClassCounts, ClassRecord, ClassSpec, NewCase, OutputArtifact, OutputRecord
 from scenegems_tool.persistence.stores.store_session import session_scope
 
 # The class count each case state adds to; cancelled cases count in none
@@ -40,6 +44,7 @@ COUNT_COLUMN_OF_STATE = {
 
 # The stages of a case in chain order; a case at a stage has reached every step that starts at or before it
 STAGE_ORDER = (
+    PipelineStage.EXPLORE_DESIGN_SPACE,
     PipelineStage.GENERATE_SCENE,
     PipelineStage.MONITOR_SCENE,
     PipelineStage.GENERATE_TRAJECTORIES,
@@ -75,6 +80,7 @@ def dropped_at_step(step: StepKind):
 def step_outputs_query(columns, campaign_id: str, step: StepKind, states: Optional[Collection[CaseState]] = None, class_id: Optional[str] = None):
     """The rows of a step's outputs with the given columns: the campaign's cases that reached the step or have its output,
     joined with their run records (simulation), the output's artifact record and the step's verdict (all outer joins).
+    The exploration case of a campaign that explores the design space is no scenario's case and is left out.
     """
     output_hash = output_hash_of(step)
     query = select(*columns).select_from(ScenarioCaseRow)
@@ -87,11 +93,18 @@ def step_outputs_query(columns, campaign_id: str, step: StepKind, states: Option
         VerdictRow, and_(VerdictRow.case_id == ScenarioCaseRow.id, VerdictRow.step == step, VerdictRow.run_index == verdict_run_index)
     )
     query = query.where(ScenarioCaseRow.campaign_id == campaign_id, or_(ScenarioCaseRow.stage.in_(stages_from(FIRST_STAGE_OF_STEP[step])), has_output))
+    query = query.where(ScenarioCaseRow.class_id != EXPLORATION_CLASS_ID)  # the exploration case runs none of these steps
     if class_id is not None:
         query = query.where(ScenarioCaseRow.class_id == class_id)
     if states is not None:
         query = query.where(ScenarioCaseRow.state.in_(list(states)))
     return query
+
+
+def explored_index(class_id: str) -> int:
+    """The index of an explored class (explored/00012 is 12); 0 for an id that carries none."""
+    digits = class_id[len(EXPLORED_CLASS_PREFIX) :]
+    return int(digits) if digits.isdigit() else 0
 
 
 class UnknownClass(LookupError):
@@ -212,6 +225,42 @@ class CaseStore:
                     corrected.append(row)
             scope.flush()
             return [ClassRecord.from_row(row) for row in corrected]
+
+    def add_classes(self, campaign_id: str, classes: Sequence[ClassSpec], *, closed_reason: Optional[str] = None, session: Optional[Session] = None) -> List[ClassRecord]:
+        """Adds classes to a campaign that exists: the FECs a design space exploration found.
+
+        They are open and take cases; with closed_reason they are complete at once, for a
+        campaign that runs no step after the exploration. A class id the campaign has
+        already violates the primary key.
+        """
+        for spec in classes:
+            require_sha256_hex(spec.content_hash)
+        now = self._clock()
+        closed = closed_reason is not None
+        with session_scope(self._sessions, session) as scope:
+            rows = [
+                CampaignClassRow(
+                    campaign_id=campaign_id,
+                    class_id=spec.class_id,
+                    content_hash=spec.content_hash,
+                    vessel_count=spec.vessel_count,
+                    obstacle_count=spec.obstacle_count,
+                    quota=spec.quota,
+                    failure_budget=spec.failure_budget,
+                    complete_count=0,
+                    dropped_count=0,
+                    in_flight_count=0,
+                    state=CampaignClassState.COMPLETE if closed else CampaignClassState.OPEN,
+                    state_reason=closed_reason,
+                    created_at=now,
+                    updated_at=now,
+                    finished_at=now if closed else None,
+                )
+                for spec in classes
+            ]
+            scope.add_all(rows)
+            scope.flush()
+            return [ClassRecord.from_row(row) for row in rows]
 
     # Cases
 
@@ -401,7 +450,54 @@ class CaseStore:
         with session_scope(self._sessions, session) as scope:
             return scope.execute(step_outputs_query([func.count()], campaign_id, step, states, class_id)).scalar_one()
 
+    def list_explored(self, campaign_id: str, limit: Optional[int] = 100, offset: int = 0, *, session: Optional[Session] = None) -> List[OutputRecord]:
+        """The FECs a design space exploration found, as its outputs in index order: one row per explored class, with its functional scenario's artifact."""
+        with session_scope(self._sessions, session) as scope:
+            exploration = scope.execute(
+                select(ScenarioCaseRow.id).where(ScenarioCaseRow.campaign_id == campaign_id, ScenarioCaseRow.class_id == EXPLORATION_CLASS_ID).order_by(ScenarioCaseRow.case_index.desc()).limit(1)
+            ).scalar_one_or_none()
+            if exploration is None:
+                return []
+            query = (
+                self._explored(select(CampaignClassRow, ArtifactRow.size_bytes, ArtifactRow.kind, ArtifactRow.media_type), campaign_id)
+                .outerjoin(ArtifactRow, ArtifactRow.hash == CampaignClassRow.content_hash)
+                .order_by(CampaignClassRow.class_id)
+                .offset(offset)
+                .limit(limit)
+            )
+            return [
+                OutputRecord(
+                    step=None,
+                    case_id=exploration,
+                    case_index=explored_index(row.class_id),
+                    class_id=row.class_id,
+                    state=CaseState.COMPLETE,
+                    reason=None,
+                    artifact=OutputArtifact(sha256=row.content_hash, size_bytes=size_bytes, kind=kind, media_type=media_type),
+                    valid=True,
+                    complete=None,
+                    run_index=None,
+                    repeat_index=None,
+                    run_record_id=None,
+                    verdict_state=None,
+                    failed_rules=(),
+                    input_source=None,
+                    vessel_count=row.vessel_count,
+                    obstacle_count=row.obstacle_count,
+                )
+                for row, size_bytes, kind, media_type in scope.execute(query.execution_options(populate_existing=True))
+            ]
+
+    def count_explored(self, campaign_id: str, *, session: Optional[Session] = None) -> int:
+        """How many FECs the campaign's design space exploration found."""
+        with session_scope(self._sessions, session) as scope:
+            return scope.execute(self._explored(select(func.count()).select_from(CampaignClassRow), campaign_id)).scalar_one()
+
     # Helpers
+
+    @staticmethod
+    def _explored(query, campaign_id: str):
+        return query.where(CampaignClassRow.campaign_id == campaign_id, CampaignClassRow.class_id.startswith(EXPLORED_CLASS_PREFIX, autoescape=True))
 
     @staticmethod
     def _output(step: StepKind, values) -> OutputRecord:

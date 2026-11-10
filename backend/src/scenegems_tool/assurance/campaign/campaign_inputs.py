@@ -9,15 +9,22 @@ from the instances a functional scenario declares, or from the actors of the ite
 (initial) scene.
 
 The content comes from the artifact store; these functions take it as bytes.
+
+A campaign that explores the design space starts with one class, exploration: the
+exploration itself, one case, pinned by the hash of its specification and scope. Each FEC
+the exploration finds becomes a class explored/<index> (five digits, the order they were
+found in), its content hash the sha256 of its functional scenario artifact, with the quota
+and failure budget of the config's design_space_exploration section.
 """
 
 import json
 from typing import Any, Dict, Mapping, Optional, Tuple, Union
 
-from scenegems_tool.assurance.campaign.campaign_config import ITEM_CLASS_PREFIX, CampaignConfig, FunctionalScenarioInput, InputItem, budget_limit
+from scenegems_tool.assurance.campaign.campaign_config import ITEM_CLASS_PREFIX, CampaignConfig, DesignSpaceExplorationConfig, FunctionalScenarioInput, InputItem, budget_limit
 from scenegems_tool.assurance.campaign.class_catalog import count_instances
 from scenegems_tool.cluster.protocol.artifacts import json_pointer
-from scenegems_tool.persistence.stores import ClassSpec
+from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID, EXPLORED_CLASS_PREFIX, ClassSpec
+from scenegems_tool.subsystems.design_space_exploration.design_space import exploration_hash
 
 SCENARIO_CLASS_PREFIX = "scenario/"
 SCENE_KEYS = ("best_scene", "scene", "initial_scene")  # where a document keeps its scene (EvaluationData uses best_scene)
@@ -33,6 +40,32 @@ def scenario_class_id(name: str) -> str:
 
 def item_class_id(index: int) -> str:
     return f"{ITEM_CLASS_PREFIX}{index}"
+
+
+def explored_class_id(index: int) -> str:
+    """The class of the FEC a design space exploration found at index: explored/00012."""
+    return f"{EXPLORED_CLASS_PREFIX}{index:05d}"
+
+
+def is_explored_class(class_id: str) -> bool:
+    return class_id.startswith(EXPLORED_CLASS_PREFIX)
+
+
+def exploration_class_spec(section: DesignSpaceExplorationConfig) -> ClassSpec:
+    """The class of the exploration itself: one case, no retry (the same specification and scope explore the same)."""
+    return ClassSpec(class_id=EXPLORATION_CLASS_ID, content_hash=exploration_hash(section.specification, section.scope), vessel_count=0, obstacle_count=0, quota=1, failure_budget=0)
+
+
+def explored_class_spec(index: int, sha256: str, vessel_count: int, obstacle_count: int, section: DesignSpaceExplorationConfig) -> ClassSpec:
+    """The class of an explored FEC, pinned by its functional scenario artifact."""
+    return ClassSpec(
+        class_id=explored_class_id(index),
+        content_hash=sha256,
+        vessel_count=vessel_count,
+        obstacle_count=obstacle_count,
+        quota=section.quota,
+        failure_budget=budget_limit(section.failure_budget),
+    )
 
 
 def input_of_class(config: CampaignConfig, class_id: str) -> Optional[Union[FunctionalScenarioInput, InputItem]]:

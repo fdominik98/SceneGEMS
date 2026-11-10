@@ -20,9 +20,10 @@ DEFAULT_OPERATOR_URL = "http://127.0.0.1:5174"
 SHA256_PATTERN = "[0-9a-f]{64}"
 CAMPAIGN_STATES = ("created", "running", "paused", "draining", "stalled", "stopped", "completed")
 CAMPAIGN_KINDS = ("campaign", "workbench")
-CAMPAIGN_STEPS = ("scene_generation", "trajectory_generation", "simulation")
+MONITORED_STEPS = ("scene_generation", "trajectory_generation", "simulation")  # the steps with findings
+CAMPAIGN_STEPS = ("design_space_exploration",) + MONITORED_STEPS
 CASE_STATES = ("active", "complete", "dropped", "failed", "cancelled")
-CASE_STAGES = ("generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate", "verdict")
+CASE_STAGES = ("explore_design_space", "generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate", "verdict")
 VERDICT_STATES = ("passed", "failed", "unmonitored")
 VERDICT_SORTS = ("fec_id", "state", "first_failure_time_s", "step", "run_index", "case_index", "created_at")  # the master's whitelist
 
@@ -76,7 +77,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     findings = sub.add_parser("findings", help="the monitor findings (or statistics) of one step of a campaign")
     findings.add_argument("campaign")
-    findings.add_argument("--step", required=True, choices=CAMPAIGN_STEPS)
+    findings.add_argument("--step", required=True, choices=MONITORED_STEPS)
 
     cases = sub.add_parser("cases", help="the cases of a campaign")
     cases.add_argument("campaign")

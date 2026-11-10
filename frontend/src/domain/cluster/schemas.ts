@@ -27,6 +27,7 @@ export const campaignActualStateSchema = z.enum([
 ]);
 export const classStateSchema = z.enum(["open", "complete", "abandoned"]);
 export const pipelineStageSchema = z.enum([
+  "explore_design_space",
   "generate_scene",
   "monitor_scene",
   "generate_trajectories",
@@ -40,12 +41,15 @@ export const caseStateSchema = z.enum(["active", "complete", "dropped", "failed"
 export const verdictStateSchema = z.enum(["passed", "failed", "unmonitored"]);
 
 // Phase 6: partial campaigns (design doc 6.3). The chain a campaign runs a consecutive part of, in order.
-export const CAMPAIGN_STEPS = ["scene_generation", "trajectory_generation", "simulation"] as const;
+// The design space exploration enumerates the FECs of a specification and scope; it has no monitor and no verdicts.
+export const CAMPAIGN_STEPS = ["design_space_exploration", "scene_generation", "trajectory_generation", "simulation"] as const;
 export const campaignStepSchema = z.enum(CAMPAIGN_STEPS);
+/** The steps of a config or an entry that names none (format 1, a master before Phase 6): the chain before the design space exploration. */
+export const IMPLIED_STEPS = ["scene_generation", "trajectory_generation", "simulation"] as const;
 /** The step a verdict belongs to: `scene` and `trajectories` verdicts have run index 0. */
 export const verdictStepSchema = z.enum(["scene", "trajectories", "simulation"]);
 export const campaignKindSchema = z.enum(["campaign", "workbench"]);
-export const CAMPAIGN_ORIGINS = ["wizard", "cli", "scene_generation", "trajectory_generation", "simulation", "live_session"] as const;
+export const CAMPAIGN_ORIGINS = ["wizard", "cli", "design_space_exploration", "scene_generation", "trajectory_generation", "simulation", "live_session"] as const;
 export const campaignOriginSchema = z.enum(CAMPAIGN_ORIGINS);
 /** Where a run record came from: a cluster job or a recorded live session. */
 export const runSourceSchema = z.enum(["job", "live_session"]);

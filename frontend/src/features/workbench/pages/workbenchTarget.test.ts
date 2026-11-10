@@ -39,6 +39,7 @@ describe("openInWorkbench", () => {
 
   it("maps each step to the page of its subsystem", () => {
     expect(target.WORKBENCH_PAGE_OF_STEP).toEqual({
+      design_space_exploration: "designSpaceExploration",
       scene_generation: "sceneGeneration",
       trajectory_generation: "trajectoryGeneration",
       simulation: "simulation",

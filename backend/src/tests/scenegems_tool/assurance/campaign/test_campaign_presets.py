@@ -19,11 +19,13 @@ def test_the_shipped_presets_are_named_ordered_and_distinct():
 
 
 def test_the_shipped_presets_validate_and_hold_no_input():
-    """A preset that starts with scene generation is a complete campaign; a later start lacks only the input the operator picks."""
+    """A preset that starts with the design space exploration or with scene generation is a complete campaign; a later start lacks only the input the operator picks."""
     for preset in builtin_presets():
         assert "input" not in preset.config
         config = parse_campaign_config(yaml.safe_dump(preset.config))
-        if config.first_step == CampaignStep.SCENE_GENERATION:
+        if config.first_step == CampaignStep.DESIGN_SPACE_EXPLORATION:
+            assert [spec.class_id for spec in validate_campaign_config(config).classes] == ["exploration"], preset.preset_id
+        elif config.first_step == CampaignStep.SCENE_GENERATION:
             assert validate_campaign_config(config).classes, preset.preset_id
         else:
             with pytest.raises(CampaignConfigError) as refused:
@@ -33,7 +35,7 @@ def test_the_shipped_presets_validate_and_hold_no_input():
 
 def test_the_shipped_presets_cover_every_step_start_and_simulator():
     presets = builtin_presets()
-    assert {preset.config["steps"][0] for preset in presets} == {"scene_generation", "simulation"}
+    assert {preset.config["steps"][0] for preset in presets} == {"design_space_exploration", "scene_generation", "simulation"}
     assert {tuple(preset.config["steps"]) for preset in presets} >= {("scene_generation",), ("scene_generation", "trajectory_generation")}
     layers = {run["stack"]["simulation_layer"] for preset in presets for run in preset.config.get("execution", {}).get("runs", [])}
     assert layers == {"kinematic", "ardupilot_sim", "gazebo"}

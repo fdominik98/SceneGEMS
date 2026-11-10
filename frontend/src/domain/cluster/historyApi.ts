@@ -92,6 +92,9 @@ export const outputRowSchema = z.object({
   run_record_id: z.number().int().nullable(),
   verdict: outputVerdictSchema.nullable(),
   input_source: inputSourceSchema.nullable(),
+  /** An explored FEC's vessels and static obstacles (rows of the design space exploration only; other steps leave them out). */
+  vessel_count: z.number().int().nullable().optional(),
+  obstacle_count: z.number().int().nullable().optional(),
 });
 
 export type InputSource = z.infer<typeof inputSourceSchema>;
@@ -107,7 +110,7 @@ export interface OutputFilters {
 }
 
 /** The outputs of one step, a page at a time (`total` is `X-Total-Count`). */
-export async function listOutputs(client: OperatorClient, campaignId: string, filters: OutputFilters, signal?: AbortSignal) {
+export async function listOutputs(client: Pick<OperatorClient, "request">, campaignId: string, filters: OutputFilters, signal?: AbortSignal) {
   const { data, total } = await client.request("GET", `${campaignPath(campaignId)}/outputs`, outputRowSchema.array(), {
     query: { ...filters },
     signal,
@@ -145,7 +148,7 @@ export const findingsSchema = z.object({
 
 export type Findings = z.infer<typeof findingsSchema>;
 
-/** The monitor findings (or, unmonitored, the statistics) of one executed step. */
+/** The monitor findings (or, unmonitored, the statistics) of one executed step. The design space exploration has none (the master answers 422): never ask for it. */
 export async function getFindings(client: OperatorClient, campaignId: string, step: CampaignStep, signal?: AbortSignal): Promise<Findings> {
   return (await client.request("GET", `${campaignPath(campaignId)}/findings`, findingsSchema, { query: { step }, signal })).data;
 }

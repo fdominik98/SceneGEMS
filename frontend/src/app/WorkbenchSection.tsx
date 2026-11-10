@@ -33,7 +33,18 @@ import { TrajectoryGenerationControls } from "../features/workbench/controls/Tra
 import { TrajectoryMonitorSidebar } from "../features/workbench/controls/TrajectoryMonitorSidebar";
 import { MqttBrokerPanel } from "../features/workbench/connection/MqttBrokerPanel";
 import { buildInitializeMonitorMessage, canInitializeMonitor } from "../features/workbench/controls/monitorConfig";
-import { SCENE_GENERATION_JOB } from "../features/workbench/cluster/workbenchJobs";
+import { DESIGN_SPACE_EXPLORATION_JOB, SCENE_GENERATION_JOB } from "../features/workbench/cluster/workbenchJobs";
+import { DesignSpaceExplorationControls } from "../features/workbench/designSpace/DesignSpaceExplorationControls";
+import { DesignSpaceSidebar } from "../features/workbench/designSpace/DesignSpaceSidebar";
+import { focusDesignSpaceEditor } from "../features/workbench/designSpace/explorationModel";
+import { ExploredFecList } from "../features/workbench/designSpace/ExploredFecList";
+import { downloadExplorationZip } from "../features/workbench/designSpace/explorationExport";
+import { explorationInputOfEntry } from "../features/workbench/designSpace/explorationInputOfEntry";
+import { useExplorationInputStore } from "../features/workbench/designSpace/explorationInputStore";
+import { handoffFec, useExplorationStore } from "../features/workbench/designSpace/explorationStore";
+import { allFecTexts, fecText } from "../features/workbench/designSpace/fecTexts";
+import { sendToScenePage, useSceneSpecificationHandoff } from "../features/workbench/pages/sceneSpecificationHandoff";
+import { useExplorationPageStore } from "../features/workbench/pages/pageStore";
 import { SceneCanvas } from "../features/workbench/scene/SceneCanvas";
 import { WorkbenchEncounterStrip } from "../features/workbench/monitor/WorkbenchEncounterPanels";
 import { useBatchGenerationStore } from "../domain/sceneGeneration/batchGenerationStore";
@@ -91,6 +102,12 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const isSceneGenerationBusy =
     activeSceneGenerationRequestId !== null || batchGenerationRunning;
   const latestGeneratedScene = useScenePlaybackStore((s) => s.latestGeneratedScene);
+  const explorationStatus = useExplorationPageStore((s) => s.status);
+  const explorationRunning = useExplorationStore((s) => s.running !== null);
+  const isExplorationBusy = explorationRunning || explorationStatus === "running" || explorationStatus === "following";
+  const exploredFecCount = useExplorationStore((s) => s.fecs.length);
+  const exploredHandoffId = useExplorationStore((s) => handoffFec(s)?.fecId ?? null);
+  const [explorationExporting, setExplorationExporting] = useState(false);
 
   const clearVisualizedScenario = useScenePlaybackStore((s) => s.clearVisualizedScenario);
   const setVisualizedScenario = useScenePlaybackStore((s) => s.setVisualizedScenario);
@@ -235,23 +252,73 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     [loadIntoEditor, operatorClient]
   );
 
+  // A FEC sent to the scene page (from the exploration page or Campaign History) loads into its editor.
+  const pendingSceneSpecification = useSceneSpecificationHandoff((s) => s.pending);
+  useEffect(() => {
+    if (pendingSceneSpecification === null) {
+      return;
+    }
+    const load = useSceneSpecificationHandoff.getState().take();
+    if (load !== null) {
+      loadIntoEditor(load.label, async () => ({ label: load.label, text: await load.text() }), "The FEC could not be loaded");
+    }
+  }, [loadIntoEditor, pendingSceneSpecification]);
+
+  /** The FEC the exploration page has selected (or its first), into the scene page's editor. */
+  const sendExploredFecToScenePage = useCallback(() => {
+    const fec = handoffFec(useExplorationStore.getState());
+    if (fec === null || operatorClient === null) {
+      return;
+    }
+    sendToScenePage({ label: fec.fecId, text: () => fecText(operatorClient, fec) });
+  }, [operatorClient]);
+
+  // An exploration opened from Campaign History brings its specification and scope, so it can run again or change.
+  const loadExplorationInput = useCallback(
+    (target: WorkbenchTarget) => {
+      if (target.page !== "designSpaceExploration" || operatorClient === null) {
+        return;
+      }
+      void explorationInputOfEntry(operatorClient, target.campaignId)
+        .then((section) => {
+          if (section === null || section.specification.trim().length === 0) {
+            return;
+          }
+          const input = useExplorationInputStore.getState();
+          input.loadSpecification(section.specification, `the specification of entry ${target.campaignId.split("-")[0]}`);
+          input.setScope(section.scope);
+          if (section.max_fecs !== undefined) {
+            input.setMaxFecs(section.max_fecs);
+          }
+          if (section.timeout_s !== undefined) {
+            input.setTimeoutSeconds(section.timeout_s);
+          }
+        })
+        .catch(() => undefined);
+    },
+    [operatorClient]
+  );
+
   // Outputs other sections open here (`openInWorkbench`), and the pages' loaded entries after a reload.
   const openTarget = useCallback(
     (target: WorkbenchTarget) => {
       if (target.page === "simulation") {
         usePlaybackStore.getState().requestAutoFit();
       }
+      loadExplorationInput(target);
       // A live entry's scenario is known before its scene is: it loads into the editor too
       loadInputSpecification(target);
       void streamControlsRef.current.openTarget(target, colregsTextRef.current);
     },
-    [loadInputSpecification]
+    [loadExplorationInput, loadInputSpecification]
   );
   const refreshLoaded = useCallback((target: WorkbenchTarget) => {
     void streamControlsRef.current.refreshLoaded(target, colregsTextRef.current);
   }, []);
   const activePage: WorkbenchPage | null =
-    activeView === "sceneGeneration" || activeView === "trajectoryGeneration" || activeView === "simulation" ? activeView : null;
+    activeView === "designSpaceExploration" || activeView === "sceneGeneration" || activeView === "trajectoryGeneration" || activeView === "simulation" ? activeView : null;
+  // The pages with a wide specification pane of their own width.
+  const specificationPage = activeView === "sceneGeneration" || activeView === "designSpaceExploration";
   useTargetConsumer(active ? activePage : null, openTarget);
   useLoadedRefresh(streamControls.operatorUrl, refreshLoaded);
   useEffect(() => {
@@ -281,7 +348,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       Math.floor(rect.width * RIGHT_PANE_MAX_WIDTH_RATIO) - RIGHT_PANE_RESIZER_WIDTH
     );
     const maxWidth =
-      activeView === "sceneGeneration"
+      activeView === "sceneGeneration" || activeView === "designSpaceExploration"
         ? Math.max(RIGHT_PANE_MAX_WIDTH, maxByCenter)
         : Math.min(maxByCenter, maxByRatio);
     return Math.min(maxWidth, Math.max(RIGHT_PANE_MIN_WIDTH, widthFromRight));
@@ -292,7 +359,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       event.preventDefault();
       setIsResizingRightPane(true);
       const applyWidth =
-        activeView === "sceneGeneration" ? setSceneGenPaneWidth : setRightPaneWidth;
+        activeView === "sceneGeneration" || activeView === "designSpaceExploration" ? setSceneGenPaneWidth : setRightPaneWidth;
       applyWidth(getClampedPaneWidth(event.clientX));
 
       const onPointerMove = (moveEvent: PointerEvent) => {
@@ -372,6 +439,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
 
   const globalErrorMessage = resolveGlobalErrorMessage(sceneGenerationError, errorMessage);
   const sceneGenerationResources = streamControls.clusterResources(SCENE_GENERATION_JOB);
+  const explorationResources = streamControls.clusterResources(DESIGN_SPACE_EXPLORATION_JOB);
 
   const showRightPane = rightPaneShown(activeView, rightPaneVisible);
 
@@ -381,7 +449,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
       : `minmax(0, ${RIGHT_PANE_DEFAULT_CENTER_FRACTION}fr) ${RIGHT_PANE_RESIZER_WIDTH}px minmax(0, ${RIGHT_PANE_DEFAULT_RIGHT_FRACTION}fr)`;
 
   const mainLayoutGridColumns = showRightPane
-    ? activeView === "sceneGeneration"
+    ? specificationPage
       ? `minmax(0, 1fr) ${RIGHT_PANE_RESIZER_WIDTH}px ${sceneGenPaneWidth}px`
       : simulationRightPaneGridColumns
     : "minmax(0, 1fr)";
@@ -511,6 +579,56 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
             <div className="load-scenario-layout mqtt-broker-view">
               <MqttBrokerPanel sendMessage={(message: ClientToServerMessage) => streamControls.sendMessage(message)} />
             </div>
+          ) : activeView === "designSpaceExploration" ? (
+            <div
+              ref={simulationCenterRef}
+              className={`simulation-center-layout${isResizingBottomPanel ? " is-resizing-bottom" : ""}`}
+              style={{ gridTemplateRows: bottomPanelGridRows }}
+            >
+              <div className="simulation-center-stage">
+                <ExploredFecList client={operatorClient} />
+              </div>
+              <div
+                className="bottom-pane-resizer"
+                onPointerDown={onBottomPaneResizeStart}
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize bottom design space exploration panel"
+              />
+              <footer className="bottom-toolbar bottom-toolbar-compact bottom-toolbar-single">
+                <div className="bottom-slot bottom-slot-controls">
+                  <DesignSpaceExplorationControls
+                    resources={explorationResources}
+                    busy={isExplorationBusy}
+                    onExplore={() => {
+                      const input = useExplorationInputStore.getState();
+                      streamControls.exploreDesignSpace({
+                        specification: input.specification,
+                        label: input.specificationLabel ?? "written specification",
+                        scope: input.scope,
+                        maxFecs: input.maxFecs,
+                        timeoutSeconds: input.timeoutSeconds,
+                      });
+                    }}
+                    onStop={() => streamControls.stopDesignSpaceExploration()}
+                    onShowSpecification={focusDesignSpaceEditor}
+                    exporting={explorationExporting}
+                    onExport={() => {
+                      const campaignId = useExplorationStore.getState().campaignId;
+                      if (operatorClient === null || campaignId === null) {
+                        return;
+                      }
+                      setExplorationExporting(true);
+                      void allFecTexts(operatorClient)
+                        .then((entries) => downloadExplorationZip(entries, campaignId))
+                        .catch((error: unknown) => setSceneGenerationError(`The FECs could not be exported: ${error instanceof Error ? error.message : String(error)}`))
+                        .finally(() => setExplorationExporting(false));
+                    }}
+                    onNext={sendExploredFecToScenePage}
+                  />
+                </div>
+              </footer>
+            </div>
           ) : activeView === "sceneGeneration" ? (
             <div
               ref={simulationCenterRef}
@@ -590,6 +708,8 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
                       );
                     }}
                     onNext={loadForTrajectoryGeneration}
+                    explorationFec={exploredFecCount > 0 ? exploredHandoffId : null}
+                    onTakeExploration={sendExploredFecToScenePage}
                   />
                 </div>
               </footer>
@@ -663,7 +783,9 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
               aria-orientation="vertical"
               aria-label="Resize right panel"
             />
-            {activeView === "simulation" || activeView === "trajectoryGeneration" ? (
+            {activeView === "designSpaceExploration" ? (
+              <DesignSpaceSidebar disabled={isExplorationBusy} />
+            ) : activeView === "simulation" || activeView === "trajectoryGeneration" ? (
               // One panel per page: its stream choice starts from that page's frames.
               <TrajectoryMonitorSidebar key={activeView} previewOnly={activeView === "trajectoryGeneration"} />
             ) : sceneGenerationPaneView === "monitor" ? (

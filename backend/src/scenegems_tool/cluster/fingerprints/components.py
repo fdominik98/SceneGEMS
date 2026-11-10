@@ -3,7 +3,7 @@
 A node's capability is a set of components (SCENEGEMS_NODE_COMPONENTS). The vessel stack
 components are the campaign layers of the vessel stack matrix, named as LayerRef names them
 (asv_software/replay, control_layer/ardupilot, simulation_layer/gazebo, ...); the subsystem
-components are scene_generation, trajectory_generation, monitoring and calibration.
+components are design_space_exploration, scene_generation, trajectory_generation, monitoring and calibration.
 
 A job requires components (JobRequirements.components): a simulation every layer of every
 vessel's stack, any other job type its subsystem component (JOB_TYPE_COMPONENTS). The images of
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
 
 # The subsystem images, tagged with SCENEGEMS_IMAGE_TAG (utils/image_names.py)
+DESIGN_SPACE_EXPLORATION_IMAGE = tagged("scenegems-design-space-exploration-subsystem")  # the Refinery model generator, built from the pinned Refinery commit
 SCENE_GENERATION_IMAGE = tagged("scenegems-scene-generation-subsystem")
 TRAJECTORY_GENERATION_IMAGE = tagged("scenegems-trajectory-generation-subsystem")
 SCENARIO_EXECUTION_IMAGE = tagged("scenegems-scenario-execution-subsystem")
@@ -50,6 +51,7 @@ STACK_LAYERS: Tuple[LayerImplementationId, ...] = (
     SimulationLayerId.ARDUPILOT_SIM,
     SimulationLayerId.GAZEBO,
 )
+DESIGN_SPACE_EXPLORATION = "design_space_exploration"
 SCENE_GENERATION = "scene_generation"
 TRAJECTORY_GENERATION = "trajectory_generation"
 MONITORING = "monitoring"
@@ -57,6 +59,7 @@ CALIBRATION = "calibration"
 
 # The subsystem components and their images: the subsystem a job of the type runs in
 SUBSYSTEM_IMAGES: Dict[ComponentId, Tuple[str, ...]] = {
+    DESIGN_SPACE_EXPLORATION: (DESIGN_SPACE_EXPLORATION_IMAGE,),
     SCENE_GENERATION: (SCENE_GENERATION_IMAGE,),
     TRAJECTORY_GENERATION: (TRAJECTORY_GENERATION_IMAGE,),
     MONITORING: (MONITORING_IMAGE,),
@@ -64,6 +67,7 @@ SUBSYSTEM_IMAGES: Dict[ComponentId, Tuple[str, ...]] = {
 }
 # The subsystem component of each job type other than the simulation, whose components come from its vessels' stacks
 JOB_TYPE_COMPONENTS: Dict[JobType, ComponentId] = {
+    JobType.DESIGN_SPACE_EXPLORATION: DESIGN_SPACE_EXPLORATION,
     JobType.SCENE_GENERATION: SCENE_GENERATION,
     JobType.TRAJECTORY_GENERATION: TRAJECTORY_GENERATION,
     JobType.MONITORING_POST_HOC: MONITORING,

@@ -57,12 +57,24 @@ def bounded_logging() -> dict:
     return {"driver": BOUNDED_LOGGING["driver"], "options": dict(BOUNDED_LOGGING["options"])}
 
 
-def runner_service(image: str, *, networks: Optional[List[str]] = None, depends_on: Optional[List[str]] = None, cpus: Optional[float] = None) -> dict:
-    """The service that runs the job's in-container part; without networks it has no network at all."""
+def runner_service(
+    image: str,
+    *,
+    networks: Optional[List[str]] = None,
+    depends_on: Optional[List[str]] = None,
+    cpus: Optional[float] = None,
+    command: Optional[List[str]] = None,
+    environment: Optional[Dict[str, str]] = None,
+) -> dict:
+    """The service that runs the job's in-container part; without networks it has no network at all.
+
+    command and environment are for a runner that is not the Python job main (the Refinery model generator); such a
+    runner speaks the same job folder protocol (job_container_io.py).
+    """
     service: dict = {
         "image": image,
-        "command": ["python", "-m", JOB_CONTAINER_MAIN],
-        "environment": {"PYTHONUNBUFFERED": "1"},
+        "command": list(command) if command is not None else ["python", "-m", JOB_CONTAINER_MAIN],
+        "environment": dict(environment) if environment is not None else {"PYTHONUNBUFFERED": "1"},
         "logging": bounded_logging(),
     }
     if cpus is not None:

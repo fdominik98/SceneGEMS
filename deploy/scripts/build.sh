@@ -30,7 +30,7 @@ Options:
 
   -1, --backend           scenegems-master-api and the Python subsystems (monitoring,
                           scene-generation, trajectory-generation,
-                          scenario-execution)
+                          scenario-execution, design-space-exploration)
 
   -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
                           sessions with ArduPilot run it on the master's machine
@@ -168,6 +168,10 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/deploy/images/trajectory_generation/requirements.txt" "$SCRIPT_DIR/deploy/images/trajectory_generation/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
+    # The design space exploration image fetches the pinned Refinery fork (deploy/images/upstream_pins.env,
+    # which is then part of its fingerprint); nothing of backend/ goes into it.
+    build_subsystem_if_stale "scenegems-design-space-exploration-subsystem:latest" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" "$SCRIPT_DIR/deploy/images/design_space_exploration"
     build_subsystem_if_stale "scenegems-master-api:latest" "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/master_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"

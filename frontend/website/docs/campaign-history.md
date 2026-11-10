@@ -5,7 +5,7 @@ title: Campaign History
 
 # Campaign History
 
-Campaign History lists every entry of the selected cluster, ongoing and finished: the campaigns made in the wizard or on the command line, and every run of the workbench (scene generation, trajectory generation, simulation, recorded live sessions). Each entry runs one or more consecutive steps of the chain scene generation, trajectory generation, simulation, and every step's outputs can be opened on the workbench page of its subsystem.
+Campaign History lists every entry of the selected cluster, ongoing and finished: the campaigns made in the wizard or on the command line, and every run of the workbench (design space exploration, scene generation, trajectory generation, simulation, recorded live sessions). Each entry runs one or more consecutive steps of the chain design space exploration, scene generation, trajectory generation, simulation, and every step's outputs can be opened on the workbench page of its subsystem.
 
 ## The list
 
@@ -36,8 +36,12 @@ Clicking a row opens the entry:
 - **Controls** (campaigns only): Start, Pause, Drain, Resume and Stop, each with what it does. A stop is confirmed and cannot be undone.
 - **Numbers**: complete cases against the quota, cases in flight and dropped, and the monitor result summaries.
 - **Outputs per step**: a tab per executed step with its outputs, a page of 20 at a time.
-- **Coverage** (campaigns only): the FECs (functional equivalence classes) with their progress, failure budgets and monitor result summaries per run.
+- **Coverage** (campaigns only): the FECs (functional equivalence classes) with their progress, failure budgets and monitor result summaries per run. A campaign that explores lists `exploration`, labeled as the design space exploration itself, and then the FECs it found as `explored/<index>`. A campaign that only explores shows a tile with the number of explored FECs and says they need no cases.
 - **Activity log** and **Config**: the entry's events and its config versions as YAML.
+
+### Outputs of the exploration
+
+The tab of the design space exploration lists the explored FECs with their vessel and obstacle counts, a page of 20 at a time. The step has no monitor, so there are no findings. **Open in workbench** shows the exploration on the Design Space Exploration page with that FEC selected, and **To scene generation** puts the FEC's text into the Scene Generation page's editor under its label, such as `explored/00003`. While the exploration runs, the tab says the FECs appear once it has ended.
 
 ### Outputs of a step
 

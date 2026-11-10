@@ -1,4 +1,5 @@
 import { parseDocument } from "yaml";
+import { scopeProblem } from "../../../domain/designSpace/designSpaceScope";
 import { findGenerator, findStack, isEmptyScopeEntry, isSet, supportsEnvironment, type BuilderCatalog } from "./configBuilder";
 import type { EntryList, Reason } from "./reasons";
 import { firstStep, inputKindOf, itemKindsFor, normalizeSteps, runsStep } from "./stepPlan";
@@ -35,8 +36,40 @@ export function uploadExpired(uploadedAt: number | null, now: number): boolean {
 
 const EXPIRED_UPLOAD = "The upload has expired on the master; upload the file again.";
 
+/** The design space exploration's own fields: a specification, a valid scope, and limits in range. */
+function checkExploration(draft: WizardDraft, reasons: Reason[]): void {
+  const exploration = draft.exploration;
+  if (exploration.specification.trim().length === 0) {
+    reasons.push(local("exploration", null, "specification", "Write or load the metamodel and the well-formedness constraints."));
+  }
+  const scope = scopeProblem(exploration.scope);
+  if (scope !== null) {
+    reasons.push(local("exploration", null, "scope", scope));
+  }
+  if (exploration.maxFecs !== null && exploration.maxFecs < 1) {
+    reasons.push(local("exploration", null, "max_fecs", "Max FECs is at least 1, or empty for every FEC."));
+  }
+  if (exploration.timeoutS === null || exploration.timeoutS <= 0) {
+    reasons.push(local("exploration", null, "timeout_s", "The timeout is above 0 seconds."));
+  }
+  if (draft.steps.length <= 1) {
+    // Quota and failure budget matter only for the cases of later steps
+    return;
+  }
+  if (exploration.quota === null || exploration.quota < 1) {
+    reasons.push(local("exploration", null, "quota", "Each explored FEC needs at least 1 case."));
+  }
+  if (typeof exploration.failureBudget === "number" && exploration.failureBudget < 0) {
+    reasons.push(local("exploration", null, "failure_budget", "The failure budget is 0 or more."));
+  }
+}
+
 function checkInput(draft: WizardDraft, reasons: Reason[], now: number): void {
   const steps = normalizeSteps(draft.steps);
+  if (inputKindOf(steps) === "explored") {
+    // The FECs come from the exploration: nothing to pick
+    return;
+  }
   if (inputKindOf(steps) === "catalog_or_scenarios") {
     const scenarios = draft.input.scenarios;
     const names = scenarios.map((scenario) => scenario.name.trim());
@@ -102,6 +135,9 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
     reasons.push(local("steps", null, "name", "Give the campaign a name."));
   }
   checkInput(draft, reasons, now);
+  if (runsStep(steps, "design_space_exploration")) {
+    checkExploration(draft, reasons);
+  }
   if (draft.domain.custom) {
     const texts: [string, string][] = [
       ["colregs_constants", draft.domain.colregsConstants],

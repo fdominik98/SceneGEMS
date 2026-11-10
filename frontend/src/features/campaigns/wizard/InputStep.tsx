@@ -26,7 +26,18 @@ function useNow(): number {
 export function InputStep(props: StepProps & { catalog: CatalogState }) {
   const client = useOperatorClient();
   const now = useNow();
-  if (inputKindOf(props.draft.steps) !== "catalog_or_scenarios") {
+  const kind = inputKindOf(props.draft.steps);
+  if (kind === "explored") {
+    return (
+      <div className="wiz-step">
+        <p className="wiz-notice" role="note">
+          This campaign starts with the design space exploration: its FECs come from the exploration, so there are no catalog FECs, functional scenarios or
+          items to choose here. Set the specification and the scope on the Design space exploration page.
+        </p>
+      </div>
+    );
+  }
+  if (kind !== "catalog_or_scenarios") {
     return <ItemInput draft={props.draft} update={props.update} reasons={props.reasons} client={client} now={now} />;
   }
   return (

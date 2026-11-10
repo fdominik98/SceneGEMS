@@ -14,6 +14,7 @@ from scenegems_tool.architecture.architecture_model import (
     KIND_COMPONENT,
     KIND_INTERFACE,
     KIND_ROLE,
+    ROLE_SUPPORT,
     ArchitectureDocument,
     Fact,
     Lane,
@@ -285,4 +286,8 @@ def monitoring_document(measurements: Optional[Mapping[str, MeasuredFacts]] = No
         metamodel_edges=metamodel_edges,
         nodes=tuple(nodes),
         edges=tuple(edges),
+        role=ROLE_SUPPORT,
+        takes="scenes, trajectories and runs",
+        gives="rule outcomes per vessel pair",
+        job_types=("monitoring.post_hoc",),
     ).validate()

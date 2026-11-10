@@ -7,6 +7,7 @@ from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobState, JobS
 def test_job_type_wire_values_are_stable():
     # stored in the database and sent on the wire: renaming one is a protocol change
     assert {job_type.value for job_type in JobType} == {
+        "design_space_exploration",
         "scene_generation",
         "trajectory_generation",
         "simulation",

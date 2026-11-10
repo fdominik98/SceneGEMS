@@ -19,6 +19,7 @@ from scenegems_tool.architecture.architecture_model import (
     KIND_COMPONENT,
     KIND_INTERFACE,
     KIND_ROLE,
+    ROLE_STEP,
     ArchitectureDocument,
     Fact,
     Lane,
@@ -283,4 +284,9 @@ def scene_generation_document(measurements: Optional[Mapping[str, MeasuredFacts]
         nodes=tuple(nodes),
         edges=tuple(edges),
         notes=("Only the implementations the live subsystem runs are listed. The evolutionary solvers and the other rejection samplers under logical_level/ serve the offline evaluation scripts.",),
+        role=ROLE_STEP,
+        step="Scene generation",
+        takes="a FEC",
+        gives="a scene",
+        job_types=("scene_generation",),
     ).validate()

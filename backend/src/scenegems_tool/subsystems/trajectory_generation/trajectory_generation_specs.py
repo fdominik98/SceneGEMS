@@ -15,6 +15,7 @@ from scenegems_tool.architecture.architecture_model import (
     KIND_COMPONENT,
     KIND_INTERFACE,
     KIND_ROLE,
+    ROLE_STEP,
     ArchitectureDocument,
     Fact,
     Lane,
@@ -262,4 +263,9 @@ def trajectory_generation_document(measurements: Optional[Mapping[str, MeasuredF
         metamodel_edges=metamodel_edges,
         nodes=tuple(nodes),
         edges=tuple(edges),
+        role=ROLE_STEP,
+        step="Trajectory generation",
+        takes="a scene",
+        gives="trajectories",
+        job_types=("trajectory_generation",),
     ).validate()

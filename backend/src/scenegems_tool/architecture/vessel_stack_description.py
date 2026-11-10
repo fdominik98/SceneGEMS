@@ -21,6 +21,7 @@ from scenegems_tool.architecture.architecture_model import (
     KIND_COMPONENT,
     KIND_INTERFACE,
     KIND_ROLE,
+    ROLE_STEP,
     STATUS_AVAILABLE,
     STATUS_PLANNED,
     ArchitectureDocument,
@@ -383,4 +384,9 @@ def vessel_stack_document(registry: Optional[AdapterRegistry] = None, resolver: 
             "A stack runs in campaigns only when a runner of the simulation job runs it on a node (Cluster job); the other available stacks run on the workbench as live sessions. Workbench only stacks (Mission Planner, real vessels) never run in a campaign: an operator or a physical vessel is in the loop.",
             "Ports that adapters connect: " + "; ".join(_port_members()) + ".",
         ),
+        role=ROLE_STEP,
+        step="Simulation",
+        takes="trajectories",
+        gives="a simulated run: its state log",
+        job_types=("simulation",),
     ).validate()

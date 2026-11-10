@@ -30,6 +30,8 @@ from scenegems_tool.persistence.stores.artifact_records import UPLOAD_ROLE, Arti
 from scenegems_tool.persistence.stores.assurance_stores import AssuranceStores
 from scenegems_tool.persistence.stores.calibration_store import CalibrationResult, CalibrationStore, NewCalibrationResult
 from scenegems_tool.persistence.stores.campaign_records import (
+    EXPLORATION_CLASS_ID,
+    EXPLORED_CLASS_PREFIX,
     START_OF_EVENTS,
     CampaignEventRecord,
     CampaignRecord,
@@ -61,6 +63,8 @@ from scenegems_tool.persistence.stores.setting_stores import CampaignPresetStore
 
 __all__ = [
     "ENGINE_CURSOR",
+    "EXPLORATION_CLASS_ID",
+    "EXPLORED_CLASS_PREFIX",
     "START_OF_EVENTS",
     "TERMINAL_EVENT_KINDS",
     "UNSET",

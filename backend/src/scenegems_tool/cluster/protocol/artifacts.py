@@ -160,10 +160,17 @@ def _resolved(value: Any, field: ArtifactField, load: Callable[[ArtifactRef], by
 
 
 def store_results(result: Mapping[str, Any], fields: Sequence[ArtifactField], put: Callable[[ArtifactField, bytes], ArtifactRef]) -> Dict[str, Any]:
-    """A copy of a job result with every declared field present stored and replaced by its reference (wire form)."""
+    """A copy of a job result with every declared field present stored and replaced by its reference (wire form).
+
+    A field declared many holds a list: each item that is not a reference already is stored as an artifact of its own.
+    """
     stored = dict(result)
     for field in fields:
-        if stored.get(field.name) is None or is_reference(stored[field.name]):
+        value = stored.get(field.name)
+        if value is None or is_reference(value):
             continue
-        stored[field.name] = put(field, encode_document(stored[field.name], field.content)).model_dump(mode="json")
+        if field.many and isinstance(value, (list, tuple)):
+            stored[field.name] = [item if is_reference(item) else put(field, encode_document(item, field.content)).model_dump(mode="json") for item in value]
+        else:
+            stored[field.name] = put(field, encode_document(value, field.content)).model_dump(mode="json")
     return stored

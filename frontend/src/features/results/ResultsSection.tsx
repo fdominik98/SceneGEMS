@@ -12,7 +12,7 @@ import { EntryHeader } from "./EntryHeader";
 import { EntryPicker } from "./EntryPicker";
 import { FindingsPanel } from "./FindingsPanel";
 import { StepTabs } from "./StepTabs";
-import { chooseStep, executedSteps, hasStepViews, STEP_LABEL, type KindFilter } from "./stepViews";
+import { chooseStep, hasStepViews, resultSteps, STEP_LABEL, type KindFilter } from "./stepViews";
 import { useCampaignDetail, useFindings, useHistoryList } from "./useResultsData";
 import { VerdictBrowser } from "./VerdictBrowser";
 
@@ -69,7 +69,7 @@ export function ResultsSection() {
   // The shown entry need not be in the filtered list (opened from another section, or filtered away).
   const selected: CampaignSummary | null = list.find((entry) => entry.campaign_id === effectiveId) ?? detail.data ?? null;
   const legacy = selected !== null && !hasStepViews(selected);
-  const steps = executedSteps(selected);
+  const steps = resultSteps(selected);
   const step = chooseStep(selected, chosenStep);
   const findings = useFindings(operatorUrl, effectiveId, step, selected !== null && !legacy);
   const unmonitored = findings.data !== undefined && !findings.data.monitored;
@@ -167,6 +167,22 @@ export function ResultsSection() {
         steps={steps}
         onBack={() => useResultsStore.getState().closeCase()}
       />
+    );
+  } else if (step === null) {
+    // An entry that only explored the design space: the exploration has no monitor, so there are no findings
+    body = (
+      <div className="results-stack">
+        <EntryHeader entry={selected} />
+        <section className="results-panel" aria-label="No monitor results">
+          <p className="meta">
+            This entry only explored the design space. The exploration has no monitor, so there are no findings or monitor result summaries; the FECs it found
+            are in Campaign History.
+          </p>
+          <button type="button" className="results-back" onClick={() => useUiStore.getState().setSection("history")}>
+            Open Campaign History
+          </button>
+        </section>
+      </div>
     );
   } else {
     body = (

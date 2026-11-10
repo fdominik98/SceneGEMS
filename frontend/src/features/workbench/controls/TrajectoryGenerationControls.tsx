@@ -214,7 +214,7 @@ export function TrajectoryGenerationControls({
 
   return (
     <StepPanel
-      step={2}
+      page="trajectoryGeneration"
       title="Trajectory Generation"
       status={panelStatus}
       where={`Plans as a job on the cluster: ${describeResources(trajectoryResources)}.`}

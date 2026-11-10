@@ -41,6 +41,10 @@ interface SceneGenerationControlsProps {
   onOpenFile: (file: File) => void;
   onExport: () => void;
   onNext: () => void;
+  /** The FEC the design space exploration page would hand over (its selected one, or its first), null when it shows none. */
+  explorationFec?: string | null;
+  /** Puts that FEC into the specification editor. */
+  onTakeExploration?: () => void;
 }
 
 /**
@@ -87,7 +91,7 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
 
   return (
     <StepPanel
-      step={1}
+      page="sceneGeneration"
       title="Scene Generation"
       status={status}
       where={`Generates as a job on the cluster: ${describeResources(resources)}. Every run is kept in Campaign History.`}
@@ -127,6 +131,16 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
         {specificationHidden ? (
           <button type="button" className="link-btn" onClick={onShowSpecification}>
             Show the specification
+          </button>
+        ) : null}
+        {!batch && props.onTakeExploration ? (
+          <button
+            type="button"
+            disabled={busy || !props.explorationFec}
+            title={props.explorationFec ? `Put ${props.explorationFec} of the Design Space Exploration page into the editor` : "The Design Space Exploration page shows no FEC"}
+            onClick={props.onTakeExploration}
+          >
+            Exploration page
           </button>
         ) : null}
       </StepRow>

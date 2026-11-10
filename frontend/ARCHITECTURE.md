@@ -69,8 +69,10 @@ them). Clicks pass through the drawing to the map; a click near a vessel selects
 
 ## The workbench pages' panels
 
-The panel under the canvas of the Scene Generation, Trajectory Generation and Simulation pages is the
-same `StepPanel` (`features/workbench/pages/StepPanel.tsx`): a header with the step, a status chip, where
+The panel under the canvas of the Scene Generation, Trajectory Generation and Simulation pages, and under
+the FEC list of the Design Space Exploration page, is the
+same `StepPanel` (`features/workbench/pages/StepPanel.tsx`): a header with the step ("Step N of M", from
+the page's place in `WORKBENCH_STEP_PAGES` of `pages/workbenchTarget.ts`), a status chip, where
 the run happens and the run button (Stop replaces it while running), a list of what blocks the run
 elsewhere (the cluster, the domain configuration, the MQTT broker), then three `StepRow`s: Input (what
 the next run takes; `PageInputPanel` offers the previous page's output, Campaign History or a file),
@@ -85,8 +87,8 @@ export from the monitoring panel and the canvas's Export menu.
 
 ## Sections
 
-The left pane has seven sections: Workbench (with the views Scene Generation, Trajectory
-Generation, Simulation and Connections), Cluster, Domain Configuration (section id `domain`),
+The left pane has seven sections: Workbench (with the views Design Space Exploration, Scene Generation,
+Trajectory Generation, Simulation and Connections), Cluster, Domain Configuration (section id `domain`),
 Capabilities, Campaigns, Campaign History (section id `history`) and Results. `uiStore` keeps
 `section` and `workbenchView` (persisted, v7: the old workbench view `domainConfig` becomes the
 section `domain`). Other sections
@@ -94,7 +96,7 @@ open an output on a workbench page through `openInWorkbench(target)` in
 `features/workbench/pages/workbenchTarget.ts`, which shows the page and queues the target for it
 (`takeTarget(page)`). The workbench stays mounted while another section is shown, so its gateway socket and state carry on.
 
-The workbench pages (design doc 6.6, `features/workbench/pages/`): Scene Generation, Trajectory
+The workbench pages (design doc 6.6, `features/workbench/pages/`): Design Space Exploration, Scene Generation, Trajectory
 Generation and Simulation each hold `{input, loaded}` in a persisted page store (`pageStore.ts`): the
 input (from the previous page's output, a Campaign History output or a file, `PageInputPanel`) and
 the target of the latest loaded entry. Every run is a one-step workbench entry (`entryConfig.ts`
@@ -105,6 +107,36 @@ a target's output from the master; a 404 clears the page. The shown page takes q
 pane is 280px with a plain-language hint per destination, an icon rail of 72px when collapsed (the
 choice is kept per browser) and a bar at the top below 800px. Below 1100px the workbench panes stack
 and scroll as one page.
+
+The Design Space Exploration page (`features/workbench/designSpace/`, view and page id
+`designSpaceExploration`) is the first step of the chain and has no canvas. Its right pane
+(`DesignSpaceSidebar`) holds the specification editor, `DesignSpaceSpecificationEditor`: the one text
+for the metamodel and the well-formedness constraints, on `controls/ProblemEditor.tsx` (the `.problem`
+editor setup the scene sidebar uses too), with Load the default (`GET /cluster/catalog/design-space`
+through `presetsApi.getDesignSpaceDefault`, null from a master without the route), Open file and Export.
+Its centre pane (`ExploredFecList`) is a windowed list of the FECs found (fixed row height, texts
+fetched lazily for the selected and visible rows through `fecTexts.ts`), each with its counts and its
+relations in words (`domain/designSpace/fecRelations.ts`), and the selected FEC's text. Its `StepPanel`
+(`DesignSpaceExplorationControls`) has the specification summary and the scope (`ScopeInput`, checked
+as typed by `domain/designSpace/designSpaceScope.ts`) under Input, Seed, Max FECs (empty: every FEC)
+and Timeout under Setup, and under Result what was found and what the stop reason means
+(`domain/designSpace/explorationResult.ts`), the entry, the ZIP export and "Next: Scene Generation".
+Stores: `useExplorationPageStore` (in `PAGE_STORES`), `useExplorationInputStore` (persisted as
+`scenegems:design-space-exploration`: specification, label, scope, max FECs, timeout) and
+`useExplorationStore` (not persisted: progress, result, FECs, texts, selection).
+`WorkbenchJobDriver.exploreDesignSpace` creates the entry from `designSpaceEntryConfig`
+(`steps: [design_space_exploration]` and the `design_space_exploration` section, no scope and no input)
+with origin `design_space_exploration`, waits for the case of the FEC `exploration`, follows its
+`explore_design_space` job's status and progress, and loads `listOutputs(step=design_space_exploration)`
+with the job's result; it asks for no findings, since no monitor judges this step. A target of the page
+names the exploration case and optionally a FEC (`fecId`). A found FEC reaches the scene page through
+`pages/sceneSpecificationHandoff.ts` (`sendToScenePage({label, text})`): from "Next: Scene Generation",
+from the scene page's "Exploration page" button and from Campaign History. A scene of a case whose FEC
+is `explored/<index>` finds its functional scenario through the case's `input_artifact`
+(`pages/inputSpecification.ts`).
+
+A config or an entry that names no steps means scene generation, trajectory generation and simulation
+(`IMPLIED_STEPS` in `domain/cluster/schemas.ts`), never the exploration.
 
 The cluster sections work on the cluster selected in the left pane. `domain/cluster/clusterStore.ts`
 keeps the list (name and operator URL, per browser). A master's operator API listens on its
@@ -141,8 +173,12 @@ tagged by hand: a stack's values are the fields the master reports, a preset's a
 (`presetFacts`) against the stacks and the FEC catalog, so saved presets sort like shipped ones. The
 filters and the grouping are kept per browser and per catalog.
 
-The wizard has a page per step the campaign runs (Scene generation, Trajectory generation, Simulation), each
-with that step's monitor. Above the pages, the campaign map (`wizard/CampaignMap.tsx`, React Flow) draws the
+The wizard has a page per step the campaign runs (Design space exploration, Scene generation, Trajectory generation, Simulation), each
+with that step's monitor where it has one. The exploration page (`wizard/ExplorationStep.tsx`) has the specification editor and
+the scope field of the workbench page, the limits, and the cases and failure budget every explored FEC gets; a campaign that
+explores names no catalog FECs and no input (`configBuilder.ts` writes the `design_space_exploration` section instead, and
+`presetDraft.ts` reads it back, filling a preset's missing specification from the master's default), and the review says the
+cases per explored FEC, since the FECs are not known before the exploration ran. Above the pages, the campaign map (`wizard/CampaignMap.tsx`, React Flow) draws the
 draft: the chain from the input to the review with a box per simulation run in a frame, the steps not run as
 dashed boxes, and a row of the settings of the whole campaign. `campaignMapModel.ts` (pure) builds the boxes,
 their facts, the problem counts the stepper used and the layout; each box opens its page (a run's box scrolls to
@@ -158,7 +194,8 @@ workbench runs) from `listHistory` (`domain/cluster/historyApi.ts`), kept live b
 topic (`campaignsReducer` in `liveTopics.ts`: pushed rows patch the page, a new, deleted or
 filtered-out entry has the page read again; polling while the topic is not live). An entry's page
 follows `campaign:<id>` (`useCampaignFeed.ts`) and has a tab per executed step with its outputs
-(`listOutputs`); "Open in workbench" and "Watch live" call `openInWorkbench(outputTarget(...))`.
+(`listOutputs`; the exploration's tab, `ExploredFecOutputs.tsx`, lists the FECs it found, and the coverage
+table names the `exploration` FEC as the exploration itself and the FECs that need no cases); "Open in workbench" and "Watch live" call `openInWorkbench(outputTarget(...))`.
 `historyStore.ts` keeps the open entry and step per browser; other sections open an entry with
 `showHistoryEntry(id)`. The Campaigns section is the wizard only.
 
@@ -171,18 +208,28 @@ turns instance samples and frames into encounter view frames (the workbench's jo
 
 `features/capabilities/` draws the architecture documents of the selected cluster's master
 (`GET /cluster/catalog/architecture`, schemas in `domain/cluster/architectureApi.ts`). One document per
-part of the system (vessel stack, trajectory generation, scene generation, monitoring), each with a
-metamodel (the generic layers, interfaces and adapters) and the concrete implementations over the same
-lanes. The page has one tab per document and three views: the implemented graph, the metamodel graph and,
-for the vessel stack, the availability matrix. Nothing in the frontend lists implementations: a new
-simulator or generator declared in the backend specs appears after the master restarts.
+part of the system, in the order of the chain (design space exploration, scene generation, trajectory
+generation, the vessel stack that simulates, monitoring), each with a metamodel (the generic layers,
+interfaces and adapters) and the concrete implementations over the same lanes, and with its place in the
+chain: `role` (step or support), `step`, `takes`, `gives` and the `job_types` that run it (all with
+defaults, so a master from before the overview still reads). The page opens on the Overview tab
+(`ChainOverview.tsx`): a card per step joined by what one step hands to the next, the supporting parts
+under it, and per card whether the selected cluster's machines offer the part's job now (the nodes feed
+and `jobTypeResources`). Each document has a tab of its own with three views: the implemented graph, the
+metamodel graph and, for the vessel stack, the availability matrix; the line beside the view buttons says
+what the shown view is for. Nothing in the frontend lists parts, steps or implementations: a new simulator,
+generator or step declared in the backend specs appears after the master restarts.
 
 - `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix, the
   `cluster_job` fact of an available stack: the job and runner that run it on a node ("simulation,
-  runner kinematic"), or none for a stack the workbench runs only as a live session).
+  runner kinematic"), or none for a stack the workbench runs only as a live session; `chainOf`: the step
+  parts numbered in the master's order and the supporting parts; `describePartOffer`: what the cluster
+  offers of a part, or why that is not known).
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
 - `ArchitectureGraph.tsx` (React Flow canvas, custom edge with a label), `GraphNodes.tsx` (cards and
-  lane bands), `cardSizes.ts`, `DetailPanel.tsx`, `MatrixView.tsx`, `CapabilitiesSection.tsx`.
+  lane bands), `cardSizes.ts`, `DetailPanel.tsx` (with nothing selected: the part's counts, what it takes
+  and gives, and its notes behind a disclosure), `MatrixView.tsx`, `ChainOverview.tsx`,
+  `CapabilitiesSection.tsx`.
 - `useFullscreen.ts` and `FullscreenButton.tsx`: full screen for the graph and its detail panel. It
   covers the window at once and asks the browser for the whole screen; where the browser refuses or
   never answers (an embedded browser), the window stays covered. Escape leaves it.

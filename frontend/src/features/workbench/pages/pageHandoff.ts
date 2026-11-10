@@ -74,9 +74,9 @@ export function trajectoriesOfTrajectoryPage(): { input: PageInput; content: str
   };
 }
 
-/** Whether an entry ran a step; a campaign from before Phase 6 ran the whole chain. */
+/** Whether an entry ran a step; a campaign from before Phase 6 ran the whole chain of then (no design space exploration). */
 export function entryRanStep(row: Pick<CampaignRow, "steps">, step: CampaignStep): boolean {
-  return row.steps === undefined || row.steps === null || row.steps.includes(step);
+  return row.steps === undefined || row.steps === null ? step !== "design_space_exploration" : row.steps.includes(step);
 }
 
 /** A history output as a page's input: its artifact and where it came from. */

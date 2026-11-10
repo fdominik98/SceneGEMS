@@ -142,3 +142,23 @@ def test_encoding_is_canonical_and_refuses_non_finite_numbers():
     assert encode_document("text", ArtifactContent.TEXT) == b"text"
     with pytest.raises(ValueError):
         encode_document({"a": float("nan")}, ArtifactContent.JSON)
+
+
+def test_store_results_puts_each_item_of_a_list_field_as_an_artifact_of_its_own():
+    stored: Dict[str, bytes] = {}
+
+    def put(field: ArtifactField, data: bytes) -> ArtifactRef:
+        sha256 = hashlib.sha256(data).hexdigest()
+        stored[sha256] = data
+        return ArtifactRef(sha256=sha256, size_bytes=len(data), kind=field.kind)
+
+    fields = (ArtifactField("functional_scenarios", ArtifactKind.FUNCTIONAL_SCENARIO, ArtifactContent.TEXT, many=True),)
+    kept = _reference("class C.", ArtifactKind.FUNCTIONAL_SCENARIO)
+    replaced = store_results({"functional_scenarios": ["class A.\n", kept, "class B.\n"], "models_found": 3}, fields, put)
+    references = [ArtifactRef.model_validate(item) for item in replaced["functional_scenarios"]]
+    assert [stored.get(reference.sha256) for reference in references] == [b"class A.\n", None, b"class B.\n"]  # a reference in the list stays as it is
+    assert references[1] == kept and replaced["models_found"] == 3
+    assert store_results(replaced, fields, put) == replaced
+    assert store_results({"functional_scenarios": []}, fields, put) == {"functional_scenarios": []}
+    # resolving gives the texts back, item by item
+    assert resolve_references(replaced, fields, lambda reference: stored.get(reference.sha256, b"class C."))["functional_scenarios"] == ["class A.\n", "class C.", "class B.\n"]

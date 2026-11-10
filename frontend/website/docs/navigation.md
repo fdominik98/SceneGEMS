@@ -9,6 +9,7 @@ Expand the menu with the hamburger (☰) button when the left pane is collapsed.
 
 **Workbench**
 
+- **Design Space Exploration**: Find the scenario classes of a specification ([Design Space Exploration](./design-space-exploration.md)).
 - **Scene Generation**: Author FEC specifications and generate scenes ([Scene Generation](./scene-generation.md)).
 - **Trajectory Generation**: Plan the vessel routes ([Trajectory Generation](./trajectory-generation.md)).
 - **Simulation**: Run a scenario, watch it play and monitor it ([Simulation view](./simulation.md)).

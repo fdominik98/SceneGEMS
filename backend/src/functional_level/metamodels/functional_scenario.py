@@ -337,12 +337,27 @@ class FunctionalScenario(Scenario):
         """
         Compute the hash of the node attributes and their neighborhoods up to the given number of hops.
 
+        The nodes are the sea objects and the vessel and obstacle types: an edge may point at a type
+        (vesselType, staticObstacleType), which is told apart by its name. The shape is the set of the
+        sea objects' neighborhoods, so it does not depend on the types no object has.
+
         :param hops: Number of hops to consider in the neighborhood.
+        :param edges: The relations that connect the nodes.
         :return: Hash of the neighborhood information.
         """
         # Initialize a dictionary to store neighborhoods for all hop levels
         neighborhoods: Dict[int, Dict[FuncObject, tuple]] = defaultdict(dict)
         neighborhood_counter: Dict[int, Dict[FuncObject, Dict[tuple, int]]] = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+        # What a node is: a sea object's kinds, or a type with its name
+        labels = (
+            self.Sea_object_interpretation,
+            self.Vessel_interpretation,
+            self.OS_interpretation,
+            self.TS_interpretation,
+            self.Static_obstacle_interpretation,
+            self.Vessel_type_interpretation,
+            self.Static_obstacle_type_interpretation,
+        )
 
         def generate_tuples(hop: int, interpretation: BinaryInterpretation, node: FuncObject) -> Set[tuple]:
             relation_descs = interpretation.get_relation_descs(node)
@@ -355,41 +370,26 @@ class FunctionalScenario(Scenario):
             return tuples
 
         def create_attributes(hop: int, node: FuncObject) -> frozenset[tuple]:
-            attributes: Set[tuple] = set()
-            if self.Sea_object_interpretation.contains(node):
-                attributes.add((self.Sea_object_interpretation.name_with_value(node), 1))
-            if self.Vessel_interpretation.contains(node):
-                attributes.add((self.Vessel_interpretation.name_with_value(node), 1))
-            if self.OS_interpretation.contains(node):
-                attributes.add((self.OS_interpretation.name_with_value(node), 1))
-            if self.TS_interpretation.contains(node):
-                attributes.add((self.TS_interpretation.name_with_value(node), 1))
-            if self.Static_obstacle_interpretation.contains(node):
-                attributes.add((self.Static_obstacle_interpretation.name_with_value(node), 1))
-
+            attributes: Set[tuple] = {(label.name_with_value(node), 1) for label in labels if label.contains(node)}
             for edge_interpretation in edges:
                 attributes.update(generate_tuples(hop, edge_interpretation, node))
 
             return frozenset(attributes)
 
-        for node in self.sea_objects:
-            neighborhoods[0][node] = (None,)
-
-        # focused_nodes = [self.os_object]
-        focused_nodes = self.sea_objects
+        nodes = self.functional_objects
         # Initialize base (0-hop) attributes
-        for node in focused_nodes:
+        for node in nodes:
             neighborhoods[0][node] = (None, create_attributes(0, node))
 
         # Build neighborhoods iteratively for each hop
         for hop in range(1, hops + 1):
             neighborhoods[hop] = {}
-            for node in focused_nodes:
+            for node in nodes:
                 neighborhoods[hop][node] = (
                     neighborhoods[hop - 1][node],
                     create_attributes(hop, node),
                 )
 
-        # Return hash of the last neighborhood
-        shape = frozenset(neighborhoods[hops].values())
+        # Return hash of the sea objects' last neighborhoods
+        shape = frozenset(neighborhoods[hops][node] for node in self.sea_objects)
         return hash(shape)

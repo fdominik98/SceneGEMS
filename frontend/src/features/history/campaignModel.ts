@@ -287,7 +287,18 @@ export function runIndexes(classes: readonly ClassView[], runCount = 0): number[
   return [...found].sort((a, b) => a - b);
 }
 
-export function classProgress(entry: Pick<ClassView, "complete" | "quota">): number {
+/**
+ * A FEC the design space exploration found in a campaign that runs no step after it: the master closes it
+ * complete at once, with no cases. It is done, not unfinished.
+ */
+export function closedWithoutCases(entry: Pick<ClassView, "state" | "complete" | "dropped" | "in_flight">): boolean {
+  return entry.state === "complete" && entry.complete === 0 && entry.dropped === 0 && entry.in_flight === 0;
+}
+
+export function classProgress(entry: Pick<ClassView, "state" | "complete" | "quota" | "dropped" | "in_flight">): number {
+  if (closedWithoutCases(entry)) {
+    return 1;
+  }
   return entry.quota > 0 ? Math.min(1, entry.complete / entry.quota) : 0;
 }
 
@@ -361,7 +372,7 @@ export function baseSeed(config: CampaignConfig | null | undefined): number | nu
 /**
  * Whether the current config version monitors a step, or null without a config. As the master reads
  * it: a generation step when its monitor is not empty (a format 1 config stores none), the simulation
- * when any run's is (a run without one is monitored post hoc).
+ * when any run's is (a run without one is monitored post hoc), never the design space exploration.
  */
 export function stepMonitored(config: CampaignConfig | null | undefined, step: CampaignStep): boolean | null {
   if (!config) {
@@ -373,6 +384,9 @@ export function stepMonitored(config: CampaignConfig | null | undefined, step: C
     execution?: { runs?: { monitor?: string }[] };
   };
   switch (step) {
+    case "design_space_exploration":
+      // The exploration has no monitor
+      return false;
     case "scene_generation":
       return (values.scene_generation?.monitor ?? "empty") !== "empty";
     case "trajectory_generation":

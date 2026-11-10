@@ -20,6 +20,7 @@ export const COMPONENTS = [
   "simulation_layer/kinematic",
   "simulation_layer/ardupilot_sim",
   "simulation_layer/gazebo",
+  "design_space_exploration",
   "scene_generation",
   "trajectory_generation",
   "monitoring",
@@ -35,6 +36,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   "simulation_layer/kinematic": "Kinematic layer",
   "simulation_layer/ardupilot_sim": "ArduPilot SITL",
   "simulation_layer/gazebo": "Gazebo",
+  design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   monitoring: "Monitoring",
@@ -43,6 +45,7 @@ const COMPONENT_LABELS: Record<string, string> = {
 
 /** The subsystem component of each job type but the simulation (`JOB_TYPE_COMPONENTS`). */
 export const JOB_TYPE_COMPONENTS: Record<string, string> = {
+  design_space_exploration: "design_space_exploration",
   scene_generation: "scene_generation",
   trajectory_generation: "trajectory_generation",
   "monitoring.post_hoc": "monitoring",

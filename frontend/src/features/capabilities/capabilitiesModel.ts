@@ -214,3 +214,84 @@ export function shortId(id: string): string {
 export function words(text: string): string {
   return text.replace(/_/g, " ");
 }
+
+// The chain: how the parts follow each other, for the page's overview
+
+/** The id of the overview among the page's tabs; no document has it. */
+export const OVERVIEW_ID = "overview";
+
+/** A part as the overview names it. */
+export interface ChainPart {
+  document: ArchitectureDocument;
+  /** The step's place in the chain, from 1; null for a supporting part. */
+  number: number | null;
+  /** The step it performs ("Simulation"), or the part's title when the master names none. */
+  name: string;
+  /** The part's own title when it differs from the step ("Vessel stack" performs "Simulation"); null otherwise. */
+  partName: string | null;
+}
+
+export interface Chain {
+  /** The parts that each perform one step, in the order the master lists them: the order of the chain. */
+  steps: ChainPart[];
+  /** The parts that serve the steps (monitoring). */
+  support: ChainPart[];
+  /** Whether the master says what the steps hand to each other; false for a master from before the overview. */
+  described: boolean;
+}
+
+export function chainOf(documents: readonly ArchitectureDocument[]): Chain {
+  const part = (document: ArchitectureDocument, number: number | null): ChainPart => {
+    const name = document.step.trim() || document.title;
+    return { document, number, name, partName: name === document.title ? null : document.title };
+  };
+  const steps = documents.filter((document) => document.role === "step").map((document, index) => part(document, index + 1));
+  const support = documents.filter((document) => document.role !== "step").map((document) => part(document, null));
+  return { steps, support, described: documents.some((document) => document.takes !== "" || document.gives !== "") };
+}
+
+/** How many implementations a part has and how many of its values were measured. */
+export function partCounts(document: ArchitectureDocument): { implementations: number; measured: number } {
+  return { implementations: document.nodes.length, measured: [...document.nodes, ...document.edges].reduce((sum, item) => sum + measuredCount(item), 0) };
+}
+
+/** What a list of machines offers of one job type, as the overview needs it. */
+export interface JobOffer {
+  jobType: string;
+  /** Machines that can run the job type now, and their slots for it. */
+  machines: number;
+  slots: number;
+}
+
+/**
+ * What the selected cluster says about a part: the offers per job type that runs it, or why nothing
+ * is known (no cluster, not read yet, unreachable). `known` is false while the answer may still change.
+ */
+export interface PartOffer {
+  known: boolean;
+  /** A line for the card: "2 slots on 1 machine", "no machine offers it", "the cluster cannot be reached". */
+  text: string;
+  tone: Tone;
+  offers: JobOffer[];
+}
+
+export function describePartOffer(state: { selected: boolean; loaded: boolean; unreachable: boolean }, offers: readonly JobOffer[]): PartOffer {
+  if (!state.selected) {
+    return { known: false, text: "no cluster selected", tone: "neutral", offers: [] };
+  }
+  if (state.unreachable) {
+    return { known: false, text: "the cluster cannot be reached", tone: "warn", offers: [] };
+  }
+  if (!state.loaded) {
+    return { known: false, text: "reading the machines", tone: "neutral", offers: [] };
+  }
+  if (offers.length === 0) {
+    return { known: false, text: "not stated by this master", tone: "neutral", offers: [] };
+  }
+  const machines = Math.max(...offers.map((offer) => offer.machines));
+  const slots = offers.reduce((sum, offer) => sum + offer.slots, 0);
+  if (machines === 0) {
+    return { known: true, text: "no machine offers it", tone: "warn", offers: [...offers] };
+  }
+  return { known: true, text: `${slots} slot${slots === 1 ? "" : "s"} on ${machines} machine${machines === 1 ? "" : "s"}`, tone: "ok", offers: [...offers] };
+}

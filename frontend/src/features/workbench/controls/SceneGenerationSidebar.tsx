@@ -1,45 +1,14 @@
-import CodeMirror from "@uiw/react-codemirror";
-import { syntaxHighlighting } from "@codemirror/language";
-import { oneDarkTheme } from "@codemirror/theme-one-dark";
-import { classHighlighter } from "@lezer/highlight";
-import { EditorView } from "@codemirror/view";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useTheme, type Theme } from "../../../app/theme";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { useUiStore } from "../../../app/uiStore";
-import problemLanguageSupport from "../../../language/refineryProblem/problemLanguageSupport";
 import { useCatalogClasses } from "../../campaigns/useCampaignData";
 import { ANY_COUNT, countOptions, filterCatalogClasses, listedValue } from "./scenarioCatalog";
 import { Disclosure } from "../../../components/Disclosure";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { BatchPresetRunner } from "./BatchPresetRunner";
-import { editorSurface } from "./editorTheme";
+import { ProblemEditor } from "./ProblemEditor";
 import { SceneGenerationPaneViewSelect } from "./SceneGenerationPaneViewSelect";
 import type { EvaluationData, SimulationFrame } from "../../../domain/simulation/types";
-
-const refineryLikeContentAttributes = EditorView.contentAttributes.of({
-  spellcheck: "false",
-  autocorrect: "off",
-  autocapitalize: "off",
-  translate: "no",
-  writingsuggestions: "false",
-});
-
-function problemExtensionsFor(theme: Theme) {
-  return [
-    problemLanguageSupport(),
-    syntaxHighlighting(classHighlighter),
-    ...(theme === "dark" ? [oneDarkTheme] : []),
-    refineryLikeContentAttributes,
-    editorSurface(theme),
-  ];
-}
-
-/** One list per theme, so the editor reconfigures only when the theme changes. */
-const functionalSpecProblemExtensions: Record<Theme, ReturnType<typeof problemExtensionsFor>> = {
-  dark: problemExtensionsFor("dark"),
-  light: problemExtensionsFor("light"),
-};
 
 function primaryModifierLabel(): string {
   if (typeof navigator === "undefined") {
@@ -107,7 +76,6 @@ export function SceneGenerationSidebar({
   );
   const [page, setPage] = useState(0);
   const mod = primaryModifierLabel();
-  const theme = useTheme();
 
   const filteredPresets = useMemo(
     () => filterCatalogClasses(allPresets, searchQuery, vesselFilter, obstacleFilter),
@@ -369,14 +337,7 @@ export function SceneGenerationSidebar({
                 </p>
               </div>
             )}
-            <CodeMirror
-              className="scene-editor-problem-codemirror"
-              value={functionalSpecText}
-              height="100%"
-              theme="none"
-              extensions={functionalSpecProblemExtensions[theme]}
-              onChange={onFunctionalSpecTextChange}
-            />
+            <ProblemEditor value={functionalSpecText} onChange={onFunctionalSpecTextChange} />
           </>
         ) : (
           <>

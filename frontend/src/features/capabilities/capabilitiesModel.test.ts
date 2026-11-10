@@ -3,14 +3,17 @@ import { fact, sampleStackDocument } from "../../test/fixtures/architectureDocum
 import {
   buildMatrix,
   cardFacts,
+  chainOf,
   CLUSTER_JOB_FACT,
   clusterJobOf,
   connectedIds,
+  describePartOffer,
   factsByGroup,
   factTone,
   formatFactValue,
   highlightFor,
   parallelIndex,
+  partCounts,
   shortId,
   stacksRunAsJobs,
   stacksThrough,
@@ -140,5 +143,62 @@ describe("text helpers", () => {
     expect(shortId("simulation_layer/gazebo")).toBe("gazebo");
     expect(shortId("plain")).toBe("plain");
     expect(words("usv_navigation_in_process")).toBe("usv navigation in process");
+  });
+});
+
+describe("the chain of parts", () => {
+  const part = (id: string, overrides: Partial<ReturnType<typeof sampleStackDocument>> = {}) => ({ ...sampleStackDocument(), id, title: id, ...overrides });
+  const documents = [
+    part("Exploration", { step: "Design space exploration", takes: "a specification and a scope", gives: "FECs" }),
+    part("Scene generation", { step: "Scene generation", takes: "a FEC", gives: "a scene" }),
+    part("Vessel stack", { step: "Simulation", takes: "trajectories", gives: "a simulated run" }),
+    part("Monitoring", { role: "support" as const, step: "", takes: "scenes, trajectories and runs", gives: "rule outcomes" }),
+  ];
+
+  it("numbers the step parts in the order the master lists them and keeps the supporting parts apart", () => {
+    const chain = chainOf(documents);
+    expect(chain.steps.map((step) => [step.number, step.name, step.partName])).toEqual([
+      [1, "Design space exploration", "Exploration"],
+      [2, "Scene generation", null],
+      [3, "Simulation", "Vessel stack"],
+    ]);
+    expect(chain.support.map((step) => [step.number, step.name, step.partName])).toEqual([[null, "Monitoring", null]]);
+    expect(chain.described).toBe(true);
+  });
+
+  it("names a part by its title and states no chain for a master from before the overview", () => {
+    const older = documents.map((document) => ({ ...document, role: "step" as const, step: "", takes: "", gives: "" }));
+    const chain = chainOf(older);
+    expect(chain.described).toBe(false);
+    expect(chain.steps.map((step) => step.name)).toEqual(["Exploration", "Scene generation", "Vessel stack", "Monitoring"]);
+    expect(chain.steps.every((step) => step.partName === null)).toBe(true);
+    expect(chain.support).toEqual([]);
+  });
+
+  it("counts a part's implementations and the measured values of its cards and arrows", () => {
+    expect(partCounts(sampleStackDocument())).toEqual({ implementations: 6, measured: 4 });
+    expect(partCounts({ ...sampleStackDocument(), nodes: [], edges: [] })).toEqual({ implementations: 0, measured: 0 });
+  });
+});
+
+describe("what the cluster offers of a part", () => {
+  const ready = { selected: true, loaded: true, unreachable: false };
+  const offer = (jobType: string, machines: number, slots: number) => ({ jobType, machines, slots });
+
+  it("says the slots and machines that run the part's job now", () => {
+    expect(describePartOffer(ready, [offer("scene_generation", 2, 3)])).toMatchObject({ known: true, text: "3 slots on 2 machines", tone: "ok" });
+    expect(describePartOffer(ready, [offer("simulation", 1, 1)])).toMatchObject({ text: "1 slot on 1 machine", tone: "ok" });
+  });
+
+  it("warns when no machine offers the job", () => {
+    expect(describePartOffer(ready, [offer("design_space_exploration", 0, 0)])).toMatchObject({ known: true, text: "no machine offers it", tone: "warn" });
+  });
+
+  it("says why nothing is known instead of claiming that nothing is offered", () => {
+    expect(describePartOffer({ selected: false, loaded: false, unreachable: false }, [])).toMatchObject({ known: false, text: "no cluster selected", tone: "neutral" });
+    expect(describePartOffer({ selected: true, loaded: false, unreachable: true }, [offer("simulation", 0, 0)])).toMatchObject({ known: false, text: "the cluster cannot be reached", tone: "warn" });
+    expect(describePartOffer({ selected: true, loaded: false, unreachable: false }, [offer("simulation", 0, 0)])).toMatchObject({ known: false, text: "reading the machines" });
+    // a master from before the overview names no job type for the part
+    expect(describePartOffer(ready, [])).toMatchObject({ known: false, text: "not stated by this master", tone: "neutral" });
   });
 });

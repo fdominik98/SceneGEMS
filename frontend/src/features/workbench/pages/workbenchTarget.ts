@@ -8,15 +8,20 @@ import { useUiStore, type WorkbenchView } from "../../../app/uiStore";
  * when it mounts or when a target is queued, and loads or follows it from there.
  */
 
-export type WorkbenchPage = "sceneGeneration" | "trajectoryGeneration" | "simulation";
+export type WorkbenchPage = "designSpaceExploration" | "sceneGeneration" | "trajectoryGeneration" | "simulation";
+
+/** The pages in the order of the chain: the step panels number them from here ("Step 2 of 4"). */
+export const WORKBENCH_STEP_PAGES: readonly WorkbenchPage[] = ["designSpaceExploration", "sceneGeneration", "trajectoryGeneration", "simulation"];
 
 export interface WorkbenchTarget {
   page: WorkbenchPage;
   campaignId: string;
   caseId: number;
-  step: "scene_generation" | "trajectory_generation" | "simulation";
+  step: "design_space_exploration" | "scene_generation" | "trajectory_generation" | "simulation";
   /** Simulation outputs. */
   runRecordId?: number;
+  /** The explored FEC to select on the design space exploration page (`explored/00003`); the case is the exploration's. */
+  fecId?: string;
   /** The case's index in its class (0-based), for labels; `caseId` is the master's database id. Absent on targets stored before it. */
   caseIndex?: number;
   /** Follow the running job instead of loading the finished output. */
@@ -25,6 +30,7 @@ export interface WorkbenchTarget {
 
 /** The workbench view that shows each page: the page ids are the view ids of `uiStore`. */
 export const WORKBENCH_VIEW_OF_PAGE: Record<WorkbenchPage, WorkbenchView> = {
+  designSpaceExploration: "designSpaceExploration",
   sceneGeneration: "sceneGeneration",
   trajectoryGeneration: "trajectoryGeneration",
   simulation: "simulation",
@@ -32,6 +38,7 @@ export const WORKBENCH_VIEW_OF_PAGE: Record<WorkbenchPage, WorkbenchView> = {
 
 /** The page an output of a step belongs on. */
 export const WORKBENCH_PAGE_OF_STEP: Record<WorkbenchTarget["step"], WorkbenchPage> = {
+  design_space_exploration: "designSpaceExploration",
   scene_generation: "sceneGeneration",
   trajectory_generation: "trajectoryGeneration",
   simulation: "simulation",

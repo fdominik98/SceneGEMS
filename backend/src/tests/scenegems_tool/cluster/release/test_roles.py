@@ -68,7 +68,7 @@ def test_component_items_are_the_catalog_with_its_images():
 
 def test_slot_items_are_the_job_types_without_images_of_their_own():
     assert slot_item_images() == {job_type.value: [] for job_type in JobType}
-    assert set(slot_item_images()) == {"scene_generation", "trajectory_generation", "simulation", "monitoring.post_hoc", "calibration.deviation"}
+    assert set(slot_item_images()) == {"design_space_exploration", "scene_generation", "trajectory_generation", "simulation", "monitoring.post_hoc", "calibration.deviation"}
 
 
 def test_the_node_parameters_are_components_without_an_amount_and_slots_with_one():

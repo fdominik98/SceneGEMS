@@ -96,5 +96,19 @@ export function sampleStackDocument(): ArchitectureDocument {
       combination(["top/b", "middle/d", "bottom/f"], "planned"),
     ],
     notes: ["A note on the stack."],
+    role: "step",
+    step: "Stacking",
+    takes: "parts",
+    gives: "a stack",
+    job_types: ["simulation"],
   };
+}
+
+/** The same document as a master from before the overview writes it: without its place in the chain. */
+export function sampleStackDocumentWithoutChain(): Record<string, unknown> {
+  const document: Record<string, unknown> = { ...sampleStackDocument() };
+  for (const key of ["role", "step", "takes", "gives", "job_types"]) {
+    delete document[key];
+  }
+  return document;
 }

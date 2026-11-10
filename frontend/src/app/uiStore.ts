@@ -28,6 +28,7 @@ export type SceneGenerationPaneView = "specification" | "monitor";
 export type AppSection = "workbench" | "cluster" | "domain" | "capabilities" | "campaigns" | "history" | "results";
 /** Views inside the workbench section (its sub-navigation). */
 export type WorkbenchView =
+  | "designSpaceExploration"
   | "simulation"
   | "connections"
   | "sceneGeneration"
@@ -35,6 +36,7 @@ export type WorkbenchView =
 
 export const APP_SECTIONS: readonly AppSection[] = ["workbench", "cluster", "domain", "capabilities", "campaigns", "history", "results"];
 export const WORKBENCH_VIEWS: readonly WorkbenchView[] = [
+  "designSpaceExploration",
   "sceneGeneration",
   "trajectoryGeneration",
   "simulation",
@@ -58,11 +60,11 @@ function isWorkbenchView(value: unknown): value is WorkbenchView {
 }
 
 /**
- * Whether a workbench view shows its right pane: the scene page always (its specification),
+ * Whether a workbench view shows its right pane: the design space exploration and scene pages always (their specification editors),
  * the trajectory and simulation pages while the monitoring panel is not hidden, Connections never.
  */
 export function rightPaneShown(view: WorkbenchView, rightPaneVisible: boolean): boolean {
-  if (view === "sceneGeneration") {
+  if (view === "sceneGeneration" || view === "designSpaceExploration") {
     return true;
   }
   return (view === "trajectoryGeneration" || view === "simulation") && rightPaneVisible;

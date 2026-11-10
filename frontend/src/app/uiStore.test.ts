@@ -115,6 +115,11 @@ describe("rightPaneShown", () => {
     expect(ui.rightPaneShown("sceneGeneration", false)).toBe(true);
   });
 
+  it("always shows the design space exploration page's specification pane, the first workbench view", () => {
+    expect(ui.rightPaneShown("designSpaceExploration", false)).toBe(true);
+    expect(ui.WORKBENCH_VIEWS[0]).toBe("designSpaceExploration");
+  });
+
   it("hides the monitoring panel of the trajectory and simulation pages when asked", () => {
     expect(ui.rightPaneShown("trajectoryGeneration", true)).toBe(true);
     expect(ui.rightPaneShown("trajectoryGeneration", false)).toBe(false);

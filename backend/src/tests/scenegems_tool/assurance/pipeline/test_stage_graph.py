@@ -3,7 +3,7 @@
 import pytest
 
 from scenegems_tool.assurance.campaign import campaign_config_from_dict
-from scenegems_tool.assurance.campaign.campaign_config import CHAIN, CampaignStep
+from scenegems_tool.assurance.campaign.campaign_config import DEFAULT_STEPS, CampaignStep
 from scenegems_tool.assurance.pipeline.stage_graph import (
     SCENE_MONITOR_STEP,
     SCENE_STEP,
@@ -114,7 +114,7 @@ def _format2(steps, **sections) -> StageGraph:
 
 def test_a_format_1_graph_runs_the_full_chain_without_generation_monitors():
     graph = _graph({"monitor": "post_hoc"})
-    assert graph.steps == CHAIN and graph.first_stage() == PipelineStage.GENERATE_SCENE and graph.monitored_steps() == []
+    assert graph.steps == DEFAULT_STEPS and graph.first_stage() == PipelineStage.GENERATE_SCENE and graph.monitored_steps() == []
     assert graph.priority_offsets == STAGE_PRIORITY_OFFSET and len(graph.runs) == 1
     progress = CaseProgress()
     progress.mark(SCENE_STEP, "succeeded")

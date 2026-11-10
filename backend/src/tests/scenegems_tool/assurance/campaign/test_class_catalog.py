@@ -116,3 +116,38 @@ def test_count_instances():
 def test_a_missing_catalog_folder(tmp_path):
     with pytest.raises(FileNotFoundError):
         len(ClassCatalog(tmp_path / "missing"))
+
+
+def test_the_enum_lists_of_every_catalog_fec_are_comma_separated():
+    # The functional model parser reads an enum's literals word by word, so a missing comma goes unnoticed here, but Refinery refuses the file
+    enum_body = re.compile(r"^enum\s+\w+\s*\{([^}]*)\}", re.MULTILINE)
+    literals = re.compile(r"\s*\w+(\s*,\s*\w+)*\s*")
+    checked = 0
+    for scenario_class in ClassCatalog.default():
+        bodies = enum_body.findall(scenario_class.read_content())
+        assert bodies, scenario_class.class_id
+        for body in bodies:
+            assert literals.fullmatch(body), f"{scenario_class.class_id}: enum literals without a comma between them: {' '.join(body.split())}"
+            checked += 1
+    assert checked >= sum(FOLDER_SIZES.values())
+
+
+def test_every_catalog_fec_declares_the_objects_it_names():
+    declared_objects = re.compile(r"^declare ([^.]*)\.", re.MULTILINE)
+    instances = re.compile(r"^(?:OS|TS|StaticObstacle)\((\w+)\)\.", re.MULTILINE)
+    for scenario_class in ClassCatalog.default():
+        content = scenario_class.read_content()
+        declared = set(re.findall(r"\w+", " ".join(declared_objects.findall(content))))
+        assert set(instances.findall(content)) <= declared, scenario_class.class_id
+
+
+def test_every_catalog_fec_is_a_consistent_and_relevant_encounter():
+    # Every target ship is in a COLREGS situation with the own ship and every static obstacle is in its dangerous head-on sector:
+    # a FEC that leaves a relation out places that object anywhere, and Refinery finds no model for it
+    from functional_level.models.model_parser import ModelParser
+
+    for scenario_class in ClassCatalog.default():
+        scenario = ModelParser.parse_problem(scenario_class.read_content())
+        assert scenario.is_consistent_by_fec, scenario_class.class_id
+        assert scenario.is_relevant_by_fec, scenario_class.class_id
+        assert (scenario.vessel_number, scenario.obstacle_number) == (scenario_class.vessel_count, scenario_class.obstacle_count), scenario_class.class_id

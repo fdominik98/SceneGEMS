@@ -190,7 +190,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   );
 
   return (
-    <StepPanel step={3} title="Simulation" status={status} where={where} notices={notices} actions={actions}>
+    <StepPanel page="simulation" title="Simulation" status={status} where={where} notices={notices} actions={actions}>
       <PageInputPanel
         noun="Trajectories"
         input={input}

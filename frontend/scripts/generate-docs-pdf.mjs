@@ -15,6 +15,7 @@ const DOC_IDS = [
   'layout',
   'navigation',
   'workbench-pages',
+  'design-space-exploration',
   'scene-generation',
   'trajectory-generation',
   'simulation',

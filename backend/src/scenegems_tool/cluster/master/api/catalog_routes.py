@@ -46,11 +46,22 @@ def catalog_router() -> APIRouter:
     async def list_stacks() -> dict:
         return await anyio.to_thread.run_sync(stacks_view)
 
+    @router.get(CATALOG_PATH + "/design-space")
+    async def get_design_space() -> dict:
+        return await anyio.to_thread.run_sync(design_space_view)
+
     @router.get(CATALOG_PATH + "/architecture")
     async def get_architecture() -> dict:
         return await anyio.to_thread.run_sync(architecture_view)
 
     return router
+
+
+def design_space_view() -> dict:
+    """What a design space exploration starts from: the specification the master ships and the default scope."""
+    from scenegems_tool.subsystems.design_space_exploration.design_space import DEFAULT_SCOPE, default_specification
+
+    return {"specification": default_specification(), "scope": DEFAULT_SCOPE}
 
 
 def classes(folder: Optional[str], pattern: Optional[str]) -> list:

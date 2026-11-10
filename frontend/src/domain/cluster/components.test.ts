@@ -29,7 +29,7 @@ function nodeWith(components: [string, "usable" | "out_of_date"][], slots: Recor
 
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
-    expect(COMPONENTS).toHaveLength(12);
+    expect(COMPONENTS).toHaveLength(13);
     expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_software/replay", "monitoring", "gpu"])).toEqual(["asv_software/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
     expect(componentLabel("simulation_layer/ardupilot_sim")).toBe("ArduPilot SITL");
     expect(componentLabel("gpu")).toBe("gpu");

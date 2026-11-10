@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../useCampaignData", () => {
   const idle = { data: undefined, error: null, isLoading: false, refetch: () => Promise.resolve() };
-  return { useOperatorClient: () => mocks.client, useCatalogClasses: () => idle, useCatalogStacks: () => idle, retryUnlessUnreachable: () => false };
+  return { useOperatorClient: () => mocks.client, useCatalogClasses: () => idle, useCatalogStacks: () => idle, useDesignSpaceDefault: () => idle, retryUnlessUnreachable: () => false };
 });
 // The preset bar reads the master's presets; these tests start from an empty draft
 vi.mock("./useCampaignPresets", () => {

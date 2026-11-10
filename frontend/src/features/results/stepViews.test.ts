@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { findingsSchema } from "../../domain/cluster/historyApi";
-import { caseDetailSchema, campaignRowSchema, type CampaignStep } from "../../domain/cluster/schemas";
+import { caseDetailSchema, campaignRowSchema } from "../../domain/cluster/schemas";
 import { sampleCase, sampleRunRecord, sampleVerdict } from "../../test/fixtures/clusterViews";
 import {
   sampleCampaignRow,
@@ -24,6 +24,7 @@ import {
   rankClasses,
   rankFailedRules,
   verdictStepOf,
+  type MonitoredStep,
 } from "./stepViews";
 
 const campaign = campaignRowSchema.parse(sampleCampaignRow());
@@ -53,7 +54,7 @@ describe("steps of an entry", () => {
   });
 
   it("names the step the verdicts carry", () => {
-    const names = (["scene_generation", "trajectory_generation", "simulation"] as CampaignStep[]).map(verdictStepOf);
+    const names = (["scene_generation", "trajectory_generation", "simulation"] as MonitoredStep[]).map(verdictStepOf);
     expect(names).toEqual(["scene", "trajectories", "simulation"]);
   });
 

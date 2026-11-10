@@ -17,7 +17,7 @@ import math
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2  # 2: a document says its place in the chain (role, step, takes, gives, job_types)
 
 FactValue = Union[str, float, int, bool, None]
 
@@ -31,6 +31,9 @@ STATUS_PLANNED = "planned"
 KIND_ROLE = "role"  # a lane's generic layer: what every implementation of the lane has to be
 KIND_INTERFACE = "interface"
 KIND_COMPONENT = "component"
+
+ROLE_STEP = "step"  # the part performs one step of the chain
+ROLE_SUPPORT = "support"  # the part serves the steps (monitoring judges their outputs)
 
 UNBOUNDED = "unbounded"  # the display value of a limit that is infinity
 
@@ -143,10 +146,17 @@ class ArchitectureDocument:
     unsupported: Tuple[UnsupportedLink, ...] = ()
     combinations: Tuple[Combination, ...] = ()
     notes: Tuple[str, ...] = ()
+    # The part's place in the chain, for the overview of the Capabilities page
+    role: str = ROLE_STEP
+    step: str = ""  # the chain step the part performs (a step part), as the console names it
+    takes: str = ""  # what it takes, in a few words
+    gives: str = ""  # what it gives
+    job_types: Tuple[str, ...] = ()  # the cluster job types that run it, so the console can say which nodes offer it
     schema_version: int = field(default=SCHEMA_VERSION)
 
     def validate(self) -> "ArchitectureDocument":
         """Fail on a dangling reference, so a typo in a spec cannot reach the page."""
+        _require(self.role in (ROLE_STEP, ROLE_SUPPORT), f"{self.id}: unknown role {self.role}")
         lane_ids = [lane.id for lane in self.lanes]
         _require_unique("lane", lane_ids)
         meta_ids = [node.id for node in self.metamodel_nodes]

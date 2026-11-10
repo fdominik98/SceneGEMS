@@ -2,6 +2,7 @@ import type { CatalogClass, CatalogStacks, StepMonitor } from "../../../domain/c
 import type { CampaignStep } from "../../../domain/cluster/schemas";
 import { plural } from "../campaignFormat";
 import { needLabel, type ResourcePlan } from "../resourcePlan";
+import { parseDesignSpaceScope } from "../../../domain/designSpace/designSpaceScope";
 import { isEmptyScopeEntry } from "./configBuilder";
 import { planScope } from "./scopePlan";
 import { CAMPAIGN_STEP_LABELS, CHAIN, inputKindOf, normalizeSteps } from "./stepPlan";
@@ -151,9 +152,16 @@ function monitorFact(monitor: StepMonitor): MapFact {
   return monitor === "post_hoc" ? fact("Post hoc monitor") : fact("No monitor", "muted");
 }
 
-/** The cases the input brings (each class's quota added up, or one per item); null while the catalog a pattern needs is not loaded. */
+/**
+ * The cases the input brings (each class's quota added up, or one per item); null while the catalog a pattern needs
+ * is not loaded, and for a campaign that explores the design space: its FECs are known only once the exploration ran.
+ */
 export function plannedCases(draft: WizardDraft, classes: readonly CatalogClass[] | undefined): number | null {
-  if (inputKindOf(draft.steps) !== "catalog_or_scenarios") {
+  const kind = inputKindOf(draft.steps);
+  if (kind === "explored") {
+    return null;
+  }
+  if (kind !== "catalog_or_scenarios") {
     return draft.input.items.length;
   }
   const scenarioCases = draft.input.scenarios.reduce((total, scenario) => total + (scenario.quota ?? 0), 0);
@@ -163,8 +171,16 @@ export function plannedCases(draft: WizardDraft, classes: readonly CatalogClass[
   return classes ? planScope(draft.scope, classes).casesPlanned + scenarioCases : null;
 }
 
+/** The cases of each explored FEC, as the map says it ("2 cases per explored FEC"). */
+export function casesPerExploredFec(draft: WizardDraft): string {
+  return `${plural(draft.exploration.quota ?? 1, "case")} per explored FEC`;
+}
+
 function inputFacts(draft: WizardDraft, classes: readonly CatalogClass[] | undefined): MapFact[] {
   const kind = inputKindOf(draft.steps);
+  if (kind === "explored") {
+    return [fact("None: the FECs come from the exploration", "muted")];
+  }
   if (kind !== "catalog_or_scenarios") {
     const items = draft.input.items;
     if (items.length === 0) {
@@ -197,6 +213,18 @@ function inputFacts(draft: WizardDraft, classes: readonly CatalogClass[] | undef
   if (cases !== null && cases > 0) {
     facts.push(fact(`${plural(cases, "case")} to complete`, "muted"));
   }
+  return facts;
+}
+
+function explorationFacts(draft: WizardDraft): MapFact[] {
+  const { exploration } = draft;
+  const facts: MapFact[] = [];
+  if (exploration.specification.trim().length === 0) {
+    facts.push(fact("No specification yet", "warn"));
+  }
+  const scope = parseDesignSpaceScope(exploration.scope);
+  facts.push(scope.ok ? fact(`Scope ${exploration.scope.trim()}`) : fact(exploration.scope.trim().length === 0 ? "No scope yet" : "The scope is not valid", "warn"));
+  facts.push(fact(exploration.maxFecs === null ? "Every FEC" : `At most ${plural(exploration.maxFecs, "FEC")}`, "muted"));
   return facts;
 }
 
@@ -238,6 +266,16 @@ function runFacts(run: RunDraft, stacks: CatalogStacks | undefined): MapFact[] {
 
 function reviewFacts(draft: WizardDraft, context: MapContext, steps: readonly CampaignStep[]): MapFact[] {
   const facts = [REVIEW_FACTS[context.review]];
+  if (inputKindOf(steps) === "explored") {
+    // The number of FECs is known only once the exploration ran
+    if (steps.length > 1) {
+      const perCase = steps.includes("simulation") ? draft.runs.reduce((total, run) => total + (run.repeats ?? 1), 0) : 0;
+      facts.push(fact(perCase > 0 ? `${casesPerExploredFec(draft)}, ${plural(perCase, "simulation")} per case` : casesPerExploredFec(draft), "muted"));
+    } else {
+      facts.push(fact("The FECs are counted by the exploration", "muted"));
+    }
+    return facts;
+  }
   const cases = plannedCases(draft, context.classes);
   if (cases !== null && cases > 0) {
     if (steps.includes("simulation")) {
@@ -321,6 +359,7 @@ function columnsOf(steps: readonly CampaignStep[]): Column[] {
 }
 
 const STAGE_PAGES: Record<Exclude<CampaignStep, "simulation">, WizardStepId> = {
+  design_space_exploration: "exploration",
   scene_generation: "scenes",
   trajectory_generation: "trajectories",
 };
@@ -369,7 +408,8 @@ export function buildCampaignMap(draft: WizardDraft, context: MapContext): Campa
         break;
       case "stage": {
         const page = STAGE_PAGES[column.step as Exclude<CampaignStep, "simulation">];
-        const facts = column.step === "scene_generation" ? sceneFacts(draft) : trajectoryFacts(draft, context.stacks);
+        const facts =
+          column.step === "design_space_exploration" ? explorationFacts(draft) : column.step === "scene_generation" ? sceneFacts(draft) : trajectoryFacts(draft, context.stacks);
         cards.push({ id: column.step, kind: "stage", title: CAMPAIGN_STEP_LABELS[column.step], facts, page, problems: context.problems[page], x, y: middle(STAGE_HEIGHT), width: CARD_WIDTH, height: STAGE_HEIGHT });
         connect(column.step);
         feeding = [column.step];

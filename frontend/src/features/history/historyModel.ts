@@ -4,6 +4,7 @@ import { describeOperatorError, OperatorApiError } from "../../domain/cluster/op
 import { splitFailedRule } from "../../domain/cluster/resultsApi";
 import {
   CAMPAIGN_STEPS,
+  IMPLIED_STEPS,
   type CampaignKind,
   type CampaignOrigin,
   type CampaignRow,
@@ -33,6 +34,7 @@ export const KIND_LABELS: Record<CampaignKind, string> = {
 export const ORIGIN_LABELS: Record<CampaignOrigin, string> = {
   wizard: "wizard",
   cli: "command line",
+  design_space_exploration: "design space exploration page",
   scene_generation: "scene generation page",
   trajectory_generation: "trajectory generation page",
   simulation: "simulation page",
@@ -40,6 +42,7 @@ export const ORIGIN_LABELS: Record<CampaignOrigin, string> = {
 };
 
 export const STEP_LABELS: Record<CampaignStep, string> = {
+  design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   simulation: "Simulation",
@@ -47,13 +50,15 @@ export const STEP_LABELS: Record<CampaignStep, string> = {
 
 /** What one output of a step is called. */
 export const STEP_OUTPUT_NOUNS: Record<CampaignStep, { one: string; many: string }> = {
+  design_space_exploration: { one: "FEC", many: "FECs" },
   scene_generation: { one: "scene", many: "scenes" },
   trajectory_generation: { one: "trajectory set", many: "trajectory sets" },
   simulation: { one: "run", many: "runs" },
 };
 
-/** The verdict step of each campaign step, as the list row totals name it. */
-export const VERDICT_STEP_OF: Record<CampaignStep, VerdictStep> = {
+/** The verdict step of each campaign step, as the list row totals name it; the design space exploration has no monitor and no verdicts. */
+export const VERDICT_STEP_OF: Record<CampaignStep, VerdictStep | null> = {
+  design_space_exploration: null,
   scene_generation: "scene",
   trajectory_generation: "trajectories",
   simulation: "simulation",
@@ -74,10 +79,10 @@ export function madeByLabel(origin: CampaignOrigin | null | undefined): string {
   return origin ? `from the ${ORIGIN_LABELS[origin]}` : "origin not recorded";
 }
 
-/** The executed steps in chain order; an entry without `steps` (format 1, or a master without Phase 6) runs the whole chain. */
+/** The executed steps in chain order; an entry without `steps` (format 1, or a master without Phase 6) runs the chain of then. */
 export function entrySteps(entry: Pick<CampaignSummary, "steps">): CampaignStep[] {
   const steps = entry.steps ?? [];
-  return steps.length === 0 ? [...CAMPAIGN_STEPS] : CAMPAIGN_STEPS.filter((step) => steps.includes(step));
+  return steps.length === 0 ? [...IMPLIED_STEPS] : CAMPAIGN_STEPS.filter((step) => steps.includes(step));
 }
 
 export function stepsLabel(steps: readonly CampaignStep[]): string {
@@ -110,7 +115,8 @@ export function rowTotalsSummary(totals: CampaignRowTotals | undefined, steps: r
   const cases = states.length === 0 ? "no cases yet" : states.map(([state, count]) => `${count} ${state}`).join(", ");
   const verdicts: VerdictLine[] = [];
   for (const step of steps) {
-    const counts = totals.verdicts[VERDICT_STEP_OF[step]];
+    const verdictStep = VERDICT_STEP_OF[step];
+    const counts = verdictStep === null ? undefined : totals.verdicts[verdictStep];
     if (!counts) {
       continue;
     }
@@ -210,6 +216,8 @@ export function outputTarget(campaignId: string, step: CampaignStep, row: Output
     caseId: row.case_id,
     step,
     ...(step === "simulation" && row.run_record_id !== null ? { runRecordId: row.run_record_id } : {}),
+    // An explored FEC is a row of the exploration case: the page loads the exploration and selects the FEC
+    ...(step === "design_space_exploration" ? { caseIndex: 0, fecId: row.fec_id } : {}),
     ...(live ? { live: true } : {}),
   };
 }

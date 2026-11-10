@@ -6,12 +6,12 @@ import { NumberSetting, StepPanel, StepRow } from "./StepPanel";
 describe("StepPanel", () => {
   it("shows the step, its status, where it runs and its run button", () => {
     render(
-      <StepPanel step={2} title="Trajectory Generation" status={{ label: "Trajectory ready", tone: "ok" }} where="Plans as a job on the cluster." actions={<button type="button">Generate trajectories</button>}>
+      <StepPanel page="trajectoryGeneration" title="Trajectory Generation" status={{ label: "Trajectory ready", tone: "ok" }} where="Plans as a job on the cluster." actions={<button type="button">Generate trajectories</button>}>
         <StepRow label="Input">scene</StepRow>
       </StepPanel>
     );
     const panel = screen.getByRole("region", { name: "Trajectory Generation" });
-    expect(within(panel).getByText("Step 2 of 3")).toBeInTheDocument();
+    expect(within(panel).getByText("Step 3 of 4")).toBeInTheDocument();
     expect(within(panel).getByRole("heading", { name: "Trajectory Generation" })).toBeInTheDocument();
     expect(within(panel).getByRole("status")).toHaveTextContent("Trajectory ready");
     expect(within(panel).getByRole("status")).toHaveClass("step-chip--ok");
@@ -25,7 +25,7 @@ describe("StepPanel", () => {
     const connect = vi.fn();
     render(
       <StepPanel
-        step={3}
+        page="simulation"
         title="Simulation"
         status={{ label: "Not initialized", tone: "idle" }}
         actions={null}
@@ -42,7 +42,7 @@ describe("StepPanel", () => {
 
   it("has no notice list when nothing is missing", () => {
     render(
-      <StepPanel step={1} title="Scene Generation" status={{ label: "Idle", tone: "idle" }} actions={null}>
+      <StepPanel page="sceneGeneration" title="Scene Generation" status={{ label: "Idle", tone: "idle" }} actions={null}>
         {null}
       </StepPanel>
     );

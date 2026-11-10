@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 import type { ConfigArtifactRef, InputItemSource, StepMonitor } from "../../../domain/cluster/campaignApi";
-import type { CampaignStep } from "../../../domain/cluster/schemas";
-import { CHAIN, normalizeSteps } from "./stepPlan";
+import { IMPLIED_STEPS, type CampaignStep } from "../../../domain/cluster/schemas";
+import { DEFAULT_EXPLORATION_QUOTA, DEFAULT_EXPLORATION_TIMEOUT_S, DEFAULT_MAX_FECS } from "../../../domain/designSpace/designSpaceConfig";
+import { normalizeSteps } from "./stepPlan";
 
 /**
  * The state of the create wizard. It holds what the operator entered, in plain JSON, and leaves
@@ -10,13 +11,14 @@ import { CHAIN, normalizeSteps } from "./stepPlan";
  * stored draft survives a reload (one per browser).
  */
 
-export const WIZARD_STEPS = ["steps", "input", "domain", "scenes", "trajectories", "runs", "resources", "policy", "review"] as const;
+export const WIZARD_STEPS = ["steps", "input", "domain", "exploration", "scenes", "trajectories", "runs", "resources", "policy", "review"] as const;
 export type WizardStepId = (typeof WIZARD_STEPS)[number];
 
 export const WIZARD_STEP_LABELS: Record<WizardStepId, string> = {
   steps: "Steps",
   input: "Input",
   domain: "Domain",
+  exploration: "Design space exploration",
   scenes: "Scene generation",
   trajectories: "Trajectory generation",
   runs: "Simulation",
@@ -74,6 +76,21 @@ export interface InputItemDraft {
 export interface InputDraft {
   scenarios: ScenarioFileDraft[];
   items: InputItemDraft[];
+}
+
+/** The design space exploration of a campaign that starts with it: its specification, scope and limits. */
+export interface ExplorationDraft {
+  /** The metamodel and the well-formedness constraints (the first part of a FEC specification). */
+  specification: string;
+  /** Where the text came from (the master's default, a file), null for one written here. Not written to the config. */
+  specificationLabel: string | null;
+  scope: string;
+  /** Null for every FEC. */
+  maxFecs: number | null;
+  timeoutS: number | null;
+  /** Complete cases each explored FEC needs. */
+  quota: number | null;
+  failureBudget: FailureBudgetDraft;
 }
 
 export interface DomainDraft {
@@ -143,6 +160,8 @@ export interface WizardDraft {
   scope: ScopeEntryDraft[];
   /** Uploaded scenario files and the items of earlier outputs or uploaded files. */
   input: InputDraft;
+  /** Only used when the campaign starts with the design space exploration. */
+  exploration: ExplorationDraft;
   domain: DomainDraft;
   trajectories: TrajectoriesDraft;
   runs: RunDraft[];
@@ -183,6 +202,18 @@ export function emptyScopeEntry(): ScopeEntryDraft {
   return { id: newEntryId("scope"), classes: [], patterns: [], quota: 1, failureBudget: 0 };
 }
 
+export function emptyExploration(): ExplorationDraft {
+  return {
+    specification: "",
+    specificationLabel: null,
+    scope: "",
+    maxFecs: DEFAULT_MAX_FECS,
+    timeoutS: DEFAULT_EXPLORATION_TIMEOUT_S,
+    quota: DEFAULT_EXPLORATION_QUOTA,
+    failureBudget: 0,
+  };
+}
+
 export function emptyRun(stackId = "", monitor = "post_hoc"): RunDraft {
   return {
     id: newEntryId("run"),
@@ -203,11 +234,13 @@ export function emptyDraft(): WizardDraft {
   return {
     name: "",
     description: "",
-    steps: [...CHAIN],
+    // The chain without the design space exploration, which a campaign runs only when asked to
+    steps: [...IMPLIED_STEPS],
     sceneMonitor: "empty",
     trajectoryMonitor: "empty",
     scope: [emptyScopeEntry()],
     input: { scenarios: [], items: [] },
+    exploration: emptyExploration(),
     domain: {
       custom: false,
       colregsConstants: "",
@@ -261,6 +294,7 @@ export function normalizeDraft(stored: unknown): WizardDraft {
       scenarios: Array.isArray(draft.input?.scenarios) ? draft.input.scenarios : base.input.scenarios,
       items: Array.isArray(draft.input?.items) ? draft.input.items : base.input.items,
     },
+    exploration: { ...base.exploration, ...(draft.exploration ?? {}) },
     domain: { ...base.domain, ...(draft.domain ?? {}) },
     trajectories: { ...base.trajectories, ...(draft.trajectories ?? {}) },
     runs: Array.isArray(draft.runs) && draft.runs.length > 0 ? draft.runs.map((run) => ({ ...emptyRun(), ...run })) : base.runs,

@@ -1,6 +1,7 @@
 """Validation of a campaign config against the class catalog, the artifact store and the vessel stack resolver.
 
-A config is accepted only as a whole: the input must match the first step it runs (catalog
+A config is accepted only as a whole: the input must match the first step it runs (none for
+a design space exploration, whose FECs come from the exploration; catalog
 classes or functional scenarios given as content for scene generation, scene items for
 trajectory generation, trajectory items for simulation), every scope entry must name
 classes the catalog has (a pattern must match at least one), no class may be named by two
@@ -31,7 +32,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     StackConfig,
     budget_limit,
 )
-from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, item_class_spec, scenario_class_spec
+from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, exploration_class_spec, item_class_spec, scenario_class_spec
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode
 from scenegems_tool.persistence.stores import ClassSpec
@@ -74,7 +75,7 @@ class ValidatedCampaign:
     config: CampaignConfig
     config_json: Dict
     config_hash: str
-    classes: Tuple[ClassSpec, ...]  # catalog classes in scope order (each once), then scenario classes, then item classes
+    classes: Tuple[ClassSpec, ...]  # catalog classes in scope order (each once), then scenario classes, then item classes; the exploration class alone for a campaign that explores
     runs: Tuple[RunStacks, ...]  # empty when the campaign does not simulate
 
     @property
@@ -182,10 +183,22 @@ def resolve_scope(config: CampaignConfig, catalog: ClassCatalog) -> Tuple[Tuple[
     return tuple(spec for _, spec in chosen.values()), reasons
 
 
+def _check_exploration_input(config: CampaignConfig) -> List[str]:
+    """A campaign that starts with the design space exploration names no FECs and no input: they come from the exploration."""
+    reasons = []
+    if config.scope:
+        reasons.append("scope: a campaign that starts with design_space_exploration takes its FECs from the exploration, not from the catalog")
+    if config.input.functional_scenarios or config.input.items:
+        reasons.append("input: a campaign that starts with design_space_exploration takes its FECs from the exploration, not functional scenarios or items")
+    return reasons
+
+
 def check_input(config: CampaignConfig) -> List[str]:
-    """The input matches the first step: catalog classes or functional scenarios for scene generation, items of the right kind after it."""
+    """The input matches the first step: none for a design space exploration, catalog classes or functional scenarios for scene generation, items of the right kind after it."""
     first, reasons = config.first_step, []
     scenarios, items = config.input.functional_scenarios, config.input.items
+    if first == CampaignStep.DESIGN_SPACE_EXPLORATION:
+        return _check_exploration_input(config)
     if first == CampaignStep.SCENE_GENERATION:
         if not config.scope and not scenarios:
             reasons.append("input: a campaign that starts with scene_generation needs scope entries or input.functional_scenarios")
@@ -256,4 +269,7 @@ def validate_campaign_config(
     if reasons:
         raise CampaignConfigRejected(reasons)
     config_json = config.to_json()
-    return ValidatedCampaign(config=config, config_json=config_json, config_hash=config.config_hash(), classes=scope_classes + input_classes, runs=tuple(runs))
+    classes = scope_classes + input_classes
+    if config.first_step == CampaignStep.DESIGN_SPACE_EXPLORATION:
+        classes = (exploration_class_spec(config.design_space_exploration),)  # the explored FECs join when the exploration has run
+    return ValidatedCampaign(config=config, config_json=config_json, config_hash=config.config_hash(), classes=classes, runs=tuple(runs))

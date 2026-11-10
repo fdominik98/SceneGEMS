@@ -17,6 +17,7 @@ export const KINEMATIC_JOB = SIMULATION_JOB;
 
 /** The job type of each queued stage, as `assurance/pipeline/stage_graph.py` STAGE_JOB_TYPES. */
 export const STAGE_JOB_TYPES: Record<string, string> = {
+  explore_design_space: "design_space_exploration",
   generate_scene: "scene_generation",
   generate_trajectories: "trajectory_generation",
   simulate: SIMULATION_JOB,
@@ -45,6 +46,7 @@ function simulatedWhere(components: readonly string[]): string {
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {
+  design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   simulation: "Simulation",
@@ -92,6 +94,7 @@ function listed(names: string[]): string {
   return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+/** The chain a format 1 config runs whole; the design space exploration came later and is never implied. */
 const CHAIN_ORDER = ["scene_generation", "trajectory_generation", "simulation"];
 
 /** The steps a config runs: its `steps` (format 2), else the whole chain (format 1). */
@@ -121,6 +124,9 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
   const runs = steps.includes("simulation") ? runsOf(config) : [];
   const generator = (config.trajectories as { generator?: unknown } | undefined)?.generator;
   const required: RequiredCapability[] = [];
+  if (steps.includes("design_space_exploration")) {
+    required.push(subsystemNeed("explore_design_space", "The design space exploration finds the FECs the campaign runs."));
+  }
   if (steps.includes("scene_generation")) {
     required.push(subsystemNeed("generate_scene", "Every case starts with a generated scene."));
   }

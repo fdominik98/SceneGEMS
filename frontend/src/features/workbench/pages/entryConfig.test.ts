@@ -15,6 +15,7 @@ import {
   toConfigYaml,
   trajectoryEntryConfig,
   WORKBENCH_ORIGIN,
+  designSpaceEntryConfig,
 } from "./entryConfig";
 
 const sceneRef = { sha256: "a".repeat(64), size_bytes: 120, kind: "scene", media_type: "application/json", pointer: null };
@@ -180,6 +181,22 @@ describe("entry seeds, names and YAML", () => {
 
   it("names entries by what ran on what, and the origin by the page", () => {
     expect(entryName("Scene generation", "head_on", new Date("2026-10-28T10:20:30Z"))).toBe("Scene generation: head_on (2026-10-28 10:20)");
-    expect(WORKBENCH_ORIGIN).toEqual({ sceneGeneration: "scene_generation", trajectoryGeneration: "trajectory_generation", simulation: "simulation" });
+    expect(WORKBENCH_ORIGIN).toEqual({ designSpaceExploration: "design_space_exploration", sceneGeneration: "scene_generation", trajectoryGeneration: "trajectory_generation", simulation: "simulation" });
+  });
+});
+
+describe("the design space exploration's entry", () => {
+  it("runs the exploration alone with the specification inline, no input and no scope entries", () => {
+    const config = designSpaceEntryConfig({ name: "explore", specification: "class OS.\n", scope: " TS = 2, StaticObstacle = 0 ", maxFecs: 100.4, timeoutSeconds: 0.2, seed: 9 });
+    expect(config).toEqual({
+      format: 3,
+      name: "explore",
+      steps: ["design_space_exploration"],
+      design_space_exploration: { specification: "class OS.\n", scope: "TS = 2, StaticObstacle = 0", max_fecs: 100, timeout_s: 1 },
+      policy: { keep_frames: true, seed: 9 },
+    });
+    expect(config.input).toBeUndefined();
+    expect(config.scope).toBeUndefined();
+    expect(designSpaceEntryConfig({ name: "all", specification: "x", scope: "TS = 1", maxFecs: null, timeoutSeconds: 600, seed: 0 }).design_space_exploration).toMatchObject({ max_fecs: null });
   });
 });

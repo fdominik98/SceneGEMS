@@ -42,6 +42,7 @@ services:
       TRAJECTORY_GENERATION_IMAGE: ${TRAJECTORY_GENERATION_IMAGE:-}
       MONITORING_IMAGE: ${MONITORING_IMAGE:-}
       SCENARIO_EXECUTION_IMAGE: ${SCENARIO_EXECUTION_IMAGE:-}
+      DESIGN_SPACE_EXPLORATION_IMAGE: ${DESIGN_SPACE_EXPLORATION_IMAGE:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Generated compose files and stack files of the node's instances; SITL and Gazebo mount it too.

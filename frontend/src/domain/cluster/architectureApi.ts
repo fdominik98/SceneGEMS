@@ -3,10 +3,12 @@ import type { OperatorClient } from "./operatorApi";
 
 /**
  * The architecture documents of the Capabilities page (`backend/.../architecture/architecture_model.py`,
- * served by `GET /cluster/catalog/architecture`). One document per part of the system: the vessel stack
- * and the trajectory generation, scene generation and monitoring subsystems. Each has a metamodel
+ * served by `GET /cluster/catalog/architecture`). One document per part of the system, in the order of
+ * the chain: the design space exploration, the scene generation, the trajectory generation, the vessel
+ * stack (which simulates) and the monitoring that judges their outputs. Each has a metamodel
  * (the generic layers, interfaces and adapters an implementation fills in) and the concrete
- * implementations with the adapters between them, laid out over the same lanes.
+ * implementations with the adapters between them, laid out over the same lanes, and says its place in
+ * the chain: the step it performs, what it takes and gives, and the cluster job types that run it.
  */
 
 const CATALOG_PATH = "/cluster/catalog";
@@ -94,6 +96,10 @@ export const combinationSchema = z.object({
   facts: z.array(factSchema),
 });
 
+/** step: the part performs one step of the chain; support: it serves the steps (monitoring judges their outputs). */
+export const DOCUMENT_ROLES = ["step", "support"] as const;
+export const documentRoleSchema = z.enum(DOCUMENT_ROLES);
+
 export const architectureDocumentSchema = z.object({
   schema_version: z.number().int(),
   id: z.string(),
@@ -107,6 +113,14 @@ export const architectureDocumentSchema = z.object({
   unsupported: z.array(unsupportedLinkSchema),
   combinations: z.array(combinationSchema),
   notes: z.array(z.string()),
+  /** The part's place in the chain; a master from before the overview states none, so every field has a default. */
+  role: documentRoleSchema.default("step"),
+  /** The chain step the part performs, as the console names it; empty for a supporting part and from an older master. */
+  step: z.string().default(""),
+  takes: z.string().default(""),
+  gives: z.string().default(""),
+  /** The cluster job types that run the part. */
+  job_types: z.array(z.string()).default([]),
 });
 
 export const architectureSchema = z.object({

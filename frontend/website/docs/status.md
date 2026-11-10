@@ -11,6 +11,7 @@ The bottom panel of each workbench page shows the state of its step in a chip be
 
 | Page | States |
 |------|--------|
+| Design Space Exploration | Idle, Exploring, N FECs found, No FEC found |
 | Scene Generation | Idle, Generating, Generating the batch, Valid scene, No valid scene |
 | Trajectory Generation | Idle, Ready to plan, Planning (with the seed step) or Generating, Trajectory ready, Partial trajectory, No usable trajectory, Failed |
 | Simulation, on the cluster | Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
@@ -30,4 +31,4 @@ Status text is colored for quick visual identification. A global error bar at th
 
 ## Loading indicators
 
-Spinners appear while the master's FEC catalog, the domain configuration or the capabilities load, and during scene generation.
+Spinners appear while the master's FEC catalog, the domain configuration or the capabilities load, and during scene generation and while the design space exploration waits for its job.

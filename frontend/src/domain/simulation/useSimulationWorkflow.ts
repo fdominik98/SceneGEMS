@@ -14,6 +14,7 @@ import { useWorkbenchCluster } from "../../features/workbench/cluster/useWorkben
 import {
   WorkbenchJobDriver,
   type BatchSceneRow,
+  type ExplorationEntryRequest,
   type SceneEntryRequest,
   type TrajectoryEntryRequest,
 } from "../../features/workbench/cluster/workbenchJobDriver";
@@ -572,6 +573,11 @@ export function useSimulationWorkflow() {
     operatorUrl: workbenchCluster.operatorUrl,
     /** The active cluster's operator client (Campaign History for the pages' inputs), null without one. */
     operatorClient: workbenchCluster.cluster?.client ?? null,
+    /** Explores the design space as a workbench entry; the page follows the job and then shows the explored FECs. */
+    exploreDesignSpace: (request: ExplorationEntryRequest) => {
+      void driver.exploreDesignSpace(request);
+    },
+    stopDesignSpaceExploration: () => driver.stopExploration(true),
     /** The selected scenarios as one batch entry; resolves when every row's case ended. */
     generateBatch: (rows: BatchSceneRow[], input: Omit<SceneGenerationInput, "functionalScenarioContent">) => driver.generateBatch(rows, input),
     /** One scene as a workbench entry, shown on the scene page as it arrives; resolves with its outcome. */

@@ -1,6 +1,7 @@
 import { stringify } from "yaml";
 import type { CampaignConfigFormat2, ConfigArtifactRef, InputItemSource, StepMonitor } from "../../../domain/cluster/campaignApi";
 import type { ArtifactRef, CampaignOrigin } from "../../../domain/cluster/schemas";
+import type { DesignSpaceSection } from "../../../domain/designSpace/designSpaceConfig";
 import type { TrajectoryGenerationParamsWire } from "../../../domain/simulation/wireTypes";
 import type { ClusterRunPlan } from "../cluster/simulationJobs";
 import { defaultReferenceGeofence, type ReferenceGeofence } from "../connection/referenceGeofence";
@@ -13,6 +14,7 @@ import type { WorkbenchPage } from "./workbenchTarget";
  */
 
 export const WORKBENCH_ORIGIN: Record<WorkbenchPage, CampaignOrigin> = {
+  designSpaceExploration: "design_space_exploration",
   sceneGeneration: "scene_generation",
   trajectoryGeneration: "trajectory_generation",
   simulation: "simulation",
@@ -75,6 +77,37 @@ export function configRef(ref: Pick<ArtifactRef, "sha256" | "size_bytes" | "kind
 
 function entryPolicy(seed: number) {
   return { keep_frames: true, seed };
+}
+
+export interface DesignSpaceEntryInput {
+  name: string;
+  /** The metamodel and the well-formedness constraints. */
+  specification: string;
+  scope: string;
+  /** Null for every FEC. */
+  maxFecs: number | null;
+  timeoutSeconds: number;
+  seed: number;
+}
+
+/**
+ * Design space exploration alone: no input and no scope (the FECs come from the exploration),
+ * the specification inline. The exploration's FECs are closed at once and the entry completes.
+ */
+export function designSpaceEntryConfig(input: DesignSpaceEntryInput): CampaignConfigFormat2 {
+  const section: DesignSpaceSection = {
+    specification: input.specification,
+    scope: input.scope.trim(),
+    max_fecs: input.maxFecs === null ? null : Math.max(1, Math.round(input.maxFecs)),
+    timeout_s: Math.max(1, Math.round(input.timeoutSeconds)),
+  };
+  return {
+    format: 3,
+    name: input.name,
+    steps: ["design_space_exploration"],
+    design_space_exploration: section,
+    policy: entryPolicy(input.seed),
+  };
 }
 
 export interface SceneEntryInput {

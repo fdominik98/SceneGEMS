@@ -16,6 +16,7 @@ import type { TrajectoryGenerationParamsWire } from "../../../domain/simulation/
  * submitted at once uses every slot the cluster has.
  */
 
+export const DESIGN_SPACE_EXPLORATION_JOB = "design_space_exploration";
 export const SCENE_GENERATION_JOB = "scene_generation";
 export const TRAJECTORY_GENERATION_JOB = "trajectory_generation";
 export const MONITORING_JOB = "monitoring.post_hoc";

@@ -6,7 +6,8 @@ import type { CampaignRow } from "../../../domain/cluster/schemas";
 import type { CampaignStep } from "../../../domain/cluster/schemas";
 import { formatDateTime, plural } from "../campaignFormat";
 import { itemFromOutput, outputProblem, sameOutput } from "./inputItems";
-import { CAMPAIGN_STEP_LABELS, CHAIN } from "./stepPlan";
+import { IMPLIED_STEPS } from "../../../domain/cluster/schemas";
+import { CAMPAIGN_STEP_LABELS } from "./stepPlan";
 import type { InputItemDraft } from "./wizardState";
 
 const ENTRIES_SHOWN = 50;
@@ -31,7 +32,7 @@ export interface HistoryPickerProps {
 
 function stepsOfRow(row: CampaignRow): readonly CampaignStep[] {
   // A row of a master without Phase 6 has no steps: it ran the whole chain
-  return row.steps ?? CHAIN;
+  return row.steps ?? IMPLIED_STEPS;
 }
 
 function flagsOf(output: OutputRow): string {

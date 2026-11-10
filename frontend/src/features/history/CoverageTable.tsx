@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import type { ClassView } from "../../domain/cluster/schemas";
+import { isExplorationFec } from "../../domain/designSpace/explorationResult";
 import { plural, splitClassId } from "../campaigns/campaignFormat";
 import {
   classProgress,
+  closedWithoutCases,
   countByState,
   COVERAGE_PAGE,
   filterAndSortClasses,
@@ -109,7 +111,7 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                       <span className="camp-class-name">{id.name}</span>
                       <span className="camp-class-folder">{id.folder}</span>
                       <span className="camp-class-counts">
-                        {entry.vessel_count} vessels, {plural(entry.obstacle_count, "obstacle")}
+                        {isExplorationFec(entry.fec_id) ? "the design space exploration itself" : `${entry.vessel_count} vessels, ${plural(entry.obstacle_count, "obstacle")}`}
                       </span>
                     </td>
                     <td>
@@ -124,9 +126,13 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                         fraction={classProgress(entry)}
                         tone={entry.state === "complete" ? "ok" : entry.state === "abandoned" ? "bad" : "info"}
                         label={
-                          <>
-                            <strong>{entry.complete}</strong> of {entry.quota}
-                          </>
+                          closedWithoutCases(entry) ? (
+                            "no cases needed"
+                          ) : (
+                            <>
+                              <strong>{entry.complete}</strong> of {entry.quota}
+                            </>
+                          )
                         }
                       />
                     </td>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Disclosure } from "../../components/Disclosure";
+import { isExploredFec } from "../../domain/designSpace/explorationResult";
 import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import type { CampaignDetail as CampaignDetailView, CampaignStep } from "../../domain/cluster/schemas";
 import { showCampaignResults } from "../results/showResults";
@@ -11,6 +12,7 @@ import { ControlsBar } from "./ControlsBar";
 import { CoverageTable } from "./CoverageTable";
 import { DeleteEntry } from "./DeleteEntry";
 import { EventsFeed } from "./EventsFeed";
+import { ExploredFecOutputs } from "./ExploredFecOutputs";
 import { entryKind, entrySteps, initialStep, KIND_LABELS, originLabel, STEP_LABELS, STEP_OUTPUT_NOUNS } from "./historyModel";
 import { MadeFrom } from "./historyParts";
 import { StepOutputs } from "./StepOutputs";
@@ -50,6 +52,16 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
   const { totals } = detail;
   const verdicts = totals.verdicts;
   const failed = verdicts.failed ?? 0;
+  // A campaign that only explores the design space: its FECs are closed complete at once, with no cases to count
+  const exploredOnly = detail.steps?.length === 1 && detail.steps[0] === "design_space_exploration";
+  if (exploredOnly) {
+    const explored = detail.fecs.filter((entry) => isExploredFec(entry.fec_id)).length;
+    return (
+      <div className="stat-tiles camp-tiles">
+        <Tile label="Explored FECs" value={explored} detail="The campaign runs no step after the exploration, so they need no cases." />
+      </div>
+    );
+  }
   return (
     <>
       <div className="stat-tiles camp-tiles">
@@ -202,9 +214,11 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
             <dd>
               {detail.input && detail.input.item_count > 0
                 ? `${plural(detail.input.item_count, "item")} for ${STEP_LABELS[detail.input.first_step].toLowerCase()}`
-                : steps[0] === "scene_generation"
-                  ? "catalog FECs or scenarios"
-                  : "not reported"}
+                : steps[0] === "design_space_exploration"
+                  ? "the FECs of the design space exploration"
+                  : steps[0] === "scene_generation"
+                    ? "catalog FECs or scenarios"
+                    : "not reported"}
             </dd>
           </div>
           <div title="Case k of every FEC runs with this seed + k in every step">
@@ -275,7 +289,11 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           <h4 className="history-step-title">
             {STEP_LABELS[step]}: {STEP_OUTPUT_NOUNS[step].many}
           </h4>
-          <StepOutputs key={step} campaignId={campaignId} step={step} running={!final} monitored={stepMonitored(config.data, step)} onOpenEntry={onOpenEntry} />
+          {step === "design_space_exploration" ? (
+            <ExploredFecOutputs key={step} campaignId={campaignId} running={!final} />
+          ) : (
+            <StepOutputs key={step} campaignId={campaignId} step={step} running={!final} monitored={stepMonitored(config.data, step)} onOpenEntry={onOpenEntry} />
+          )}
         </div>
       </section>
       {isCampaign && <CoverageTable classes={detail.fecs} runNames={names} />}

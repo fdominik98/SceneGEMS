@@ -1,6 +1,8 @@
 import { readResultField } from "../../../domain/cluster/clusterJobs";
 import type { ConfigArtifactRef } from "../../../domain/cluster/campaignApi";
 import { createFramesApi, parseFrames, runFramesFlow } from "../../../domain/cluster/framesApi";
+import { listOutputs, type OutputRow } from "../../../domain/cluster/historyApi";
+import { exploredFecsOfResult, parseExplorationResult, type ExplorationResult, type ExploredFec } from "../../../domain/designSpace/explorationResult";
 import { OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { CaseDetail, PipelineStage, RunRecord } from "../../../domain/cluster/schemas";
 import { buildFramesFromTrajectoryData, parseScenarioFile } from "../../../domain/sceneGeneration/parseEvaluationDataFile";
@@ -77,7 +79,16 @@ export interface LoadedRun {
   caseIndex: number;
 }
 
-export type LoadedOutput = LoadedScene | LoadedTrajectories | LoadedRun;
+export interface LoadedExploration {
+  step: "design_space_exploration";
+  /** The exploration job's result, null when the master reports none (the job did not end). */
+  result: ExplorationResult | null;
+  /** The explored FECs in index order. */
+  fecs: ExploredFec[];
+  caseIndex: number;
+}
+
+export type LoadedOutput = LoadedExploration | LoadedScene | LoadedTrajectories | LoadedRun;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -267,10 +278,51 @@ async function loadRun(client: LoaderClient, target: WorkbenchTarget, detail: Ca
   return { step: "simulation", runRecord, scenario, frames, setup: runSetupOf(runRecord), input, caseIndex: detail.case_index };
 }
 
+const OUTPUT_PAGE = 500;
+
+/** Every output row of a step, page by page. */
+export async function allOutputs(client: Pick<OperatorClient, "request">, campaignId: string, step: "design_space_exploration", signal?: AbortSignal): Promise<OutputRow[]> {
+  const rows: OutputRow[] = [];
+  for (;;) {
+    const page = await listOutputs(client, campaignId, { step, limit: OUTPUT_PAGE, offset: rows.length }, signal);
+    rows.push(...page.items);
+    if (page.items.length < OUTPUT_PAGE || (page.total !== null && rows.length >= page.total)) {
+      return rows;
+    }
+  }
+}
+
+/** An output row of the exploration as a listed FEC. */
+export function exploredFecOfRow(row: OutputRow): ExploredFec {
+  return { fecId: row.fec_id, index: row.case_index, vesselCount: row.vessel_count ?? null, obstacleCount: row.obstacle_count ?? null, artifact: row.artifact };
+}
+
+async function loadExploration(client: LoaderClient, target: WorkbenchTarget, detail: CaseDetail, options: LoaderOptions): Promise<LoadedExploration> {
+  const job = stageJob(detail, "explore_design_space");
+  let result: ExplorationResult | null = null;
+  if (job !== null && job.job_id !== null) {
+    const view = await client.getJob(job.job_id, options.signal).catch((error: unknown) => {
+      if (error instanceof OperatorApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    });
+    result = view === null ? null : parseExplorationResult(view.result);
+  }
+  if (detail.state === "active" && result === null) {
+    throw new EntryEndedError("The exploration has not ended yet.", false);
+  }
+  const rows = await gone(() => allOutputs(client, target.campaignId, "design_space_exploration", options.signal), "The entry");
+  const fecs = rows.length > 0 ? rows.map(exploredFecOfRow).sort((a, b) => a.index - b.index) : result !== null ? exploredFecsOfResult(result) : [];
+  return { step: "design_space_exploration", result, fecs, caseIndex: detail.case_index };
+}
+
 /** Fetches the output a target names. Rejects with `EntryEndedError` (`gone`) when the entry or output was deleted. */
 export async function loadEntryOutput(client: LoaderClient, target: WorkbenchTarget, options: LoaderOptions = {}): Promise<LoadedOutput> {
   const detail = await gone(() => client.getCase(target.campaignId, target.caseId, options.signal), "The entry");
   switch (target.step) {
+    case "design_space_exploration":
+      return loadExploration(client, target, detail, options);
     case "scene_generation":
       return loadScene(client, target, detail, options);
     case "trajectory_generation":

@@ -10,11 +10,19 @@ from typing import Any, Dict, Mapping, Tuple, Type
 from pydantic import BaseModel
 
 from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, ComponentId
-from scenegems_tool.cluster.node.jobs import calibration_deviation_job, monitoring_post_hoc_job, scene_generation_job, simulation_job, trajectory_generation_job
+from scenegems_tool.cluster.node.jobs import (
+    calibration_deviation_job,
+    design_space_exploration_job,
+    monitoring_post_hoc_job,
+    scene_generation_job,
+    simulation_job,
+    trajectory_generation_job,
+)
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField
 from scenegems_tool.cluster.protocol.jobs import JobType
 
 JOB_TYPE_MODULES: Dict[JobType, ModuleType] = {
+    JobType.DESIGN_SPACE_EXPLORATION: design_space_exploration_job,
     JobType.SCENE_GENERATION: scene_generation_job,
     JobType.TRAJECTORY_GENERATION: trajectory_generation_job,
     JobType.SIMULATION: simulation_job,

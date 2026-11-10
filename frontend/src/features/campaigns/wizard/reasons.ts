@@ -33,6 +33,7 @@ const SECTION_STEPS: Record<string, WizardStepId> = {
   name: "steps",
   description: "steps",
   steps: "steps",
+  design_space_exploration: "exploration",
   scene_generation: "scenes",
   scope: "input",
   input: "input",

@@ -9,7 +9,7 @@ The Campaigns page defines a campaign and starts it on the selected cluster. Fol
 
 ## The wizard
 
-The wizard builds the campaign config step by step: the steps of the chain the campaign runs and their monitors, the input, the domain, the trajectory generator, the runs, the resources and the policy. The review step checks the config on the master before the campaign is created. What you enter is kept in this browser until the campaign is created or you discard it.
+The wizard builds the campaign config step by step: the steps of the chain the campaign runs (design space exploration, scene generation, trajectory generation, simulation) and their monitors, the input (none when the campaign explores), the domain, the trajectory generator, the runs, the resources and the policy. The review step checks the config on the master before the campaign is created. What you enter is kept in this browser until the campaign is created or you discard it.
 
 Once created, the campaign opens in Campaign History, where it can be started (unless it was started on creation) and followed.
 

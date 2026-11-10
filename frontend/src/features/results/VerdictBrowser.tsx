@@ -2,18 +2,18 @@ import { useMemo } from "react";
 import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import { hasActiveFilters, toApiFilters, type VerdictPaging, type VerdictSort } from "../../domain/cluster/resultsApi";
 import { useResultsStore } from "../../domain/cluster/resultsStore";
-import type { CampaignStep, Verdict } from "../../domain/cluster/schemas";
+import type { Verdict } from "../../domain/cluster/schemas";
 import { VerdictFilterBar } from "./VerdictFilterBar";
 import { VerdictSummaryPanel } from "./VerdictSummaryPanel";
 import { VerdictTable } from "./VerdictTable";
-import { verdictStepOf } from "./stepViews";
+import { verdictStepOf, type MonitoredStep } from "./stepViews";
 import { useCampaignDetail, useResultsClient, useVerdictPage, useVerdictSummary } from "./useResultsData";
 
 interface VerdictBrowserProps {
   operatorUrl: string;
   campaignId: string;
   /** The step view shown. */
-  step: CampaignStep;
+  step: MonitoredStep;
   /** Whether the master filters verdicts by step; one without Phase 6 lists the verdicts of the whole campaign. */
   stepFilter: boolean;
 }

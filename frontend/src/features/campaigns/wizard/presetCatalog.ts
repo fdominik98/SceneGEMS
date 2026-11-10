@@ -1,6 +1,6 @@
 import type { CatalogClass, CatalogStack } from "../../../domain/cluster/campaignApi";
 import type { CampaignPreset } from "../../../domain/cluster/presetsApi";
-import type { CampaignStep } from "../../../domain/cluster/schemas";
+import { IMPLIED_STEPS, type CampaignStep } from "../../../domain/cluster/schemas";
 import { plural } from "../campaignFormat";
 import type { CatalogFacet, CatalogModel, CatalogValue } from "./catalogModel";
 import { isEmptyScopeEntry, type BuilderCatalog } from "./configBuilder";
@@ -22,6 +22,10 @@ export interface PresetFacts {
   obstacles: number[];
   /** It has no scope: the campaign's input, picked in the wizard, says what the scenes hold. */
   fromInput: boolean;
+  /** It starts with the design space exploration: its FECs come from it (no scope, no input). */
+  explores: boolean;
+  /** The scope it explores, when it explores. */
+  exploredScope: string | null;
   /** FECs and cases of its scope; null when it has no scope or the FEC catalog is not read yet. */
   fecs: number | null;
   cases: number | null;
@@ -40,7 +44,8 @@ function ascending(values: Iterable<number>): number[] {
 /** What a preset's config says, read against the master's catalogs; while one of them loads its part stays empty. */
 export function presetFacts(preset: CampaignPreset, catalog: BuilderCatalog | null, classes: readonly CatalogClass[] | undefined): PresetFacts {
   const draft = draftFromConfig(preset.config, catalog ?? NO_STACKS);
-  const fromInput = draft.scope.every(isEmptyScopeEntry);
+  const explores = preset.steps[0] === "design_space_exploration";
+  const fromInput = !explores && draft.scope.every(isEmptyScopeEntry);
   const plan = classes && !fromInput ? planScope(draft.scope, classes) : null;
   const selected = plan?.entries.flatMap((entry) => entry.classes) ?? [];
   const runs = preset.steps.includes("simulation") ? draft.runs : [];
@@ -50,6 +55,8 @@ export function presetFacts(preset: CampaignPreset, catalog: BuilderCatalog | nu
     vessels: ascending(selected.map((entry) => entry.vessel_count)),
     obstacles: ascending(selected.map((entry) => entry.obstacle_count)),
     fromInput,
+    explores,
+    exploredScope: explores ? draft.exploration.scope.trim() || null : null,
     fecs: plan?.classes ?? null,
     cases: plan?.casesPlanned ?? null,
     stacks: catalog?.stacks.filter((stack) => used.has(stack.id)) ?? [],
@@ -58,12 +65,19 @@ export function presetFacts(preset: CampaignPreset, catalog: BuilderCatalog | nu
 }
 
 const INPUT_VALUE: CatalogValue = { value: "input", label: "Set by the input", rank: Number.MAX_SAFE_INTEGER };
+const EXPLORED_VALUE: CatalogValue = { value: "explored", label: "Set by the exploration", rank: Number.MAX_SAFE_INTEGER - 1 };
 
 function vesselValues(facts: PresetFacts): CatalogValue[] {
+  if (facts.explores) {
+    return [EXPLORED_VALUE];
+  }
   return facts.fromInput ? [INPUT_VALUE] : facts.vessels.map((count) => ({ value: String(count), label: plural(count, "vessel"), rank: count }));
 }
 
 function obstacleValues(facts: PresetFacts): CatalogValue[] {
+  if (facts.explores) {
+    return [EXPLORED_VALUE];
+  }
   return facts.fromInput ? [INPUT_VALUE] : facts.obstacles.map((count) => ({ value: String(count), label: count === 0 ? "No obstacles" : plural(count, "obstacle"), rank: count }));
 }
 
@@ -79,9 +93,13 @@ function stepValues(facts: PresetFacts): CatalogValue[] {
   return facts.preset.steps.map((step) => ({ value: step, label: CAMPAIGN_STEP_LABELS[step], rank: CHAIN.indexOf(step) }));
 }
 
-/** The steps in a few words, for the grouping and the cards. */
+/** The steps in a few words, for the grouping and the cards: the chain of scene generation to simulation is the whole chain. */
 export function describeSteps(steps: readonly CampaignStep[]): string {
-  return steps.length === CHAIN.length ? "Whole chain" : steps.map((step) => CAMPAIGN_STEP_LABELS[step]).join(", ");
+  const whole = IMPLIED_STEPS.every((step) => steps.includes(step));
+  if (whole) {
+    return steps.includes("design_space_exploration") ? "Design space exploration and the whole chain" : "Whole chain";
+  }
+  return steps.map((step) => CAMPAIGN_STEP_LABELS[step]).join(", ");
 }
 
 const FACETS: readonly CatalogFacet<PresetFacts>[] = [
@@ -121,6 +139,9 @@ function countRange(values: readonly number[], one: string): string {
 
 /** What a preset's card says about its scope, in the order the card shows it. */
 export function scopeTags(facts: PresetFacts): string[] {
+  if (facts.explores) {
+    return [facts.exploredScope !== null ? `Explores the design space, scope ${facts.exploredScope}` : "Explores the design space"];
+  }
   if (facts.fromInput) {
     return ["Input picked in the wizard"];
   }

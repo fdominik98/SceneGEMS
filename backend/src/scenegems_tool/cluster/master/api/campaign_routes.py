@@ -38,8 +38,13 @@ routes set. Without Postgres stores the master mounts unavailable_router instead
                                            functional scenario or item it started from, null for a catalog FEC) and input_source
     GET  <id>/outputs?step=&state=&fec_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
                                            simulation) by FEC and case: the artifact, whether it is valid and complete, the step's verdict
-                                           and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run
-    GET  <id>/findings?step=               the summary of a step for Results: cases by state, outputs, verdicts, failed rules, encounter_types (vessel
+                                           and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run.
+                                           step=design_space_exploration lists the FECs the exploration found, in the same row shape: a row per
+                                           explored FEC (fec_id explored/<index>, case_index the index, case_id the exploration case) with its
+                                           functional scenario as the artifact and its vessel_count and obstacle_count; empty until the
+                                           exploration has finished; state and fec_id do not narrow it
+    GET  <id>/findings?step=               (422 for design_space_exploration, which no monitor judges)
+                                           the summary of a step for Results: cases by state, outputs, verdicts, failed rules, encounter_types (vessel
                                            pairs by the first encounter type of each), FECs (fecs), durations; statistics only for a step the config
                                            does not monitor
     GET  <id>/verdicts?fec_id=&state=&run_index=&sensitive=&step=&sort=&order=&limit=&offset=&format=       verdicts, by default by FEC, case, step and run;
@@ -79,6 +84,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 
 from scenegems_tool.cluster.master.api.campaign_views import (
+    DEFAULT_STEP_NAMES,
+    EXPLORATION_STEP_NAME,
     STEP_NAMES,
     VERDICT_COLUMNS,
     campaign_detail_view,
@@ -236,7 +243,9 @@ def _validated_config(text: str, artifacts: Any = None, stores: Optional[Assuran
 
 
 def _step_kind(step: str) -> StepKind:
-    """The verdict step of an API step name (scene_generation, trajectory_generation, simulation)."""
+    """The verdict step of an API step name (scene_generation, trajectory_generation, simulation); the design space exploration has none."""
+    if step == EXPLORATION_STEP_NAME:
+        raise HTTPException(status_code=422, detail=f"{step} has no monitor result summaries; its outputs are the FECs it found")
     if step not in STEP_NAMES:
         raise HTTPException(status_code=422, detail=f"step is one of {', '.join(STEP_NAMES)}, not {step!r}")
     # Imported here with the config model (see _validated_config)
@@ -440,13 +449,16 @@ def _case_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
 def _output_routes(stores: AssuranceStores) -> APIRouter:
     router = APIRouter()
 
-    async def step_of_campaign(campaign_id: str, step: str) -> tuple:
-        """The verdict step and the current config of a campaign for a step it runs; 404 for no campaign, 422 for a step it does not run."""
+    async def step_of_campaign(campaign_id: str, step: str, explored: bool = False) -> tuple:
+        """The verdict step and the current config of a campaign for a step it runs; 404 for no campaign, 422 for a step it does not run.
+
+        explored: the step may be the design space exploration, which has no verdict step (None).
+        """
         await _campaign_or_404(stores, campaign_id)
-        kind = _step_kind(step)
+        kind = None if explored else _step_kind(step)
         configs = await _run(stores.campaigns.current_configs, [campaign_id])
         config = configs[campaign_id].config if campaign_id in configs else {}
-        if step not in (config.get("steps") or STEP_NAMES):
+        if step not in (config.get("steps") or DEFAULT_STEP_NAMES):
             raise HTTPException(status_code=422, detail=f"campaign {campaign_id} does not run {step}")
         return kind, config
 
@@ -460,7 +472,16 @@ def _output_routes(stores: AssuranceStores) -> APIRouter:
         limit: int = 100,
         offset: int = 0,
     ) -> list:
-        kind, _config = await step_of_campaign(campaign_id, step)
+        kind, _config = await step_of_campaign(campaign_id, step, explored=step == EXPLORATION_STEP_NAME)
+
+        def read_explored() -> tuple:
+            with stores.transaction() as session:
+                return stores.cases.list_explored(campaign_id, _page(limit), max(0, offset), session=session), stores.cases.count_explored(campaign_id, session=session)
+
+        if kind is None:
+            explored_fecs, total = await _run(read_explored)
+            _with_total(response, total)
+            return [output_view(output) for output in explored_fecs]
 
         def read() -> tuple:
             with stores.transaction() as session:

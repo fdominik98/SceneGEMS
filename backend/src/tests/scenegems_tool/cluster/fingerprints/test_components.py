@@ -57,6 +57,7 @@ def test_the_catalog_lists_the_campaign_layers_and_the_subsystems():
         "simulation_layer/kinematic",
         "simulation_layer/ardupilot_sim",
         "simulation_layer/gazebo",
+        "design_space_exploration",
         "scene_generation",
         "trajectory_generation",
         "monitoring",

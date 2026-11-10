@@ -14,6 +14,7 @@ from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 
 
 class JobType(str, Enum):
+    DESIGN_SPACE_EXPLORATION = "design_space_exploration"
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     SIMULATION = "simulation"  # one run of every vessel's stack; the payload's runner picks how (cluster/node/jobs/simulation_job.py)

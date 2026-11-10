@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { getCatalogStacks, listCatalogClasses } from "../../domain/cluster/campaignApi";
 import { useSelectedCluster } from "../../domain/cluster/clusterStore";
+import { getDesignSpaceDefault } from "../../domain/cluster/presetsApi";
 import { createOperatorClient, OperatorApiError, type OperatorClient } from "../../domain/cluster/operatorApi";
 
 /** The operator client and catalog queries of the Campaigns section (the wizard); entries are followed in Campaign History. */
@@ -33,6 +34,18 @@ export function useCatalogStacks() {
   return useQuery({
     queryKey: ["catalog", client?.baseUrl, "stacks"],
     queryFn: ({ signal }) => getCatalogStacks(client as OperatorClient, signal),
+    enabled: client !== null,
+    staleTime: 5 * 60_000,
+    retry: retryUnlessUnreachable,
+  });
+}
+
+/** The master's default design space (specification and scope); null from a master that has none (404). */
+export function useDesignSpaceDefault() {
+  const client = useOperatorClient();
+  return useQuery({
+    queryKey: ["catalog", client?.baseUrl, "design-space"],
+    queryFn: ({ signal }) => getDesignSpaceDefault(client as OperatorClient, signal),
     enabled: client !== null,
     staleTime: 5 * 60_000,
     retry: retryUnlessUnreachable,

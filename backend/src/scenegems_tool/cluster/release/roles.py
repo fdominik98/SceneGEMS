@@ -57,9 +57,9 @@ PULLED_IMAGES = (POSTGRES_IMAGE,)
 
 # Where the web UI is served from (cluster/master/settings.py)
 DEFAULT_OPERATOR_ALLOWED_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
-# A kinematic node: replay and USV Navigation on the kinematic layer, scene and trajectory generation, post-hoc monitoring
-DEFAULT_NODE_COMPONENTS = "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring"
-DEFAULT_NODE_SLOTS = "simulation:2,scene_generation:1,trajectory_generation:1,monitoring.post_hoc:1"
+# A kinematic node: replay and USV Navigation on the kinematic layer, design space exploration, scene and trajectory generation, post-hoc monitoring
+DEFAULT_NODE_COMPONENTS = "asv_software/replay,asv_software/usv_navigation,control_layer/none,simulation_layer/kinematic,design_space_exploration,scene_generation,trajectory_generation,monitoring"
+DEFAULT_NODE_SLOTS = "simulation:2,design_space_exploration:1,scene_generation:1,trajectory_generation:1,monitoring.post_hoc:1"
 # The artifact store on the master and the artifact cache on a node (cluster/master/settings.py, node_configuration.py)
 DEFAULT_ARTIFACT_MAX_BYTES = str(256 * 1024 * 1024)
 DEFAULT_ARTIFACT_SWEEP_INTERVAL_S = "600"

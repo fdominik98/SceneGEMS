@@ -324,6 +324,18 @@ function Overview({ document, view }: { document: ArchitectureDocument; view: Gr
         {document.summary}
       </Header>
       <dl className="cap-facts">
+        {document.takes !== "" && (
+          <div className="cap-fact">
+            <dt>Takes</dt>
+            <dd>{document.takes}</dd>
+          </div>
+        )}
+        {document.gives !== "" && (
+          <div className="cap-fact">
+            <dt>Gives</dt>
+            <dd>{document.gives}</dd>
+          </div>
+        )}
         <div className="cap-fact">
           <dt>{view === "concrete" ? "Implementations" : "Generic nodes"}</dt>
           <dd>{view === "concrete" ? document.nodes.length : document.metamodel_nodes.length}</dd>
@@ -354,11 +366,15 @@ function Overview({ document, view }: { document: ArchitectureDocument; view: Gr
         </div>
       </dl>
       <p className="cap-detail-text">{view === "concrete" ? "Click a card to see its values and the stacks it is part of. Click an arrow to see what the adapter carries." : "Click a card or arrow to see what an implementation has to provide and how to add one."}</p>
-      {document.notes.map((note) => (
-        <p key={note} className="cap-detail-note">
-          {note}
-        </p>
-      ))}
+      {document.notes.length > 0 && (
+        <Disclosure id={`capabilities-notes-${document.id}`} title="Notes on this part" hint={document.notes.length} variant="plain" headingLevel={4}>
+          {document.notes.map((note) => (
+            <p key={note} className="cap-detail-note">
+              {note}
+            </p>
+          ))}
+        </Disclosure>
+      )}
     </>
   );
 }

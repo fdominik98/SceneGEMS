@@ -21,9 +21,13 @@ the selection below is too:
 - An item class (item/<n>, an output of an earlier step or an uploaded file) has quota 1 and
   failure budget 0: the same item gives the same outcome again, so it is not retried.
 
+- The exploration class of a campaign that explores the design space (exploration) has quota 1
+  and failure budget 0 too: one case, the exploration. The classes it adds (explored/<n>) are
+  decided like catalog classes, with the quota and failure budget of the config.
+
 Backpressure: a new case starts only while every stage has fewer queued jobs (and intents)
-of the campaign than its cap; how many start is bounded by the cap of the first configured
-step's stage.
+of the campaign than its cap; how many start is bounded by the cap of the stage new cases
+start at (the first step cases run, or the exploration for the exploration case).
 """
 
 from dataclasses import dataclass, field

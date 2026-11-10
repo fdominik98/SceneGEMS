@@ -1,11 +1,11 @@
 import { z } from "zod";
-import type { OperatorClient } from "./operatorApi";
+import { OperatorApiError, type OperatorClient } from "./operatorApi";
 import { campaignStepSchema } from "./schemas";
 
 /**
  * What the master offers to start from, and the cluster's own settings (`setting_routes.py`,
  * `catalog_routes.py`): the functional scenarios of its class catalog as text, the domain presets
- * of `backend/assets/domain_config/`, the cluster's domain configuration (saved on the master,
+ * of `backend/assets/domain_config/`, the default design space to explore, the cluster's domain configuration (saved on the master,
  * global for the cluster), and the campaign presets (shipped with the master image, or saved by
  * operators). The frontend keeps no presets of its own.
  */
@@ -64,6 +64,25 @@ export const campaignPresetSchema = z.object({
   updated_at: z.string().nullable(),
 });
 export type CampaignPreset = z.infer<typeof campaignPresetSchema>;
+
+/** The default input of a design space exploration the master ships: the metamodel and well-formedness constraints, and a scope. */
+export const designSpaceDefaultSchema = z.object({ specification: z.string(), scope: z.string() });
+export type DesignSpaceDefault = z.infer<typeof designSpaceDefaultSchema>;
+
+/**
+ * The master's default design space (`GET /cluster/catalog/design-space`), or null when the master
+ * has none to offer (a master before the design space exploration answers 404).
+ */
+export async function getDesignSpaceDefault(client: Pick<OperatorClient, "request">, signal?: AbortSignal): Promise<DesignSpaceDefault | null> {
+  try {
+    return (await client.request("GET", `${CATALOG_PATH}/design-space`, designSpaceDefaultSchema, { signal })).data;
+  } catch (error) {
+    if (error instanceof OperatorApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
 
 /** A class's functional scenario (`.problem` text with LF line endings). */
 export async function getClassContent(client: Pick<OperatorClient, "request">, classId: string, signal?: AbortSignal): Promise<string> {

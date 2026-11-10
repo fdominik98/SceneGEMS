@@ -1,6 +1,7 @@
 import type { Findings } from "../../domain/cluster/historyApi";
 import {
   CAMPAIGN_STEPS,
+  IMPLIED_STEPS,
   type CampaignKind,
   type CampaignSummary,
   type CampaignOrigin,
@@ -20,6 +21,7 @@ import { formatSeconds, formatTime } from "./resultsFormat";
  */
 
 export const STEP_LABEL: Record<CampaignStep, string> = {
+  design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
   simulation: "Simulation",
@@ -27,19 +29,30 @@ export const STEP_LABEL: Record<CampaignStep, string> = {
 
 /** What each step produces, for the plain sentences. */
 export const STEP_OUTPUT: Record<CampaignStep, string> = {
+  design_space_exploration: "FECs",
   scene_generation: "scenes",
   trajectory_generation: "trajectory sets",
   simulation: "simulated runs",
 };
 
-const VERDICT_STEP: Record<CampaignStep, VerdictStep> = {
+/** A step a monitor can judge: every step but the design space exploration, which has no monitor and no findings. */
+export type MonitoredStep = Exclude<CampaignStep, "design_space_exploration">;
+
+/** The steps the Results section offers, in chain order. */
+export const RESULT_STEPS: readonly MonitoredStep[] = ["scene_generation", "trajectory_generation", "simulation"];
+
+export function isMonitoredStep(step: CampaignStep): step is MonitoredStep {
+  return step !== "design_space_exploration";
+}
+
+const VERDICT_STEP: Record<MonitoredStep, VerdictStep> = {
   scene_generation: "scene",
   trajectory_generation: "trajectories",
   simulation: "simulation",
 };
 
 /** The step name verdicts carry (`scene`, `trajectories`, `simulation`). */
-export function verdictStepOf(step: CampaignStep): VerdictStep {
+export function verdictStepOf(step: MonitoredStep): VerdictStep {
   return VERDICT_STEP[step];
 }
 
@@ -55,6 +68,7 @@ export const KIND_LABEL: Record<CampaignKind, string> = { campaign: "Campaign", 
 const ORIGIN_LABEL: Record<CampaignOrigin, string> = {
   wizard: "made in the wizard",
   cli: "made on the command line",
+  design_space_exploration: "run on the design space exploration page",
   scene_generation: "run on the scene generation page",
   trajectory_generation: "run on the trajectory generation page",
   simulation: "run on the simulation page",
@@ -92,20 +106,28 @@ interface EntryLike {
 
 /**
  * The steps an entry executed, in chain order. A master without Phase 6 sends no steps: every
- * campaign it ran was the full chain.
+ * campaign it ran was the chain of then (scene generation to simulation).
  */
 export function executedSteps(entry: EntryLike | null | undefined): CampaignStep[] {
   const steps = entry?.steps;
   if (!steps || steps.length === 0) {
-    return [...CAMPAIGN_STEPS];
+    return [...IMPLIED_STEPS];
   }
   return CAMPAIGN_STEPS.filter((step) => steps.includes(step));
 }
 
-/** The step to show: the chosen one when the entry executed it, else the last executed step. */
-export function chooseStep(entry: EntryLike | null | undefined, chosen: CampaignStep | null): CampaignStep {
-  const steps = executedSteps(entry);
-  return chosen !== null && steps.includes(chosen) ? chosen : steps[steps.length - 1];
+/** The executed steps the Results section offers: the design space exploration has no monitor results, so it is left out. */
+export function resultSteps(entry: EntryLike | null | undefined): MonitoredStep[] {
+  return executedSteps(entry).filter(isMonitoredStep);
+}
+
+/** The step to show: the chosen one when the entry executed it, else the last executed step; null for an entry that only explored the design space. */
+export function chooseStep(entry: EntryLike | null | undefined, chosen: CampaignStep | null): MonitoredStep | null {
+  const steps = resultSteps(entry);
+  if (steps.length === 0) {
+    return null;
+  }
+  return chosen !== null && isMonitoredStep(chosen) && steps.includes(chosen) ? chosen : steps[steps.length - 1];
 }
 
 /** Whether the master that sent the entry knows the step filter and the findings route. */
@@ -228,7 +250,7 @@ export function describeFindings(findings: Findings): FindingsView {
 // The case page
 
 export interface CaseStepRow {
-  step: CampaignStep;
+  step: MonitoredStep;
   label: string;
   /** False for a step the entry did not execute (its row still shows, so the case reads as a whole chain). */
   executed: boolean;
@@ -240,13 +262,13 @@ export interface CaseStepRow {
   monitored: boolean;
 }
 
-function verdictsOfStep(verdicts: readonly Verdict[], step: CampaignStep): Verdict[] {
+function verdictsOfStep(verdicts: readonly Verdict[], step: MonitoredStep): Verdict[] {
   const name = verdictStepOf(step);
   // A master before Phase 6 sends no step: all its verdicts are of the simulation.
   return verdicts.filter((verdict) => (verdict.step ?? "simulation") === name);
 }
 
-function outputOf(detail: CaseDetail, step: CampaignStep): string {
+function outputOf(detail: CaseDetail, step: MonitoredStep): string {
   switch (step) {
     case "scene_generation":
       return detail.scene_artifact !== null ? "scene stored" : "no scene";
@@ -262,9 +284,9 @@ function outputOf(detail: CaseDetail, step: CampaignStep): string {
   }
 }
 
-/** One row per step of the chain, with the case's output and verdicts of that step. */
+/** One row per monitored step of the chain, with the case's output and verdicts of that step. */
 export function caseStepRows(detail: CaseDetail, executed: readonly CampaignStep[]): CaseStepRow[] {
-  return CAMPAIGN_STEPS.map((step) => {
+  return RESULT_STEPS.map((step) => {
     const verdicts = verdictsOfStep(detail.verdicts, step);
     const counts = { passed: 0, failed: 0, unmonitored: 0 };
     for (const verdict of verdicts) {

@@ -2,8 +2,13 @@
 
 Sections:
     format          1 (the default), 2 or 3
-    steps           format 2: the consecutive part of the chain scene_generation, trajectory_generation,
-                    simulation the campaign runs, in chain order; all three by default
+    steps           format 2: the consecutive part of the chain design_space_exploration, scene_generation,
+                    trajectory_generation, simulation the campaign runs, in chain order; the last three by default
+    design_space_exploration  the first step's input, required when the campaign runs it: the specification (the
+                    metamodel and the well-formedness constraints, the first part of a FEC specification; the one
+                    of backend/assets/design_space/ when left out) and the
+                    scope, a cap on the FECs, the time limit, and the quota and failure budget every FEC it finds
+                    gets; such a campaign names no scope and no input, its FECs come from the exploration
     scope           FECs, functional equivalence classes (catalog ids or folder patterns), each entry
                     with a quota and a failure budget (a number of cases, or unlimited: the FEC is never
                     abandoned); format 3 lists them under fecs, formats 1 and 2 under classes
@@ -31,7 +36,8 @@ config hashes the same from a Windows and a Linux checkout.
 A format 1 config is the full chain with the fields it always had: it takes none of the
 format 2 fields, and its JSON (and so its hash) leaves them out, so a campaign created
 before format 2 keeps its stored hash. Sections of steps a campaign does not run are kept
-but not used. Format 3 is format 2 with a scope entry's FECs under fecs instead of
+but not used; the design_space_exploration section is left out of the JSON of a config that
+has none, so the configs stored before the step existed keep their hashes too. Format 3 is format 2 with a scope entry's FECs under fecs instead of
 classes; formats 1 and 2 keep the name classes in their JSON, so their hashes stay.
 
 The campaign seed (policy.seed) is the base the case seeds count up from: case k of a class
@@ -66,6 +72,9 @@ from scenegems_tool.cluster.node.jobs.trajectory_generation_job import PARAM_KEY
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
+from scenegems_tool.subsystems.design_space_exploration.design_space import ScopeError, default_specification
+from scenegems_tool.subsystems.design_space_exploration.design_space import normalize_newlines as normalize_specification
+from scenegems_tool.subsystems.design_space_exploration.design_space import parse_scope
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TrajectoryGenerationParams
 
 CONFIG_FORMAT = 1  # the format of a config that names none
@@ -92,17 +101,22 @@ class ConfigModel(BaseModel):
 class CampaignStep(str, Enum):
     """The steps of the chain, in chain order."""
 
+    DESIGN_SPACE_EXPLORATION = "design_space_exploration"
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     SIMULATION = "simulation"
 
     @property
     def step_kind(self) -> StepKind:
-        """The step as verdicts and outputs name it."""
+        """The step as verdicts and outputs name it; the design space exploration has none (its outputs are FECs, which no verdict judges)."""
+        if self == CampaignStep.DESIGN_SPACE_EXPLORATION:
+            raise ValueError("the design space exploration has no verdict step")
         return {CampaignStep.SCENE_GENERATION: StepKind.SCENE, CampaignStep.TRAJECTORY_GENERATION: StepKind.TRAJECTORIES, CampaignStep.SIMULATION: StepKind.SIMULATION}[self]
 
 
 CHAIN = tuple(CampaignStep)
+# The steps of a config that names none: the chain as it was before the design space exploration, which a config asks for by name
+DEFAULT_STEPS = (CampaignStep.SCENE_GENERATION, CampaignStep.TRAJECTORY_GENERATION, CampaignStep.SIMULATION)
 
 
 # Failure budget
@@ -244,6 +258,42 @@ class InputConfig(ConfigModel):
         if twice:
             raise ValueError(f"functional scenario names must be distinct: {twice}")
         return scenarios
+
+
+# Design space exploration
+
+
+class DesignSpaceExplorationConfig(ConfigModel):
+    """What the first step explores, and how the FECs it finds run through the later steps.
+
+    The specification is Refinery source; the scope lists `<class> = <count>` or
+    `<class> = <lower>..<upper>` entries (subsystems/design_space_exploration/design_space.py).
+    Every FEC found becomes a class explored/<index> with this quota and failure budget.
+    """
+
+    # The metamodel and the well-formedness constraints, and whatever the family fixes; the specification the master ships when left out
+    specification: str = Field(default_factory=default_specification, min_length=1)
+    scope: str = Field(min_length=1)  # how many instances of a class a FEC has, such as "TS = 2, StaticObstacle = 0"
+    max_fecs: Optional[int] = Field(default=1000, ge=1)  # the exploration stops at this many FECs; None: every FEC
+    timeout_s: float = Field(default=600.0, gt=0)  # the exploration's time limit; the FECs found until then are used
+    quota: int = Field(default=1, ge=1)  # complete cases each explored FEC needs
+    failure_budget: FailureBudget = 0  # dropped and failed cases an explored FEC may use up before it is abandoned
+
+    @field_validator("specification")
+    @classmethod
+    def _specification_text(cls, specification: str) -> str:
+        if not specification.strip():
+            raise ValueError("the specification is empty")
+        return normalize_specification(specification)
+
+    @field_validator("scope")
+    @classmethod
+    def _scope_entries(cls, scope: str) -> str:
+        try:
+            parse_scope(scope)
+        except ScopeError as error:
+            raise ValueError(str(error)) from error
+        return scope.strip()
 
 
 # Domain
@@ -517,6 +567,8 @@ class QueueDepthCaps(ConfigModel):
             raise ValueError("the verdict stage queues no jobs")
         if stage in (PipelineStage.MONITOR_SCENE, PipelineStage.MONITOR_TRAJECTORIES):
             return self.monitor
+        if stage == PipelineStage.EXPLORE_DESIGN_SPACE:
+            return 1  # a campaign explores once
         return getattr(self, stage.value)
 
 
@@ -575,7 +627,9 @@ def _renamed_scope(scope: Any, old: str, new: str) -> Any:
 
 
 # The format 2 fields; a format 1 config takes none of them and its JSON leaves them out
-FORMAT_2_FIELDS = ("steps", "input", "scene_generation")
+FORMAT_2_FIELDS = ("steps", "input", "scene_generation", "design_space_exploration")
+# A section that is absent unless the campaign uses it: left out of the JSON when None, so older configs keep their hashes
+OPTIONAL_SECTIONS = ("design_space_exploration",)
 FORMAT_2_TRAJECTORY_FIELDS = ("monitor",)
 FORMAT_1_EXCLUDED: Dict[str, Any] = {**{name: True for name in FORMAT_2_FIELDS}, "trajectories": set(FORMAT_2_TRAJECTORY_FIELDS)}
 
@@ -584,9 +638,10 @@ class CampaignConfig(ConfigModel):
     format: Literal[1, 2, 3] = CONFIG_FORMAT
     name: str = Field(min_length=1, max_length=256)
     description: str = ""
-    steps: Tuple[CampaignStep, ...] = CHAIN
+    steps: Tuple[CampaignStep, ...] = DEFAULT_STEPS
     scope: Tuple[ScopeEntry, ...] = ()  # catalog FECs; a format 1 config needs at least one entry
     input: InputConfig = Field(default_factory=InputConfig)
+    design_space_exploration: Optional[DesignSpaceExplorationConfig] = None  # required when the campaign runs the step
     domain: DomainConfig = Field(default_factory=DomainConfig)
     scene_generation: SceneGenerationConfig = Field(default_factory=SceneGenerationConfig)
     trajectories: TrajectoriesConfig = Field(default_factory=TrajectoriesConfig)
@@ -628,6 +683,8 @@ class CampaignConfig(ConfigModel):
                 raise ValueError(f"{', '.join(newer)} need format 2")
             if not self.scope:
                 raise ValueError("a format 1 config needs at least one scope entry")
+        if self.runs_step(CampaignStep.DESIGN_SPACE_EXPLORATION) and self.design_space_exploration is None:
+            raise ValueError("steps name design_space_exploration, which needs the design_space_exploration section (specification and scope)")
         return self
 
     @property
@@ -644,6 +701,9 @@ class CampaignConfig(ConfigModel):
         formats 1 and 2 write a scope entry's FECs as classes, as they always did.
         """
         data = self.model_dump(mode="json", exclude=FORMAT_1_EXCLUDED) if self.format == 1 else self.model_dump(mode="json")
+        for section in OPTIONAL_SECTIONS:
+            if data.get(section) is None:
+                data.pop(section, None)
         if self.format in LEGACY_FORMATS:
             data["scope"] = _renamed_scope(data["scope"], FEC_KEY, LEGACY_FEC_KEY)
         return data

@@ -1,4 +1,4 @@
-enum VesselType {CargoShip, Tanker, OSPassengerShip
+enum VesselType {CargoShip, Tanker, OSPassengerShip,
                  ContainerShip, PassengerShip,
                  FishingShip, MotorVessel,
                  SailingVessel, MilitaryVessel, MiniUSV}
@@ -83,7 +83,7 @@ error moreThanOneOS(OS v1, OS v2) <->
 error noOS() <->
     !OS(_).
 
-declare os.
+declare os, obst1.
 !exists(OS::new).
 !exists(TS::new).
 !exists(StaticObstacle::new).
@@ -97,4 +97,5 @@ default !crossingFromPort(*, *).
 default !vesselType(*, *).
 
 default !atDangerousHeadOnSectorOf(*, *).
+atDangerousHeadOnSectorOf(obst1, os).
 default !headOn(*, *).

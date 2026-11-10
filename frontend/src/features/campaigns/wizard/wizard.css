@@ -1525,3 +1525,11 @@ button.wiz-catalog-item:disabled {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The design space exploration page: the specification editor gets room to read a metamodel. */
+.wiz-exploration-editor {
+  display: flex;
+  flex-direction: column;
+  height: 420px;
+  min-width: 0;
+}

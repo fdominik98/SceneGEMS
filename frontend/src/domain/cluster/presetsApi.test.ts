@@ -4,6 +4,7 @@ import {
   deleteCampaignPreset,
   getClassContent,
   getClusterDomain,
+  getDesignSpaceDefault,
   getDomainPresets,
   listCampaignPresets,
   matchingPreset,
@@ -88,5 +89,16 @@ describe("matchingPreset", () => {
     expect(matchingPreset(presets, "A: 1\r\nB: 2\r\n")?.name).toBe("general");
     expect(matchingPreset(presets, "A: 5\n")?.name).toBe("strict");
     expect(matchingPreset(presets, "A: 6\n")).toBeNull();
+  });
+
+  it("reads the default design space, and none from a master that has no route for it", async () => {
+    const shipped = { specification: "class OS.\n", scope: "TS = 2, StaticObstacle = 0" };
+    const { client: operator, calls } = client(() => json(shipped));
+    expect(await getDesignSpaceDefault(operator)).toEqual(shipped);
+    expect(calls[0].url.pathname).toBe("/cluster/catalog/design-space");
+    const { client: old } = client(() => json({ detail: "Not Found" }, 404));
+    expect(await getDesignSpaceDefault(old)).toBeNull();
+    const { client: broken } = client(() => json({ detail: "boom" }, 500));
+    await expect(getDesignSpaceDefault(broken)).rejects.toThrow();
   });
 });

@@ -48,6 +48,11 @@ Desired and actual states:
              no new cases
     complete every class complete or abandoned: actual completed
 
+A campaign that explores the design space starts with the class exploration alone. Its one
+case runs the exploration; when that succeeds the case machine adds a class per FEC found,
+and from the same tick on their cases start like any other class's. While the exploration
+class is open nothing else starts.
+
 Stop conditions of the config (max cases, max failed verdicts, max duration) set the desired
 state to draining, with a note event giving the reason. max_failed_verdicts counts the failed
 verdicts of every monitored step (scenes and trajectory sets too, not only runs): the operator
@@ -100,7 +105,7 @@ from scenegems_tool.persistence.schema import (
     NodeStatus,
     VerdictState,
 )
-from scenegems_tool.persistence.stores import ENGINE_CURSOR, AssuranceStores, CampaignRecord, JobStore, NodeRecord, PipelineJobEvent, SubmitOutcome
+from scenegems_tool.persistence.stores import ENGINE_CURSOR, EXPLORATION_CLASS_ID, AssuranceStores, CampaignRecord, JobStore, NodeRecord, PipelineJobEvent, SubmitOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -590,14 +595,20 @@ class PipelineEngine:
         return None
 
     def _start_cases(self, machine: CaseMachine, session: Session, context: CampaignContext, queued) -> None:
-        backpressure = Backpressure(context.config.resources.queue_depth, dict(queued), context.graph.first_stage())
+        classes = self.stores.cases.list_classes(context.campaign_id, [CampaignClassState.OPEN], session=session)
+        exploring = [record for record in classes if record.class_id == EXPLORATION_CLASS_ID] if context.graph.explores else []
+        if exploring:
+            classes = exploring  # the campaign's other classes come from the exploration
+        first_stage = context.graph.first_stage(EXPLORATION_CLASS_ID if exploring else None)
+        if first_stage is None:
+            return  # the campaign only explores, and the exploration has run
+        backpressure = Backpressure(context.config.resources.queue_depth, dict(queued), first_stage)
         room = min(backpressure.room_for_new_cases(), self.settings.max_new_cases_per_tick)
         max_cases = context.config.policy.stop.max_cases
         if max_cases is not None:
             room = min(room, max_cases - self.stores.cases.count_cases(context.campaign_id, session=session))
         if room <= 0:
             return
-        classes = self.stores.cases.list_classes(context.campaign_id, [CampaignClassState.OPEN], session=session)
         planned = plan_new_cases(classes, next_case_indexes(session, context.campaign_id), room)
         machine.start_cases(context, planned)
 

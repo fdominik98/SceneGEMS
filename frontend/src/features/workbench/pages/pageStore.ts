@@ -167,11 +167,13 @@ const undefinedStorage: Storage = {
 
 export type PageStore = ReturnType<typeof createPageStore>;
 
+export const useExplorationPageStore = createPageStore("designSpaceExploration");
 export const useScenePageStore = createPageStore("sceneGeneration");
 export const useTrajectoryPageStore = createPageStore("trajectoryGeneration");
 export const useSimulationPageStore = createPageStore("simulation");
 
 export const PAGE_STORES: Record<WorkbenchPage, PageStore> = {
+  designSpaceExploration: useExplorationPageStore,
   sceneGeneration: useScenePageStore,
   trajectoryGeneration: useTrajectoryPageStore,
   simulation: useSimulationPageStore,

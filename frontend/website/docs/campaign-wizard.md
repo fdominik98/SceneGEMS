@@ -5,7 +5,7 @@ title: Campaign wizard
 
 # Campaign wizard
 
-The Campaigns section defines and starts campaigns. A campaign runs a consecutive part of the chain scene generation, trajectory generation and simulation, with an optional monitor after each step. The wizard walks through the choices and checks the finished config on the master before it creates the campaign. Your entries are kept in this browser until the campaign is created or you discard them.
+The Campaigns section defines and starts campaigns. A campaign runs a consecutive part of the chain design space exploration, scene generation, trajectory generation and simulation, with an optional monitor after each step. The wizard walks through the choices and checks the finished config on the master before it creates the campaign. Your entries are kept in this browser until the campaign is created or you discard them.
 
 ## Presets
 
@@ -39,6 +39,7 @@ Ticking several values of a filter shows the presets with any of them (Steps and
 | Trajectory planning check without simulation | Scene and trajectory generation with the planned trajectories judged |
 | Simulate saved trajectories: kinematic and ArduPilot SITL | Simulation only; pick the trajectories on the Input page |
 | USV Navigation on straight trajectories with low TCPA | One case per two-vessel FEC without obstacles, low TCPA enforced and straight trajectories, USV Navigation steering the own ship, with the post hoc monitor after every step |
+| Design space exploration: every three-vessel FEC, one case each | Explores `TS = 2, StaticObstacle = 0` with the master's default specification, then scene generation, trajectory generation and a kinematic replay with the post hoc monitor, one case of each FEC found |
 
 **Save this draft as a preset** stores the current draft on the master under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
@@ -61,8 +62,9 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Page | Shown when | What it holds |
 |------|------------|---------------|
 | Steps | always | The campaign's name and description, the first and the last step |
-| Input | always | What the first step starts from: catalog FECs and scenario files, scenes, or trajectories |
+| Input | always | What the first step starts from: catalog FECs and scenario files, scenes, or trajectories. A campaign that starts with the exploration takes none: its FECs come from the exploration |
 | Domain | always | The cluster's domain configuration, or customized COLREGS constants, vessel types and obstacle types for this campaign only |
+| Design space exploration | design space exploration is a step | The specification, the scope, the maximum number of FECs, the timeout and, when later steps run, the cases and the failure budget of each explored FEC |
 | Scene generation | scene generation is a step | The monitor after scene generation, the scene generation timeout and the low TCPA option |
 | Trajectory generation | trajectory generation is a step | The trajectory generator and its parameters, and the monitor after trajectory generation |
 | Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay or USV Navigation on the own ship), environment, seed, repeats and monitor |
@@ -74,21 +76,37 @@ A run's **Stack** field opens the catalog of the master's stacks, with the same 
 
 ## Steps
 
-Choose **Start with** and **Stop after**. The steps in between run too, so the part is always consecutive: scene generation alone, scene generation and trajectory generation, all three, trajectory generation alone or with simulation, or simulation alone. A step that is not chosen hides its pages and writes nothing into the config.
+Choose **Start with** and **Stop after**. The steps in between run too, so the part is always consecutive: the design space exploration alone or with any steps after it, scene generation alone, scene generation and trajectory generation, scene generation through simulation, trajectory generation alone or with simulation, or simulation alone. A step that is not chosen hides its pages and writes nothing into the config.
 
 The monitor after each step is chosen on the step's own page:
 
 | Step | Monitor choice |
 |------|----------------|
+| Design space exploration | None: it has no monitor |
 | Scene generation | No monitor, or the post hoc monitor, which judges each generated scene as a one-scene log (the initial situation) |
 | Trajectory generation | No monitor, or the post hoc monitor, which judges the planned trajectories |
 | Simulation | Set per run on the Simulation page: post hoc, live or none |
 
 Changing the first step removes chosen input items that do not fit it, such as scenes when the campaign now starts with simulation.
 
+## Design space exploration
+
+This page is shown when the design space exploration is a step. It holds:
+
+- **Metamodel and well-formedness constraints**: the specification editor, with **Load the default**, **Open file...** and an export, as on the [Design Space Exploration](./design-space-exploration) page. An empty editor starts from the master's default, and a preset that leaves the specification out explores that default.
+- **Scope**: how many objects of each class a model has, such as `TS = 2, StaticObstacle = 0`, checked as you type.
+- **Max FECs**: the search stops after this many; empty finds every FEC. **Timeout**: how long the search may run; the FECs found until then are kept.
+- **Cases per explored FEC** and **Failure budget per explored FEC**: shown when a step follows the exploration. They are the quota and the failure budget that every FEC the exploration finds gets (see [Quota and failure budget](#quota-and-failure-budget)). Without a later step the page says that the campaign runs the exploration alone, so its FECs need no cases.
+
+How many FECs there are is known only once the exploration ran. The review therefore says "N cases per explored FEC" in place of a total, or that the campaign ends with the list of FECs.
+
+### How a campaign that explores runs
+
+The campaign starts with one entry in its FEC list called `exploration`: the exploration itself, one case. When it finishes, one FEC `explored/<five digit index>` appears per FEC found, and their cases run through the later steps. A campaign that only explores ends when the exploration does, and its explored FECs need no cases. An exploration that finds nothing ends the campaign and says why.
+
 ## Input
 
-The Input page depends on the first step.
+The Input page depends on the first step. A campaign that starts with the design space exploration has nothing to choose here: its FECs come from the exploration, with no catalog scope and no input.
 
 ### Scene generation
 

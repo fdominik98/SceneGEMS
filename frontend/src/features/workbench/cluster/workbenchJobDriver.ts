@@ -17,7 +17,10 @@ import type { EvaluationData, SimulationFrame } from "../../../domain/simulation
 import type { TrajectoryGenerationParamsWire } from "../../../domain/simulation/wireTypes";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
 import { useUiStore } from "../../../app/uiStore";
+import { EXPLORATION_FEC_ID } from "../../../domain/designSpace/explorationResult";
+import { useExplorationStore } from "../designSpace/explorationStore";
 import {
+  designSpaceEntryConfig,
   entryName,
   scenarioClassId,
   scenarioInputName,
@@ -32,12 +35,13 @@ import { caseEndMessage, createCaseWaiter, isGone, pollCase, waitForCase, waitFo
 import { framesOfRun, loadEntryOutput, type LoadedOutput, type LoadedRun } from "../pages/entryLoader";
 import { resolveInputItem, uploadedRef } from "../pages/pageInputs";
 import { PAGE_STORES, type PageInput } from "../pages/pageStore";
-import { clearPageOutput, showLoadedScene, showLoadedTrajectories } from "../pages/showEntryOutput";
+import { clearPageOutput, showLoadedExploration, showLoadedScene, showLoadedTrajectories } from "../pages/showEntryOutput";
 import type { WorkbenchPage, WorkbenchTarget } from "../pages/workbenchTarget";
 import type { ReferenceGeofence } from "../connection/referenceGeofence";
 import type { ClusterRunPlan } from "./simulationJobs";
 import type { JobTypeResources } from "./workbenchResources";
 import {
+  DESIGN_SPACE_EXPLORATION_JOB,
   MONITORING_JOB,
   monitoredFrames,
   monitoringSubmission,
@@ -92,6 +96,17 @@ export interface BatchSceneRow {
   requestId: string;
   label: string;
   functionalScenarioContent: string;
+}
+
+export interface ExplorationEntryRequest {
+  /** The metamodel and the well-formedness constraints. */
+  specification: string;
+  /** What the page calls them, for the entry's name. */
+  label: string;
+  scope: string;
+  /** Null for every FEC. */
+  maxFecs: number | null;
+  timeoutSeconds: number;
 }
 
 export interface TrajectoryEntryRequest {
@@ -160,6 +175,7 @@ export class WorkbenchJobDriver {
   private dispatch: (message: ParsedServerMessage) => void;
   private hooks: SimulationPageHooks = NO_HOOKS;
   private readonly sceneJobs = new Map<string, PageTask>();
+  private explorationJob: PageTask | null = null;
   private trajectoryJob: PageTask | null = null;
   private previewMonitorJob: AbortController | null = null;
   private simulationJob: PageTask | null = null;
@@ -232,6 +248,114 @@ export class WorkbenchJobDriver {
 
   private newTask(ownEntry: boolean, entryId: string | null = null): PageTask {
     return { controller: new AbortController(), entryId, ownEntry, workbenchEntry: false };
+  }
+
+  // Design space exploration
+
+  /**
+   * Explores the design space as a one-step workbench entry: the exploration case's job reports its
+   * status on the page while it runs, then the page loads the explored FECs from the entry.
+   */
+  async exploreDesignSpace(request: ExplorationEntryRequest): Promise<void> {
+    this.abortTask(this.explorationJob);
+    this.cancelLoad("designSpaceExploration");
+    const page = PAGE_STORES.designSpaceExploration;
+    const cluster = this.access().cluster;
+    const blocker = this.blocker(DESIGN_SPACE_EXPLORATION_JOB);
+    if (cluster === null || blocker !== null) {
+      page.getState().setStatus("failed", blocker ?? "No cluster is selected.", null);
+      return;
+    }
+    const task = this.newTask(true);
+    this.explorationJob = task;
+    clearPageOutput("designSpaceExploration");
+    useExplorationStore.getState().setRunning({ message: null, progress: null });
+    page.getState().setStatus("running", "Creating the workbench entry...", null);
+    try {
+      const signal = task.controller.signal;
+      const config = designSpaceEntryConfig({
+        name: entryName("Design space exploration", `${request.label}, ${request.scope.trim()}`),
+        specification: request.specification,
+        scope: request.scope,
+        maxFecs: request.maxFecs,
+        timeoutSeconds: request.timeoutSeconds,
+        seed: takeEntrySeed(),
+      });
+      const entryId = await this.createEntry(cluster, toConfigYaml(config), config.name, WORKBENCH_ORIGIN.designSpaceExploration, task);
+      if (signal.aborted) {
+        // Stopped while the entry was made: createEntry stopped it, and the page already says so
+        return;
+      }
+      page.getState().setStatus("running", "Waiting for the entry's exploration job...", entryId);
+      const caseView = await waitForCase(cluster.client, entryId, EXPLORATION_FEC_ID, this.follow(signal));
+      await this.followExplorationCase(cluster, { campaignId: entryId, caseId: caseView.case_id }, task);
+    } catch (error) {
+      this.explorationFailure(error, task);
+    } finally {
+      if (this.explorationJob === task) {
+        this.explorationJob = null;
+        useExplorationStore.getState().setRunning(null);
+      }
+    }
+  }
+
+  private explorationFailure(error: unknown, task: PageTask): void {
+    if (this.explorationJob !== task) {
+      return;
+    }
+    const page = PAGE_STORES.designSpaceExploration.getState();
+    useExplorationStore.getState().setRunning(null);
+    if (isAbort(error) || task.controller.signal.aborted) {
+      page.setStatus("idle", null, null);
+      return;
+    }
+    if (isGone(error)) {
+      this.clearPage("designSpaceExploration", "The entry was deleted.");
+      return;
+    }
+    page.setStatus("failed", `The design space exploration on the cluster failed: ${describe(error)}`, null);
+  }
+
+  /** Follows the exploration job of an entry's exploration case, then loads the explored FECs once the case ended. */
+  private async followExplorationCase(cluster: WorkbenchCluster, entry: { campaignId: string; caseId: number }, task: PageTask): Promise<void> {
+    const signal = task.controller.signal;
+    const page = PAGE_STORES.designSpaceExploration;
+    const { jobId, detail } = await waitForStageJob(cluster.client, entry.campaignId, entry.caseId, "explore_design_space", this.follow(signal));
+    if (jobId === null) {
+      throw new Error(caseEndMessage(detail));
+    }
+    const job = await followJob(cluster.client, jobId, {
+      pollIntervalMs: this.jobPollMs,
+      channel: cluster.channel,
+      signal,
+      onProgress: ({ job: view, status }) => {
+        if (this.explorationJob !== task) {
+          return;
+        }
+        const running = view.state === "leased" || view.state === "running";
+        useExplorationStore.getState().setRunning({ message: running ? (status?.message ?? null) : null, progress: running ? (status?.progress ?? null) : null });
+        page.getState().setStatus("running", view.state === "queued" ? "Waiting for a free slot on the cluster..." : "Exploring the design space...", entry.campaignId);
+      },
+    });
+    if (job.state === "cancelled") {
+      throw new DOMException("The exploration was stopped.", "AbortError");
+    }
+    if (job.state !== "succeeded") {
+      throw new Error(jobFailureMessage(job));
+    }
+    useExplorationStore.getState().setRunning(null);
+    const target: WorkbenchTarget = { page: "designSpaceExploration", campaignId: entry.campaignId, caseId: entry.caseId, step: "design_space_exploration", caseIndex: 0 };
+    await this.finishEntry(target, task, "Loading the explored FECs...");
+  }
+
+  /** Stops the page's exploration (and its entry when the page made it, or on the user's Stop a followed workbench entry). */
+  stopExploration(byUser = false): void {
+    if (this.explorationJob !== null) {
+      this.abortTask(this.explorationJob, byUser);
+      this.explorationJob = null;
+      useExplorationStore.getState().setRunning(null);
+      PAGE_STORES.designSpaceExploration.getState().setStatus("idle", null, null);
+    }
   }
 
   // Scene generation
@@ -889,6 +1013,23 @@ export class WorkbenchJobDriver {
       .catch(() => undefined);
     page.setStatus("following", "Following the running entry...", target.campaignId);
     switch (target.page) {
+      case "designSpaceExploration": {
+        this.abortTask(this.explorationJob);
+        this.explorationJob = task;
+        clearPageOutput("designSpaceExploration");
+        useExplorationStore.getState().setRunning({ message: null, progress: null });
+        try {
+          await this.followExplorationCase(cluster, entry, task);
+        } catch (error) {
+          this.explorationFailure(error, task);
+        } finally {
+          if (this.explorationJob === task) {
+            this.explorationJob = null;
+            useExplorationStore.getState().setRunning(null);
+          }
+        }
+        return;
+      }
       case "sceneGeneration": {
         this.stopScenes();
         const requestId = `follow-${target.campaignId}-${target.caseId}`;
@@ -992,6 +1133,9 @@ export class WorkbenchJobDriver {
 
   private async showLoaded(target: WorkbenchTarget, loaded: LoadedOutput): Promise<void> {
     switch (loaded.step) {
+      case "design_space_exploration":
+        showLoadedExploration(target, loaded);
+        return;
       case "scene_generation":
         showLoadedScene(target, loaded);
         return;
@@ -1023,7 +1167,11 @@ export class WorkbenchJobDriver {
 
   /** The page stops following its own trajectory planning or simulation run, so what it loads next is not overwritten. */
   private releasePage(page: WorkbenchPage): void {
-    if (page === "trajectoryGeneration" && this.trajectoryJob !== null) {
+    if (page === "designSpaceExploration" && this.explorationJob !== null) {
+      this.abortTask(this.explorationJob);
+      this.explorationJob = null;
+      useExplorationStore.getState().setRunning(null);
+    } else if (page === "trajectoryGeneration" && this.trajectoryJob !== null) {
       this.abortTask(this.trajectoryJob);
       this.trajectoryJob = null;
       useTrajectoryGenerationStore.getState().markStopped();
@@ -1043,6 +1191,8 @@ export class WorkbenchJobDriver {
 
   /** Stops everything this driver follows (the workbench is closed or switched to another cluster). */
   stopAll(): void {
+    this.abortTask(this.explorationJob);
+    this.explorationJob = null;
     this.stopScenes();
     this.abortTask(this.trajectoryJob);
     this.trajectoryJob = null;

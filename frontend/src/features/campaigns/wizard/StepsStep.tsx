@@ -5,6 +5,7 @@ import { CAMPAIGN_STEP_LABELS, CAMPAIGN_STEP_OUTPUTS, CHAIN, firstStep, itemKind
 import type { StepProps } from "./stepTypes";
 
 const STEP_HINTS: Record<CampaignStep, string> = {
+  design_space_exploration: "Finds every FEC of a metamodel and its well-formedness constraints within a scope.",
   scene_generation: "Generates scenes from FECs of the catalog or from functional scenario files.",
   trajectory_generation: "Plans the trajectories of scenes, generated here or taken from Campaign History or files.",
   simulation: "Simulates trajectories, generated here or taken from Campaign History or files, once per run you define.",
@@ -37,7 +38,7 @@ export function StepsStep({ draft, update, reasons }: StepProps) {
         </div>
         <div className="wiz-column">
           <p className="wiz-notice wiz-explain" role="note">
-            A campaign runs one, two or all three steps of the chain scene generation, trajectory generation, simulation, always next to each other. It starts with the first step you choose and stops after the last.
+            A campaign runs one or more steps of the chain design space exploration, scene generation, trajectory generation, simulation, always next to each other. It starts with the first step you choose and stops after the last.
           </p>
         </div>
       </div>
@@ -75,7 +76,9 @@ export function StepsStep({ draft, update, reasons }: StepProps) {
 
       <p className="wiz-plan" role="status" aria-label="The chosen steps">
         This campaign runs <strong>{draft.steps.map((step) => CAMPAIGN_STEP_LABELS[step].toLowerCase()).join(", then ")}</strong>.
-        {first !== "scene_generation" && " Its input comes from earlier results or files (next page)."}
+        {first === "design_space_exploration"
+          ? " Its FECs come from the exploration, so it takes no input."
+          : first !== "scene_generation" && " Its input comes from earlier results or files (next page)."}
       </p>
       <FieldIssues reasons={own.rest} showField />
     </div>

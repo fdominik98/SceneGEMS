@@ -35,6 +35,7 @@ class CampaignOrigin(str, Enum):
 
     WIZARD = "wizard"
     CLI = "cli"
+    DESIGN_SPACE_EXPLORATION = "design_space_exploration"
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     SIMULATION = "simulation"
@@ -90,6 +91,7 @@ class CampaignClassState(str, Enum):
 class PipelineStage(str, Enum):
     """The stages of a case. Every stage but verdict runs as a job; verdict is written by the engine."""
 
+    EXPLORE_DESIGN_SPACE = "explore_design_space"  # the exploration case only: the design_space_exploration job that finds the campaign's FECs
     GENERATE_SCENE = "generate_scene"
     MONITOR_SCENE = "monitor_scene"  # post_hoc monitor over the scene as a one-scene log
     GENERATE_TRAJECTORIES = "generate_trajectories"
@@ -193,6 +195,9 @@ class CampaignConfigVersionRow(Base):
 class CampaignClassRow(Base):
     """One class of a campaign, its content pinned by hash, with its quota and its counts.
 
+    A campaign that explores the design space has the class exploration (the exploration itself, one case, no
+    vessels) from its creation and gets a class explored/<index> per FEC the exploration finds.
+
     The counts follow the case states (the case store updates them with every case change):
     complete counts complete cases, dropped counts dropped and failed ones (the failure
     budget's use), in flight counts active ones.
@@ -203,7 +208,7 @@ class CampaignClassRow(Base):
         CheckConstraint(sha256_hex_check("content_hash"), name="content_hash_is_sha256_hex"),
         CheckConstraint("quota >= 1", name="quota_positive"),
         CheckConstraint("failure_budget >= 0", name="failure_budget_not_negative"),
-        CheckConstraint("vessel_count >= 1 AND obstacle_count >= 0", name="counts_of_the_scenario"),
+        CheckConstraint("vessel_count >= 0 AND obstacle_count >= 0", name="counts_of_the_scenario"),  # 0 vessels: the class of a design space exploration itself
         CheckConstraint("complete_count >= 0 AND dropped_count >= 0 AND in_flight_count >= 0", name="case_counts_not_negative"),
         CheckConstraint("state = 'open' OR finished_at IS NOT NULL", name="finished_when_closed"),
         Index("ix_campaign_class_campaign_id_state", "campaign_id", "state"),

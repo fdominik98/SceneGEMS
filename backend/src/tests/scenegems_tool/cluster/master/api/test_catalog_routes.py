@@ -307,15 +307,19 @@ def test_every_offered_stack_is_a_config_the_validation_accepts(stacks):
 ARCHITECTURE = f"{CATALOG_PATH}/architecture"
 
 
-def test_the_architecture_is_served_as_the_four_documents(operator, tmp_path, monkeypatch):
+def test_the_architecture_is_served_as_the_five_documents_in_chain_order(operator, tmp_path, monkeypatch):
     from scenegems_tool.architecture import architecture_files
 
     monkeypatch.setattr(architecture_files, "ARCHITECTURE_FOLDER", str(tmp_path / "architecture"))  # no files yet: built on request
     response = operator.get(ARCHITECTURE)
     assert response.status_code == 200
     body = response.json()
-    assert [document["id"] for document in body["documents"]] == ["vessel_stack", "trajectory_generation", "scene_generation", "monitoring"]
-    assert body["documents"][0]["combinations"] and body["documents"][0]["metamodel_nodes"]
+    assert [document["id"] for document in body["documents"]] == ["design_space_exploration", "scene_generation", "trajectory_generation", "vessel_stack", "monitoring"]
+    stack = body["documents"][3]
+    assert stack["combinations"] and stack["metamodel_nodes"]
+    assert (stack["role"], stack["step"], stack["takes"], stack["job_types"]) == ("step", "Simulation", "trajectories", ["simulation"])
+    exploration = body["documents"][0]
+    assert (exploration["role"], exploration["gives"], exploration["job_types"]) == ("step", "FECs", ["design_space_exploration"])
 
 
 def test_the_architecture_is_served_from_the_files_written_at_startup(operator, tmp_path, monkeypatch):
@@ -353,3 +357,17 @@ def test_the_domain_presets_are_the_masters_files(operator):
     for key, presets in listed.items():
         assert presets == [{"name": preset.name, "default": preset.default, "content": preset.content} for preset in expected[key]]
     assert [preset["name"] for preset in listed["colregs_constants"] if preset["default"]] == ["general_maritime_constants"]
+
+
+# Design space
+
+
+def test_the_design_space_default_is_the_shipped_specification_and_scope(operator):
+    from scenegems_tool.subsystems.design_space_exploration.design_space import DEFAULT_SCOPE, default_specification, parse_scope
+
+    response = operator.get(f"{CATALOG_PATH}/design-space")
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"specification", "scope"}
+    assert body["specification"] == default_specification() and "\r" not in body["specification"]
+    assert body["scope"] == DEFAULT_SCOPE and parse_scope(body["scope"])

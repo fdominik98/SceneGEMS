@@ -8,7 +8,7 @@ import { describeOperatorError, OperatorApiError, type OperatorClient } from "..
 import type { NodeView } from "../../../domain/cluster/schemas";
 import { planKey, planResources, requiredCapabilities, slotsByJobType, startBlocker, type ResourcePlan } from "../resourcePlan";
 import { useCatalogClasses, useCatalogStacks, useOperatorClient } from "../useCampaignData";
-import { buildCampaignMap, reviewStatusOf } from "./campaignMapModel";
+import { buildCampaignMap, casesPerExploredFec, reviewStatusOf } from "./campaignMapModel";
 import { CampaignMap, type MapTarget } from "./CampaignMap";
 import { buildCampaignConfig, configToYaml, requiredLabelsOf, type BuilderCatalog } from "./configBuilder";
 import { checkDraft } from "./draftChecks";
@@ -20,9 +20,10 @@ import { ReviewStep } from "./ReviewStep";
 import { RunsStep } from "./RunsStep";
 import { InputStep } from "./InputStep";
 import { PresetBar } from "./PresetBar";
+import { ExplorationStep } from "./ExplorationStep";
 import { ScenesStep } from "./ScenesStep";
 import { StepsStep } from "./StepsStep";
-import { visibleWizardSteps } from "./stepPlan";
+import { inputKindOf, visibleWizardSteps } from "./stepPlan";
 import type { CatalogState, ClusterResources, StepProps } from "./stepTypes";
 import { TrajectoriesStep } from "./TrajectoriesStep";
 import { useValidation, validationFromError } from "./useValidation";
@@ -247,6 +248,9 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
     case "domain":
       body = <DomainStep {...stepProps} />;
       break;
+    case "exploration":
+      body = <ExplorationStep {...stepProps} />;
+      break;
     case "scenes":
       body = <ScenesStep {...stepProps} />;
       break;
@@ -282,6 +286,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
           creating={creation.isPending}
           createMessage={createMessage}
           startBlocker={cluster.startBlocker}
+          explored={inputKindOf(draft.steps) === "explored" ? (draft.steps.length > 1 ? casesPerExploredFec(draft) : "the campaign ends with the list of FECs") : null}
         />
       );
   }

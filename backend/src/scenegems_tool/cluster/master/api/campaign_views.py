@@ -32,7 +32,9 @@ from scenegems_tool.persistence.stores import (
     VerdictRecord,
 )
 
-STEP_NAMES = ("scene_generation", "trajectory_generation", "simulation")  # the chain, as the config and the API name its steps
+EXPLORATION_STEP_NAME = "design_space_exploration"  # the first step: its outputs are the FECs it found, and no monitor judges it
+DEFAULT_STEP_NAMES = ("scene_generation", "trajectory_generation", "simulation")  # the steps of a config that names none
+STEP_NAMES = (EXPLORATION_STEP_NAME,) + DEFAULT_STEP_NAMES  # the chain, as the config and the API name its steps
 
 VERDICT_COLUMNS = (
     "verdict_id",
@@ -76,8 +78,8 @@ def campaign_view(campaign: CampaignRecord) -> Dict[str, Any]:
 
 
 def config_steps(config: Mapping[str, Any]) -> List[str]:
-    """The steps a stored config runs; a format 1 config, which stores none, runs the full chain."""
-    return list(config.get("steps") or STEP_NAMES)
+    """The steps a stored config runs; a format 1 config, which stores none, runs scene generation, trajectory generation and simulation."""
+    return list(config.get("steps") or DEFAULT_STEP_NAMES)
 
 
 def config_input(config: Mapping[str, Any]) -> Dict[str, Any]:
@@ -97,7 +99,9 @@ def config_made_from(config: Mapping[str, Any]) -> List[str]:
 
 
 def config_monitored(config: Mapping[str, Any], step: str) -> bool:
-    """Whether the config monitors a step. A generation step is monitored when its monitor is not empty (a format 1 config stores none); the simulation when any run's is."""
+    """Whether the config monitors a step. A generation step is monitored when its monitor is not empty (a format 1 config stores none); the simulation when any run's is; the design space exploration never."""
+    if step == EXPLORATION_STEP_NAME:
+        return False
     if step == "scene_generation":
         return (config.get("scene_generation") or {}).get("monitor", "empty") != "empty"
     if step == "trajectory_generation":
@@ -315,7 +319,10 @@ def output_verdict_view(output: OutputRecord) -> Optional[Dict[str, Any]]:
 
 
 def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lambda campaign_id: True) -> Dict[str, Any]:
-    """An output of a step. The artifact is None while the step has none or once its record is gone; an input source whose campaign was deleted since reads as {}."""
+    """An output of a step. The artifact is None while the step has none or once its record is gone; an input source whose campaign was deleted since reads as {}.
+
+    A FEC a design space exploration found also carries vessel_count and obstacle_count.
+    """
     artifact = output.artifact
     reference = None
     if artifact is not None and artifact.size_bytes is not None and artifact.kind is not None:
@@ -323,7 +330,7 @@ def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lam
     source = output.input_source
     if source is not None and source.get("campaign_id") is not None and not source_exists(source["campaign_id"]):
         source = {}
-    return {
+    view = {
         "case_id": output.case_id,
         "case_index": output.case_index,
         "fec_id": output.class_id,
@@ -338,6 +345,9 @@ def output_view(output: OutputRecord, source_exists: Callable[[str], bool] = lam
         "verdict": output_verdict_view(output),
         "input_source": source,
     }
+    if output.vessel_count is not None:  # a FEC a design space exploration found
+        view.update(vessel_count=output.vessel_count, obstacle_count=output.obstacle_count)
+    return view
 
 
 def source_campaigns(outputs: Iterable[OutputRecord]) -> Set[str]:

@@ -189,6 +189,7 @@ class JobChanged(LiveModel):
 
 
 class InstanceKind(str, Enum):
+    DESIGN_SPACE_EXPLORATION = "design_space_exploration"
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     SIMULATION = "simulation"
@@ -196,6 +197,7 @@ class InstanceKind(str, Enum):
 
 
 JOB_INSTANCE_KINDS: Dict[JobType, InstanceKind] = {
+    JobType.DESIGN_SPACE_EXPLORATION: InstanceKind.DESIGN_SPACE_EXPLORATION,
     JobType.SCENE_GENERATION: InstanceKind.SCENE_GENERATION,
     JobType.TRAJECTORY_GENERATION: InstanceKind.TRAJECTORY_GENERATION,
     JobType.SIMULATION: InstanceKind.SIMULATION,

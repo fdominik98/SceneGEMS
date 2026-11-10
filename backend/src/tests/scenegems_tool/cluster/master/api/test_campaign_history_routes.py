@@ -560,3 +560,107 @@ def test_a_refused_delete_and_a_failed_create_send_nothing(client, stores):
         assert browser.drain() == []
     finally:
         browser.close()
+
+
+# Design space exploration
+
+EXPLORING = {
+    "format": 3,
+    "name": "explore",
+    "steps": ["design_space_exploration", "scene_generation"],
+    "design_space_exploration": {"specification": "class OS.\nclass TS.\n", "scope": "TS = 1..2"},
+}
+
+
+def create_exploring(client, **changes):
+    response = client.post(CAMPAIGNS_PATH, content=json.dumps({"config": {**EXPLORING, **changes}, "kind": "workbench", "origin": "design_space_exploration"}), headers=JSON)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def seed_explored(stores, campaign_id, texts=("OS(os).\nTS(ts1).\n", "OS(os).\nTS(ts1).\nTS(ts2).\n")):
+    """The exploration case, complete, and one class per text with its artifact record, as the engine leaves them."""
+    import hashlib
+
+    from scenegems_tool.assurance.campaign.campaign_config import DesignSpaceExplorationConfig
+    from scenegems_tool.assurance.campaign.campaign_inputs import explored_class_spec
+    from scenegems_tool.subsystems.design_space_exploration.design_space import count_instances
+
+    (exploration,) = stores.cases.create_cases(campaign_id, [NewCase("exploration", 0, 7, stage=PipelineStage.EXPLORE_DESIGN_SPACE)])
+    section = DesignSpaceExplorationConfig(**EXPLORING["design_space_exploration"])
+    specs = []
+    for index, text in enumerate(texts):
+        data = text.encode("utf-8")
+        sha = hashlib.sha256(data).hexdigest()
+        stores.artifacts.insert_if_absent(sha, "functional_scenario", len(data), "text/plain; charset=utf-8")
+        specs.append(explored_class_spec(index, sha, *count_instances(text), section))
+    stores.cases.add_classes(campaign_id, specs)
+    stores.cases.move_case(exploration.case_id, exploration.version, stage=PipelineStage.VERDICT, state=CaseState.COMPLETE)
+    return exploration, specs
+
+
+def test_an_exploring_entry_is_created_with_its_origin_and_first_step(client, stores):
+    created = create_exploring(client)
+    assert (created["kind"], created["origin"], created["steps"], created["input"]) == (
+        "workbench",
+        "design_space_exploration",
+        EXPLORING["steps"],
+        {"first_step": "design_space_exploration", "item_count": 0},
+    )
+    (record,) = stores.cases.list_classes(created["campaign_id"])
+    assert (record.class_id, record.vessel_count) == ("exploration", 0)
+    listed = client.get(CAMPAIGNS_PATH, params={"origin": "design_space_exploration"})
+    assert [row["campaign_id"] for row in listed.json()] == [created["campaign_id"]]
+
+
+def test_the_outputs_of_the_exploration_are_the_fecs_it_found(client, stores):
+    campaign_id = create_exploring(client)["campaign_id"]
+    path = f"{CAMPAIGNS_PATH}/{campaign_id}/outputs"
+    empty = client.get(path, params={"step": "design_space_exploration"})
+    assert (empty.status_code, empty.json(), empty.headers["x-total-count"]) == (200, [], "0")  # nothing until the exploration has finished
+    exploration, specs = seed_explored(stores, campaign_id)
+    response = client.get(path, params={"step": "design_space_exploration"})
+    assert response.status_code == 200 and response.headers["x-total-count"] == "2"
+    first, second = response.json()
+    assert first == {
+        "case_id": exploration.case_id,
+        "case_index": 0,
+        "fec_id": "explored/00000",
+        "state": "complete",
+        "reason": None,
+        "artifact": {"sha256": specs[0].content_hash, "size_bytes": 17, "kind": "functional_scenario", "media_type": "text/plain; charset=utf-8", "pointer": None},
+        "valid": True,
+        "complete": None,
+        "run_index": None,
+        "repeat_index": None,
+        "run_record_id": None,
+        "verdict": None,
+        "input_source": None,
+        "vessel_count": 2,
+        "obstacle_count": 0,
+    }
+    assert (second["fec_id"], second["case_index"], second["vessel_count"]) == ("explored/00001", 1, 3)
+    page = client.get(path, params={"step": "design_space_exploration", "limit": 1, "offset": 1})
+    assert [row["fec_id"] for row in page.json()] == ["explored/00001"] and page.headers["x-total-count"] == "2"
+    # the rows of the other steps carry no counts
+    assert "vessel_count" not in client.get(path, params={"step": "scene_generation"}).json()[0] if client.get(path, params={"step": "scene_generation"}).json() else True
+
+
+def test_the_exploration_has_no_findings_and_is_refused_for_a_campaign_that_does_not_explore(client, stores):
+    campaign_id = create_exploring(client)["campaign_id"]
+    findings = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/findings", params={"step": "design_space_exploration"})
+    assert findings.status_code == 422 and "has no monitor result summaries" in findings.json()["detail"]
+    plain = create(client).json()["campaign_id"]
+    refused = client.get(f"{CAMPAIGNS_PATH}/{plain}/outputs", params={"step": "design_space_exploration"})
+    assert refused.status_code == 422 and "does not run design_space_exploration" in refused.json()["detail"]
+
+
+def test_a_case_of_an_explored_fec_names_the_exploration_as_its_source(client, stores):
+    campaign_id = create_exploring(client)["campaign_id"]
+    exploration, specs = seed_explored(stores, campaign_id)
+    source = {"campaign_id": campaign_id, "case_id": exploration.case_id, "step": "design_space_exploration"}
+    (case,) = stores.cases.create_cases(campaign_id, [NewCase("explored/00000", 0, 7, input_artifact=specs[0].content_hash, input_source=source)])
+    detail = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/cases/{case.case_id}").json()
+    assert (detail["fec_id"], detail["input_artifact"], detail["input_source"]) == ("explored/00000", specs[0].content_hash, source)
+    (row,) = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/outputs", params={"step": "scene_generation"}).json()
+    assert row["input_source"] == source and "vessel_count" not in row

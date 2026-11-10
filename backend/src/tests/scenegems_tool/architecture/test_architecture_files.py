@@ -9,13 +9,42 @@ from scenegems_tool.architecture import architecture_files
 from scenegems_tool.architecture.architecture_catalog import build_architecture_documents
 from scenegems_tool.architecture.architecture_files import INDEX_FILE, architecture_view, read_architecture_files, start_architecture_files_writer, write_architecture_files
 from scenegems_tool.architecture.architecture_model import SCHEMA_VERSION, to_plain
+from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, parse_measured_facts
 
-DOCUMENT_IDS = ["vessel_stack", "trajectory_generation", "scene_generation", "monitoring"]
+DOCUMENT_IDS = ["design_space_exploration", "scene_generation", "trajectory_generation", "vessel_stack", "monitoring"]  # the chain, then what serves it
 
 
-def test_the_catalog_builds_the_four_documents_in_page_order():
+def test_the_catalog_builds_the_five_documents_in_chain_order():
     assert list(build_architecture_documents()) == DOCUMENT_IDS
+
+
+def test_every_document_says_its_place_in_the_chain():
+    documents = build_architecture_documents()
+    assert [(document.role, document.step) for document in documents.values()] == [
+        ("step", "Design space exploration"),
+        ("step", "Scene generation"),
+        ("step", "Trajectory generation"),
+        ("step", "Simulation"),
+        ("support", ""),
+    ]
+    assert all(document.takes and document.gives and document.job_types for document in documents.values())
+    # every step gives what the next one takes, in the words the page joins them with
+    assert (documents["design_space_exploration"].gives, documents["scene_generation"].takes) == ("FECs", "a FEC")
+    assert (documents["scene_generation"].gives, documents["trajectory_generation"].takes) == ("a scene", "a scene")
+    assert (documents["trajectory_generation"].gives, documents["vessel_stack"].takes) == ("trajectories", "trajectories")
+    job_types = {member.value for member in JobType}
+    assert all(set(document.job_types) <= job_types for document in documents.values())
+    plain = to_plain(documents["monitoring"])
+    assert (plain["role"], plain["step"], plain["job_types"]) == ("support", "", ["monitoring.post_hoc"])
+
+
+def test_a_document_with_an_unknown_role_is_refused():
+    import dataclasses
+
+    document = build_architecture_documents()["monitoring"]
+    with pytest.raises(ValueError, match="unknown role"):
+        dataclasses.replace(document, role="extra").validate()
 
 
 def test_one_file_per_document_and_an_index_are_written(tmp_path):

@@ -1,7 +1,10 @@
 """The payload of each pipeline job, from the campaign's config, the case's input and its earlier results.
 
+    design_space_exploration  the config's specification as the problem, its scope's entries, the cap
+                            and the time limit, the exploration case's seed
     scene_generation        a catalog class's content from the catalog (checked against the hash
-                            the campaign pinned), or a functional scenario given as content as its
+                            the campaign pinned), or a functional scenario given as content or an
+                            explored FEC as its
                             reference (kind functional_scenario, which the node resolves); the
                             domain contents, the timeout, enforce_low_tcpa, the case seed
     monitoring.post_hoc     (monitor_scene) the scene result's evaluation_data as scene, a
@@ -50,7 +53,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     InputRef,
     RunConfig,
 )
-from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class
+from scenegems_tool.assurance.campaign.campaign_inputs import input_of_class, is_explored_class
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.stage_graph import StageGraph, Step
 from scenegems_tool.cluster.fingerprints.comparison import fingerprints_of
@@ -58,6 +61,7 @@ from scenegems_tool.cluster.fingerprints.components import ComponentId, Simulati
 from scenegems_tool.cluster.protocol.artifacts import ArtifactContent, encode_document, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobSubmission, JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, TrajectoryGeneratorImplementation
+from scenegems_tool.subsystems.design_space_exploration.design_space import parse_scope
 
 TRAJECTORIES_POINTER = "/trajectories"
 
@@ -147,12 +151,26 @@ class PayloadBuilder:
 
     # Payloads
 
-    def scene_generation(self, class_id: str, content_hash: str, case_seed: int) -> Dict[str, Any]:
-        """A catalog class's content, or the reference of a functional scenario given as content."""
+    def design_space_exploration(self, case_seed: int) -> Dict[str, Any]:
+        """The exploration of the config's specification within its scope; the seed fixes the order the FECs are found in."""
+        section = self.config.design_space_exploration
+        if section is None:
+            raise PayloadError("the campaign has no design_space_exploration section")
+        payload: Dict[str, Any] = {"problem": section.specification, "scopes": list(parse_scope(section.scope)), "random_seed": case_seed, "timeout_s": section.timeout_s}
+        if section.max_fecs is not None:
+            payload["max_models"] = section.max_fecs
+        return payload
+
+    def scene_generation(self, class_id: str, content_hash: str, case_seed: int, explored: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
+        """A catalog class's content, or the reference of a functional scenario given as content or of an explored FEC (explored, its artifact reference)."""
         domain = self.config.domain
         scenario = input_of_class(self.config, class_id)
-        if scenario is None:
-            content: Any = self.class_content(class_id, content_hash)
+        if is_explored_class(class_id):
+            if explored is None or explored.get("sha256") != content_hash:
+                raise PayloadError(f"FEC {class_id} has no functional scenario artifact {content_hash} from the exploration")
+            content: Any = dict(explored)
+        elif scenario is None:
+            content = self.class_content(class_id, content_hash)
         elif isinstance(scenario, FunctionalScenarioInput):
             if scenario.ref.sha256 != content_hash:
                 raise PayloadError(f"FEC {class_id} names functional scenario {scenario.ref.sha256}, but the campaign pinned {content_hash}")

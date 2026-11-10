@@ -11,6 +11,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'workbench-pages',
+        'design-space-exploration',
         'scene-generation',
         'trajectory-generation',
         'simulation',

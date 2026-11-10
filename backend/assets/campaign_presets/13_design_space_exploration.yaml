@@ -1,0 +1,32 @@
+# Shipped with the master image: a campaign preset (scenegems_tool/assurance/campaign/campaign_presets.py).
+format: 3
+name: "Design space exploration: every three-vessel FEC, one case each"
+description: >-
+  The design space exploration finds every FEC of the default specification with two target
+  ships and no static obstacle (28 FECs, the three-vessel family of the catalog). One case of each
+  runs through scene generation, trajectory generation and a kinematic replay, judged by the post
+  hoc monitor. Change the scope to explore another family; the campaign's FECs are whatever the
+  exploration finds.
+steps: [design_space_exploration, scene_generation, trajectory_generation, simulation]
+design_space_exploration:
+  # The specification is left out: the master's default (backend/assets/design_space/) is explored.
+  scope: "TS = 2, StaticObstacle = 0"
+  max_fecs: 1000
+  timeout_s: 600
+  quota: 1
+  failure_budget: 1
+domain:
+  scene_generation_timeout_s: 60
+  enforce_low_tcpa: false
+trajectories:
+  generator: monitor_driven_rrt
+  timeout_s: 1800
+execution:
+  runs:
+    - name: kinematic replay
+      stack: {simulation_layer: kinematic, mode: replay}
+      repeats: 1
+      monitor: post_hoc
+policy:
+  retention: all
+  seed: 20261110

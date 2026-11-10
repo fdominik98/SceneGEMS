@@ -63,10 +63,15 @@ export interface ReviewStepProps {
   startBlocker: string | null;
   /** The base seed the case seeds count up from. */
   baseSeed: number | null;
+  /**
+   * Set when the campaign starts with the design space exploration: its FECs and cases are known only once the
+   * exploration ran, so the review says what each explored FEC gets ("1 case per explored FEC") instead of a total.
+   */
+  explored?: string | null;
 }
 
 /** Review: the generated YAML, the master's check of it (reasons attached to their steps) and the way to create the campaign. */
-export function ReviewStep({ yaml, validation, current, localReasons, serverReasons, onGoTo, onCheck, onCreate, creating, createMessage, startBlocker, baseSeed }: ReviewStepProps) {
+export function ReviewStep({ yaml, validation, current, localReasons, serverReasons, onGoTo, onCheck, onCreate, creating, createMessage, startBlocker, baseSeed, explored = null }: ReviewStepProps) {
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const all = [...localReasons, ...serverReasons];
@@ -95,7 +100,14 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
         )}
         {!blocked && validation.status === "idle" && <p>The config has not been checked on the master yet.</p>}
         {!blocked && validation.status === "checking" && <p role="status">Checking the config on the master...</p>}
-        {!blocked && validation.status === "valid" && result && (
+        {!blocked && validation.status === "valid" && result && explored !== null && (
+          <p>
+            <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> Its FECs come from the design space exploration, so how many
+            there are is known only once it ran: {explored}{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}, base seed <code>{baseSeed ?? 0}</code>.
+            Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
+          </p>
+        )}
+        {!blocked && validation.status === "valid" && result && explored === null && (
           <p>
             <strong>The master accepts this config{current ? "" : " (an earlier version of it)"}.</strong> {plural(result.fecs.length, "FEC")} selected, <strong>{plural(result.cases_planned, "case")}</strong> planned
             to complete{result.runs.length > 0 ? `, ${plural(result.runs.length, "run")}` : ""}, base seed <code>{baseSeed ?? 0}</code>. Config hash <code title={result.config_hash}>{shortHash(result.config_hash, 12)}</code>.
@@ -126,9 +138,11 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
         </div>
       )}
 
-      {result && validation.status === "valid" && (
+      {result && validation.status === "valid" && (explored === null || result.runs.length > 0) && (
         <div className="wiz-result">
           <h4>What the master resolved</h4>
+          {explored === null && (
+            <>
           <div className="camp-table-wrap wiz-class-scroll">
             <table className="camp-table camp-table--dense">
               <thead>
@@ -160,6 +174,8 @@ export function ReviewStep({ yaml, validation, current, localReasons, serverReas
             <button type="button" onClick={() => setShowAll((value) => !value)}>
               {showAll ? "Show fewer FECs" : `Show all ${result.fecs.length} FECs`}
             </button>
+          )}
+            </>
           )}
           <ul className="wiz-runs-result">
             {result.runs.map((run) => (

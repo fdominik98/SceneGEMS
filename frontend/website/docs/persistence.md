@@ -11,6 +11,7 @@ The application stores user preferences and editor content in browser local stor
 - Color mode (light or dark)
 - The known clusters and the active one
 - FEC specification text
+- The design space exploration page's specification, scope, maximum number of FECs and timeout
 - Scene generation settings (timeout, low TCPA, live preview)
 - Trajectory generation settings
 - A fixed seed for the workbench's runs

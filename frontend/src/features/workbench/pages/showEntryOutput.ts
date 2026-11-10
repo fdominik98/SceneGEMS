@@ -1,7 +1,8 @@
 import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../../../domain/playback/playbackStore";
 import type { SimulationFrame } from "../../../domain/simulation/types";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
-import type { LoadedScene, LoadedTrajectories } from "./entryLoader";
+import { useExplorationStore } from "../designSpace/explorationStore";
+import type { LoadedExploration, LoadedScene, LoadedTrajectories } from "./entryLoader";
 import { PAGE_STORES } from "./pageStore";
 import type { WorkbenchPage, WorkbenchTarget } from "./workbenchTarget";
 
@@ -23,6 +24,12 @@ export function withMonitorFields(scene: SimulationFrame, monitored: SimulationF
     maneuverStates: monitored.maneuverStates,
     metrics: monitored.metrics,
   };
+}
+
+/** The explored FECs of an entry, with the target's FEC selected when it names one. */
+export function showLoadedExploration(target: WorkbenchTarget, loaded: LoadedExploration): void {
+  useExplorationStore.getState().show({ campaignId: target.campaignId, result: loaded.result, fecs: loaded.fecs, selectedFecId: target.fecId ?? null });
+  PAGE_STORES.designSpaceExploration.getState().setLoaded({ ...target, caseIndex: loaded.caseIndex, fecId: undefined }, null);
 }
 
 export function showLoadedScene(target: WorkbenchTarget, loaded: LoadedScene): void {
@@ -50,6 +57,9 @@ export function showLoadedTrajectories(target: WorkbenchTarget, loaded: LoadedTr
 /** Drops what a page shows of its loaded entry; its input stays. */
 export function clearPageOutput(page: WorkbenchPage): void {
   switch (page) {
+    case "designSpaceExploration":
+      useExplorationStore.getState().clear();
+      return;
     case "sceneGeneration":
       useScenePlaybackStore.getState().clearVisualizedScenario();
       return;

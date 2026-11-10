@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { NumberField } from "../../campaigns/wizard/fields";
 import "./stepPanel.css";
+import { WORKBENCH_STEP_PAGES, type WorkbenchPage } from "./workbenchTarget";
 
 /** The tone of a page's status chip. */
 export type StepTone = "idle" | "busy" | "live" | "ok" | "warn" | "error";
@@ -17,7 +18,8 @@ export interface StepNotice {
 }
 
 interface StepPanelProps {
-  step: 1 | 2 | 3;
+  /** The page whose step this is: its place in the chain gives the number. */
+  page: WorkbenchPage;
   title: string;
   status: StepStatus;
   /** Where the run happens and what it has there (the cluster's slots, a live session). */
@@ -34,12 +36,14 @@ interface StepPanelProps {
  * status and its run buttons, what is missing before it can run, then a row each for the
  * page's input, its setup and the result it shows.
  */
-export function StepPanel({ step, title, status, where, actions, notices = [], children }: StepPanelProps) {
+export function StepPanel({ page, title, status, where, actions, notices = [], children }: StepPanelProps) {
   return (
     <section className="step-panel" aria-label={title}>
       <header className="step-panel-head">
         <div className="step-panel-title">
-          <span className="step-panel-step">Step {step} of 3</span>
+          <span className="step-panel-step">
+            Step {WORKBENCH_STEP_PAGES.indexOf(page) + 1} of {WORKBENCH_STEP_PAGES.length}
+          </span>
           <h3>{title}</h3>
           <StatusChip status={status} />
         </div>

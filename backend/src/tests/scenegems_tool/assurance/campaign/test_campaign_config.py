@@ -10,6 +10,7 @@ from scenegems_tool.assurance.campaign.campaign_config import (
     CHAIN,
     DEFAULT_COLREGS_CONSTANTS_FILE,
     DEFAULT_OBSTACLE_TYPES_FILE,
+    DEFAULT_STEPS,
     DEFAULT_VESSEL_TYPES_FILE,
     MAX_SEED,
     CampaignConfig,
@@ -78,8 +79,8 @@ def test_the_exit_campaign_sample():
 
 def test_the_queue_depth_caps_cover_every_job_stage():
     caps = QueueDepthCaps(simulate=4)
-    # generate_scene, monitor_scene, generate_trajectories, monitor_trajectories, simulate, monitor, calibrate; the monitors share one cap
-    assert [caps.cap(stage) for stage in PipelineStage if stage != PipelineStage.VERDICT] == [16, 32, 16, 32, 4, 32, 8]
+    # explore_design_space (a campaign explores once), generate_scene, monitor_scene, generate_trajectories, monitor_trajectories, simulate, monitor, calibrate; the monitors share one cap
+    assert [caps.cap(stage) for stage in PipelineStage if stage != PipelineStage.VERDICT] == [1, 16, 32, 16, 32, 4, 32, 8]
     with pytest.raises(ValueError):
         caps.cap(PipelineStage.VERDICT)
 
@@ -306,9 +307,9 @@ def test_format_1_hashes_stay_what_they_were():
 
 def test_a_format_1_config_is_the_full_chain():
     config = load_campaign_config(EXIT_CAMPAIGN)
-    assert config.format == 1 and config.steps == CHAIN and config.first_step == CampaignStep.SCENE_GENERATION
+    assert config.format == 1 and config.steps == DEFAULT_STEPS and config.first_step == CampaignStep.SCENE_GENERATION
     assert config.input == InputConfig() and config.scene_generation.monitor == MonitorImplementation.EMPTY and config.trajectories.monitor == MonitorImplementation.EMPTY
-    assert all(config.runs_step(step) for step in CampaignStep)
+    assert all(config.runs_step(step) for step in DEFAULT_STEPS) and not config.runs_step(CampaignStep.DESIGN_SPACE_EXPLORATION)  # the chain it always ran
 
 
 @pytest.mark.parametrize(
@@ -342,7 +343,7 @@ def test_a_format_2_config_with_steps_and_monitors():
 
 def test_format_2_defaults():
     config = campaign_config_from_dict(_format2(scope=MINIMAL["scope"]))
-    assert config.steps == CHAIN and config.input == InputConfig() and config.scene_generation == SceneGenerationConfig()
+    assert config.steps == DEFAULT_STEPS and config.input == InputConfig() and config.scene_generation == SceneGenerationConfig()
     assert config.config_hash() != campaign_config_from_dict(MINIMAL).config_hash()  # the format and the new fields are hashed
 
 
@@ -379,7 +380,10 @@ def test_a_scope_entry_takes_the_name_of_its_format(data, reason):
 
 
 def test_the_step_kinds():
-    assert [step.step_kind for step in CHAIN] == [StepKind.SCENE, StepKind.TRAJECTORIES, StepKind.SIMULATION]
+    assert [step.step_kind for step in DEFAULT_STEPS] == [StepKind.SCENE, StepKind.TRAJECTORIES, StepKind.SIMULATION]
+    assert CHAIN == (CampaignStep.DESIGN_SPACE_EXPLORATION, *DEFAULT_STEPS)
+    with pytest.raises(ValueError, match="has no verdict step"):  # its outputs are FECs, which no verdict judges
+        CampaignStep.DESIGN_SPACE_EXPLORATION.step_kind
 
 
 def test_input_with_scenarios_and_items():
@@ -402,7 +406,7 @@ def test_input_with_scenarios_and_items():
         (_format2(steps=["scene_generation", "simulation"]), "steps must be consecutive and in chain order"),
         (_format2(steps=["trajectory_generation", "scene_generation"]), "steps must be consecutive and in chain order"),
         (_format2(steps=["simulation", "simulation"]), "steps must be consecutive and in chain order"),
-        (_format2(steps=["planning"]), "steps.0: Input should be 'scene_generation', 'trajectory_generation' or 'simulation'"),
+        (_format2(steps=["planning"]), "steps.0: Input should be 'design_space_exploration', 'scene_generation', 'trajectory_generation' or 'simulation'"),
         (_format2(scene_generation={"monitor": "live"}), "monitored post_hoc or not at all"),
         (_format2(trajectories={"monitor": "live"}), "monitored post_hoc or not at all"),
         (_format2(input={"functional_scenarios": [{"name": "a/b", "ref": SCENARIO_REF, "quota": 1}]}), "input.functional_scenarios.0.name: String should match pattern"),

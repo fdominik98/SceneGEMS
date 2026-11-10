@@ -18,8 +18,22 @@ describe("DetailPanel", () => {
     expect(html).toContain("4 of 6");
     expect(html).toContain("Run as cluster jobs");
     expect(html).toContain("2 of 4");
-    expect(html).toContain("A note on the stack.");
+    // what the part takes and gives, from the document
+    expect(html).toContain("<dt>Takes</dt><dd>parts</dd>");
+    expect(html).toContain("<dt>Gives</dt><dd>a stack</dd>");
+    // the notes are detail: a closed disclosure that says how many there are
+    expect(html).toContain("Notes on this part");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("A note on the stack.");
     expect(html).not.toContain("Back to the overview");
+  });
+
+  it("leaves out what a master from before the overview does not state", () => {
+    const older = { ...sampleStackDocument(), takes: "", gives: "", notes: [] };
+    const html = renderToStaticMarkup(<DetailPanel document={older} view="concrete" selection={null} onShow={vi.fn()} />);
+    expect(html).not.toContain("<dt>Takes</dt>");
+    expect(html).not.toContain("<dt>Gives</dt>");
+    expect(html).not.toContain("Notes on this part");
   });
 
   it("leaves the cluster job count out for a document of an older master", () => {

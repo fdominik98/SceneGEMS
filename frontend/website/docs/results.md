@@ -19,7 +19,7 @@ Other pages open Results on an entry for you, for example **Open the results** o
 
 ## Views per step
 
-A campaign or workbench run executes one, two or three consecutive steps of the chain scene generation, trajectory generation, simulation. The row of tabs under the entry name offers only the steps the entry executed, and opens on the last one. Each tab shows the findings of that step and its monitor result summaries.
+A campaign or workbench run executes one or more consecutive steps of the chain design space exploration, scene generation, trajectory generation, simulation. The design space exploration has no monitor, so it has no findings and no tab: the row of tabs under the entry name offers only the monitored steps the entry executed, and opens on the last one. An entry that only explored the design space shows a note and a button that opens Campaign History, where its FECs are listed. Each tab shows the findings of that step and its monitor result summaries.
 
 ## Findings
 
@@ -43,7 +43,7 @@ Below the findings, the table lists the monitor result summaries of the shown st
 
 ## Case page
 
-The case page starts with a table of all three steps of the chain: for each step, whether the entry executed it, what the case has of its output, and the step's monitor result summary with the failed rules. Under it are the monitor result summary cards of every monitored step with the outcome of each rule per vessel pair, the run records, the recorded run and the jobs of the case.
+The case page starts with a table of the monitored steps of the chain (scene generation, trajectory generation, simulation): for each step, whether the entry executed it, what the case has of its output, and the step's monitor result summary with the failed rules. Under it are the monitor result summary cards of every monitored step with the outcome of each rule per vessel pair, the run records, the recorded run and the jobs of the case.
 
 ### Recorded run
 
