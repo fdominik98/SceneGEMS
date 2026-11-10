@@ -23,8 +23,8 @@ def model(gazebo_stack):
 
 
 class TestCompose:
-    def test_services_are_the_two_sitl_instances_and_gazebo(self, gazebo_stack):
-        assert list(gazebo_stack.compose["services"]) == ["agent_0", "agent_1", "gazebo"]
+    def test_services_are_sitl_and_replay_per_vessel_and_gazebo(self, gazebo_stack):
+        assert list(gazebo_stack.compose["services"]) == ["agent_0", "agent_0_asv_software", "agent_1", "agent_1_asv_software", "gazebo"]
 
     def test_sitl_uses_the_json_backend_against_the_gazebo_service(self, gazebo_stack):
         for name in ("agent_0", "agent_1"):
@@ -167,8 +167,8 @@ def custom_stack():
 
 
 class TestCustomControlLayer:
-    def test_gazebo_is_the_only_service(self, custom_stack):
-        assert list(custom_stack[1]["services"]) == ["gazebo"]
+    def test_every_vessel_has_its_controller_and_replay_container_next_to_gazebo(self, custom_stack):
+        assert list(custom_stack[1]["services"]) == ["agent_0_controller", "agent_0_asv_software", "agent_1_controller", "agent_1_asv_software", "gazebo"]
 
     def test_the_world_starts_paused_for_the_actuator_and_waits_for_no_agent(self, custom_stack):
         gazebo = custom_stack[1]["services"]["gazebo"]

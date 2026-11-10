@@ -39,6 +39,7 @@ import {
   type SimulationContext,
   type VesselInitConnectionDraft,
 } from "./simulationInitConfig";
+import { vesselNameOf, vesselRole } from "../../../domain/simulation/actorNaming";
 
 export interface SimulationInitControlsHandle {
   initializeSimulation: () => void;
@@ -55,6 +56,7 @@ function ModelFileControls(props: {
   onClear: () => void;
 }) {
   const { vesselId, content, exportFileName, onLoad, onClear } = props;
+  // vesselId is the vessel's label here (os, own ship), for the buttons' names.
   const inputRef = useRef<HTMLInputElement | null>(null);
   const hasContent = typeof content === "string" && content.length > 0;
   return (
@@ -73,17 +75,17 @@ function ModelFileControls(props: {
           e.target.value = "";
         }}
       />
-      <button type="button" aria-label={`Load a Gazebo model for vessel ${vesselId}`} onClick={() => inputRef.current?.click()}>
+      <button type="button" aria-label={`Load a Gazebo model for ${vesselId}`} onClick={() => inputRef.current?.click()}>
         Load...
       </button>
       <IconButton
-        label={`Export the Gazebo model of vessel ${vesselId}`}
+        label={`Export the Gazebo model of ${vesselId}`}
         icon={<DownloadIcon />}
         disabled={!hasContent}
         onClick={() => downloadBlob(new Blob([content ?? ""], { type: "application/xml" }), exportFileName)}
       />
       {hasContent ? (
-        <button type="button" className="link-btn" aria-label={`Clear the Gazebo model of vessel ${vesselId}`} onClick={onClear}>
+        <button type="button" className="link-btn" aria-label={`Clear the Gazebo model of ${vesselId}`} onClick={onClear}>
           Clear
         </button>
       ) : null}
@@ -105,6 +107,20 @@ interface Props {
 }
 
 const EMPTY_ACTORS: ActorStaticInfo[] = [];
+
+/** A vessel as the setup tables name it: its id as in the scenario (os, ts1) and what it is. */
+function VesselLabel({ id, ownShip }: { id: string; ownShip: boolean }) {
+  return (
+    <>
+      <span className="sim-vessel-id">{vesselNameOf(id, ownShip)}</span> <span className="sim-vessel-role">{vesselRole(ownShip)}</span>
+    </>
+  );
+}
+
+/** The same as text, for the controls' accessible names. */
+function vesselText(id: string, ownShip: boolean): string {
+  return `${vesselNameOf(id, ownShip)}, ${vesselRole(ownShip)}`;
+}
 
 function ownShipIdsOf(actors: ActorStaticInfo[]): Set<string> {
   return new Set(actors.filter((actor) => actor.isOwnShip).map((actor) => actor.id));
@@ -371,10 +387,12 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
               stackDrafts.map((draft) => {
                 const real = draft.context === "real";
                 const softwareChoices = real ? REAL_VESSEL_ASV_SOFTWARE : ASV_SOFTWARE;
-                const name = `${ownShipIds.has(draft.vesselId) ? "Own ship" : "Target"} ${draft.vesselId}`;
+                const name = vesselText(draft.vesselId, ownShipIds.has(draft.vesselId));
                 return (
                   <tr key={draft.vesselId}>
-                    <td className="sim-vessel-name">{name}</td>
+                    <td className="sim-vessel-name">
+                      <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
+                    </td>
                     <td>
                       <select aria-label={`Kind of ${name}`} value={draft.context} disabled={disabled} onChange={(e) => updateKind(draft.vesselId, e.target.value as SimulationContext)}>
                         <option value="simulation">Simulated</option>
@@ -474,17 +492,19 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
               <tbody>
                 {stackDrafts.map((draft) => (
                   <tr key={draft.vesselId}>
-                    <td className="sim-vessel-name">{draft.vesselId}</td>
-                    <td>
-                      <input aria-label={`Agent name of vessel ${draft.vesselId}`} value={draft.agentName} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
+                    <td className="sim-vessel-name">
+                      <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
                     </td>
                     <td>
-                      <input aria-label={`Topic of vessel ${draft.vesselId}`} title={draft.topic} value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
+                      <input aria-label={`Agent name of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} value={draft.agentName} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
+                    </td>
+                    <td>
+                      <input aria-label={`Topic of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} title={draft.topic} value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
                     </td>
                     <td className="sim-port-cell">
                       {draft.context === "simulation" ? (
                         <input
-                          aria-label={`Simulator port of vessel ${draft.vesselId}`}
+                          aria-label={`Simulator port of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`}
                           type="number"
                           step={1}
                           value={draft.port}
@@ -520,10 +540,12 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
               <tbody>
                 {simulatedDrafts.map((draft) => (
                   <tr key={draft.vesselId}>
-                    <td className="sim-vessel-name">{draft.vesselId}</td>
+                    <td className="sim-vessel-name">
+                      <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
+                    </td>
                     <td>
                       <ModelFileControls
-                        vesselId={draft.vesselId}
+                        vesselId={vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}
                         content={draft.gazeboVesselModel}
                         exportFileName={`${draft.agentName || draft.vesselId}.sdf`}
                         onLoad={(text) => updateConnection(draft.vesselId, "gazeboVesselModel", text)}

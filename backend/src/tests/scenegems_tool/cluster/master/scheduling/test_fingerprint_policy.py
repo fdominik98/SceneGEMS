@@ -112,5 +112,6 @@ def test_a_component_is_stale_when_one_of_its_images_differs():
     node = _node(components, {SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "old"})
     assert stale_components(node.components, node_mismatches(node, EXPECTED)) == {"simulation_layer/gazebo"}
     runner_stale = _node(components, {SCENARIO_EXECUTION_IMAGE: "old", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"})
-    assert stale_components(runner_stale.components, node_mismatches(runner_stale, EXPECTED)) == {"simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"}
+    in_the_scenario_execution_image = {"asv_software/replay", "simulation_layer/ardupilot_sim", "simulation_layer/gazebo", "calibration"}  # the replay containers and the runner
+    assert stale_components(runner_stale.components, node_mismatches(runner_stale, EXPECTED)) == in_the_scenario_execution_image
     assert stale_components(components, []) == frozenset()

@@ -6,7 +6,6 @@ import re
 import pytest
 
 from scenegems_tool.cluster.fingerprints.components import images_of
-from scenegems_tool.cluster.node import instance_scope
 from scenegems_tool.cluster.node.job_report import JobFailed
 from scenegems_tool.cluster.node.jobs.in_container.run_observation import RunObserver
 from scenegems_tool.cluster.node.jobs.job_payload import parse_payload
@@ -25,13 +24,6 @@ WIND = [0.0, 3.0, 0.0]
 WAVES = {"amplitude": 0.5, "period": 5.0, "steepness": 0.0, "direction": [1.0, 0.0]}
 
 
-@pytest.fixture
-def instances_folder(monkeypatch, tmp_path):
-    monkeypatch.setattr(instance_scope, "INSTANCES_FOLDER", str(tmp_path).replace("\\", "/"))
-    monkeypatch.delenv("SCENARIO_EXECUTION_IMAGE", raising=False)
-    return tmp_path
-
-
 def custom_payload(head_on_trajectories, **fields):
     return {"runner": "gazebo_custom", "trajectories": head_on_trajectories.to_dict(), **fields}
 
@@ -42,12 +34,25 @@ def stack_for(node, make_job, head_on_trajectories, job_id="sim-1", **fields):
     return job, build_job_stack(job, node, GazeboCustomSimulationPayload.model_validate(payload_data))
 
 
-def test_the_stack_is_the_paused_world_and_the_runner(instances_folder, node, make_job, head_on_trajectories):
-    """No SITL and no vessel service: Gazebo starts paused with the actuator listening, and the runner steps it."""
+def test_usv_navigation_runs_in_its_own_image(instances_folder, node, make_job, head_on_trajectories):
+    _, stack = stack_for(node, make_job, head_on_trajectories, mode="usv_navigation")
+    services = stack.compose["services"]
+    own_ship, target = services["vessel_0_asv_software"], services["vessel_1_asv_software"]
+    assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_server"
+    assert "scenegems-scenario-execution-subsystem" in target["image"], "the other vessel replays"
+
+
+def test_the_stack_is_the_paused_world_a_controller_and_asv_software_per_vessel_and_the_runner(instances_folder, node, make_job, head_on_trajectories):
+    """No SITL: Gazebo starts paused with the actuator listening, every vessel has its controller and its replay container, and the runner steps them."""
     job, stack = stack_for(node, make_job, head_on_trajectories)
     scope = node.job_scope(job)
     services = stack.compose["services"]
-    assert set(services) == {"gazebo", RUNNER_SERVICE}
+    vessel_services = {f"vessel_{vessel}_{layer}" for vessel in (0, 1) for layer in ("controller", "asv_software")}
+    assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
+    for name in vessel_services:
+        assert services[name]["image"].endswith("scenegems-scenario-execution-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
+    assert services["vessel_0_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
+    assert services["vessel_0_asv_software"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_software.replay.replay_server", "--port", "11410"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)
@@ -57,7 +62,7 @@ def test_the_stack_is_the_paused_world_and_the_runner(instances_folder, node, ma
         assert "ports" not in service
     runner = services[RUNNER_SERVICE]
     assert runner["image"] == "scenegems-scenario-execution-subsystem:latest"
-    assert runner["networks"] == [STACK_NETWORK] and runner["depends_on"] == ["gazebo"]
+    assert runner["networks"] == [STACK_NETWORK] and set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
     assert stack.project.name == scope.compose_project
 
 
@@ -89,16 +94,16 @@ def test_an_unknown_own_ship_fails_for_good(instances_folder, node, make_job, he
 
 
 @pytest.mark.parametrize(
-    "fields, components",
+    "fields, components, asv_images",
     [
-        ({}, ("asv_software/replay", "control_layer/custom", "simulation_layer/gazebo")),
-        ({"mode": "usv_navigation"}, ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")),
+        ({}, ("asv_software/replay", "control_layer/custom", "simulation_layer/gazebo"), set()),
+        ({"mode": "usv_navigation"}, ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo"), {"scenegems-usv-navigation:latest"}),
     ],
 )
-def test_a_gazebo_node_without_sitl_runs_it(head_on_trajectories, fields, components):
-    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the runner's: no SITL."""
+def test_a_gazebo_node_without_sitl_runs_it(head_on_trajectories, fields, components, asv_images):
+    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the scenario execution image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
     assert payload_components(JobType.SIMULATION, custom_payload(head_on_trajectories, **fields)) == components
-    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-scenario-execution-subsystem:latest"}
+    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-scenario-execution-subsystem:latest"} | asv_images
 
 
 @pytest.mark.parametrize(

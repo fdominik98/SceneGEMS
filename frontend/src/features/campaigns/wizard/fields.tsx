@@ -23,7 +23,7 @@ export function FieldIssues({ reasons, showField = false }: { reasons: readonly 
 }
 
 const MONITOR_CHOICES: { value: StepMonitor; label: string; hint: (output: string) => string }[] = [
-  { value: "empty", label: "No monitor", hint: (output) => `The ${output} are kept without a monitor summary.` },
+  { value: "empty", label: "No monitor", hint: (output) => `The ${output} are kept without a monitor result summary.` },
   { value: "post_hoc", label: "Post hoc monitor", hint: (output) => `The COLREGS monitor judges the ${output} after the step.` },
 ];
 

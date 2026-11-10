@@ -27,12 +27,12 @@ function CaseSteps({ detail, steps }: { detail: CaseDetail; steps: readonly Camp
         <span className="meta">{steps.length} of 3 executed</span>
       </header>
       <div className="results-table-wrap">
-        <table className="results-table results-table--plain" aria-label="Monitor summary of each step">
+        <table className="results-table results-table--plain" aria-label="Monitor result summary of each step">
           <thead>
             <tr>
               <th>Step</th>
               <th>Output</th>
-              <th>Monitor summary</th>
+              <th>Monitor result summary</th>
               <th>Failed rules</th>
             </tr>
           </thead>
@@ -115,7 +115,7 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
 
   const back = (
     <button type="button" onClick={onBack} className="results-back">
-      Back to the monitor summaries
+      Back to the monitor result summaries
     </button>
   );
   if (query.isPending) {
@@ -151,13 +151,13 @@ export function CasePage({ operatorUrl, campaignId, caseId, steps, onBack }: Cas
       <CaseSummary detail={detail} />
       <CaseSteps detail={detail} steps={steps} />
 
-      <section className="results-panel" aria-label="Monitor summaries of the case">
+      <section className="results-panel" aria-label="Monitor result summaries of the case">
         <header className="results-panel-head">
-          <h3>Monitor summaries of the steps</h3>
+          <h3>Monitor result summaries of the steps</h3>
           <span className="meta">{detail.verdicts.length}</span>
         </header>
         {detail.verdicts.length === 0 ? (
-          <p className="meta">The case has no monitor summary yet.</p>
+          <p className="meta">The case has no monitor result summary yet.</p>
         ) : (
           <div className="results-stack">
             {detail.verdicts.map((verdict) => (

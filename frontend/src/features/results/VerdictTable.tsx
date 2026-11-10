@@ -71,7 +71,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
   const ariaSort = (key: VerdictSort) => ((sortable ? activeSort === key : FEC_ORDER.includes(key)) ? (ascending ? "ascending" : "descending") : undefined);
 
   return (
-    <section className="results-panel" aria-label="Monitor summaries">
+    <section className="results-panel" aria-label="Monitor result summaries">
       <div className="results-table-wrap results-table-wrap--tall">
         <table className="results-table" aria-busy={loading}>
           <thead>
@@ -91,7 +91,7 @@ export function VerdictTable({ verdicts, total, paging, loading, onOpenCase, onP
             {verdicts.length === 0 && (
               <tr>
                 <td colSpan={9} className="results-empty-cell">
-                  {loading ? "Loading the monitor summaries." : "No monitor summary matches the filters."}
+                  {loading ? "Loading the monitor result summaries." : "No monitor result summary matches the filters."}
                 </td>
               </tr>
             )}

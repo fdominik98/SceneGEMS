@@ -148,7 +148,7 @@ def test_show_prints_the_summary_and_a_coverage_table():
     code, out, _ = run(server, "show", CAMPAIGN)
     assert code == 0
     assert "desired running, actual running" in out and "started 2026-10-25T12:05:00+00:00" in out
-    assert "cases: 8 complete of quota 10, 1 dropped, 2 in flight" in out and "monitor summaries: failed 1, passed 7" in out
+    assert "cases: 8 complete of quota 10, 1 dropped, 2 in flight" in out and "monitor result summaries: failed 1, passed 7" in out
     table_lines = out.split("\n\n", 1)[1].splitlines()
     assert table_lines[0].split() == ["FEC", "state", "quota", "complete", "dropped", "in", "flight", "budget", "left", "failed", "passed"]
     assert table_lines[1].split() == [CLASS_A, "open", "5", "3", "1", "2", "4", "1", "2"]
@@ -445,7 +445,7 @@ def test_outputs_print_a_table_and_send_the_filters():
     params = server.requests[0].url.params
     assert (params["step"], params["fec_id"], params["state"], params["limit"], params["offset"]) == ("scene_generation", CLASS_A, "complete", "3", "1")
     lines = out.splitlines()
-    assert lines[0].split() == ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "monitor", "summary", "artifact", "from"] and len(lines) == 4
+    assert lines[0].split() == ["FEC", "index", "case", "state", "valid", "complete", "run", "repeat", "monitor", "result", "summary", "artifact", "from"] and len(lines) == 4
     assert "failed (rule_15;rule_8)" in lines[1] and "abababababab" in lines[1] and "c1#3" in lines[1]
     assert "head_on.json" in lines[2] and "False" in lines[2]
     assert lines[3].rstrip().endswith("deleted")
@@ -458,7 +458,7 @@ def test_outputs_of_nothing():
 
 def test_verdicts_of_nothing():
     server = Server({("GET", f"/cluster/campaigns/{CAMPAIGN}/verdicts"): json_response([])})
-    assert run(server, "verdicts", CAMPAIGN)[1] == "no monitor summaries\n"
+    assert run(server, "verdicts", CAMPAIGN)[1] == "no monitor result summaries\n"
 
 
 def test_outputs_and_findings_need_a_known_step():
@@ -487,7 +487,7 @@ def test_findings_print_the_summary_of_a_monitored_step():
     code, out, _ = run(server, "findings", CAMPAIGN, "--step", "trajectory_generation")
     assert code == 0 and server.requests[0].url.params["step"] == "trajectory_generation"
     assert "trajectory_generation: monitored" in out and "cases: complete 5, dropped 1" in out and "outputs: 5, valid 5, complete 3" in out
-    assert "monitor summaries: passed 3, failed 2, unmonitored 0" in out and "job duration s: median 4.2, p90 9.8" in out
+    assert "monitor result summaries: passed 3, failed 2, unmonitored 0" in out and "job duration s: median 4.2, p90 9.8" in out
     assert "rule_15" in out and "12.5" in out and "20.1" in out and CLASS_A in out
 
 

@@ -1,8 +1,9 @@
 """Simulation instance builder for Docker-based stacks: a thin caller of the adapter registry.
 
 The instance is resolved first, so an unavailable stack or an unsupported environment is
-rejected before anything is generated. The simulation layer adapter and each vessel's
-control layer adapter then contribute their files and compose services.
+rejected before anything is generated. Then every layer brings its own containers: the
+simulation layer one simulator for the scenario, and per vessel the control layer its
+controller and the ASV software adapter its ASV software (contracts/docker_stack.py).
 """
 
 import json
@@ -18,9 +19,10 @@ from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
-from scenegems_tool.vessel_stack.contracts.docker_stack import DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
+from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSoftware, DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.roles import LayerRef
+from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -32,11 +34,14 @@ _logger = logging.getLogger(__name__)
 _STANDALONE_COMPOSE_FILENAME = f"{SIMULATION_GEN_FOLDER}/docker-compose.yml"
 
 
-def _docker_runtime(registry: AdapterRegistry, ref: LayerRef, kind: type) -> object:
-    runtime_class = registry.runtime(str(ref))
-    if not issubclass(runtime_class, kind):
-        raise StackUnavailableError([f"{ref} has no Docker stack adapter"])
-    return runtime_class()
+def _contributor(registry: AdapterRegistry, spec_id: str, kind: type) -> Optional[object]:
+    """The spec's contributor to the stack; None for a spec that runs in no container of its own."""
+    contributor_class = registry.docker(spec_id)
+    if contributor_class is None:
+        return None
+    if not issubclass(contributor_class, kind):
+        raise StackUnavailableError([f"the Docker stack class of {spec_id} is no {kind.__name__}"])
+    return contributor_class()
 
 
 def build_simulation_docker_stack_artifacts(
@@ -66,7 +71,11 @@ def build_simulation_docker_stack_artifacts(
         mounted_gen_folder=GAZEBO_GEN_MOUNT if gen_folder == SIMULATION_GEN_FOLDER else docker_volume_path(gen_folder),
     )
     artifacts = DockerStackArtifacts()
-    simulation_layer = _docker_runtime(resolver.registry, LayerRef.of(simulation_config.simulation_layer), DockerSimulationLayer)
+    registry = resolver.registry
+    simulation_ref = LayerRef.of(simulation_config.simulation_layer)
+    simulation_layer = _contributor(registry, str(simulation_ref), DockerSimulationLayer)
+    if simulation_layer is None:
+        raise StackUnavailableError([f"{simulation_ref} has no Docker stack adapter"])
     for agent_id, vessel_config in simulation_config.vessels.items():
         vessel = trajectories.initial_scene.get_by_id(agent_id)
         if not isinstance(vessel, ConcreteVessel):
@@ -74,24 +83,29 @@ def build_simulation_docker_stack_artifacts(
         if not vessel_config.is_simulated:
             continue
         state = trajectories.initial_scene[vessel]
-        control_layer = _docker_runtime(resolver.registry, LayerRef.of(vessel_config.stack.control_layer), DockerControlLayer)
-        simulation_layer.add_vessel(artifacts, request, vessel_config, vessel, state)
-        control_layer.add_vessel(artifacts, request, vessel_config, vessel, state)
+        asv_adapter = resolution.chains[agent_id].asv_adapter
+        contributors = (
+            simulation_layer,
+            _contributor(registry, str(LayerRef.of(vessel_config.stack.control_layer)), DockerControlLayer),
+            _contributor(registry, asv_adapter.id, DockerAsvSoftware) if asv_adapter is not None else None,
+        )
+        for contributor in contributors:
+            if contributor is not None:
+                contributor.add_vessel(artifacts, request, vessel_config, vessel, state)
     simulation_layer.finish(artifacts, request)
     # The scenario execution worker reads the trajectories from the shared gen folder.
     artifacts.pending_writes.append((f"{gen_folder}/trajectories.json", json.dumps(trajectories.to_dict())))
 
     if embedded_in_subsystem:
-        maritime_network = {"maritime_net": {"driver": "bridge"}}
+        maritime_network = {STACK_NETWORK: {"driver": "bridge"}}
     else:
-        maritime_network = {"maritime_net": {"name": SIMULATION_COMPOSE_PROJECT, "driver": "bridge"}}
+        maritime_network = {STACK_NETWORK: {"name": SIMULATION_COMPOSE_PROJECT, "driver": "bridge"}}
 
-    docker_compose = merge_compose_volumes(
-        {
-            "services": artifacts.services,
-            "networks": maritime_network,
-        }
-    )
+    docker_compose = {"services": artifacts.services, "networks": maritime_network}
+    if any(service.get("volumes") for service in artifacts.services.values()):
+        # Only a stack with a simulator that reads generated files needs the runtime assets volume where it runs;
+        # a kinematic stack declares none, so a node without that volume runs it.
+        docker_compose = merge_compose_volumes(docker_compose)
     return artifacts.pending_writes, docker_compose
 
 

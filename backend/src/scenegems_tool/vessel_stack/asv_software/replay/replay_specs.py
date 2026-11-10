@@ -4,7 +4,12 @@ from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, Laye
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, LayerRef
+from scenegems_tool.vessel_stack.contracts.stack_services import backend_component_container
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER
+
+# The replay container of one vessel (replay_server.py). It sits on the adapters that are stepped by a
+# lockstep runner; through ArduAgent, replay is ArduAgent's own mission and needs no container of its own.
+REPLAY_CONTAINER = backend_component_container("scenegems_tool.vessel_stack.asv_software.replay.replay_server")
 
 REPLAY_LAYER = LayerSpec(
     layer=LayerRef.of(AsvSoftwareId.REPLAY),
@@ -15,9 +20,10 @@ REPLAY_STATE_FOLLOWER = AdapterSpec(
     id="replay_state_follower",
     source=LayerRef.of(AsvSoftwareId.REPLAY),
     target=LayerRef.of(ControlLayerId.NONE),
-    description="Direct state follower in pure Python: heading and speed commands that track the trajectory, stepped only by the simulation clock.",
+    description="Direct state follower in pure Python, in the vessel's replay container: heading and speed commands that track the trajectory, stepped only by the simulation clock.",
     provides_ports=frozenset({Port.HEADING_SPEED_CMD}),
     requires_ports=frozenset({Port.VESSEL_STATE, Port.CLOCK}),
+    containers=(REPLAY_CONTAINER,),
 )
 
 REPLAY_ARDUAGENT_FOLLOWER = AdapterSpec(
@@ -41,12 +47,16 @@ REPLAY_MAVLINK_LOCKSTEP = AdapterSpec(
     id="replay_mavlink_lockstep",
     source=LayerRef.of(AsvSoftwareId.REPLAY),
     target=LayerRef.of(ControlLayerId.ARDUPILOT),
-    description="In-process ReplayFollower driving ArduPilot over MAVLink: GUIDED heading and speed targets sent on simulation-time step boundaries read from SITL, states recorded with SITL time. No MAVProxy or ArduAgent.",
+    description=(
+        "The ReplayFollower in the vessel's replay container driving ArduPilot over MAVLink: the runner sends its heading and speed as GUIDED targets "
+        "on simulation-time step boundaries read from SITL, and records the states with SITL time. No MAVProxy or ArduAgent."
+    ),
     # Stepped by SITL time, so it has no wall-clock timer of its own. SITL is not held while a
     # command is in flight, so the tier stays bounded and max_speedup unknown until measured.
     capabilities=Capabilities(lockstep=True, repeatability_tier=RepeatabilityTier.BOUNDED, max_speedup=None),
     provides_ports=frozenset({Port.HEADING_SPEED_CMD, Port.MAVLINK}),
     requires_ports=frozenset({Port.VESSEL_STATE, Port.CLOCK}),
+    containers=(REPLAY_CONTAINER,),
 )
 
 

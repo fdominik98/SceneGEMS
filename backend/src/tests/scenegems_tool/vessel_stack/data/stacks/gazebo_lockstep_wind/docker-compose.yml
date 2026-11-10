@@ -31,6 +31,18 @@ services:
     - host.docker.internal:host-gateway
     networks:
     - maritime_net
+  agent_0_asv_software:
+    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    command:
+    - python
+    - -m
+    - scenegems_tool.vessel_stack.asv_software.replay.replay_server
+    - --port
+    - '11410'
+    environment:
+      PYTHONUNBUFFERED: '1'
+    networks:
+    - maritime_net
   agent_1:
     image: ${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}
     restart: unless-stopped
@@ -61,6 +73,18 @@ services:
       exec /tmp/sitl_entrypoint.sh'
     extra_hosts:
     - host.docker.internal:host-gateway
+    networks:
+    - maritime_net
+  agent_1_asv_software:
+    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    command:
+    - python
+    - -m
+    - scenegems_tool.vessel_stack.asv_software.replay.replay_server
+    - --port
+    - '11410'
+    environment:
+      PYTHONUNBUFFERED: '1'
     networks:
     - maritime_net
   gazebo:

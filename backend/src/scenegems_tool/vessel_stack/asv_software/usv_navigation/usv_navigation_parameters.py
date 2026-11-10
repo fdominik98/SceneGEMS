@@ -6,7 +6,7 @@ colav_automaton.
 
 import math
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -96,3 +96,9 @@ class UsvNavigationParameters:
     def as_dict(self) -> Dict[str, Any]:
         horizon = {} if self.horizon is None else {"horizon": self.horizon}
         return {"goal": list(self.goal), **self.runtime_kwargs(), **horizon}
+
+
+def parameters_for(vessel: ConcreteVessel, trajectories: Any, dt: float, given: Optional[Mapping[int, UsvNavigationParameters]] = None) -> UsvNavigationParameters:
+    """The parameters of a vessel's run: the ones the caller gave for it, else the SceneGEMS defaults from its generated trajectory."""
+    chosen = (given or {}).get(vessel.id)
+    return chosen or UsvNavigationParameters.from_reference(vessel, trajectories.state_list(vessel), trajectories.initial_scene.actors, dt)

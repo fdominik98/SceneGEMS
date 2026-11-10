@@ -116,7 +116,7 @@ def test_cancel_tells_the_node(client, make_node, schedule):
 def test_nodes_show_connection_and_fingerprint_state(client, make_node, schedule):
     current = make_node("current", slots={SCENE: 1}, components=["scene_generation"])
     stale = make_node(
-        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "asv_software/replay"], fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"})
+        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "control_layer/none"], fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"})
     )
     current.connect()
     stale.connect()
@@ -128,7 +128,7 @@ def test_nodes_show_connection_and_fingerprint_state(client, make_node, schedule
     assert nodes[current.node_id]["slots"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
     assert nodes[current.node_id]["components"] == [{"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"}]
     assert nodes[stale.node_id]["components"] == [
-        {"component": "asv_software/replay", "images": [], "state": "usable"},
+        {"component": "control_layer/none", "images": [], "state": "usable"},  # the absence of a controller has no container
         {"component": "simulation_layer/kinematic", "images": [SCENARIO_EXECUTION_IMAGE], "state": "out_of_date"},
         {"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"},
     ], "in catalog order, the stale one marked"

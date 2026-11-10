@@ -52,7 +52,16 @@
 /* The simulation page's Setup row: the vessels' stacks, their live-session connections and Gazebo models. */
 .sim-vessel-name {
   white-space: nowrap;
+}
+
+/* The vessel's id as the scenario names it (os, ts1), then what it is, written out. */
+.sim-vessel-id {
   font-weight: 600;
+}
+
+.sim-vessel-role {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
 }
 
 /* Below these widths the tables scroll sideways in their row rather than cut their selects short. */

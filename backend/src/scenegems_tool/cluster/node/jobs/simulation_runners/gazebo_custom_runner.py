@@ -5,10 +5,11 @@ line-of-sight waypoint follower, or in mode usv_navigation the own ship (the sce
 own_ship_id names another vessel) on USV Navigation and the others on replay, as the kinematic
 runner's modes are. The node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
-scenario execution image on the stack network. The stack has no SITL: the Gazebo service starts
+scenario execution image on the stack network (vessel_job_stack.py). Every vessel has its ASV
+software container and its controller container. The stack has no SITL: the Gazebo service starts
 paused with the gz-transport actuator listening (GZ_START_PAUSED, GZ_ACTUATOR_PORT), and the
-runner steps the world itself (gz_lockstep_runner.run_gz_custom), so a node with the Gazebo layer
-and no SITL runs it.
+runner steps the world itself and carries the messages between the containers
+(gz_lockstep_runner.run_gz_custom), so a node with the Gazebo layer and no SITL runs it.
 
 The payload's environment (wind and waves) goes into the instance, so the generated world and
 the hull dynamics the runner's autopilots are tuned from see the same one; the resolver refuses
@@ -31,11 +32,11 @@ from scenegems_tool.cluster.node.job_report import JobFailed, JobReport, JobResu
 from scenegems_tool.cluster.node.jobs.job_payload import EnvironmentPayload, GeofencePayload, TrajectoriesInput, to_trajectories
 from scenegems_tool.cluster.node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, job_document
-from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import STACK_NETWORK, frame_builder, observed_trajectories, step_observer
+from scenegems_tool.cluster.node.jobs.simulation_runners.ardupilot_runner import frame_builder, observed_trajectories, step_observer
 from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload, check_closed_loop_options, own_ship
-from scenegems_tool.cluster.node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, runner_service
+from scenegems_tool.cluster.node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
+from scenegems_tool.cluster.node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.node.node_context import NodeContext
-from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
@@ -43,6 +44,7 @@ from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLa
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
+    from scenegems_tool.vessel_stack.hosting import StackHosting
 
 GAZEBO_SERVICE = "gazebo"  # the Gazebo service's name on the stack network (generators/gazebo_service_generator.py), where the actuator listens
 
@@ -124,37 +126,12 @@ def _instance(payload: GazeboCustomSimulationPayload):
 
 
 def build_job_stack(job: JobSpec, node: NodeContext, payload: GazeboCustomSimulationPayload) -> JobStack:
-    """Resolve the instance, write the world and the vessel models into the job's folder and assemble the stack: the paused Gazebo service and the runner."""
-    from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-    from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
-    from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
-
+    """The job's stack: the paused Gazebo service with the world and the vessel models, a controller and an ASV software container per vessel, and the runner."""
     try:
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
-    try:
-        default_resolver().require_instance(instance, attended=False)
-    except StackUnavailableError as error:
-        raise JobFailed(f"Simulation stack rejected: {error}", retryable=False) from error
-    scope = node.job_scope(job)
-    gen_folder = f"{scope.folder}/gen"
-    pending_writes, stack_compose = build_simulation_docker_stack_artifacts(
-        instance,
-        trajectories,
-        node.mqtt_connection,
-        payload.geofence.to_geofence() if payload.geofence is not None else node.reference_geofence,
-        headless=True,
-        embedded_in_subsystem=True,
-        gen_folder=gen_folder,
-    )
-    write_simulation_gen_files(pending_writes, gen_folder)
-    stack_services = list(stack_compose["services"])
-    services = {
-        **stack_compose["services"],
-        RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SCENARIO_EXECUTION), networks=[STACK_NETWORK], depends_on=stack_services),
-    }
-    return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"))
+    return build_vessel_job_stack(job, node, instance, trajectories, payload.geofence.to_geofence() if payload.geofence is not None else node.reference_geofence)
 
 
 def run(job: JobSpec, node: NodeContext, report: JobReport, payload: GazeboCustomSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
@@ -164,8 +141,14 @@ def run(job: JobSpec, node: NodeContext, report: JobReport, payload: GazeboCusto
     return stack.run(job_document(job), report, timeout_s=payload.timeout_s, cancel=cancel, observation=node.observations.of(job), paced=True)
 
 
-def execute(job: JobSpec, payload: GazeboCustomSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
-    """The in-container part: step the world with every vessel's custom controller and describe the run; observation paces it and forwards its states."""
+def execute(
+    job: JobSpec, payload: GazeboCustomSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None
+) -> JobResultData:
+    """The in-container part: step the world with every vessel's ASV software and controller containers and describe the run; observation paces it and forwards its states.
+
+    hosting is where the ASV software and the controllers run: the stack's containers unless given (vessel_stack/hosting.py).
+    """
+    from scenegems_tool.vessel_stack.hosting import in_stack_hosting
     from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import run_gz_custom
 
     trajectories, instance, parameters = _instance(payload)
@@ -175,7 +158,9 @@ def execute(job: JobSpec, payload: GazeboCustomSimulationPayload, status: Status
     observer = observation.observer(frame_builder(job.job_id, trajectories, dt, monitor, state_of=plain_state), dt, last_index=steps) if observation is not None else None
     on_step = step_observer(trajectories, monitor, observer, state_of=plain_state)
     status(f"connecting to the Gazebo actuator for the {payload.mode.value} run" + (" with the live monitor" if monitor is not None else ""))
-    result = run_gz_custom(trajectories, instance, host=GAZEBO_SERVICE, dt=payload.dt, steps=payload.steps, usv_navigation_parameters=parameters or None, on_step=on_step)
+    result = run_gz_custom(
+        trajectories, instance, host=GAZEBO_SERVICE, dt=payload.dt, steps=payload.steps, usv_navigation_parameters=parameters or None, on_step=on_step, hosting=hosting or in_stack_hosting()
+    )
     status("run finished", 1.0)
     data: JobResultData = {
         "run_record": dict(result.run_record),

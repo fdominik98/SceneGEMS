@@ -94,11 +94,11 @@ TS(ts1).
 TS(ts2).
 default !overtakingToPort(*, *).
 default !overtakingToStarboard(*, *).
-overtakingToStarboard(ts2, os).
+overtakingToStarboard(ts1, os).
 default !crossingFromPort(*, *).
 default !vesselType(*, *).
 
 default !atDangerousHeadOnSectorOf(*, *).
 default !headOn(*, *).
-headOn(os, ts1).
-headOn(ts1, os).
+headOn(os, ts2).
+headOn(ts2, os).

@@ -2,6 +2,8 @@
 
 Every vessel has an ASV participant (the line-of-sight waypoint follower for replay, USV
 Navigation for usv_navigation) and a TwinThrustAutopilot with gains from its generated hull.
+Both come from a hosting (vessel_stack/hosting.py): built in this process, or the vessel's ASV
+software and controller containers, which this runner then carries the messages between.
 The world is paused and advances only through the gz-transport actuator (gz_transport_actuator.py):
 
     for every scenario step of dt:
@@ -32,13 +34,14 @@ import numpy as np
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
-from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
+from scenegems_tool.vessel_stack.asv_software.asv_software_runtime import ParticipantRequest
+from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
 from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepParticipant, StepAck, derive_seed
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
-from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_specs import CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, TwinThrustAutopilot
+from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics import VesselDynamics, derive_vessel_dynamics
@@ -230,20 +233,25 @@ def run_gz_custom(
     resolver: Optional[StackResolver] = None,
     connect_timeout_s: float = 600.0,
     on_step: Optional[StepObserver] = None,
+    hosting: Optional[StackHosting] = None,
 ) -> GzRunResult:
     """Run every simulated vessel on a running Gazebo stack with the custom controller, through the registry.
 
     The instance is validated as an unattended run (machine names the host for per-host limits).
-    Each vessel's participant is the runtime of its ASV adapter: the line-of-sight waypoint
-    follower for replay, USV Navigation (parameters from its trajectory unless given) for
-    usv_navigation. host and port reach the gz-transport actuator in the Gazebo container. dt
-    defaults to the trajectory time step and steps to its timespan. The run seed is environment.seed.
+    hosting decides where each vessel's ASV software and autopilot run: in this process by default,
+    in the vessel's ASV software and controller containers with ContainerHosting. Replay hands the
+    controller its trajectory as a waypoint mission, which the controller's line-of-sight follower
+    steers; USV Navigation (parameters from its trajectory unless given) sets the autopilot's
+    heading and speed every step. host and port reach the gz-transport actuator in the Gazebo
+    container. dt defaults to the trajectory time step and steps to its timespan. The run seed is
+    environment.seed.
     """
     resolver = resolver or default_resolver()
     resolution = resolver.require_instance(simulation, attended=False, host=machine)
     wrong = [f"vessel {agent_id} runs on {chain.stack.control_layer.value}" for agent_id, chain in resolution.chains.items() if chain.stack.control_layer != ControlLayerId.CUSTOM]
     if wrong:
         raise StackUnavailableError([f"run_gz_custom needs the custom control layer for every simulated vessel: {', '.join(wrong)}"])
+    hosting = hosting or InProcessHosting()
     dt = float(trajectories.time_step) if dt is None else dt
     scene = trajectories.initial_scene
     models: Dict[int, str] = {}
@@ -252,30 +260,36 @@ def run_gz_custom(
     vessels: Dict[int, ConcreteVessel] = {}
     thrusters: Dict[int, Dict[str, float]] = {}
     navigation_parameters: Dict[int, UsvNavigationParameters] = {}
-    for agent_id, vessel_config in simulation.simulated_vessels.items():
-        vessel = scene.get_by_id(agent_id)
-        if not isinstance(vessel, ConcreteVessel):
-            raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
-        adapter = resolution.chains[agent_id].asv_adapter
-        participant_class = resolver.registry.runtime(adapter.id)
-        if adapter.id == CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER.id:
-            participants[vessel.id] = participant_class(vessel, trajectories.state_list(vessel), trajectories.time_step)
-        else:
-            parameters = (usv_navigation_parameters or {}).get(vessel.id) or UsvNavigationParameters.from_reference(vessel, trajectories.state_list(vessel), scene.actors, dt)
-            navigation_parameters[vessel.id] = parameters
-            participants[vessel.id] = participant_class(vessel, parameters)
-        dynamics = hull_dynamics(vessel, simulation.environment)
-        autopilots[vessel.id] = TwinThrustAutopilot(AutopilotGains.from_dynamics(dynamics, vessel, control_dt))
-        thrusters[vessel.id] = thruster_constants(dynamics)
-        models[vessel.id] = vessel_config.require_connection().agent_name
-        vessels[vessel.id] = vessel
-    steps = steps if steps is not None else int(round(trajectories.timespan / dt))
     link = GzLockstepLink(host, port)
-    link.connect(connect_timeout_s)
     try:
+        for agent_id, vessel_config in simulation.simulated_vessels.items():
+            vessel = scene.get_by_id(agent_id)
+            if not isinstance(vessel, ConcreteVessel):
+                raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
+            software = vessel_config.stack.asv_software
+            if software == AsvSoftwareId.USV_NAVIGATION:
+                navigation_parameters[vessel.id] = parameters_for(vessel, trajectories, dt, usv_navigation_parameters)
+            agent_name = vessel_config.require_connection().agent_name
+            request = ParticipantRequest(
+                vessel=vessel,
+                agent_name=agent_name,
+                asv_software=software,
+                adapter=resolution.chains[agent_id].asv_adapter,
+                trajectories=trajectories,
+                dt=dt,
+                parameters=navigation_parameters.get(vessel.id),
+            )
+            dynamics = hull_dynamics(vessel, simulation.environment)
+            participants[vessel.id], autopilots[vessel.id] = hosting.custom_control(request, AutopilotGains.from_dynamics(dynamics, vessel, control_dt))
+            thrusters[vessel.id] = thruster_constants(dynamics)
+            models[vessel.id] = agent_name
+            vessels[vessel.id] = vessel
+        steps = steps if steps is not None else int(round(trajectories.timespan / dt))
+        link.connect(connect_timeout_s)
         result = run_gz_lockstep(link, models, participants, autopilots, vessels, thrusters, dt, steps, simulation.environment.seed, control_dt=control_dt, on_step=on_step)
     finally:
         link.close()
+        hosting.close()
 
     tier = resolution.repeatability_tier
     run_record = {

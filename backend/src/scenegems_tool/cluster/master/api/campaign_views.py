@@ -302,7 +302,7 @@ def event_view(event: CampaignEventRecord) -> Dict[str, Any]:
 
 
 def output_verdict_view(output: OutputRecord) -> Optional[Dict[str, Any]]:
-    """The step's verdict of an output, in short: enough for the monitor summary of a row, the rule outcomes stay with the verdict route."""
+    """The step's verdict of an output, in short: enough for the monitor result summary of a row, the rule outcomes stay with the verdict route."""
     if output.verdict_state is None:
         return None
     return {

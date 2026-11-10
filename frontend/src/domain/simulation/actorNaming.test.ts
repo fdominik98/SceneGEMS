@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createActorNamer, FIRST_OBSTACLE_ID, obstacleName, vesselName } from "./actorNaming";
+import { createActorNamer, FIRST_OBSTACLE_ID, obstacleName, vesselName, vesselNameOf, vesselRole } from "./actorNaming";
 
 describe("actor names", () => {
   it("names vessels as the paper's figure does: os, ts1, ts2", () => {
@@ -21,5 +21,13 @@ describe("actor names", () => {
     expect(byOrder("a", { isOwnShip: false, isVessel: true })).toBe("ts1");
     expect(byOrder("b", { isOwnShip: false, isVessel: true })).toBe("ts2");
     expect(byOrder("rock", { isOwnShip: false, isVessel: false })).toBe("so1");
+  });
+});
+
+describe("vessel labels", () => {
+  it("names a vessel by its actor id and says what it is", () => {
+    expect([vesselNameOf("0", true), vesselNameOf("1", false), vesselNameOf("12", false)]).toEqual(["os", "ts1", "ts12"]);
+    expect(vesselNameOf("rescue", false)).toBe("rescue");
+    expect([vesselRole(true), vesselRole(false)]).toEqual(["own ship", "target ship"]);
   });
 });

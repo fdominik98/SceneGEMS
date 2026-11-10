@@ -324,14 +324,14 @@ def monitors_view() -> List[Dict[str, Any]]:
     from scenegems_tool.persistence.schema import MonitorImplementation
 
     described = {
-        MonitorImplementation.POST_HOC: ("Post hoc", "A monitoring job judges the recorded run after the simulation; the monitor summary is passed or failed.", ["monitoring.post_hoc"], False),
+        MonitorImplementation.POST_HOC: ("Post hoc", "A monitoring job judges the recorded run after the simulation; the monitor result summary is passed or failed.", ["monitoring.post_hoc"], False),
         MonitorImplementation.LIVE: (
             "Live",
             "The COLREGS monitor runs inside the simulation step by step; on the kinematic layer it can stop the run early once every rule is decided.",
             ["simulation"],
             True,
         ),
-        MonitorImplementation.EMPTY: ("None", "Nothing is judged; every monitor summary is unmonitored.", [], False),
+        MonitorImplementation.EMPTY: ("None", "Nothing is judged; every monitor result summary is unmonitored.", [], False),
     }
     return [
         {"id": monitor.value, "label": label, "description": description, "job_types": job_types, "supports_early_stop": early_stop}

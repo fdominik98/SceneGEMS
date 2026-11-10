@@ -37,7 +37,7 @@ export function VerdictChips({ lines }: { lines: readonly VerdictLine[] }) {
   return (
     <span className="history-verdicts">
       {lines.map((line) => (
-        <span key={line.step} className="history-verdict-line" title={`Monitor summaries of ${STEP_LABELS[line.step].toLowerCase()}`}>
+        <span key={line.step} className="history-verdict-line" title={`Monitor result summaries of ${STEP_LABELS[line.step].toLowerCase()}`}>
           <span className="meta">{STEP_LABELS[line.step]}</span>
           {line.passed > 0 && <ToneBadge tone="ok">{line.passed} passed</ToneBadge>}
           {line.failed > 0 && <ToneBadge tone="bad">{line.failed} failed</ToneBadge>}

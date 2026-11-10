@@ -26,9 +26,9 @@ export function VerdictFilterBar({ detail, filters, onChange, onReset, csvUrl, t
   return (
     <div className="results-filters-wrap">
       <div className="results-filters-head">
-        <span className="meta">{total !== null ? `${total} ${total === 1 ? "monitor summary" : "monitor summaries"}${active ? " match the filters" : ""}` : "Loading the monitor summaries"}</span>
+        <span className="meta">{total !== null ? `${total} ${total === 1 ? "monitor result summary" : "monitor result summaries"}${active ? " match the filters" : ""}` : "Loading the monitor result summaries"}</span>
         {csvUrl ? (
-          <a className="results-csv" href={csvUrl} download title="Every monitor summary the filters match, as CSV, in the table's columns plus the case id">
+          <a className="results-csv" href={csvUrl} download title="Every monitor result summary the filters match, as CSV, in the table's columns plus the case id">
             Download CSV{total !== null ? ` (${total})` : ""}
           </a>
         ) : (
@@ -38,7 +38,7 @@ export function VerdictFilterBar({ detail, filters, onChange, onReset, csvUrl, t
       <Disclosure
         id="results:filters"
         title="Filters"
-        hint={activeCount > 0 ? `${activeCount} active` : "none, showing every monitor summary"}
+        hint={activeCount > 0 ? `${activeCount} active` : "none, showing every monitor result summary"}
         forceOpen={active}
         headingLevel={3}
       >
@@ -56,7 +56,7 @@ export function VerdictFilterBar({ detail, filters, onChange, onReset, csvUrl, t
         </select>
       </label>
       <label className="results-field">
-        <span>Monitor summary</span>
+        <span>Monitor result summary</span>
         <select value={filters.state} onChange={(event) => onChange({ state: event.target.value as VerdictState | "any" })}>
           <option value="any">Any</option>
           <option value="passed">Passed</option>

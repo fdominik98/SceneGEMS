@@ -63,7 +63,9 @@ def test_every_payload_stack_is_one_its_runner_declares():
 def test_run_and_execute_go_to_the_runner_with_the_parsed_payload(monkeypatch, make_job, node, payload, runner):
     calls = []
     monkeypatch.setattr(RUNNER_MODULES[runner], "run", lambda job, node, report, parsed, cancel: calls.append(("run", type(parsed).__name__, cancel)) or {"ran": True})
-    monkeypatch.setattr(RUNNER_MODULES[runner], "execute", lambda job, parsed, status, observation=None: calls.append(("execute", type(parsed).__name__, observation)) or {"executed": True})
+    monkeypatch.setattr(
+        RUNNER_MODULES[runner], "execute", lambda job, parsed, status, observation=None, hosting=None: calls.append(("execute", type(parsed).__name__, observation)) or {"executed": True}
+    )
     job = make_job(JobType.SIMULATION, payload)
     assert simulation_job.run(job, node, "report") == {"ran": True}
     assert simulation_job.execute(job, lambda message, progress=None: None, observation="observed") == {"executed": True}

@@ -103,7 +103,7 @@ Use either or both. Scope entries without FECs are ignored while there are scena
 
 Both apply to each FEC of the entry or file on its own.
 
-- **Quota**: the complete cases the FEC needs. A case is complete when every run has its monitor summary. A failed monitor summary is a finding and counts toward the quota.
+- **Quota**: the complete cases the FEC needs. A case is complete when every run has its monitor result summary. A failed monitor result summary is a finding and counts toward the quota.
 - **Failure budget**: the cases the FEC may lose before it is abandoned. A case is lost when it is dropped (no valid scene within the timeout, or no complete trajectories) or failed (a job ran out of attempts). A FEC runs at most its quota of cases at once and starts no case it may not need; a lost case is replaced by the next one, with the next seed, once it is lost. Once the lost cases exceed the budget, the FEC is abandoned and its running cases are cancelled.
 - **Unlimited**: tick it next to the failure budget and the FEC is never abandoned: it replaces lost cases until its quota is complete. A scenario that never gives a valid scene then runs until a stop condition of the Policy page (a case count or a duration) ends the campaign, or until you stop it. The config says `failure_budget: unlimited`, and Campaign History shows the budget left as unlimited.
 

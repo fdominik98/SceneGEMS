@@ -124,12 +124,12 @@ describe("Results section", () => {
     expect(await within(findings).findByText("partial findings")).toBeVisible();
     expect(within(findings).getByRole("note")).toHaveTextContent("No monitor judged this step");
     expect(within(findings).queryByText("Passed")).not.toBeInTheDocument();
-    expect(await screen.findByText(/there are no monitor summaries to list/)).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Monitor summaries" })?.querySelector("table")).toBeNull();
+    expect(await screen.findByText(/there are no monitor result summaries to list/)).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Monitor result summaries" })?.querySelector("table")).toBeNull();
 
     await user.click(within(tabs).getByRole("tab", { name: "Trajectory generation" }));
     expect(await screen.findByText("rule_15")).toBeVisible();
-    expect(screen.queryByText(/there are no monitor summaries to list/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/there are no monitor result summaries to list/)).not.toBeInTheDocument();
     const sceneVerdictQueries = requested("/verdicts").filter((url) => url.searchParams.get("step") === "scene");
     expect(sceneVerdictQueries).toHaveLength(0);
   });

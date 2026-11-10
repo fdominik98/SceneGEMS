@@ -1,0 +1,5 @@
+# Runtime dependencies for scenegems-usv-navigation (see deploy/images/usv_navigation/Dockerfile).
+numpy==2.5.4
+scipy==1.18.1
+# USV Navigation itself, pinned to COLAV_AUTOMATON_COMMIT (vessel_stack/asv_software/usv_navigation/usv_navigation_specs.py)
+colav-automaton @ https://github.com/michaelstolberger27/usv-navigation/archive/54866f24a04987334057ae5c5896dfc3ee8ca058.zip

@@ -4,7 +4,6 @@ import os
 
 import pytest
 
-from scenegems_tool.cluster.node import instance_scope
 from scenegems_tool.cluster.node.job_report import JobFailed
 from scenegems_tool.cluster.node.jobs.in_container.run_observation import RunObserver
 from scenegems_tool.cluster.node.jobs.job_payload import parse_payload
@@ -20,13 +19,6 @@ from utils.file_system_utils import RUNTIME_ASSETS_VOLUME
 GEOFENCE = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
 
 
-@pytest.fixture
-def instances_folder(monkeypatch, tmp_path):
-    monkeypatch.setattr(instance_scope, "INSTANCES_FOLDER", str(tmp_path).replace("\\", "/"))
-    monkeypatch.delenv("SCENARIO_EXECUTION_IMAGE", raising=False)
-    return tmp_path
-
-
 def stack_for(layer, node, make_job, head_on_trajectories, job_id="sim-1"):
     payload_data = {"runner": "ardupilot", "simulation_layer": layer, "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE}
     job = make_job(JobType.SIMULATION, payload_data, job_id=job_id)
@@ -39,7 +31,7 @@ def test_stack_is_scoped_to_the_job(instances_folder, node, make_job, head_on_tr
     scope = node.job_scope(job)
     services = stack.compose["services"]
     vessel_services = [key for key in services if key.startswith("vessel_")]
-    assert sorted(vessel_services) == ["vessel_0", "vessel_1"]
+    assert sorted(vessel_services) == ["vessel_0", "vessel_0_asv_software", "vessel_1", "vessel_1_asv_software"], "SITL and a replay container per vessel"
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
@@ -81,13 +73,15 @@ def usv_navigation_stack(node, make_job, head_on_trajectories, layer="ardupilot_
 
 
 @pytest.mark.parametrize("layer", ["ardupilot_sim", "gazebo"])
-def test_usv_navigation_gets_a_sitl_per_vessel_and_nothing_else(instances_folder, node, make_job, head_on_trajectories, layer):
-    """USV Navigation runs in the runner, so its vessel has a SITL service like a replaying one, and no MAVProxy or ArduAgent."""
+def test_usv_navigation_gets_a_sitl_and_its_asv_software_per_vessel(instances_folder, node, make_job, head_on_trajectories, layer):
+    """Every vessel has a SITL service and its ASV software container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"vessel_0", "vessel_1", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"vessel_0", "vessel_1", "vessel_0_asv_software", "vessel_1_asv_software", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
     assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
+    assert "scenegems-usv-navigation" in services["vessel_0_asv_software"]["image"]
+    assert "scenegems-scenario-execution-subsystem" in services["vessel_1_asv_software"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, node, make_job, head_on_trajectories):
@@ -151,7 +145,7 @@ def fake_sitl(monkeypatch, head_on_trajectories):
     vessels = head_on_trajectories.initial_scene.vessels
     columns = FakeSitlColumns({vessel.id: head_on_trajectories.state_list(vessel) for vessel in vessels})
 
-    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None, usv_navigation_parameters=None):
+    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None, usv_navigation_parameters=None, hosting=None):
         columns.calls.append({"instance": instance, "usv_navigation_parameters": usv_navigation_parameters})
         recorded = []
         for index in range(len(columns[0])):

@@ -141,7 +141,7 @@ describe("findings of a step", () => {
     const view = describeFindings(findingsSchema.parse(sampleUnmonitoredFindings));
     expect(view.monitored).toBe(false);
     expect(view.partial).toBe(true);
-    expect(view.statement).toBe("No monitor judged this step. These are partial findings: statistics about the scenes of scene generation, without monitor summaries.");
+    expect(view.statement).toBe("No monitor judged this step. These are partial findings: statistics about the scenes of scene generation, without monitor result summaries.");
     expect(view.verdicts).toBeNull();
     expect(view.failedRules).toEqual([]);
     expect(view.outputs.count).toBe(5);
@@ -170,7 +170,7 @@ describe("steps of a case", () => {
     const rows = caseStepRows(detail, ["scene_generation", "trajectory_generation", "simulation"]);
     expect(rows.map((row) => row.step)).toEqual(["scene_generation", "trajectory_generation", "simulation"]);
     expect(rows.map((row) => row.output)).toEqual(["scene stored", "trajectories stored", "1 run"]);
-    expect(rows.map(describeStepVerdict)).toEqual(["failed", "no monitor summary", "failed"]);
+    expect(rows.map(describeStepVerdict)).toEqual(["failed", "no monitor result summary", "failed"]);
     expect(rows[2].failedRules).toEqual(["rule_8"]);
     expect(rows[1].monitored).toBe(false);
   });

@@ -38,8 +38,9 @@ Options:
   -5, --node              Node daemon image only (scenegems-node:latest); a node
                           also needs the images of the components it offers
 
-  --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy
-                          (scenegems-gazebo-harmonic, scenegems-ardupilot-sitl, scenegems-mavproxy)
+  --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy, USV Navigation
+                          (scenegems-gazebo-harmonic, scenegems-ardupilot-sitl, scenegems-mavproxy,
+                          scenegems-usv-navigation)
 
   --all                   Build every image (same as no arguments)
 
@@ -132,6 +133,11 @@ build_simulation_images() {
     build_subsystem_if_stale "scenegems-ardupilot-sitl:latest" "$SCRIPT_DIR/deploy/images/sitl/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/sitl/Dockerfile" "$SCRIPT_DIR/deploy/images/sitl" "$SCRIPT_DIR/deploy/images/gazebo/sitl_entrypoint.sh"
     build_if_stale "scenegems-mavproxy:latest" "$SCRIPT_DIR/deploy/images/mavproxy/Dockerfile" "$SCRIPT_DIR/deploy/images/mavproxy"
+    # USV Navigation is a component of its own: its image copies only its server and the wire protocol it serves.
+    build_subsystem_if_stale "scenegems-usv-navigation:latest" "$SCRIPT_DIR/deploy/images/usv_navigation/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/usv_navigation" \
+        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/asv_software/usv_navigation/usv_navigation_server.py" \
+        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py"
 }
 
 build_arduagent_image() {

@@ -22,6 +22,7 @@ import { SituationContextsSection } from "./SituationContextsSection";
 import { monitorSectionKey } from "./monitorSectionKey";
 import { PersistedDetails } from "./monitorPrimitives";
 import { useMonitorFrameForKind } from "./useMonitorFrame";
+import { vesselRole } from "../../../domain/simulation/actorNaming";
 
 interface BasicActorInfoPanelProps {
   stream: TrajectoryStream;
@@ -92,7 +93,7 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
                     />
                     <span className="frame-actor-name">{renderActorName(actor.name)}</span>
                     <span className="frame-actor-meta meta">
-                      {actor.isOwnShip ? "Own ship" : "Other"} · {actor.type}
+                      {actor.isVessel === false ? "obstacle" : vesselRole(actor.isOwnShip)} · {actor.type}
                     </span>
                   </summary>
                   <div className="frame-actor-body">

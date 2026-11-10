@@ -100,11 +100,18 @@ def test_the_scenario_execution_service_joins_the_vessel_network_to_drive_the_lo
     assert "maritime_net" in _unified(VESSEL_STACK, config)["services"][SERVICE_NAME]["networks"]
 
 
-def test_a_kinematic_instance_runs_the_scenario_execution_service_alone():
-    config = SimulationInstanceConfig(simulation_layer=SimulationLayerId.KINEMATIC, environment=EnvironmentConfig.calm())
-    compose = _unified({"services": {}, "networks": {}}, config)
-    assert list(compose["services"]) == [SERVICE_NAME]
-    assert "depends_on" not in compose["services"][SERVICE_NAME]
+def test_a_kinematic_session_has_its_simulator_and_an_asv_software_container_per_vessel():
+    trajectories = encounter_trajectories("head_on", 20)
+    instance = stack_instance(SimulationLayerId.KINEMATIC, [0, 1], control_layer=ControlLayerId.NONE)
+    instance.vessels["0"].stack = VesselStackConfig(AsvSoftwareId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC)
+    _, stack = session_stack.build_simulation_docker_stack_artifacts(instance, trajectories, _connection(), GEOFENCE, embedded_in_subsystem=True, gen_folder=session_stack.session_gen_folder(SCOPE))
+    compose = _unified(stack, instance)
+    assert list(compose["services"]) == ["agent_0_asv_software", "agent_1_asv_software", "kinematic_sim", SERVICE_NAME], "named by the vessels' agents"
+    service = compose["services"][SERVICE_NAME]
+    assert service["depends_on"] == ["agent_0_asv_software", "agent_1_asv_software", "kinematic_sim"]
+    assert "maritime_net" in service["networks"], "the service steps the containers on the stack's network"
+    assert "scenegems-usv-navigation" in compose["services"]["agent_0_asv_software"]["image"]
+    assert compose["services"]["kinematic_sim"]["container_name"] == SCOPE.container_name("kinematic_sim")
 
 
 def test_mission_planner_vessels_on_their_ground_station_port_are_found_by_their_mavproxy():

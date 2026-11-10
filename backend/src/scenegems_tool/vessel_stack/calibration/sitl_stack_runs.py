@@ -11,7 +11,10 @@ compose file to run several repeats side by side on one host:
 - the shared runtime assets volume becomes a bind mount of a folder per repeat, mounted at /runtime_assets
   (every host path in the generated files is rewritten to it);
 - each SITL serial port, or the gz-transport actuator's port, is published on a host port of its own, which the run connects to;
-- fixed container names and the Gazebo host port are dropped, so repeats do not collide.
+- fixed container names and the Gazebo host port are dropped, so repeats do not collide;
+- the ASV software and controller containers of the vessels are left out: the measurement runs on the host, outside the
+  stack's network, and hosts those layers in its own process (vessel_stack/hosting.py, InProcessHosting). They compute
+  the same commands there, but a campaign's hop from its runner to each container is not part of what is measured.
 
 Three ways of driving an ArduPilot repeat are measured:
 
@@ -52,8 +55,9 @@ from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_spec
 from scenegems_tool.vessel_stack.calibration.measured_entry import MeasuredEntry, evidence, host_label
 from scenegems_tool.vessel_stack.calibration.reference_scenarios import REFERENCE_RUNS, reference_run
 from scenegems_tool.vessel_stack.calibration.repeat_analysis import DeviationSummary, TrackingSummary, TrackSamples, achieved_speedup, repeat_deviation, tracking_error
-from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.stack_services import is_participant_service
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import MavlinkLink
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import MavlinkRunResult, mavlink_instance, run_mavlink_stack
 from scenegems_tool.vessel_stack.registry.catalog import build_registry
@@ -315,6 +319,8 @@ def prepare_run_folder(
             file.write(_rewrite(content, replacements))
 
     compose = _rewrite(copy.deepcopy(compose), replacements)
+    # The measurement drives the run from this process on the host and hosts every vessel's ASV software and controller there.
+    compose["services"] = {name: service for name, service in compose["services"].items() if not is_participant_service(name)}
     mount = f"{os.path.abspath(assets).replace(chr(92), '/')}:{CONTAINER_ASSETS}:ro"
     endpoints: Dict[str, str] = {}
     if spec.custom:

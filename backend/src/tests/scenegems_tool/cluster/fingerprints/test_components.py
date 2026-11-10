@@ -36,6 +36,7 @@ from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
 MAVPROXY_IMAGE = "scenegems-mavproxy:latest"
 ARDUAGENT_IMAGE = "scenegems-arduagent:latest"
+USV_NAVIGATION_IMAGE = "scenegems-usv-navigation:latest"
 
 
 def _stack(asv_software: AsvSoftwareId, control_layer: ControlLayerId, simulation_layer: SimulationLayerId) -> VesselStackConfig:
@@ -81,7 +82,9 @@ def test_the_layer_images_come_from_the_container_specs():
     assert images["control_layer/ardupilot"] == (SITL_IMAGE,)
     assert images["simulation_layer/gazebo"] == tuple(sorted((GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE)))
     assert images["simulation_layer/kinematic"] == images["simulation_layer/ardupilot_sim"] == (SCENARIO_EXECUTION_IMAGE,), "a simulation layer adds the runner"
-    assert images["asv_software/replay"] == images["asv_software/usv_navigation"] == images["control_layer/none"] == images["control_layer/custom"] == ()
+    assert images["asv_software/replay"] == images["control_layer/custom"] == (SCENARIO_EXECUTION_IMAGE,), "the replay and custom controller containers start from the scenario execution image"
+    assert images["asv_software/usv_navigation"] == (USV_NAVIGATION_IMAGE,), "USV Navigation has an image of its own"
+    assert images["control_layer/none"] == (), "no controller, no container"
     assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(COMPONENTS), "the lockstep replay on ArduPilot needs neither"
 
 
@@ -141,4 +144,5 @@ def test_the_custom_controller_needs_no_sitl():
     """A node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
     components = stack_components(RUNNER_STACKS[SimulationRunner.GAZEBO_CUSTOM])
     assert components == ("asv_software/replay", "asv_software/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
-    assert images_of(components) == {GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE}
+    assert images_of(components) == {GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE, USV_NAVIGATION_IMAGE}
+    assert SITL_IMAGE not in images_of(components)

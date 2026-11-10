@@ -121,7 +121,7 @@ describe("outputs", () => {
     expect(outputRowSchema.parse(sampleDroppedOutput()).artifact).toBeNull();
   });
 
-  it("parses a verdict's monitor summary, which null and an older master's leave out", () => {
+  it("parses a verdict's monitor result summary, which null and an older master's leave out", () => {
     const verdict = outputRowSchema.parse(sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })).verdict;
     expect(verdict?.first_failure_time_s).toBe(61);
     expect(verdict?.encounters?.["os - ts1"]).toEqual(["CROSSING_FROM_PORT", "OTHER"]);

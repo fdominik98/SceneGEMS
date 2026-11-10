@@ -1,8 +1,11 @@
-"""Contract for adapters that contribute files and services to a per-job Docker Compose stack.
+"""Contract for the layers and adapters that contribute files and services to a stack's Docker Compose file.
 
 The simulation instance builder (vessel_stack/simulation_docker_stack.py) resolves the
-instance through the registry, then asks the simulation layer and each vessel's control
-layer for their part. Services appear in the compose file in the order they are added.
+instance through the registry, then asks the simulation layer and, per vessel, the control
+layer and the ASV software adapter for their part: each brings the containers it runs in. A
+contributor is bound to its spec in the registry (registry/catalog.py, docker=); a layer that
+runs in no container of its own (control layer none) has none. Services appear in the compose
+file in the order they are added.
 """
 
 from dataclasses import dataclass, field
@@ -47,4 +50,11 @@ class DockerSimulationLayer(Protocol):
 
 @runtime_checkable
 class DockerControlLayer(Protocol):
+    def add_vessel(self, artifacts: DockerStackArtifacts, request: DockerStackRequest, vessel_config: VesselConfig, vessel: ConcreteVessel, state: ActorState) -> None: ...
+
+
+@runtime_checkable
+class DockerAsvSoftware(Protocol):
+    """The container of one vessel's ASV software, added by the adapter that runs it."""
+
     def add_vessel(self, artifacts: DockerStackArtifacts, request: DockerStackRequest, vessel_config: VesselConfig, vessel: ConcreteVessel, state: ActorState) -> None: ...

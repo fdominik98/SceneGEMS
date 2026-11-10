@@ -394,7 +394,7 @@ def test_a_case_whose_verdicts_cannot_be_written_is_quarantined(harness, monkeyp
     campaign = create_campaign(harness.stores, config_dict(quota=1, failure_budget=1))
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     first, second = _cases(harness, campaign)
-    assert first.state == CaseState.FAILED and "its monitor summaries could not be written: ValueError: no verdict store" in first.reason
+    assert first.state == CaseState.FAILED and "its monitor result summaries could not be written: ValueError: no verdict store" in first.reason
     assert second.state == CaseState.COMPLETE
     assert assert_consistent(harness.stores, campaign.campaign_id) == {"failed": 1, "complete": 1}
 

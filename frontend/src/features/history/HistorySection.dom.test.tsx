@@ -190,13 +190,13 @@ describe("Campaign History in the DOM", () => {
     expect(useUiStore.getState().section).toBe("workbench");
   });
 
-  it("shows the monitor summary: passed or failed, scenario types, roles of the vessels and failed rules", async () => {
+  it("shows the monitor result summary: passed or failed, scenario types, roles of the vessels and failed rules", async () => {
     const user = userEvent.setup();
     outputs = [sampleTrajectoryOutput({ verdict: sampleMonitorVerdict() })];
     entryConfig = { trajectories: { monitor: "post_hoc" } };
     renderSection();
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
-    expect(await screen.findByRole("columnheader", { name: "Monitor summary" })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Monitor result summary" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: /verdict/i })).not.toBeInTheDocument();
     const output = (await screen.findByText("partial")).closest("tr") as HTMLElement;
     expect(within(output).getByText("failed")).toBeInTheDocument();
@@ -231,7 +231,7 @@ describe("Campaign History in the DOM", () => {
     expect(within(output).getAllByText("roles not recorded")).toHaveLength(2);
   });
 
-  it("leaves the monitor summary out of a step without a monitor", async () => {
+  it("leaves the monitor result summary out of a step without a monitor", async () => {
     const user = userEvent.setup();
     outputs = [sampleTrajectoryOutput({ verdict: null })];
     entryConfig = { trajectories: { monitor: "empty" } };
@@ -239,17 +239,17 @@ describe("Campaign History in the DOM", () => {
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
     await waitFor(() => expect(calls.some((call) => call.path === "/cluster/campaigns/wb1/config")).toBe(true));
     expect(await screen.findByText("partial")).toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", { name: "Monitor summary" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Monitor result summary" })).not.toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Input from" })).toBeInTheDocument();
   });
 
-  it("says a case of a monitored step has no monitor summary yet", async () => {
+  it("says a case of a monitored step has no monitor result summary yet", async () => {
     const user = userEvent.setup();
     outputs = [sampleTrajectoryOutput({ state: "active", verdict: null })];
     entryConfig = { trajectories: { monitor: "post_hoc" } };
     renderSection();
     await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
-    expect(await screen.findByText("no monitor summary yet")).toBeInTheDocument();
+    expect(await screen.findByText("no monitor result summary yet")).toBeInTheDocument();
   });
 
   it("deletes a final entry after a confirmation, and says to stop one the master refuses", async () => {

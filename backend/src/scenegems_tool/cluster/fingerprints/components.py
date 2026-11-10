@@ -11,8 +11,9 @@ the required components are the job's required images, so the release lists the 
 component (cluster/release/roles.py), the deployment tool installs the images of the components
 it is given per node, and the master judges a node out of date per component.
 
-A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image),
-and a simulation layer adds the scenario execution image the simulation runner runs in. The
+A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image):
+every layer runs in a container of its own. An ASV software adds those of the adapters that run it on the
+runners' stacks, and a simulation layer adds the scenario execution image the simulation runner runs in. The
 simulation job's runners and the vessel stacks each runs are declared here too (RUNNER_STACKS), so
 the Capabilities page can name the runner of a stack without loading the job modules. The registry
 is read on first use, so importing this module (the master does at start) loads neither it nor numpy.
@@ -84,7 +85,7 @@ _ORDER = {component: index for index, component in enumerate(COMPONENTS)}
 class SimulationRunner(str, Enum):
     """The runners of the simulation job (cluster/node/jobs/simulation_job.py), the value of its payload's runner."""
 
-    KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, in process
+    KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, the runner stepping the kinematic simulator's container
     ARDUPILOT = "ardupilot"  # replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
     GAZEBO_CUSTOM = "gazebo_custom"  # replay or USV Navigation on the custom controller, the runner stepping a Gazebo world per job (no SITL)
 
@@ -150,9 +151,29 @@ def _layer_images(layer: LayerImplementationId) -> Tuple[str, ...]:
 
     spec = default_registry().layer(LayerRef.of(layer))
     images = {container.default_image for container in spec.containers} if spec is not None else set()
-    if LayerRef.of(layer).role == Role.SIMULATION_LAYER:
+    role = LayerRef.of(layer).role
+    if role == Role.SIMULATION_LAYER:
         images.add(SCENARIO_EXECUTION_IMAGE)  # the simulation runner
+    elif role == Role.ASV_SOFTWARE:
+        images.update(_asv_adapter_images(layer))
     return tuple(sorted(images))
+
+
+def _asv_adapter_images(asv_software: LayerImplementationId) -> Set[str]:
+    """The images of the adapters that run an ASV software on the stacks the simulation runners run (the vessel's replay container)."""
+    from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
+    from scenegems_tool.vessel_stack.registry.catalog import default_resolver
+
+    resolver = default_resolver()
+    images: Set[str] = set()
+    for stacks in RUNNER_STACKS.values():
+        for software, control_layer, simulation_layer in stacks:
+            if software != asv_software:
+                continue
+            adapter = resolver.resolve(VesselStackConfig(asv_software=software, control_layer=control_layer, simulation_layer=simulation_layer)).asv_adapter
+            if adapter is not None:
+                images.update(container.default_image for container in adapter.containers)
+    return images
 
 
 @lru_cache(maxsize=1)

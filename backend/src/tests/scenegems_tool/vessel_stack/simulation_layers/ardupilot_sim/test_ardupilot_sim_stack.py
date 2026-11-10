@@ -9,7 +9,7 @@ from tests.scenegems_tool.vessel_stack.sdf import parse_params, parse_sdf, plugi
 
 
 def test_there_is_no_simulator_service(ardupilot_sim_stack):
-    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_1"]
+    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_0_asv_software", "agent_1", "agent_1_asv_software"], "SITL and the replay container of each vessel"
     assert "gazebo" not in ardupilot_sim_stack.compose["services"]
 
 

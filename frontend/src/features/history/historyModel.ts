@@ -22,7 +22,7 @@ import { isFinalState, newerSummary, type ListViewState, type Tone } from "./cam
 /**
  * What Campaign History shows, as pure functions: entry kinds, origins and steps, the row totals,
  * the filters the list route cannot apply, the live list updates, the outputs of a step with their
- * monitor summary and the workbench target of an output.
+ * monitor result summary and the workbench target of an output.
  */
 
 export const KIND_LABELS: Record<CampaignKind, string> = {
@@ -287,7 +287,7 @@ export function inputSourceLabel(source: InputSource | null): SourceLabel | null
   return { kind: "text", text: "a deleted entry" };
 }
 
-// The monitor summary of an output (the API calls it the output's verdict)
+// The monitor result summary of an output (the API calls it the output's verdict)
 
 export interface MonitorEncounter {
   type: string;

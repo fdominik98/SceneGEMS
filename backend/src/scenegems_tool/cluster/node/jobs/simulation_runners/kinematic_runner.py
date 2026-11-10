@@ -1,9 +1,12 @@
-"""The simulation job's kinematic runner: a lockstep run on the kinematic layer, in a scenario execution container.
+"""The simulation job's kinematic runner: a lockstep run on the kinematic layer, on a stack per job.
 
 Two modes: replay of every vessel's generated trajectory (kinematic_runner.run_kinematic_replay),
 or USV Navigation on the own ship against replaying targets (run_kinematic_closed_loop).
-The run needs no other service, so its container has no network. A run is bit-identical
-for the same payload, and the result carries its state digest.
+The stack holds the kinematic simulator, one container for the scenario, and an ASV software
+container per vessel (vessel_job_stack.py); the runner, from the scenario execution image, owns
+the clock and carries the commands and states between them. The stack's network is its own and
+reaches nothing else. A run is bit-identical for the same payload, and the result carries its
+state digest.
 
 With monitor live, the COLREGS monitor judges every step in process (live_monitor.py) with the
 post-hoc monitor's summary (subsystems/monitoring/rule_outcomes.py), and early_stop ends the run once
@@ -22,12 +25,13 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Optional, Tuple
 from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
-from scenegems_tool.cluster.node.job_report import JobReport, JobResultData
+from scenegems_tool.cluster.node.job_report import JobFailed, JobReport, JobResultData
 from scenegems_tool.cluster.node.jobs.job_payload import TrajectoriesInput, to_trajectories
 from scenegems_tool.cluster.node.jobs.live_monitor import LiveMonitor, SimulationMonitor
-from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, run_in_runner_container
+from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, job_document
+from scenegems_tool.cluster.node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
+from scenegems_tool.cluster.node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.node.node_context import NodeContext
-from scenegems_tool.cluster.node.subsystem import Subsystem
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
@@ -36,6 +40,7 @@ from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLa
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
+    from scenegems_tool.vessel_stack.hosting import StackHosting
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
 ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
@@ -137,8 +142,32 @@ class KinematicSimulationPayload(ProtocolModel):
 PAYLOAD_MODEL = KinematicSimulationPayload
 
 
+def kinematic_run_instance(payload: KinematicSimulationPayload):
+    """The trajectories and the instance of the payload's run; ValueError when own_ship_id names no vessel."""
+    from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
+    from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import kinematic_instance
+
+    trajectories = to_trajectories(payload.trajectories)
+    asv_software: Dict[int, AsvSoftwareId] = {}
+    if payload.mode == KinematicMode.USV_NAVIGATION:
+        asv_software[own_ship(trajectories.initial_scene, payload.own_ship_id).id] = AsvSoftwareId.USV_NAVIGATION
+    return trajectories, kinematic_instance(trajectories, asv_software, environment=EnvironmentConfig.calm(seed=payload.seed))
+
+
+def build_job_stack(job: JobSpec, node: NodeContext, payload: KinematicSimulationPayload) -> JobStack:
+    """The job's stack: the kinematic simulator, an ASV software container per vessel, and the runner."""
+    try:
+        trajectories, instance = kinematic_run_instance(payload)
+    except ValueError as error:
+        raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
+    return build_vessel_job_stack(job, node, instance, trajectories, node.reference_geofence)
+
+
 def run(job: JobSpec, node: NodeContext, report: JobReport, payload: KinematicSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
-    return run_in_runner_container(job, node, report, Subsystem.SCENARIO_EXECUTION, timeout_s=payload.timeout_s, cancel=cancel)
+    report.status("generating the kinematic stack")
+    stack = build_job_stack(job, node, payload)
+    # The runner steps the simulator, so an observed run is paced to the observers' speed and that time does not count against the timeout
+    return stack.run(job_document(job), report, timeout_s=payload.timeout_s, cancel=cancel, observation=node.observations.of(job), paced=True)
 
 
 def frame_builder(scenario_id: str, actors, dt: float, monitor: Optional[LiveMonitor]) -> Callable[[int, Any], Dict[str, Any]]:
@@ -173,11 +202,16 @@ def step_observer(monitor: Optional[LiveMonitor], observer) -> Optional[Callable
     return on_step
 
 
-def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
-    """The in-container part: run the simulation in process and describe the run; observation makes it observable live."""
+def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None) -> JobResultData:
+    """The in-container part: step the simulator and every vessel's ASV software container and describe the run; observation makes it observable live.
+
+    hosting is where the simulator and the ASV software run: the stack's containers unless given (vessel_stack/hosting.py).
+    """
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
+    from scenegems_tool.vessel_stack.hosting import in_stack_hosting
     from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_closed_loop, run_kinematic_replay
 
+    hosting = hosting or in_stack_hosting()
     trajectories = to_trajectories(payload.trajectories)
     environment = EnvironmentConfig.calm(seed=payload.seed)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
@@ -187,11 +221,18 @@ def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCal
     on_step = step_observer(monitor, observer)
     status(f"running the kinematic {payload.mode.value} run" + (" with the live monitor" if monitor is not None else ""))
     if payload.mode == KinematicMode.REPLAY:
-        result = run_kinematic_replay(trajectories, environment=environment, dt=payload.dt, steps=payload.steps, on_step=on_step)
+        result = run_kinematic_replay(trajectories, environment=environment, dt=payload.dt, steps=payload.steps, on_step=on_step, hosting=hosting)
     else:
         parameters = payload.usv_navigation.to_parameters() if payload.usv_navigation is not None else None
         result = run_kinematic_closed_loop(
-            trajectories, own_ship_id=payload.own_ship_id, usv_navigation_parameters=parameters, environment=environment, dt=payload.dt, steps=payload.steps, on_step=on_step
+            trajectories,
+            own_ship_id=payload.own_ship_id,
+            usv_navigation_parameters=parameters,
+            environment=environment,
+            dt=payload.dt,
+            steps=payload.steps,
+            on_step=on_step,
+            hosting=hosting,
         )
     status("run finished", 1.0)
     data: JobResultData = {"run_record": dict(result.run_record), "steps": result.steps, "state_digest": result.state_digest()}

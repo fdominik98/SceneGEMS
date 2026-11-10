@@ -26,4 +26,4 @@ There is nothing to start or stop: every run is recorded as an entry of [Campaig
 | The canvas | Canvas toolbar, **Export**, **Screenshot (image)** | PNG, in the colors of the current mode |
 | The frames as a table | Canvas toolbar, **Export**, **Table (CSV)** | CSV |
 | The frames as map data | Canvas toolbar, **Export**, **Map data (GeoJSON)** | GeoJSON |
-| The monitor summaries of an entry | [Results](./results), the table's download | CSV |
+| The monitor result summaries of an entry | [Results](./results), the table's download | CSV |

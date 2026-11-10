@@ -36,3 +36,16 @@ export function createActorNamer(): (id: string, kind: { isOwnShip: boolean; isV
     return numeric !== null ? vesselName(numeric, false) : `ts${targets}`;
   };
 }
+
+/** A vessel's name from its actor id: os, or ts<n> for a numeric id; another id is shown as it is. */
+export function vesselNameOf(id: string, isOwnShip: boolean): string {
+  if (isOwnShip) {
+    return "os";
+  }
+  return /^\d+$/.test(id) ? vesselName(Number(id), false) : id;
+}
+
+/** What a vessel is, written out next to its name. */
+export function vesselRole(isOwnShip: boolean): string {
+  return isOwnShip ? "own ship" : "target ship";
+}

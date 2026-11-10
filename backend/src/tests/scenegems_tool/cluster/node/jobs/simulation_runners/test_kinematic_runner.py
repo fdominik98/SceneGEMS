@@ -1,15 +1,20 @@
-"""The kinematic runner of the simulation job in process: the live monitor gives the post-hoc result, and a run without it is unchanged."""
+"""The kinematic runner of the simulation job: its stack, and the run with the layers hosted in process: the live monitor gives the post-hoc result, and a run without it is unchanged."""
 
 import io
 
 import pytest
 
+from scenegems_tool.cluster.node.job_report import JobFailed
 from scenegems_tool.cluster.node.jobs import monitoring_post_hoc_job, simulation_job
 from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation, RunObserver
+from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicSimulationPayload, build_job_stack, kinematic_run_instance
 from scenegems_tool.cluster.node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
+from scenegems_tool.cluster.node.launchers.per_job.job_stack import RUNNER_SERVICE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.subsystems.monitoring.rule_outcomes import RuleOutcomes
+from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
+from tests.scenegems_tool.vessel_stack.loopback_stack import loopback_hosting
 
 SUMMARY_KEYS = ("scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "passed")
 
@@ -24,6 +29,49 @@ def simulate(make_job, head_on_trajectories):
         return simulation_job.execute(make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields}), _quiet)
 
     return simulate
+
+
+def kinematic_stack(node, make_job, head_on_trajectories, **fields):
+    payload_data = {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields}
+    job = make_job(JobType.SIMULATION, payload_data)
+    return job, build_job_stack(job, node, KinematicSimulationPayload.model_validate(payload_data))
+
+
+def test_the_stack_is_the_simulator_an_asv_software_container_per_vessel_and_the_runner(instances_folder, node, make_job, head_on_trajectories):
+    job, stack = kinematic_stack(node, make_job, head_on_trajectories)
+    scope = node.job_scope(job)
+    services = stack.compose["services"]
+    assert set(services) == {"kinematic_sim", "vessel_0_asv_software", "vessel_1_asv_software", RUNNER_SERVICE}
+    for key, service in services.items():
+        assert service["container_name"] == scope.container_name(key)
+        assert "scenegems-scenario-execution-subsystem" in service["image"], "the simulator, replay and the runner start from the scenario execution image"
+        assert service["networks"] == [STACK_NETWORK] and "ports" not in service
+    assert set(services[RUNNER_SERVICE]["depends_on"]) == set(services) - {RUNNER_SERVICE}
+    assert stack.compose["networks"] == {STACK_NETWORK: {"driver": "bridge"}}, "the job's own network, which reaches nothing else"
+    assert "volumes" not in stack.compose, "the runner sends every container what it needs"
+
+
+def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instances_folder, node, make_job, head_on_trajectories):
+    _, stack = kinematic_stack(node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1)
+    services = stack.compose["services"]
+    assert "scenegems-usv-navigation" in services["vessel_1_asv_software"]["image"]
+    assert "scenegems-scenario-execution-subsystem" in services["vessel_0_asv_software"]["image"]
+
+
+def test_an_unknown_own_ship_fails_the_stack_for_good(instances_folder, node, make_job, head_on_trajectories):
+    with pytest.raises(JobFailed) as failure:
+        kinematic_stack(node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=9)
+    assert not failure.value.retryable and "No vessel with id 9" in str(failure.value)
+
+
+@pytest.mark.parametrize("fields", [{}, {"mode": "usv_navigation"}, {"monitor": "live"}])
+def test_the_run_against_the_containers_is_the_run_in_process(make_job, head_on_trajectories, fields):
+    """The job's execute steps real sockets here: every layer's server on the loopback interface, as its container runs it."""
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields})
+    instance = kinematic_run_instance(KinematicSimulationPayload.model_validate(job.payload))[1]
+    in_process = simulation_job.execute(job, _quiet)
+    with loopback_hosting(instance) as hosting:
+        assert simulation_job.execute(job, _quiet, hosting=hosting) == in_process
 
 
 def test_a_run_without_a_monitor_is_the_plain_replay(simulate, head_on_trajectories):

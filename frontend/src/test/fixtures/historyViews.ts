@@ -143,7 +143,7 @@ export function sampleSimulationOutput(overrides: Record<string, unknown> = {}):
   };
 }
 
-/** A verdict as a master sends it with its monitor summary: a crossing that failed, a head-on, a pair without an encounter and a vessel's own failed rule. */
+/** A verdict as a master sends it with its monitor result summary: a crossing that failed, a head-on, a pair without an encounter and a vessel's own failed rule. */
 export function sampleMonitorVerdict(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     state: "failed",

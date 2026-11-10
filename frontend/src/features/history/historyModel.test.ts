@@ -43,7 +43,7 @@ const row = (raw: Record<string, unknown>) => campaignRowSchema.parse(raw);
 const output = (raw: Record<string, unknown>) => outputRowSchema.parse(raw);
 const summaryOf = (overrides: Record<string, unknown> = {}) => monitorSummary(outputVerdictSchema.parse(sampleMonitorVerdict(overrides)));
 
-describe("the monitor summary", () => {
+describe("the monitor result summary", () => {
   it("says who gives way per encounter, with the failed rules under their pair", () => {
     const summary = summaryOf();
     expect(summary.state).toBe("failed");

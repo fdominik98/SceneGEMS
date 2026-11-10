@@ -225,7 +225,7 @@ def test_an_out_of_date_component_gets_no_jobs_and_is_reported(make_node, plane,
     assert outdated.expect(LeaseOffer).job.job_id == scene.job_id, "the scene generation component is up to date"
     session = plane.registry.session(outdated.node_id)
     assert [(mismatch.image, mismatch.required, mismatch.actual) for mismatch in session.out_of_date] == [(image_repository(SCENARIO_EXECUTION_IMAGE), "fp-execution", "fp-older")]
-    assert session.stale_components == {"simulation_layer/kinematic"}
+    assert "simulation_layer/kinematic" in session.stale_components and "scene_generation" not in session.stale_components
     current = make_node("current", slots={KINEMATIC: 1}, components=KINEMATIC_NODE)
     current.connect()
     assert schedule() == 1

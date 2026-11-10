@@ -65,7 +65,7 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
           </span>
         </div>
         <Tile
-          label="Monitor summaries"
+          label="Monitor result summaries"
           value={Object.values(verdicts).reduce((sum, count) => sum + count, 0)}
           detail={`${verdicts.passed ?? 0} passed, ${failed} failed`}
           tone={failed > 0 ? "warn" : undefined}
@@ -82,7 +82,7 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
             detail={`${totals.fecs_open} open, ${totals.fecs_complete} complete, ${totals.fecs_abandoned} abandoned`}
             tone={totals.fecs_abandoned > 0 ? "bad" : undefined}
           />
-          <Tile label="Unmonitored runs" value={verdicts.unmonitored ?? 0} detail="runs without a monitor summary" />
+          <Tile label="Unmonitored runs" value={verdicts.unmonitored ?? 0} detail="runs without a monitor result summary" />
         </div>
       </Disclosure>
     </>
@@ -260,7 +260,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           </dl>
         </Disclosure>
         <div className="camp-results-link">
-          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor summaries, cases and recorded runs are in the Results section">
+          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor result summaries, cases and recorded runs are in the Results section">
             Open the results
           </button>
           {final && <DeleteEntry entry={detail} onDeleted={onBack} />}

@@ -251,7 +251,11 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "The software that decides where a vessel goes: it reads the vessel's state and issues heading and speed commands, waypoints or MAVLink missions.",
             KIND_ROLE,
             (*layer_members, "AsvSoftwareId member", "a runtime bound by a loader in registry/catalog.py"),
-            "Add an AsvSoftwareId member, a LayerSpec in <impl>_specs.py, register it in registry/catalog.py and connect it to a control layer with an adapter.",
+            (
+                "Add an AsvSoftwareId member and a LayerSpec in <impl>_specs.py, serve the software over the lockstep wire protocol (contracts/lockstep_wire.py) "
+                "in a container of its own, register it in registry/catalog.py with the class that adds that container to a stack, connect it to a control "
+                "layer with an adapter, and add its entry to asv_software/asv_software_runtime.py."
+            ),
             "scenegems_tool/vessel_stack/asv_software",
         ),
         MetamodelNode(
@@ -261,7 +265,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "Turns the ASV software's decision into actuator commands. The none layer stands for a simulation that integrates control itself.",
             KIND_ROLE,
             (*layer_members, "ControlLayerId member", "a runtime bound by a loader in registry/catalog.py"),
-            "Add a ControlLayerId member, a LayerSpec, a DockerControlLayer if it runs in containers, register both in registry/catalog.py.",
+            "Add a ControlLayerId member, a LayerSpec and a DockerControlLayer that adds the controller's container per vessel, and register both in registry/catalog.py (docker=).",
             "scenegems_tool/vessel_stack/control_layers",
         ),
         MetamodelNode(
@@ -275,17 +279,23 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
                 "SimulationLayerId member",
                 "a runtime bound by a loader in registry/catalog.py",
             ),
-            "Add a SimulationLayerId member, a LayerSpec with its capabilities, a DockerSimulationLayer or in-process simulation, register in registry/catalog.py, and add its measurements to measured_capabilities.yaml.",
+            (
+                "Add a SimulationLayerId member, a LayerSpec with its capabilities and a DockerSimulationLayer that adds the simulator's container for the scenario, "
+                "register both in registry/catalog.py (docker=), and add its measurements to measured_capabilities.yaml."
+            ),
             "scenegems_tool/vessel_stack/simulation_layers",
         ),
         MetamodelNode(
             META_PARTICIPANT,
             Role.ASV_SOFTWARE.value,
             "Lockstep participant",
-            "How in-process ASV software and controllers take part in a run: the clock asks every participant for its command at each step.",
+            (
+                "How ASV software takes part in a run: the clock asks every participant for its command at each step. "
+                "The runner holds a link to the software's container, which answers over the lockstep wire protocol."
+            ),
             KIND_INTERFACE,
             tuple(f"LockstepParticipant.{member}" for member in _protocol_members(LockstepParticipant)),
-            "Implement the protocol and bind the class as the runtime of the spec.",
+            "Implement the protocol, serve it in the software's container and bind the class as the runtime of the spec.",
             "scenegems_tool/vessel_stack/contracts/clock.py",
         ),
         MetamodelNode(
@@ -295,7 +305,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "How a control layer that runs in containers contributes its files and services to the compose stack of a job.",
             KIND_INTERFACE,
             tuple(f"DockerControlLayer.{member}" for member in _protocol_members(DockerControlLayer)),
-            "Implement the protocol and bind the class as the runtime of the spec.",
+            "Implement the protocol and bind the class to the spec in registry/catalog.py (docker=).",
             "scenegems_tool/vessel_stack/contracts/docker_stack.py",
         ),
         MetamodelNode(
@@ -305,7 +315,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "How a simulator that runs in containers adds its world, vessels and service to the compose stack, one vessel at a time and then the instance as a whole.",
             KIND_INTERFACE,
             tuple(f"DockerSimulationLayer.{member}" for member in _protocol_members(DockerSimulationLayer)),
-            "Implement the protocol and bind the class as the runtime of the spec.",
+            "Implement the protocol and bind the class to the spec in registry/catalog.py (docker=).",
             "scenegems_tool/vessel_stack/contracts/docker_stack.py",
         ),
         MetamodelNode(

@@ -1,7 +1,9 @@
 """The workbench's simulation stack: one compose stack per live session.
 
-It holds the generated vessel stack (SITL, MAVProxy, ArduAgent, Gazebo) and the scenario
-execution service, which the workbench drives over MQTT. Every live session has its own
+It holds the generated vessel stack, every layer in its own container (the simulator of the
+scenario, and per vessel its controller and its ASV software: Gazebo or the kinematic simulator,
+SITL or the custom controller, ArduAgent with MAVProxy, replay or USV Navigation), and the
+scenario execution service, which the workbench drives over MQTT. Every live session has its own
 scope (InstanceScope.live_session: node `workbench`, instance `live-<session>`), and the
 stack's compose project, container names, networks and generated files come from it, so
 several live sessions run side by side on one machine. On the master's broker the session's
@@ -9,9 +11,8 @@ topics are scoped too (gateway/socket_session.py); the node runs cluster simulat
 per-job stacks instead (per_job/job_stack.py).
 
 The scenario execution service joins the vessel stack's network, since an instance of
-simulated vessels is driven by its lockstep runner over MAVLink or gz-transport from there
-(subsystems/scenario_execution/lockstep_simulation_driver.py). A kinematic instance has no
-simulator services: the service runs it alone. Host ports are published only where a person
+simulated vessels is driven by its lockstep runner from there, which steps the stack's
+containers (subsystems/scenario_execution/lockstep_simulation_driver.py). Host ports are published only where a person
 connects: Docker picks a free host port for each Mission Planner vessel's ground control
 station, which is read back once the stack is up and handed to on_ground_control_ports.
 
@@ -41,7 +42,6 @@ from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenario_execution_service import SCENARIO_EXECUTION_SERVICE_TOPIC
 from scenegems_tool.vessel_stack.asv_software.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
-from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import gcs_mavproxy_service_name
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
@@ -243,19 +243,14 @@ class SimulationSessionStack:
         time_step: int,
     ) -> None:
         gen_folder = session_gen_folder(self.scope)
-        if simulation_config.simulation_layer == SimulationLayerId.KINEMATIC:
-            # The worker integrates the kinematic layer itself; it only needs the trajectories.
-            pending_writes = [(session_trajectories_file(self.scope), json.dumps(trajectories.to_dict()))]
-            stack_compose: dict = {"services": {}, "networks": {}}
-        else:
-            pending_writes, stack_compose = build_simulation_docker_stack_artifacts(
-                simulation_config,
-                trajectories,
-                mqtt_connection,
-                reference_geofence,
-                embedded_in_subsystem=True,
-                gen_folder=gen_folder,
-            )
+        pending_writes, stack_compose = build_simulation_docker_stack_artifacts(
+            simulation_config,
+            trajectories,
+            mqtt_connection,
+            reference_geofence,
+            embedded_in_subsystem=True,
+            gen_folder=gen_folder,
+        )
         write_simulation_gen_files(pending_writes, gen_folder)
         self._verify_gen_files(pending_writes)
 

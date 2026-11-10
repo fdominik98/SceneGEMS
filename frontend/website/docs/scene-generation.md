@@ -36,6 +36,6 @@ The header holds the step's status and the run button. The status says whether t
 | Result | Export the scene (JSON) | Downloads the shown valid scene as JSON (the button with the download icon) |
 | Result | Next: Trajectory Generation | Makes the shown valid scene the input of the Trajectory Generation page and opens it |
 
-The panel says what the cluster offers (slots on machines, free) and which entry the page shows. Without a machine that runs scene generation, it says why and generation stays off. A generated scene is judged by the scene monitor when a machine offers monitoring; its monitor summaries are shown with the scene.
+The panel says what the cluster offers (slots on machines, free) and which entry the page shows. Without a machine that runs scene generation, it says why and generation stays off. A generated scene is judged by the scene monitor when a machine offers monitoring; its monitor result summaries are shown with the scene.
 
 Clicking a batch result shows that case of the batch entry.

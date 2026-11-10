@@ -1,9 +1,11 @@
 """Default registry: every layer, adapter and ruled-out connection of design section 3.3.
 
-New ASV software, controllers or simulators are added by implementing their specs and
-runtime and registering them here. Nothing else changes. A spec can be registered as
-planned (SpecStatus.PLANNED) so the resolver answers its rows before it exists; since
-Phase 2 every "yes" row of the availability matrix is available.
+New ASV software, controllers or simulators are added by implementing their specs, their
+container (a server for the lockstep wire protocol, contracts/lockstep_wire.py, and the class
+that adds its service to a stack) and registering them here. An ASV software that a lockstep
+runner steps also gets its entry in asv_software/asv_software_runtime.py. A spec can be
+registered as planned (SpecStatus.PLANNED) so the resolver answers its rows before it exists;
+since Phase 2 every "yes" row of the availability matrix is available.
 """
 
 from functools import lru_cache
@@ -71,7 +73,8 @@ UNSUPPORTED_CONNECTIONS = (
 )
 
 
-# Runtime loaders import on first use, so resolving a stack stays free of the code that runs it.
+# Loaders import on first use, so resolving a stack stays free of the code that runs it.
+# runtime: the class that runs a spec in the caller's process.
 def _kinematic_simulation():
     from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation import KinematicSimulation
 
@@ -82,6 +85,25 @@ def _replay_follower():
     from scenegems_tool.vessel_stack.asv_software.replay.replay_follower import ReplayFollower
 
     return ReplayFollower
+
+
+# docker: the class that adds a spec's containers to a stack (contracts/docker_stack.py).
+def _kinematic_simulation_layer():
+    from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation_layer import KinematicSimulationLayer
+
+    return KinematicSimulationLayer
+
+
+def _replay_container():
+    from scenegems_tool.vessel_stack.asv_software.replay.replay_service_generator import ReplayAsvSoftware
+
+    return ReplayAsvSoftware
+
+
+def _usv_navigation_container():
+    from scenegems_tool.vessel_stack.asv_software.usv_navigation.usv_navigation_service_generator import UsvNavigationAsvSoftware
+
+    return UsvNavigationAsvSoftware
 
 
 def _ardupilot_control_layer():
@@ -115,29 +137,32 @@ def build_registry(measurements: Optional[Mapping[str, CapabilityMeasurement]] =
     registry.register_layer(USV_NAVIGATION_LAYER)
     registry.register_layer(MISSION_PLANNER_LAYER)
     registry.register_layer(ON_BOARD_LAYER)
-    registry.register_layer(ARDUPILOT_CONTROL_LAYER, runtime=_ardupilot_control_layer)
-    registry.register_layer(CUSTOM_CONTROL_LAYER, runtime=_custom_control_layer)
+    # A control or simulation layer brings its own containers. Control layer none is the absence of a controller and brings none.
+    registry.register_layer(ARDUPILOT_CONTROL_LAYER, docker=_ardupilot_control_layer)
+    registry.register_layer(CUSTOM_CONTROL_LAYER, docker=_custom_control_layer)
     registry.register_layer(NONE_CONTROL_LAYER)
     registry.register_layer(REAL_VESSEL_CONTROL_LAYER)
-    registry.register_layer(KINEMATIC_LAYER, runtime=_kinematic_simulation)
-    registry.register_layer(GAZEBO_LAYER, runtime=_gazebo_simulation_layer)
-    registry.register_layer(ARDUPILOT_SIM_LAYER, runtime=_ardupilot_sim_layer)
+    registry.register_layer(KINEMATIC_LAYER, runtime=_kinematic_simulation, docker=_kinematic_simulation_layer)
+    registry.register_layer(GAZEBO_LAYER, docker=_gazebo_simulation_layer)
+    registry.register_layer(ARDUPILOT_SIM_LAYER, docker=_ardupilot_sim_layer)
     registry.register_layer(REAL_VESSEL_SIMULATION_LAYER)
 
-    registry.register_adapter(REPLAY_STATE_FOLLOWER, runtime=_replay_follower)
-    registry.register_adapter(USV_NAVIGATION_IN_PROCESS, runtime=usv_navigation_participant_runtime)
+    # An ASV software's container comes with the adapter that runs it: the routes a lockstep runner
+    # steps have one per vessel, ArduAgent's and Mission Planner's are started by the ArduPilot control layer.
+    registry.register_adapter(REPLAY_STATE_FOLLOWER, runtime=_replay_follower, docker=_replay_container)
+    registry.register_adapter(USV_NAVIGATION_IN_PROCESS, runtime=usv_navigation_participant_runtime, docker=_usv_navigation_container)
     registry.register_adapter(REPLAY_ARDUAGENT_FOLLOWER)
-    registry.register_adapter(REPLAY_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime, default=True)
+    registry.register_adapter(REPLAY_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime, docker=_replay_container, default=True)
     registry.register_adapter(MISSION_PLANNER_GCS_PORT)
     # ArduAgent's external control mode, for the simulated vessels of instances with a real vessel (gateway/workbench_stack_mapping.py).
     registry.register_adapter(MISSION_PLANNER_MAVLINK_PORT, default=False)
     registry.register_adapter(KINEMATIC_COMMAND_INPUT)
     registry.register_adapter(SITL_INTERNAL_PHYSICS)
     registry.register_adapter(ARDUPILOT_GAZEBO_PLUGIN)
-    registry.register_adapter(CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER, runtime=los_waypoint_follower_runtime)
+    registry.register_adapter(CUSTOM_CONTROLLER_WAYPOINT_FOLLOWER, runtime=los_waypoint_follower_runtime, docker=_replay_container)
     registry.register_adapter(GZ_TRANSPORT_ACTUATOR, runtime=gz_lockstep_link_runtime)
-    registry.register_adapter(CUSTOM_CONTROLLER_HEADING_SPEED_INPUT, runtime=usv_navigation_participant_runtime)
-    registry.register_adapter(USV_NAVIGATION_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime)
+    registry.register_adapter(CUSTOM_CONTROLLER_HEADING_SPEED_INPUT, runtime=usv_navigation_participant_runtime, docker=_usv_navigation_container)
+    registry.register_adapter(USV_NAVIGATION_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime, docker=_usv_navigation_container)
     # A real vessel: ArduAgent's modes into its autopilot, and the autopilot's built-in link to its hull.
     registry.register_adapter(REPLAY_ARDUAGENT_REAL_VESSEL)
     registry.register_adapter(MISSION_PLANNER_ARDUAGENT_REAL_VESSEL)

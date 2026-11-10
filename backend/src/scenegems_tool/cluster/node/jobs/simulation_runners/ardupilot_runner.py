@@ -6,8 +6,9 @@ runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
 replay. The node resolves the instance, generates the vessel stack into the job's folder and adds
-a runner from the scenario execution image on the stack network. The runner drives every
-vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
+a runner from the scenario execution image on the stack network (vessel_job_stack.py). Every
+vessel has its SITL and its ASV software container; the runner steps the ASV software, sends its
+commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 
 Observed live, the runner forwards each step's observed states as frames, at most a bounded
 number a second at the stack's own pace: SITL runs free at the payload's speedup, so the run is
@@ -36,18 +37,18 @@ from scenegems_tool.cluster.node.jobs.job_payload import GeofencePayload, Trajec
 from scenegems_tool.cluster.node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.node.jobs.runner_container import StatusCallback, job_document
 from scenegems_tool.cluster.node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload, check_closed_loop_options, own_ship
-from scenegems_tool.cluster.node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, runner_service
+from scenegems_tool.cluster.node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
+from scenegems_tool.cluster.node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.node.node_context import NodeContext
-from scenegems_tool.cluster.node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK  # noqa: F401  (the network of every service of the job's stack)
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.node.jobs.in_container.run_observation import ContainerObservation
-
-STACK_NETWORK = "maritime_net"  # the network build_simulation_docker_stack_artifacts puts every vessel service on
+    from scenegems_tool.vessel_stack.hosting import StackHosting
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
 ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (
@@ -127,31 +128,12 @@ def _instance(payload: ArduPilotSimulationPayload):
 
 
 def build_job_stack(job: JobSpec, node: NodeContext, payload: ArduPilotSimulationPayload) -> JobStack:
-    """Resolve the instance, write the generated files into the job's folder and assemble the stack."""
-    from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-    from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
-    from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
-
+    """The job's stack: SITL and an ASV software container per vessel, Gazebo on the gazebo layer, and the runner."""
     try:
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
-    try:
-        default_resolver().require_instance(instance, attended=False)
-    except StackUnavailableError as error:
-        raise JobFailed(f"Simulation stack rejected: {error}", retryable=False) from error
-    scope = node.job_scope(job)
-    gen_folder = f"{scope.folder}/gen"
-    pending_writes, stack_compose = build_simulation_docker_stack_artifacts(
-        instance, trajectories, node.mqtt_connection, payload.geofence.to_geofence(), headless=True, embedded_in_subsystem=True, gen_folder=gen_folder
-    )
-    write_simulation_gen_files(pending_writes, gen_folder)
-    vessel_services = list(stack_compose["services"])
-    services = {
-        **stack_compose["services"],
-        RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SCENARIO_EXECUTION), networks=[STACK_NETWORK], depends_on=vessel_services),
-    }
-    return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"))
+    return build_vessel_job_stack(job, node, instance, trajectories, payload.geofence.to_geofence())
 
 
 def run(job: JobSpec, node: NodeContext, report: JobReport, payload: ArduPilotSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
@@ -229,9 +211,13 @@ def observed_trajectories(trajectories, result, dt: float, state_of: Callable[[A
     return builder.build()
 
 
-def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None) -> JobResultData:
-    """The in-container part: drive every vessel's SITL in lockstep and describe the run; observation forwards its states live."""
+def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCallback, observation: Optional["ContainerObservation"] = None, hosting: Optional["StackHosting"] = None) -> JobResultData:
+    """The in-container part: step every vessel's ASV software container, drive its SITL in lockstep and describe the run; observation forwards its states live.
+
+    hosting is where the ASV software runs: the stack's containers unless given (vessel_stack/hosting.py).
+    """
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt, run_mavlink_stack
+    from scenegems_tool.vessel_stack.hosting import in_stack_hosting
 
     trajectories, instance, parameters = _instance(payload)
     dt = lockstep_dt(trajectories.time_step) if payload.dt is None else payload.dt
@@ -251,6 +237,7 @@ def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCal
         start_boot_s=payload.start_boot_s,
         on_step=on_step,
         usv_navigation_parameters=parameters or None,
+        hosting=hosting or in_stack_hosting(),
     )
     status("run finished", 1.0)
     data: JobResultData = {

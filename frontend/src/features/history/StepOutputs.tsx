@@ -98,10 +98,10 @@ function EncounterLine({ encounter }: { encounter: MonitorEncounter }) {
   );
 }
 
-/** The monitor summary of an output, very brief: passed or failed and, per vessel pair, the encounter types, the vessels' roles and the rules that failed. */
+/** The monitor result summary of an output, very brief: passed or failed and, per vessel pair, the encounter types, the vessels' roles and the rules that failed. */
 function MonitorSummaryCell({ row }: { row: OutputRow }) {
   if (row.verdict === null) {
-    return <span className="meta">{row.state === "active" ? "no monitor summary yet" : "no monitor summary"}</span>;
+    return <span className="meta">{row.state === "active" ? "no monitor result summary yet" : "no monitor result summary"}</span>;
   }
   const summary = monitorSummary(row.verdict);
   if (summary.headline === null) {
@@ -206,7 +206,7 @@ function OutputRowView({
   );
 }
 
-/** The outputs of one executed step, a page at a time, each with its state, flags, the monitor summary of a monitored step and the way onto its workbench page. */
+/** The outputs of one executed step, a page at a time, each with its state, flags, the monitor result summary of a monitored step and the way onto its workbench page. */
 export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry }: StepOutputsProps) {
   const [page, setPage] = useState(0);
   const query = useStepOutputs(campaignId, step, page, running);
@@ -258,7 +258,7 @@ export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry 
               <th>Case</th>
               <th>State</th>
               <th>Output</th>
-              {showMonitor && <th>Monitor summary</th>}
+              {showMonitor && <th>Monitor result summary</th>}
               <th>Input from</th>
               <th>
                 <span className="sr-only">Actions</span>

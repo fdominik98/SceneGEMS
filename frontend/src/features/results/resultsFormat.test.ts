@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { artifactFileName, describeStack, formatBytes, formatSeconds, runLabel, shortClassId, shortHash, sortedArtifacts, stageLabel } from "./resultsFormat";
 
 describe("results formatting", () => {
-  it("names the stages, the last one as the monitor summary", () => {
+  it("names the stages, the last one as the monitor result summary", () => {
     expect(stageLabel("generate_scene")).toBe("generate scene");
-    expect(stageLabel("verdict")).toBe("monitor summary");
+    expect(stageLabel("verdict")).toBe("monitor result summary");
   });
 
   it("formats seconds", () => {

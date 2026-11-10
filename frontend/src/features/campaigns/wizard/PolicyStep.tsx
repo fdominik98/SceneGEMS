@@ -6,8 +6,8 @@ import type { RetentionPolicy } from "./wizardState";
 
 const RETENTION: { value: RetentionPolicy; label: string; description: string }[] = [
   { value: "all", label: "Keep everything", description: "Every artifact of every case is kept." },
-  { value: "failures", label: "Keep failures", description: "Trajectories and state logs are kept only for failed monitor summaries and failed cases." },
-  { value: "verdicts_only", label: "Monitor summaries only", description: "No artifacts once a case has its monitor summaries. A recorded run cannot be replayed afterwards." },
+  { value: "failures", label: "Keep failures", description: "Trajectories and state logs are kept only for failed monitor result summaries and failed cases." },
+  { value: "verdicts_only", label: "Monitor result summaries only", description: "No artifacts once a case has its monitor result summaries. A recorded run cannot be replayed afterwards." },
 ];
 
 /** Policy: what is kept, the campaign seed and the conditions that end the campaign early. */
@@ -56,12 +56,12 @@ export function PolicyStep({ draft, update, reasons }: StepProps) {
         forceOpen={own.byField.has("stop")}
         headingLevel={4}
       >
-        <p className="meta wiz-explain">Optional. The first one reached ends the campaign: no new cases after the case limit, a drain after the failed monitor summary limit or the duration.</p>
+        <p className="meta wiz-explain">Optional. The first one reached ends the campaign: no new cases after the case limit, a drain after the failed monitor result summary limit or the duration.</p>
         <div className="wiz-row">
           <Field label="Most cases" htmlFor="wiz-max-cases" hint="No new cases after this many, over all FECs." issues={stopIssues("max_cases")}>
             <NumberField id="wiz-max-cases" integer min={1} value={policy.maxCases} placeholder="no limit" onChange={(value) => update((next) => void (next.policy.maxCases = value))} />
           </Field>
-          <Field label="Most failed monitor summaries" htmlFor="wiz-max-failed" hint="Drain once this many monitor summaries failed." issues={stopIssues("max_failed_verdicts")}>
+          <Field label="Most failed monitor result summaries" htmlFor="wiz-max-failed" hint="Drain once this many monitor result summaries failed." issues={stopIssues("max_failed_verdicts")}>
             <NumberField id="wiz-max-failed" integer min={1} value={policy.maxFailedVerdicts} placeholder="no limit" onChange={(value) => update((next) => void (next.policy.maxFailedVerdicts = value))} />
           </Field>
           <Field label="Longest run" htmlFor="wiz-max-duration" hint="Drain after the campaign has run this long." issues={stopIssues("max_duration_s")}>

@@ -133,6 +133,22 @@ class TestRuntimeBinding:
         registry.bind_runtime("first", lambda: 5)
         assert registry.runtime("first") == 5
 
+    def test_the_docker_contributor_is_bound_apart_from_the_runtime_and_loaded_on_first_use(self, registry):
+        calls = []
+
+        def loader():
+            calls.append(1)
+            return "docker class"
+
+        registry.register_adapter(adapter("first"), runtime=lambda: "runtime class", docker=loader)
+        assert calls == []
+        assert registry.docker("first") == "docker class" and registry.runtime("first") == "runtime class"
+        assert calls == [1]
+
+    def test_a_spec_without_a_container_has_no_docker_contributor(self, registry):
+        registry.register_adapter(adapter("first"), runtime=lambda: "runtime class")
+        assert registry.docker("first") is None
+
     def test_bind_runtime_to_an_unknown_spec_fails(self, registry):
         with pytest.raises(KeyError, match="No spec missing is registered"):
             registry.bind_runtime("missing", lambda: 5)

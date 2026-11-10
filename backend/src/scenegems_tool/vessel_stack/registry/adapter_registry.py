@@ -1,4 +1,12 @@
-"""Registry of layer specs, adapter specs, ruled-out connections and runtime bindings."""
+"""Registry of layer specs, adapter specs, ruled-out connections and what runs them.
+
+A spec can have two bindings, both loaded on first use:
+
+- runtime: the class that runs the layer or adapter in the caller's process (a lockstep
+  participant, a simulation, a link to a simulator);
+- docker: the contributor that adds the spec's containers to a stack's compose file
+  (contracts/docker_stack.py).
+"""
 
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Set, Tuple, TypeVar
 
@@ -6,8 +14,8 @@ from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, Laye
 from scenegems_tool.vessel_stack.contracts.roles import AsvSoftwareId, LayerRef
 from scenegems_tool.vessel_stack.registry.measured_capabilities import CapabilityMeasurement
 
-# Runtime classes are bound through loaders so that resolving a stack never imports the
-# code that builds it (Docker generators, MQTT clients).
+# Classes are bound through loaders so that resolving a stack never imports the code that
+# builds or runs it (Docker generators, MQTT clients).
 RuntimeLoader = Callable[[], Any]
 _Connection = Tuple[LayerRef, LayerRef]
 _Spec = TypeVar("_Spec", LayerSpec, AdapterSpec)
@@ -24,15 +32,16 @@ class AdapterRegistry:
         self._unsupported: Dict[_Connection, UnsupportedConnection] = {}
         self._spec_ids: Set[str] = set()
         self._runtimes: Dict[str, RuntimeLoader] = {}
+        self._docker: Dict[str, RuntimeLoader] = {}
 
-    def register_layer(self, spec: LayerSpec, runtime: Optional[RuntimeLoader] = None) -> LayerSpec:
+    def register_layer(self, spec: LayerSpec, runtime: Optional[RuntimeLoader] = None, *, docker: Optional[RuntimeLoader] = None) -> LayerSpec:
         self._claim_id(spec.id)
         spec = self._measured(spec)
         self._layers[spec.layer] = spec
-        self._bind(spec.id, runtime)
+        self._bind(spec.id, runtime, docker)
         return spec
 
-    def register_adapter(self, spec: AdapterSpec, runtime: Optional[RuntimeLoader] = None, *, default: Optional[bool] = None) -> AdapterSpec:
+    def register_adapter(self, spec: AdapterSpec, runtime: Optional[RuntimeLoader] = None, *, docker: Optional[RuntimeLoader] = None, default: Optional[bool] = None) -> AdapterSpec:
         """Register an adapter. A second adapter on the same connection must say whether it
         becomes the default (default=True) or is an alternative a vessel selects by id
         (default=False, see VesselConfig.adapter_ids)."""
@@ -54,7 +63,7 @@ class AdapterRegistry:
         else:
             connection_adapters.append(spec)
         self._adapters_by_id[spec.id] = spec
-        self._bind(spec.id, runtime)
+        self._bind(spec.id, runtime, docker)
         return spec
 
     def declare_unsupported(self, connection: UnsupportedConnection) -> None:
@@ -110,6 +119,11 @@ class AdapterRegistry:
             raise LookupError(f"{spec_id} has no runtime implementation")
         return loader()
 
+    def docker(self, spec_id: str) -> Optional[Any]:
+        """The class that adds a spec's containers to a Docker stack; None for a spec that brings none."""
+        loader = self._docker.get(spec_id)
+        return loader() if loader is not None else None
+
     def check_measurements(self) -> None:
         """Fail on measured entries that match no registered spec, since a typo would drop a measurement."""
         unknown = sorted(set(self._measurements) - self._spec_ids)
@@ -127,6 +141,8 @@ class AdapterRegistry:
             return spec
         return spec.with_capabilities(measurement.apply(spec.capabilities), measurement.notes)
 
-    def _bind(self, spec_id: str, runtime: Optional[RuntimeLoader]) -> None:
+    def _bind(self, spec_id: str, runtime: Optional[RuntimeLoader], docker: Optional[RuntimeLoader]) -> None:
         if runtime is not None:
             self._runtimes[spec_id] = runtime
+        if docker is not None:
+            self._docker[spec_id] = docker

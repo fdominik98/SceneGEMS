@@ -13,7 +13,7 @@ SceneGEMS runs on a cluster: one master and any number of nodes, deployed by Mac
 |------|---------|
 | [`backend/`](backend/) | Python package roots under `backend/src/`: `scenegems_tool` (workbench gateway, subsystems, vessel stacks, the cluster's master and node, the assurance pipeline, persistence), `functional_level`, `logical_level`, `concrete_level`, `evaluation`, `visualization`, `scripts`, `utils`, `tests`. Domain configuration, the 828 functional scenario classes and runtime assets are in `backend/assets/` |
 | [`frontend/`](frontend/) | React and Vite web console with the sections Workbench, Cluster, Domain Configuration, Capabilities, Campaigns, Campaign History and Results; in-app documentation in `frontend/website/` |
-| [`deploy/images/`](deploy/images/) | One folder per Docker image: `master_api`, `node`, `mqtt_broker`, the subsystems `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, and the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images |
+| [`deploy/images/`](deploy/images/) | One folder per Docker image: `master_api`, `node`, `mqtt_broker`, the subsystems `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`, and `usv_navigation`, the image of the USV Navigation ASV software. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images |
 | [`deploy/master/`](deploy/master/), [`deploy/node/`](deploy/node/) | The compose file and `.env.example` of each cluster role |
 | [`deploy/scripts/`](deploy/scripts/) | `build.sh` and its fingerprint and build helpers `docker-common.sh`; `./build.sh` in the repository root calls it |
 
@@ -61,7 +61,7 @@ Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and 
 | `-1`, `--backend` | `scenegems-master-api` and the four subsystem images |
 | `-4`, `--arduagent` | `scenegems-arduagent` (live sessions with ArduPilot, on the master's machine) |
 | `-5`, `--node` | `scenegems-node`, the node daemon |
-| `--simulation` | `scenegems-gazebo-harmonic`, `scenegems-ardupilot-sitl`, `scenegems-mavproxy` |
+| `--simulation` | `scenegems-gazebo-harmonic`, `scenegems-ardupilot-sitl`, `scenegems-mavproxy`, `scenegems-usv-navigation` |
 | `--release <folder>` | everything a cluster runs, then the release bundle (see below) |
 | `--fingerprints` | prints every image's fingerprint and builds nothing |
 | `--no-check` | rebuilds the selected images even when their fingerprint matches |
@@ -164,7 +164,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
 
 The same steps by hand, which is also what the single-host rehearsal test (`backend/src/tests/scenegems_tool/assurance/local_cluster.py`) does:
 
-1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-master-api`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the images of each component it offers (the role's `SCENEGEMS_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
+1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The master needs `scenegems-master-api`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a node needs `scenegems-node` and the images of each component it offers (the role's `SCENEGEMS_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers, `asv_software/replay`, `control_layer/custom` and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-usv-navigation` for `asv_software/usv_navigation`, `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
 2. On the master, in a folder of its own with both files of `stacks/master/` and `release.json`: write `.env` from [`deploy/master/.env.example`](deploy/master/.env.example) (master id, project name, the release's `SCENEGEMS_IMAGE_TAG`, `COMPOSE_FILE`, a generated Postgres password), `chmod 600 .env`, then:
 
    ```bash

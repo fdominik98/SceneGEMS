@@ -133,7 +133,7 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
           <>
             <Tile label="Passed" count={view.verdicts.passed} tone="passed" detail={share(view.verdicts.passed, judged)} />
             <Tile label="Failed" count={view.verdicts.failed} tone="failed" detail={share(view.verdicts.failed, judged)} />
-            {view.verdicts.unmonitored > 0 && <Tile label="Unmonitored" count={view.verdicts.unmonitored} tone="unmonitored" detail="without a monitor summary" />}
+            {view.verdicts.unmonitored > 0 && <Tile label="Unmonitored" count={view.verdicts.unmonitored} tone="unmonitored" detail="without a monitor result summary" />}
           </>
         )}
         <Tile label={`Valid ${STEP_OUTPUT[view.step]}`} count={view.outputs.valid} detail={share(view.outputs.valid, view.outputs.count)} />
@@ -176,7 +176,7 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
           variant="plain"
           headingLevel={4}
         >
-          {view.failedRules.length === 0 ? <p className="meta">No rule failed in the monitor summaries of this step.</p> : <RankedRules rules={view.failedRules} />}
+          {view.failedRules.length === 0 ? <p className="meta">No rule failed in the monitor result summaries of this step.</p> : <RankedRules rules={view.failedRules} />}
         </Disclosure>
       )}
 
