@@ -1283,6 +1283,18 @@ body,
   align-self: center;
 }
 
+/* A label with a tooltip that says what it means. */
+.mon-hint {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-decoration-color: var(--text-dim);
+  text-underline-offset: 2px;
+}
+
+.mon-bool-chip--hinted {
+  cursor: help;
+}
+
 .mon-chip-row {
   display: flex;
   align-items: center;

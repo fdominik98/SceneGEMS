@@ -3,7 +3,8 @@ import { renderRelationId } from "./renderRelationId";
 import { GeneralMonitorList } from "./GeneralMonitorList";
 import { fmtNum } from "./monitorFormat";
 import { looksLikeSituationContexts } from "./monitorFieldShapes";
-import { ActorTag, Chip, DirectionBadge, MonitorSection } from "./monitorPrimitives";
+import { SITUATION_CONTEXT_HINTS } from "./monitorHints";
+import { ActorTag, Chip, DirectionBadge, HintTh, MonitorSection } from "./monitorPrimitives";
 
 function RoleChip({ giveWay }: { giveWay: boolean }) {
   return giveWay ? <Chip label="give-way" tone="warn" /> : <Chip label="stand-on" tone="good" />;
@@ -22,19 +23,19 @@ function ContextCard({
       <div className="mon-card-head">
         <span className="mon-card-title">{renderRelationId(ctx.relationId)}</span>
         <Chip label={ctx.situationLabel || ctx.situationType} tone="info" />
-        <span className="mon-card-sub meta">
+        <span className="mon-card-sub meta" title={SITUATION_CONTEXT_HINTS.timeInContext}>
           {fmtNum(ctx.timeSpentInCurrentContext)} s in context
         </span>
       </div>
       <table className="mon-actor-table">
         <thead>
           <tr>
-            <th>Vessel</th>
-            <th>Avoidance</th>
-            <th>Judged</th>
-            <th>Role</th>
-            <th>Global avoid.</th>
-            <th>Global role</th>
+            <th scope="col">Vessel</th>
+            <HintTh label="Avoidance" hint={SITUATION_CONTEXT_HINTS.avoidance} />
+            <HintTh label="Judged" hint={SITUATION_CONTEXT_HINTS.judged} />
+            <HintTh label="Role" hint={SITUATION_CONTEXT_HINTS.role} />
+            <HintTh label="Global avoid." hint={SITUATION_CONTEXT_HINTS.globalAvoidance} />
+            <HintTh label="Global role" hint={SITUATION_CONTEXT_HINTS.globalRole} />
           </tr>
         </thead>
         <tbody>

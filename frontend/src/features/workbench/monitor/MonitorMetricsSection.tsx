@@ -2,6 +2,7 @@ import { renderRelationId } from "./renderRelationId";
 import { GeneralMonitorObject } from "./GeneralMonitorList";
 import { fmtNum, type Tone } from "./monitorFormat";
 import { looksLikeMetrics } from "./monitorFieldShapes";
+import { METRIC_HINTS } from "./monitorHints";
 import { MonitorSection, StatTile } from "./monitorPrimitives";
 
 type NumMap = Record<string, number>;
@@ -108,8 +109,8 @@ export function MonitorMetricsSection({
         <>
           <p className="mon-micro">Scene</p>
           <div className="mon-tile-row">
-            <StatTile label="DCPA" value={fmtNum(sceneDcpa)} unit="m" />
-            <StatTile label="TCPA" value={fmtNum(sceneTcpa)} unit="s" />
+            <StatTile label="DCPA" value={fmtNum(sceneDcpa)} unit="m" hint={METRIC_HINTS.dcpa} />
+            <StatTile label="TCPA" value={fmtNum(sceneTcpa)} unit="s" hint={METRIC_HINTS.tcpa} />
             <StatTile
               label="Danger sector"
               value={fmtNum(sceneDanger, 3)}
@@ -155,14 +156,16 @@ export function MonitorMetricsSection({
                       value={fmtNum(distance)}
                       unit="m"
                       tone={distanceTone(distance, t)}
+                      hint={METRIC_HINTS.distance}
                     />
                     <StatTile
                       label="DCPA"
                       value={fmtNum(dcpa)}
                       unit="m"
                       tone={distanceTone(dcpa, t)}
+                      hint={METRIC_HINTS.dcpa}
                     />
-                    <StatTile label="TCPA" value={fmtNum(tcpa)} unit="s" />
+                    <StatTile label="TCPA" value={fmtNum(tcpa)} unit="s" hint={METRIC_HINTS.tcpa} />
                     <StatTile label="DS index" value={fmtNum(ds, 3)} tone={dsIndexTone(ds)} />
                   </div>
                   {t.safetyDistance !== undefined || t.visibilityDistance !== undefined ? (

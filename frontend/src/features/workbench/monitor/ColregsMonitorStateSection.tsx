@@ -2,9 +2,10 @@ import type { ActorStaticInfo, ColregsMonitorStateData } from "../../../domain/s
 import { renderRelationId } from "./renderRelationId";
 import { GeneralMonitorList } from "./GeneralMonitorList";
 import { looksLikeColregsStates } from "./monitorFieldShapes";
-import { ActorTag, BoolChip, BoolDot, MonitorSection } from "./monitorPrimitives";
+import { COLREGS_STATE_COLUMN_HINTS, COLREGS_STATE_HINTS } from "./monitorHints";
+import { ActorTag, BoolChip, BoolDot, HintTh, MonitorSection } from "./monitorPrimitives";
 
-const PER_ACTOR_COLUMNS: { key: keyof ColregsMonitorStateData; label: string }[] = [
+const PER_ACTOR_COLUMNS: { key: keyof typeof COLREGS_STATE_COLUMN_HINTS; label: string }[] = [
   { key: "rightOfStartStateByActorId", label: "Right of start" },
   { key: "leftOfStartStateByActorId", label: "Left of start" },
   { key: "haveBeenInRightManeuverByActorId", label: "Was in right man." },
@@ -42,19 +43,40 @@ function StateCard({
 
       <p className="mon-micro">Perception</p>
       <div className="mon-chip-row">
-        <BoolChip label="In sight"value={row.actorsSeeEachOther} tone="neutral" />
-        <BoolChip label="Passed each other" value={row.actorsPassedEachOther} tone="neutral" />
+        <BoolChip
+          label="In sight"
+          value={row.actorsSeeEachOther}
+          tone="neutral"
+          hint={COLREGS_STATE_HINTS.inSight}
+        />
+        <BoolChip
+          label="Passed each other"
+          value={row.actorsPassedEachOther}
+          tone="neutral"
+          hint={COLREGS_STATE_HINTS.passedEachOther}
+        />
       </div>
 
       <p className="mon-micro">Risk</p>
       <div className="mon-chip-row">
-        <BoolChip label="Collision course" value={row.actorsOnCollisionCourse} tone="danger" />
+        <BoolChip
+          label="Collision course"
+          value={row.actorsOnCollisionCourse}
+          tone="danger"
+          hint={COLREGS_STATE_HINTS.collisionCourse}
+        />
         <BoolChip
           label="Safety domain violated"
           value={row.actorsViolateSafetyDomain}
           tone="danger"
+          hint={COLREGS_STATE_HINTS.safetyDomainViolated}
         />
-        <BoolChip label="Low TCPA" value={row.actorsHaveLowTcpa} tone="danger" />
+        <BoolChip
+          label="Low TCPA"
+          value={row.actorsHaveLowTcpa}
+          tone="danger"
+          hint={COLREGS_STATE_HINTS.lowTcpa}
+        />
       </div>
 
       {ids.length > 0 ? (
@@ -64,9 +86,9 @@ function StateCard({
             <table className="mon-actor-table mon-actor-table--dense">
               <thead>
                 <tr>
-                  <th>Vessel</th>
+                  <th scope="col">Vessel</th>
                   {PER_ACTOR_COLUMNS.map((c) => (
-                    <th key={String(c.key)}>{c.label}</th>
+                    <HintTh key={c.key} label={c.label} hint={COLREGS_STATE_COLUMN_HINTS[c.key]} />
                   ))}
                 </tr>
               </thead>
@@ -79,7 +101,7 @@ function StateCard({
                     {PER_ACTOR_COLUMNS.map((c) => {
                       const map = row[c.key] as Record<string, boolean> | undefined;
                       return (
-                        <td key={String(c.key)} className="mon-dot-cell">
+                        <td key={c.key} className="mon-dot-cell">
                           <BoolDot value={Boolean(map?.[id])} />
                         </td>
                       );

@@ -87,6 +87,27 @@ export function Chip({ label, tone = "neutral" }: { label: ReactNode; tone?: Ton
   return <span className={`mon-chip mon-chip--${tone}`}>{label}</span>;
 }
 
+/** A label whose meaning is explained in a tooltip (`hint`); plain text without one. */
+export function Hinted({ hint, children }: { hint?: string; children: ReactNode }) {
+  if (!hint) {
+    return <>{children}</>;
+  }
+  return (
+    <span className="mon-hint" title={hint}>
+      {children}
+    </span>
+  );
+}
+
+/** Column header of a monitor table, with a tooltip saying what the column means. */
+export function HintTh({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <th scope="col">
+      <Hinted hint={hint}>{label}</Hinted>
+    </th>
+  );
+}
+
 /**
  * Boolean as a chip. `tone` says which value is noteworthy:
  * - "danger": true is bad (red), false is muted
@@ -97,16 +118,19 @@ export function BoolChip({
   label,
   value,
   tone = "neutral",
+  hint,
 }: {
   label: string;
   value: boolean;
   tone?: "neutral" | "danger" | "good";
+  /** What the flag means, added to the tooltip after its value. */
+  hint?: string;
 }) {
   const activeTone = tone === "danger" ? "danger" : tone === "good" ? "good" : "info";
   return (
     <span
-      className={`mon-bool-chip mon-bool-chip--${value ? activeTone : "off"}`}
-      title={`${label}: ${value ? "yes" : "no"}`}
+      className={`mon-bool-chip mon-bool-chip--${value ? activeTone : "off"}${hint ? " mon-bool-chip--hinted" : ""}`}
+      title={`${label}: ${value ? "yes" : "no"}${hint ? `. ${hint}` : ""}`}
     >
       <span className="mon-bool-dot" />
       {label}
@@ -137,15 +161,20 @@ export function StatTile({
   value,
   unit,
   tone = "neutral",
+  hint,
 }: {
   label: string;
   value: ReactNode;
   unit?: string;
   tone?: Tone;
+  /** What the value means, shown as a tooltip on the label. */
+  hint?: string;
 }) {
   return (
     <div className={`mon-tile mon-tile--${tone}`}>
-      <span className="mon-tile-label">{label}</span>
+      <span className="mon-tile-label">
+        <Hinted hint={hint}>{label}</Hinted>
+      </span>
       <span className="mon-tile-value">
         {value}
         {unit ? <span className="mon-tile-unit"> {unit}</span> : null}
@@ -160,18 +189,23 @@ export function MiniBar({
   max,
   valueText,
   tone = "info",
+  hint,
 }: {
   label: string;
   value: number;
   max: number;
   valueText?: string;
   tone?: Tone;
+  /** What the bar measures, shown as a tooltip on the label. */
+  hint?: string;
 }) {
   const pct = max > 0 && Number.isFinite(value) ? Math.max(0, Math.min(1, value / max)) : 0;
   return (
     <div className="mon-bar">
       <div className="mon-bar-head">
-        <span className="mon-bar-label">{label}</span>
+        <span className="mon-bar-label">
+          <Hinted hint={hint}>{label}</Hinted>
+        </span>
         <span className="mon-bar-value meta">{valueText ?? `${fmtNum(value)} / ${fmtNum(max)}`}</span>
       </div>
       <div className="mon-bar-track">

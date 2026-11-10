@@ -2,7 +2,8 @@ import type { ActorStaticInfo, ManeuverStateData } from "../../../domain/simulat
 import { GeneralMonitorList } from "./GeneralMonitorList";
 import { directionWord, fmtNum, humanizeEnum } from "./monitorFormat";
 import { looksLikeManeuverStates } from "./monitorFieldShapes";
-import { ActorTag, BoolChip, Chip, MiniBar, MonitorSection, StatTile } from "./monitorPrimitives";
+import { MANEUVER_HINTS } from "./monitorHints";
+import { ActorTag, BoolChip, Chip, Hinted, MiniBar, MonitorSection, StatTile } from "./monitorPrimitives";
 
 function hasSpeedChange(row: ManeuverStateData): boolean {
   return (
@@ -31,28 +32,59 @@ function ManeuverCard({
         {changed ? (
           <span className="mon-card-sub meta">was {humanizeEnum(row.previousManeuverType)}</span>
         ) : null}
-        {row.maneuverCount > 0 ? <span className="mon-badge">x{row.maneuverCount}</span> : null}
+        {row.maneuverCount > 0 ? (
+          <span className="mon-badge" title={MANEUVER_HINTS.maneuverCount}>
+            x{row.maneuverCount}
+          </span>
+        ) : null}
       </div>
 
       <div className="mon-tile-row">
-        <StatTile label="Turn" value={turn} tone={turn === "-" ? "neutral" : "info"} />
-        <StatTile label="Δ heading (prev)" value={fmtNum(row.headingDiffSincePreviousDeg)} unit="deg" />
-        <StatTile label="Δ heading (start)" value={fmtNum(row.headingDiffSinceStartDeg)} unit="deg" />
+        <StatTile
+          label="Turn"
+          value={turn}
+          tone={turn === "-" ? "neutral" : "info"}
+          hint={MANEUVER_HINTS.turn}
+        />
+        <StatTile
+          label="Δ heading (prev)"
+          value={fmtNum(row.headingDiffSincePreviousDeg)}
+          unit="deg"
+          hint={MANEUVER_HINTS.headingPrev}
+        />
+        <StatTile
+          label="Δ heading (start)"
+          value={fmtNum(row.headingDiffSinceStartDeg)}
+          unit="deg"
+          hint={MANEUVER_HINTS.headingStart}
+        />
         <StatTile
           label="Δ heading (RA)"
           value={fmtNum(row.headingDiffSinceReadilyApparentDeg)}
           unit="deg"
+          hint={MANEUVER_HINTS.headingReadilyApparent}
         />
       </div>
 
       {hasSpeedChange(row) ? (
         <div className="mon-tile-row">
-          <StatTile label="Δ speed (prev)" value={fmtNum(row.speedDiffSincePrevious)} unit="m/s" />
-          <StatTile label="Δ speed (start)" value={fmtNum(row.speedDiffSinceStart)} unit="m/s" />
+          <StatTile
+            label="Δ speed (prev)"
+            value={fmtNum(row.speedDiffSincePrevious)}
+            unit="m/s"
+            hint={MANEUVER_HINTS.speedPrev}
+          />
+          <StatTile
+            label="Δ speed (start)"
+            value={fmtNum(row.speedDiffSinceStart)}
+            unit="m/s"
+            hint={MANEUVER_HINTS.speedStart}
+          />
           <StatTile
             label="Δ speed (RA)"
             value={fmtNum(row.speedDiffSinceReadilyApparent)}
             unit="m/s"
+            hint={MANEUVER_HINTS.speedReadilyApparent}
           />
         </div>
       ) : null}
@@ -62,21 +94,32 @@ function ManeuverCard({
         value={row.distanceMade}
         max={row.totalDistanceMade}
         valueText={`${fmtNum(row.distanceMade)} / ${fmtNum(row.totalDistanceMade)} m`}
+        hint={MANEUVER_HINTS.distanceMade}
       />
 
       <div className="mon-chip-row">
-        <BoolChip label="Just started" value={row.justStarted} tone="neutral" />
+        <BoolChip
+          label="Just started"
+          value={row.justStarted}
+          tone="neutral"
+          hint={MANEUVER_HINTS.justStarted}
+        />
         <BoolChip
           label="Readily apparent time passed"
           value={row.readilyApparentTimePassed}
           tone="good"
+          hint={MANEUVER_HINTS.readilyApparentTimePassed}
         />
-        <span className="meta">timespan {fmtNum(row.timespan)} s</span>
+        <span className="meta">
+          <Hinted hint={MANEUVER_HINTS.timespan}>timespan</Hinted> {fmtNum(row.timespan)} s
+        </span>
       </div>
 
       {row.suggestedManeuvers.length > 0 ? (
         <div className="mon-chip-row mon-chip-row--wrap">
-          <span className="mon-micro mon-micro--inline">Suggested</span>
+          <span className="mon-micro mon-micro--inline">
+            <Hinted hint={MANEUVER_HINTS.suggested}>Suggested</Hinted>
+          </span>
           {row.suggestedManeuvers.map((m) => (
             <Chip key={m} label={humanizeEnum(m)} tone="neutral" />
           ))}
