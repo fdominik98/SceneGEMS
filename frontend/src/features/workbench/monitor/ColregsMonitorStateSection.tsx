@@ -42,7 +42,7 @@ function StateCard({
 
       <p className="mon-micro">Perception</p>
       <div className="mon-chip-row">
-        <BoolChip label="See each other" value={row.actorsSeeEachOther} tone="neutral" />
+        <BoolChip label="In sight"value={row.actorsSeeEachOther} tone="neutral" />
         <BoolChip label="Passed each other" value={row.actorsPassedEachOther} tone="neutral" />
       </div>
 

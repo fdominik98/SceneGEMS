@@ -742,7 +742,9 @@ def test_revision_0014_renames_the_stored_asv_system_names_and_back(empty_databa
                 {"at": at},
             )
             connection.execute(
-                text("INSERT INTO worker_node_component (worker_node_id, component) VALUES ('worker-1', 'asv_software/replay'), ('worker-1', 'asv_software/usv_navigation'), ('worker-1', 'control_layer/none')")
+                text(
+                    "INSERT INTO worker_node_component (worker_node_id, component) VALUES ('worker-1', 'asv_software/replay'), ('worker-1', 'asv_software/usv_navigation'), ('worker-1', 'control_layer/none')"
+                )
             )
             connection.execute(
                 text(

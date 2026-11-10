@@ -5,8 +5,8 @@ import numpy as np
 
 from logical_level.constraint_satisfaction.assignments import Assignments
 from logical_level.models.actor_variable import ActorVariable
-from logical_level.models.values import ActorValues
-from utils.colregs_approximations import drift_threshold, vis_distance
+from logical_level.models.values import ActorValues, ObstacleValues
+from utils.colregs_approximations import drift_threshold, vis_distance, vis_distance_with_obstacle
 from utils.global_constants import EPSILON, SIDE_ANGLE
 from utils.math_utils import compute_angle, magnitude
 
@@ -125,7 +125,11 @@ class GeometricProperties(ABC):
     @property
     def vis_distance(self) -> float:
         if self.__vis_distance is None:
-            self.__vis_distance = vis_distance(
+            # Two vessels are in sight when either one sees the other. A static obstacle
+            # sees nothing, so a pair with one keeps its own rule.
+            has_obstacle = isinstance(self.val1, ObstacleValues) or isinstance(self.val2, ObstacleValues)
+            pair_vis_distance = vis_distance_with_obstacle if has_obstacle else vis_distance
+            self.__vis_distance = pair_vis_distance(
                 self.angle_p21_v2 >= SIDE_ANGLE,
                 self.val2.l,
                 self.angle_p12_v1 >= SIDE_ANGLE,

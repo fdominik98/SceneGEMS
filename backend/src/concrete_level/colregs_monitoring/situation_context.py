@@ -57,7 +57,9 @@ class SituationContext(ABC):
         self.start_timestamp = start_timestamp
         self.actors_on_collision_course = self.get_actors_on_collision_course(start_scene)
         self.actors_have_low_tcpa = self.get_actors_have_low_tcpa(start_scene)
-        self.actors_see_each_other = self.get_actors_see_each_other(start_scene)
+        # At the start scene the visibility band counts as in sight, as it does for the
+        # encounter gate of an initial scene.
+        self.actors_see_each_other = self.get_actors_see_each_other(start_scene, include_visibility_band=True)
         self.actors_passed_each_other = self.get_actors_passed_each_other(start_scene)
         self.actors_violate_safety_domain = self.get_actors_violate_safety_domain(start_scene)
         self.actors_right_of_start_state = self.get_actors_right_of_start_state(start_scene)
@@ -177,8 +179,14 @@ class SituationContext(ABC):
     def _get_actors_passed_each_other_condition(self, current_scene: ConcreteScene) -> bool:
         pass
 
-    def get_actors_see_each_other(self, scene: ConcreteScene) -> bool:
-        return not scene.out_of_visibility_distance(self.actor2, self.actor1)
+    def get_actors_see_each_other(self, scene: ConcreteScene, include_visibility_band: bool = False) -> bool:
+        """Whether the pair is in sight in ``scene`` alone: either vessel sees the other.
+
+        The same test the encounter gate uses, so the flag and the classification cannot
+        disagree. The monitor state carries it forward, since a pair that has been in
+        sight stays in sight.
+        """
+        return scene.in_sight(self.actor2, self.actor1, include_visibility_band)
 
     def get_actors_on_collision_course(self, scene: ConcreteScene) -> bool:
         return scene.on_collision_course(self.actor2, self.actor1)

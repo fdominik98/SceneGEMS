@@ -1,4 +1,4 @@
-"""COLREGSMonitor at the first timestamp, and the first failure time it keeps per rule."""
+"""COLREGSMonitor at the first timestamp, the first failure time it keeps per rule, and the in sight state it keeps per pair."""
 
 import math
 
@@ -17,10 +17,17 @@ PAIR = Relation.canonical(OWN_SHIP, TARGET)
 # Head-on along the x axis. The safety radius is 120 m: 80 m is inside the default circle,
 # 200 m only inside the own ship's head-on ellipse.
 INSIDE_CIRCLE, INSIDE_HEAD_ON_DOMAIN = 80.0, 200.0
+# Two 30 m vessels meeting are in sight from 5 nm (9260 m).
+WITHIN_VISIBILITY, BEYOND_VISIBILITY = 3000.0, 12000.0
 
 
 def head_on(distance: float) -> ConcreteScene:
     return ConcreteScene({OWN_SHIP: ActorState(0.0, 0.0, SPEED, 0.0), TARGET: ActorState(distance, 0.0, SPEED, math.pi)})
+
+
+def abeam(distance: float, advance: float = 0.0) -> ConcreteScene:
+    """Parallel courses east, ``distance`` apart: never on a collision course."""
+    return ConcreteScene({OWN_SHIP: ActorState(advance, 0.0, SPEED, 0.0), TARGET: ActorState(advance, distance, SPEED, 0.0)})
 
 
 def safe_distance(results: COLREGSRuleResultMapSet) -> COLREGSRuleResult:
@@ -89,3 +96,33 @@ def test_first_failures_are_kept_per_relation_and_never_moved():
     other = Relation(OWN_SHIP, OWN_SHIP)
     later = record_first_failures(recorded, results(first, other), 9)
     assert later == {(first, giving_way): 5, (other, giving_way): 9} and recorded == {(first, giving_way): 5}
+
+
+def test_a_pair_within_visibility_is_in_sight_and_one_beyond_it_is_not():
+    assert COLREGSMonitor(abeam(WITHIN_VISIBILITY), constants()).initial_monitor_state_set[PAIR].actors_see_each_other
+    assert not COLREGSMonitor(abeam(BEYOND_VISIBILITY), constants()).initial_monitor_state_set[PAIR].actors_see_each_other
+
+
+def test_a_pair_stays_in_sight_after_both_vessels_leave_visibility_range():
+    monitor = COLREGSMonitor(abeam(WITHIN_VISIBILITY), constants())
+    apart = abeam(BEYOND_VISIBILITY, SPEED)
+    after = monitor.step(monitor.initial_monitored_scene_with_results, apart, 1)
+    assert apart.visibility_distance_kind(OWN_SHIP, TARGET) == "out"
+    assert after.monitored_scene.colregs_state_set[PAIR].actors_see_each_other
+    later = monitor.step(after, abeam(BEYOND_VISIBILITY, 2 * SPEED), 1)
+    assert later.monitored_scene.colregs_state_set[PAIR].actors_see_each_other
+
+
+def test_a_pair_that_was_in_sight_meets_again_beyond_visibility_as_an_encounter():
+    monitor = COLREGSMonitor(abeam(WITHIN_VISIBILITY), constants())
+    assert monitor.initial_situation_context_set[PAIR].situation_type is COLREGSType.OTHER
+    after = monitor.step(monitor.initial_monitored_scene_with_results, head_on(BEYOND_VISIBILITY), 1)
+    assert after.monitored_scene.situation_context_set[PAIR].situation_type is COLREGSType.HEAD_ON
+    assert after.monitored_scene.colregs_state_set[PAIR].actors_see_each_other
+
+
+def test_a_pair_never_in_sight_meets_beyond_visibility_without_an_encounter():
+    monitor = COLREGSMonitor(abeam(BEYOND_VISIBILITY), constants())
+    after = monitor.step(monitor.initial_monitored_scene_with_results, head_on(BEYOND_VISIBILITY), 1)
+    assert after.monitored_scene.situation_context_set[PAIR].situation_type is COLREGSType.OTHER
+    assert not after.monitored_scene.colregs_state_set[PAIR].actors_see_each_other

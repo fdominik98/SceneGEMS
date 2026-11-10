@@ -12,7 +12,7 @@ import numpy as np
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
-from utils.colregs_approximations import vis_distance
+from utils.colregs_approximations import vis_distance, vis_distance_with_obstacle
 
 # Upstream's validated geometric prescribed time (behaviour regression suite and CommonOcean
 # batch, dt 1 s). It sizes dsafe = Cs + v * tp and the arrival radius at the virtual waypoint.
@@ -61,8 +61,9 @@ class UsvNavigationParameters:
           control_horizon seconds after each transition, so the vessel must be able to turn
           through half a circle well before that.
         - horizon: the largest visibility distance between the vessel and another actor, seen
-          from neither one's stern. One value per run, so it does not follow the bearing as the
-          monitor's visibility does. None when the vessel is alone.
+          from neither one's stern. Two vessels are in sight when either one sees the other, so
+          the more visible of the two sets the distance of a pair. One value per run, so it does
+          not follow the bearing as the monitor's visibility does. None when the vessel is alone.
         - dcpa_beta1, dcpa_beta2: upstream's, or 1.25 and 2.5 safety radii where those are larger.
         - prescribed_time and every other runtime argument: upstream defaults.
         """
@@ -83,7 +84,7 @@ class UsvNavigationParameters:
             speed=speed,
             safety_radius=safety_radius,
             control_horizon=max(DEFAULT_CONTROL_HORIZON_STEPS * dt, DEFAULT_PRESCRIBED_TIME_S, full_turn_s),
-            horizon=max((vis_distance(False, vessel.length, False, actor.length) for actor in actors if actor.id != vessel.id), default=None),
+            horizon=max(((vis_distance if actor.is_vessel else vis_distance_with_obstacle)(False, vessel.length, False, actor.length) for actor in actors if actor.id != vessel.id), default=None),
             runtime_options=(
                 ("dcpa_beta1", max(UPSTREAM_DCPA_BETA1_M, DCPA_BETA1_RADII * safety_radius)),
                 ("dcpa_beta2", max(UPSTREAM_DCPA_BETA2_M, DCPA_BETA2_RADII * safety_radius)),

@@ -16,8 +16,8 @@ from scenegems_tool.vessel_stack.calibration.reference_scenarios import (  # noq
     encounter_trajectories,
     make_vessel,
 )
-from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import (
     AgentConnection,
     EnvironmentConfig,

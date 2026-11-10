@@ -199,8 +199,12 @@ class TestHeadOnWhileOvertaken:
 
     The seed used to fail Rule 16 at 75 s (first turn after the window), then Rule 17 at 375 s (the
     own ship turned back to its track while TS1 was still overtaking it), and TS1 never settled on
-    its course again. The encounter with TS2 that starts once the own ship is back on its track
-    (after 720 s) is left to the window repair and not part of this seed.
+    its course again.
+
+    The scene also holds TS2, which the own ship is overtaking. That pair is in sight from the
+    start, so its encounter starts again as soon as the own ship is back on its heading (135 s),
+    and the seed leaves it to the window repair. TS2 is left out here, so the seed is the one of
+    the head-on while overtaken alone; test_monitor_guided_planner plans the whole scene.
     """
 
     TIME_STEP = 15
@@ -208,7 +212,8 @@ class TestHeadOnWhileOvertaken:
     @pytest.fixture(scope="class")
     def seed(self):
         with open(os.path.join(os.path.dirname(__file__), "data", "four_vessel_head_on_overtaken.json"), encoding="utf-8") as file:
-            scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
+            whole_scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
+        scene = ConcreteScene({actor: state for actor, state in whole_scene.items() if actor.name != "ts2"})
         monitor = COLREGSMonitor(scene, constants(), judge_initial_scene=False)
         nodes = build_seed_nodes(monitor, self.TIME_STEP, 720.0)
         return nodes, {vessel.name: vessel for vessel in scene.vessels}

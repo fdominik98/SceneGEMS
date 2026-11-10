@@ -264,17 +264,29 @@ class ConcreteScene(Serializable):
         predicate = AtOrInOvertakingToStarboardCR if include_visibility_band else InOvertakingToStarboardCR
         return predicate(self.vars[actor1], self.vars[actor2], colregs_constants).holds(self.evaluation_cache)
 
-    def in_sight_on_collision_course(self, actor1: ConcreteActor, actor2: ConcreteActor, include_visibility_band: bool = False) -> bool:
-        """True when the pair can see each other (at or in visibility) and DCPA is inside the safety distance.
+    def in_sight(self, actor1: ConcreteActor, actor2: ConcreteActor, include_visibility_band: bool = False) -> bool:
+        """True when the pair is in sight of one another in this scene.
+
+        The visibility distance of two vessels is the range at which either one sees the
+        other (COLREGS Rule 3(k)), so this holds as soon as one of them does. It looks at
+        this scene only: the monitor keeps a pair in sight once it has been, and carries
+        that itself.
+        """
+        if include_visibility_band and self.at_visibility_distance(actor1, actor2):
+            return True
+        return self.in_visibility_distance(actor1, actor2)
+
+    def in_sight_on_collision_course(self, actor1: ConcreteActor, actor2: ConcreteActor, include_visibility_band: bool = False, already_in_sight: bool = False) -> bool:
+        """True when the pair is in sight (at or in visibility) and DCPA is inside the safety distance.
 
         Low TCPA is not required: coming into sight on a collision course is already a
         COLREGS encounter. TCPA is reported separately on the monitor state.
+        ``already_in_sight`` is the monitor's memory of the pair: one that has been in
+        sight stays in sight, whatever its range in this scene.
         """
         if not self.on_collision_course(actor1, actor2):
             return False
-        if include_visibility_band:
-            return self.at_visibility_distance(actor1, actor2) or self.in_visibility_distance(actor1, actor2)
-        return self.in_visibility_distance(actor1, actor2)
+        return already_in_sight or self.in_sight(actor1, actor2, include_visibility_band)
 
     def overtaking_to_port(self, actor1: ConcreteActor, actor2: ConcreteActor, colregs_constants: COLREGSConstraints) -> bool:
         """Overtaking-to-port bearing geometry only, without visibility or collision risk."""

@@ -8,6 +8,9 @@ from utils.math_utils import Direction
 
 @dataclass(frozen=False)
 class COLREGSMonitorState:
+    # The pair is in sight: either vessel sees the other, now or at an earlier scene of
+    # the run. It is never taken back, so it is also the memory the situation context
+    # step reads to keep a pair in sight beyond visibility range.
     actors_see_each_other: bool
     actors_passed_each_other: bool
     actors_right_of_start_state: Dict[ConcreteActor, bool]

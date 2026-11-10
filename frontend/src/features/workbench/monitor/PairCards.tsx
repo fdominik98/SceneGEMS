@@ -160,7 +160,7 @@ function PairDetails({ pair }: { pair: PairModel }) {
         {colregs ? (
           <DetailRow label="Monitor state">
             {[
-              colregs.actorsSeeEachOther ? "see each other" : "not in sight",
+              colregs.actorsSeeEachOther ? "in sight" : "not in sight",
               colregs.actorsOnCollisionCourse ? "collision course" : null,
               colregs.actorsHaveLowTcpa ? "low TCPA" : null,
               colregs.actorsViolateSafetyDomain ? "safety domain violated" : null,

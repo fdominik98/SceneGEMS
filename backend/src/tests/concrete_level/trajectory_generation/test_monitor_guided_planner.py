@@ -2,6 +2,7 @@
 
 import json
 import os
+import random
 
 import pytest
 
@@ -118,13 +119,20 @@ class TestRepair:
 
 
 @pytest.mark.slow
-def test_a_scene_with_a_late_second_encounter_is_repaired_to_a_clean_plan():
-    """Own ship head-on with TS3 while TS1 overtakes it; back on its track it meets TS2 again and one window repairs that."""
+def test_a_scene_with_a_second_encounter_is_repaired_to_a_clean_plan():
+    """Own ship head-on with TS3 while TS1 overtakes it, and overtaking TS2 itself.
+
+    The own ship and TS2 stay in sight, so their encounter starts again as soon as the own
+    ship is back on its heading (135 s). The seed has no corridor for it and fails Rule 16
+    there; the window repair clears that.
+    """
     with open(os.path.join(os.path.dirname(__file__), "data", "four_vessel_head_on_overtaken.json"), encoding="utf-8") as file:
         scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
+    random.seed(0)  # the window search samples heading changes
     previews = _Previews()
     planner = _planner(scene, observer=previews)
     trajectories, iterations = planner.plan_trajectory()
     assert planner.first_failed_step is None
-    assert len(trajectories) == iterations + 1
+    assert iterations == 240, "the seed runs the whole hour"
+    assert len(trajectories) == 140, "the repaired plan ends once every give-way ship is back on its track"
     assert len(previews) > iterations  # the repair kept reporting after the last seed step

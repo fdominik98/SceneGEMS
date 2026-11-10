@@ -305,9 +305,9 @@ payloads = [
 ]
 for _, job_type, payload in payloads:
     parse_payload(job_types.payload_model(job_type), JobSpec(job_id="check", job_type=job_type, payload=payload, attempt=1, idempotency_key="check"))
-worker node = WorkerNodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION: 1})
+worker_node = WorkerNodeContext("m1", "n1", MQttConnectionInfo("", "", "broker", "broker", 1883, False, False), Geofence(57.7, 11.9, 2000.0), slots={JobType.SIMULATION: 1})
 job = JobSpec(job_id="check", job_type=JobType.SIMULATION, payload=payloads[3][2], attempt=1, idempotency_key="check")
-stack = ardupilot_runner.build_job_stack(job, worker node, parse_payload(simulation_job.SimulationPayload, job).root)
+stack = ardupilot_runner.build_job_stack(job, worker_node,parse_payload(simulation_job.SimulationPayload, job).root)
 assert "runner" in stack.compose["services"] and len(stack.compose["services"]) >= 3, stack.compose["services"].keys()
 print("worker node side ok:", ", ".join(sorted(name for name, _, _ in payloads)))
 """

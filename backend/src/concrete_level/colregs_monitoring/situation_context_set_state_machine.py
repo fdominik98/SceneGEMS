@@ -38,7 +38,10 @@ class SituationContextSetStateMachine:
         next_situation_contexts = {}
         for relation in current_situation_context_set.relations:
             current_context = current_situation_context_set[relation]
-            next_situation_contexts[relation] = SituationContextStateMachine.step(current_context, step_samples, next_scene, next_timestamp, colregs_constants)
+            # A pair that has been in sight stays in sight. The monitor state of the
+            # scene being left holds that memory for each relation.
+            already_in_sight = current_monitored_scene.colregs_state_set[relation].actors_see_each_other
+            next_situation_contexts[relation] = SituationContextStateMachine.step(current_context, step_samples, next_scene, next_timestamp, colregs_constants, already_in_sight)
         return SituationContextSetStateMachine.from_situation_contexts(next_situation_contexts, next_scene)
 
     @staticmethod

@@ -101,6 +101,7 @@ class SituationContextStateMachine:
         next_scene: ConcreteScene,
         next_timestamp: int,
         colregs_constants: COLREGSConstraints,
+        already_in_sight: bool = False,
     ) -> SituationContext:
         """Calculate the next situation context without mutating the current one.
 
@@ -108,8 +109,12 @@ class SituationContextStateMachine:
         whatever the bearing geometry says. That holds for an encounter that is already
         running as well, so it ends the moment one vessel is inside the other's domain,
         and a new one can only begin once the pair is clear of it again.
+
+        ``already_in_sight`` says the pair has been in sight at an earlier scene of the
+        run. Such a pair stays in sight even when both vessels are beyond visibility
+        range again, so a collision course alone starts an encounter for it.
         """
-        next_context = SituationContextStateMachine._next_context(current_situation_context, step_samples, next_scene, next_timestamp, colregs_constants)
+        next_context = SituationContextStateMachine._next_context(current_situation_context, step_samples, next_scene, next_timestamp, colregs_constants, already_in_sight)
         if next_context.situation_type is not COLREGSType.OTHER and next_context.get_actors_violate_safety_domain(next_scene):
             return OtherSituationContext(next_context.actor1, next_context.actor2, next_scene, next_timestamp, colregs_constants)
         return next_context
@@ -121,6 +126,7 @@ class SituationContextStateMachine:
         next_scene: ConcreteScene,
         next_timestamp: int,
         colregs_constants: COLREGSConstraints,
+        already_in_sight: bool = False,
     ) -> SituationContext:
         """The next context from the encounter's own logic, before the safety domain guard."""
         if current_situation_context.get_actors_passed_each_other(next_scene):
@@ -131,6 +137,7 @@ class SituationContextStateMachine:
             current_situation_context.actor2,
             next_timestamp,
             colregs_constants,
+            already_in_sight=already_in_sight,
         )
         if current_situation_context.situation_type == COLREGSType.OTHER and candidate.situation_type == COLREGSType.OTHER:
             # Look inside the step before concluding that nothing happened. An encounter
@@ -142,7 +149,7 @@ class SituationContextStateMachine:
             # against a vessel that was never told it had to act. This is the same
             # end-point sampling hole that SafeDistanceCondition avoids by taking the
             # minimum clearance over the whole step.
-            onset = SituationContextStateMachine._find_onset_within_step(current_situation_context, step_samples, colregs_constants)
+            onset = SituationContextStateMachine._find_onset_within_step(current_situation_context, step_samples, colregs_constants, already_in_sight)
             if onset is not None:
                 return onset
         if current_situation_context.situation_type == COLREGSType.OTHER and candidate.situation_type != COLREGSType.OTHER:
@@ -160,6 +167,7 @@ class SituationContextStateMachine:
         current_situation_context: SituationContext,
         step_samples: StepSamples,
         colregs_constants: COLREGSConstraints,
+        already_in_sight: bool = False,
     ) -> Optional[SituationContext]:
         """The earliest non-OTHER classification strictly inside the step, if any.
 
@@ -171,7 +179,7 @@ class SituationContextStateMachine:
         actor1 = current_situation_context.actor1
         actor2 = current_situation_context.actor2
         for timestamp, scene in step_samples.samples:
-            candidate = SituationContextStateMachine.get_situation_context(scene, actor1, actor2, timestamp, colregs_constants)
+            candidate = SituationContextStateMachine.get_situation_context(scene, actor1, actor2, timestamp, colregs_constants, already_in_sight=already_in_sight)
             if candidate.situation_type is not COLREGSType.OTHER:
                 return candidate
         return None
@@ -200,9 +208,10 @@ class SituationContextStateMachine:
         start_timestamp: int,
         colregs_constants: COLREGSConstraints,
         include_visibility_band: bool = False,
+        already_in_sight: bool = False,
     ) -> SituationContext:
         if isinstance(vessel1, ConcreteVessel) and isinstance(vessel2, ConcreteVessel):
-            if not scene.in_sight_on_collision_course(vessel1, vessel2, include_visibility_band=include_visibility_band):
+            if not scene.in_sight_on_collision_course(vessel1, vessel2, include_visibility_band=include_visibility_band, already_in_sight=already_in_sight):
                 return OtherSituationContext(vessel1, vessel2, scene, start_timestamp, colregs_constants)
             situation_context = SituationContextStateMachine._from_bearing_geometry(scene, vessel1, vessel2, start_timestamp, colregs_constants)
             # An encounter cannot start with one vessel already inside the other's domain

@@ -74,7 +74,11 @@ class COLREGSStateMachine:
             is_safety_domain_violation = situation_context.get_actors_violate_safety_domain(next_scene)
             vessels_on_collision_course = situation_context.get_actors_on_collision_course(next_scene)
             actors_have_low_tcpa = situation_context.get_actors_have_low_tcpa(next_scene)
-            actors_see_each_other = situation_context.get_actors_see_each_other(next_scene)
+            # In sight is kept once reached: a pair that has been in sight stays so when
+            # both vessels are beyond visibility range again. A running encounter counts
+            # too, since one that began inside the step proves the pair was in sight
+            # there, even if the scene the step ends in is out of range.
+            actors_see_each_other = current_state.actors_see_each_other or situation_context.situation_type is not COLREGSType.OTHER or situation_context.get_actors_see_each_other(next_scene)
             # SituationContextStateMachine.step returns the SAME context object while an
             # encounter holds and a new one when it changes, so identity is exactly the
             # "this encounter just started" test.

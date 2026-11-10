@@ -18,6 +18,7 @@ from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBu
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
 from scenegems_tool.vessel_stack.calibration.reference_scenarios import ENCOUNTER_TARGETS, VESSEL_SCALES, make_vessel, scaled_vessel
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import KinematicRunResult, run_kinematic_closed_loop
+from utils.global_constants import VISIBILITY_DIST_6
 
 STEPS = 1400
 LARGE_HULL_YAW_RATE = 0.008  # rad/s, as the 100 m reference hull
@@ -120,15 +121,16 @@ def small_own_ship_against_a_large_target() -> Trajectories:
     return TrajectoryBuilder.default_trajectory_from_scene(ConcreteScene({own: ActorState(0.0, 0.0, 3.0, 0.0), target: ActorState(6000.0, 0.0, 3.0, math.pi)}), 1, STEPS)
 
 
-def test_a_small_own_ship_has_a_horizon_shorter_than_a_large_targets_safety_radius():
+def test_a_small_own_ship_has_the_horizon_of_the_large_target_it_meets():
+    """The pair is in sight once either vessel sees the other, so the large target's range counts and not the 370 m the small hull is seen from."""
     trajectories = small_own_ship_against_a_large_target()
     own = trajectories.initial_scene.os
     parameters = UsvNavigationParameters.from_reference(own, trajectories.state_list(own), trajectories.initial_scene.actors, 1.0)
-    assert parameters.horizon < parameters.safety_radius
+    assert parameters.horizon == VISIBILITY_DIST_6 > parameters.safety_radius
 
 
-@pytest.mark.xfail(strict=True, reason="the pair's visibility is shorter than the large target's safety radius, so the target only comes into view inside its domain")
-def test_a_small_own_ship_keeps_the_domain_of_a_target_it_sees_late():
+@pytest.mark.xfail(strict=True, reason="the target is in view from the start, but avoidance starts too late for a slow own ship to clear the large target's radius")
+def test_a_small_own_ship_keeps_the_domain_of_a_large_target():
     assert steps_inside_a_domain(run_kinematic_closed_loop(small_own_ship_against_a_large_target())) == 0
 
 

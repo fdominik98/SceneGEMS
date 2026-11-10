@@ -25,8 +25,8 @@ from haversine import Unit
 from pymavlink import mavutil
 
 from concrete_level.models.actor_state import ActorState
-from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence, from_true_north, to_true_north
+from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand
 from utils.math_utils import heading_diff, rotate_heading
 
 ROVER_HOLD_MODE = 4  # Rover custom_mode of HOLD: throttle and steering exactly 0

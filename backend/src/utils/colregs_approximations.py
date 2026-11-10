@@ -127,15 +127,17 @@ def o2VisibilityByo1(o1_sees_o2_stern: bool, o2_length: float) -> float:
 
 def possible_vis_distances_by_length(length1, length2):
     return [
-        min(o2VisibilityByo1(True, length1), o2VisibilityByo1(True, length2)),
-        min(o2VisibilityByo1(True, length1), o2VisibilityByo1(False, length2)),
-        min(o2VisibilityByo1(False, length1), o2VisibilityByo1(True, length2)),
-        min(o2VisibilityByo1(False, length1), o2VisibilityByo1(False, length2)),
+        vis_distance(True, length1, True, length2),
+        vis_distance(True, length1, False, length2),
+        vis_distance(False, length1, True, length2),
+        vis_distance(False, length1, False, length2),
     ]
 
 
 def possible_vis_distances_by_bearing(o2_sees_o1_stern, o1_sees_o2_stern):
-    if o1_sees_o2_stern or o2_sees_o1_stern:
+    # The pair is in sight at the longer of the two ranges, so the short sternlight
+    # ranges bound it only when each vessel sees the other's stern.
+    if o1_sees_o2_stern and o2_sees_o1_stern:
         return [
             VISIBILITY_DIST_2,
             VISIBILITY_DIST_3,
@@ -152,6 +154,25 @@ def possible_vis_distances_by_bearing(o2_sees_o1_stern, o1_sees_o2_stern):
 
 
 def vis_distance(o2_sees_o1_stern, length1, o1_sees_o2_stern, length2):
+    """The range at which two vessels come in sight of one another.
+
+    COLREGS Rule 3(k): vessels are in sight of one another when one can be observed
+    visually from the other. One direction is enough, so the pair is in sight from the
+    longer of the two ranges.
+    """
+    return max(
+        o2VisibilityByo1(o2_sees_o1_stern, length1),
+        o2VisibilityByo1(o1_sees_o2_stern, length2),
+    )
+
+
+def vis_distance_with_obstacle(o2_sees_o1_stern, length1, o1_sees_o2_stern, length2):
+    """The visibility range of a pair with a static obstacle in it.
+
+    An obstacle observes nothing, so the rule for two vessels does not apply. The
+    shorter of the two ranges is kept, which is what the scene generator places
+    obstacles by.
+    """
     return min(
         o2VisibilityByo1(o2_sees_o1_stern, length1),
         o2VisibilityByo1(o1_sees_o2_stern, length2),

@@ -5,6 +5,7 @@ import math
 import pytest
 
 from concrete_level.models.actor_state import ActorState
+from concrete_level.models.concrete_actors import ConcreteActor
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import (
     DEFAULT_CONTROL_HORIZON_STEPS,
     DEFAULT_PRESCRIBED_TIME_S,
@@ -13,7 +14,7 @@ from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parame
     UsvNavigationParameters,
 )
 from tests.scenegems_tool.vessel_stack.scenarios import SPEED, encounter_trajectories, make_vessel
-from utils.global_constants import VISIBILITY_DIST_5, VISIBILITY_DIST_6
+from utils.global_constants import VISIBILITY_DIST_3, VISIBILITY_DIST_5, VISIBILITY_DIST_6
 
 STATES = [ActorState(0.0, 0.0, SPEED, 0.0), ActorState(8.0, 0.0, SPEED, 0.0)]
 
@@ -94,14 +95,22 @@ def test_prescribed_time_is_the_upstream_default(head_on):
 def test_horizon_is_the_visibility_between_the_vessel_and_the_other_actor():
     own = make_vessel(0, True, length=30.0)
     other = make_vessel(1, False, length=100.0)
-    assert UsvNavigationParameters.from_reference(own, STATES, [own, other], 1.0).horizon == VISIBILITY_DIST_5, "the smaller vessel limits the pair"
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, other], 1.0).horizon == VISIBILITY_DIST_6, "the more visible vessel sets the distance of the pair"
+    assert UsvNavigationParameters.from_reference(other, STATES, [own, other], 1.0).horizon == VISIBILITY_DIST_6, "the pair has one distance, whichever vessel asks"
 
 
 def test_horizon_is_the_largest_visibility_of_several_actors():
+    own = make_vessel(0, True, length=15.0)
+    seen_from_near = make_vessel(1, False, length=10.0)
+    seen_from_far = make_vessel(2, False, length=30.0)
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, seen_from_near], 1.0).horizon == VISIBILITY_DIST_3
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, seen_from_near, seen_from_far], 1.0).horizon == VISIBILITY_DIST_5
+
+
+def test_a_static_obstacle_does_not_extend_the_horizon():
     own = make_vessel(0, True, length=100.0)
-    near_sighted = make_vessel(1, False, length=30.0)
-    far_sighted = make_vessel(2, False, length=100.0)
-    assert UsvNavigationParameters.from_reference(own, STATES, [own, near_sighted, far_sighted], 1.0).horizon == VISIBILITY_DIST_6
+    obstacle = ConcreteActor.from_dict({"id": 1, "type": "SmallIsland", "length": 30.0, "safety_radius": 30.0, "is_vessel": False})
+    assert UsvNavigationParameters.from_reference(own, STATES, [own, obstacle], 1.0).horizon == VISIBILITY_DIST_5
 
 
 def test_a_vessel_alone_has_no_horizon():
