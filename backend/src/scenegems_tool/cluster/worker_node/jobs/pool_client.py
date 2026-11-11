@@ -5,6 +5,9 @@ attempt, so an earlier attempt's late reply is never taken for this one. The res
 task marked as its result on one of its streams. A task that fails, or is aborted by somebody else, fails
 the attempt at once with the subsystem's reason, and a job that stops waiting without a result (cancelled,
 lost, released, timed out) cancels its own request, so the pool's other tasks keep running.
+
+A request whose task takes more than its start (a series of scenes that follows as signals) names
+on_running: it is called once, on the job's thread, when the task left the queue and runs.
 """
 
 import logging
@@ -48,6 +51,11 @@ def wait_for_reply(replied: threading.Event, report: JobReport, description: str
             raise JobFailed(f"No {description} within {timeout_s:g} s", retryable=True)
 
 
+def request_id_of(job: JobSpec) -> str:
+    """The id of the job's request to a pool: the job and its attempt, so an earlier attempt's late reply is never taken for this one."""
+    return f"{job.job_id}-{job.attempt}"
+
+
 @dataclass
 class PoolReply:
     """What a request came back with: the result message of its task, as the subsystem published it, and the seed the task ran with."""
@@ -67,6 +75,7 @@ class _FollowedRequest:
         self._report = report
         self.result: Optional[Mapping[str, Any]] = None
         self.ended: Optional[Tuple[TaskState, Optional[str]]] = None  # the task's end state and its reason, while there is no result
+        self.started = threading.Event()  # the task runs, or is over without having run
         self.done = threading.Event()
 
     def on_stream(self, stream: str, message: Mapping[str, Any]) -> None:
@@ -74,6 +83,7 @@ class _FollowedRequest:
             return
         if self._is_result(stream, message):
             self.result = message
+            self.started.set()
             self.done.set()
         elif self._progress is not None:
             text = self._progress(stream, message)
@@ -84,6 +94,8 @@ class _FollowedRequest:
         del seed  # the job sent the seed itself
         if request_id != self.request_id or self.result is not None or self.ended is not None:
             return
+        if state == TaskState.RUNNING or state.is_final:
+            self.started.set()
         if state in (TaskState.FAILED, TaskState.ABORTED):
             self.ended = (state, reason)
             self.done.set()
@@ -111,17 +123,19 @@ def run_pool_request(
     pool_description: str,
     reply_description: str,
     progress: Optional[Callable[[str, Mapping[str, Any]], Optional[str]]] = None,
+    on_running: Optional[Callable[[Any, str], None]] = None,
 ) -> PoolReply:
     """Run the job as one request on the worker node's pool of the subsystem and return the task's result.
 
     seed: the request's seed; a job that names none gets one drawn here, so every request carries one.
     is_result(stream, message) picks the task's result among its stream messages; progress turns any other
-    stream message into a status line. JobFailed when the pool cannot be reached, the task fails or is
-    aborted, or no result comes within timeout_s.
+    stream message into a status line. on_running(client, request id) is called once when the task runs:
+    there the job sends what the task needs beyond its start (client.publish_signal). JobFailed when the
+    pool cannot be reached, the task fails or is aborted, or no result comes within timeout_s.
     """
     from scenegems_tool.messaging.mqtt_pool_client import MqttPoolClient
 
-    request_id = f"{job.job_id}-{job.attempt}"  # an earlier attempt's late reply is never taken for this one
+    request_id = request_id_of(job)
     request_seed = draw_seed() if seed is None else seed
     followed = _FollowedRequest(request_id, is_result, progress, report)
     pool = worker_node.pools.get(subsystem)
@@ -135,7 +149,12 @@ def run_pool_request(
         wait_for_pool(lambda: client.is_connected and client.is_heartbeat_valid, report, pool_description, cancel)
         client.publish_start_task(task_name, request_id, params, request_seed)
         sent = True
-        wait_for_reply(followed.done, report, reply_description, cancel, timeout_s)
+        deadline = time.monotonic() + timeout_s
+        if on_running is not None:
+            wait_for_reply(followed.started, report, f"{pool_description} to start the task", cancel, timeout_s)
+            if not followed.done.is_set():
+                on_running(client, request_id)
+        wait_for_reply(followed.done, report, reply_description, cancel, max(0.0, deadline - time.monotonic()))
     finally:
         if sent and followed.result is None and followed.ended is None:
             _cancel_request(client, request_id)

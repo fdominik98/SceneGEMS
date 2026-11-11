@@ -4,7 +4,7 @@ import pytest
 
 from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.pooled import pooled_service
-from scenegems_tool.cluster.worker_node.launchers.pooled.monitor_service import MonitorService
+from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.service_pools import ServicePools
 from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_pool import TrajectoryGenerationPool
@@ -57,20 +57,22 @@ def test_image_override_applies_to_pools(no_docker, monkeypatch, mqtt_connection
     assert pool.build_compose()["services"]["scene-generation-subsystem"]["image"] == "scenegems-scene-generation-subsystem:branch"
 
 
-def test_scoped_monitor_is_named_by_scope(no_docker, mqtt_connection, geofence):
+def test_the_monitoring_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqtt_connection, geofence):
     scope = InstanceScope.pooled("m1", "n1", "monitoring")
-    monitor = MonitorService.for_scope(scope, mqtt_connection, geofence, "scenario_monitor", "waraps/service/virtual/real/scenario_monitor", "rules: []\n")
-    service = monitor.labelled(monitor.build_compose())["services"]["monitoring"]
-    assert service["container_name"] == "scenegems-m1-n1-monitoring-subsystem"
-    assert "MQTT_TOPIC_PREFIX" not in service["environment"] and service["labels"] == {INSTANCE_LABEL: "monitoring-subsystem"}
-    assert service["environment"]["MONITOR_AGENT_NAME"] == "scenario_monitor" and service["environment"]["MONITOR_TOPIC"] == "waraps/service/virtual/real/scenario_monitor"
-    assert service["environment"]["COLREGS_CONSTRAINTS_YAML_B64"] == "cnVsZXM6IFtdCg==" and service["networks"] == ["scenegems_broker"]
-    assert monitor.project.name == "scenegems-m1-n1" and monitor.names.instance == scope.key, "in the worker node's project, found by its label"
+    pool = MonitoringPool.for_scope(scope, mqtt_connection.with_topic_root("scenegems"), geofence, workers=2, broker_network="worker_node_broker_net", service_name="monitoring-subsystem-2")
+    service = pool.labelled(pool.build_compose())["services"]["monitoring-subsystem"]
+    assert service["container_name"] == service["hostname"] == "scenegems-m1-n1-monitoring-subsystem"
+    assert service["labels"] == {INSTANCE_LABEL: "monitoring-subsystem"} and service["cpus"] == 3, "a core per series it judges at once, and one for the service"
+    environment = service["environment"]
+    assert (environment["WORKER_COUNT"], environment["MQTT_SERVICE_NAME"], environment["MQTT_TOPIC_ROOT"]) == ("2", "monitoring-subsystem-2", "scenegems")
+    # The COLREGS constants come with every request, and the name and the topic with the launcher's variables
+    assert not {"MONITOR_AGENT_NAME", "MONITOR_TOPIC", "COLREGS_CONSTRAINTS_YAML_B64", "MQTT_TOPIC_PREFIX"} & set(environment)
+    assert (pool.service_name, pool.service_topic) == ("monitoring-subsystem-2", "scenegems/service/virtual/real/monitoring-subsystem-2")
+    assert pool.project.name == "scenegems-m1-n1" and pool.names.instance == scope.key, "in the worker node's project, found by its label"
 
 
-def test_a_monitor_is_a_worker_nodes_alone():
-    """The control node starts none: the workbench has its previews and runs judged by jobs on a worker node."""
-    assert not hasattr(MonitorService, "for_workbench")
+def test_a_monitoring_pool_on_its_own_keeps_the_subsystems_name():
+    assert MonitoringPool.default_service_name == "monitoring-subsystem" and MonitoringPool.subsystem is Subsystem.MONITORING
 
 
 # The pools of a worker node: started together, looked after, removed together
@@ -92,10 +94,12 @@ def container_of(pool) -> str:
 
 
 def test_the_pools_of_the_subsystems_start_together_each_once(pools):
-    pools.start([Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION, Subsystem.SIMULATION])
+    pools.start([Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION, Subsystem.MONITORING, Subsystem.SIMULATION])
     scene = pools.get(Subsystem.SCENE_GENERATION)
     assert scene.service_name == "scene-generation-subsystem-4" and scene.workers == 2
     assert pools.get(Subsystem.TRAJECTORY_GENERATION).service_name == "trajectory-generation-subsystem-4"
+    monitoring = pools.get(Subsystem.MONITORING)
+    assert isinstance(monitoring, MonitoringPool) and (monitoring.service_name, monitoring.workers) == ("monitoring-subsystem-4", 2)
     pools.start([Subsystem.SCENE_GENERATION])
     assert pools.get(Subsystem.SCENE_GENERATION) is scene, "a pool that is there is left alone; a subsystem without a pool yet is skipped"
 

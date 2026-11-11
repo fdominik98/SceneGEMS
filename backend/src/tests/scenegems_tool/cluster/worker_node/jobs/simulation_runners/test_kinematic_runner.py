@@ -6,7 +6,7 @@ import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
-from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job, simulation_job
+from scenegems_tool.cluster.worker_node.jobs import simulation_job
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation, RunObserver
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicSimulationPayload, build_job_stack, kinematic_run_instance
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
@@ -81,11 +81,11 @@ def test_a_run_without_a_monitor_is_the_plain_replay(simulate, head_on_trajector
     assert result["steps"] == 120
 
 
-def test_the_live_monitor_gives_the_post_hoc_result_of_the_same_run(simulate, make_job):
+def test_the_live_monitor_gives_the_post_hoc_result_of_the_same_run(simulate, post_hoc):
     plain, live = simulate(), simulate(monitor="live")
     assert live["state_digest"] == plain["state_digest"] and live["steps"] == plain["steps"]
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": plain["trajectories"]}), _quiet)
-    assert {key: live["monitor"][key] for key in SUMMARY_KEYS} == {key: post_hoc[key] for key in SUMMARY_KEYS}
+    judged = post_hoc(plain["trajectories"])
+    assert {key: live["monitor"][key] for key in SUMMARY_KEYS} == {key: judged[key] for key in SUMMARY_KEYS}
     assert live["monitor"]["stopped_early_at"] is None
     assert not live["monitor"]["passed"] and live["monitor"]["failed_rules"][0]["first_failed_at"] == 61
 

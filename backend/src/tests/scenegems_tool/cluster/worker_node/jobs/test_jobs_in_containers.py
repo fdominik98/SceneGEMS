@@ -20,11 +20,11 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import LogStream
 from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import execute as execute_calibration
 from scenegems_tool.cluster.worker_node.jobs.job_runner import run_job
-from scenegems_tool.cluster.worker_node.jobs.monitoring_post_hoc_job import execute as execute_post_hoc
 from scenegems_tool.cluster.worker_node.launchers.docker_cli import container_ids_for_instance, is_container_running
 from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem, subsystem_image
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.messaging.mqtt_client import CLUSTER_TOPIC_ROOT, MQttConnectionInfo
+from scenegems_tool.subsystems.monitoring.monitoring_worker import SeriesMonitor
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
 from utils.file_system_utils import COLREGS_CONSTANTS_FOLDER, FUNCTIONAL_MODELS_FOLDER, STATIC_OBSTACLE_TYPES_FOLDER, VESSEL_TYPES_FOLDER
@@ -145,12 +145,25 @@ def test_two_kinematic_jobs_run_side_by_side(broker, control_node_id, make_job, 
     assert reports[1].first("running") < reports[0].first("run finished")
 
 
-def test_post_hoc_monitoring_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):
-    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.MONITORING_POST_HOC: 1})
-    job = make_job(JobType.MONITORING_POST_HOC, {"trajectories": head_on_trajectories.to_dict()})
-    result = run_job(job, worker_node, RecordingReport())
-    expected = json.loads(json.dumps(execute_post_hoc(job, lambda message, progress=None: None)))
-    assert result == expected
+def test_post_hoc_monitoring_runs_on_the_monitoring_pool(broker, control_node_id, make_job, head_on_trajectories):
+    """Needs the monitoring subsystem image built from the pooled subsystems code."""
+    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.MONITORING_POST_HOC: 2})
+    in_process = SeriesMonitor("reference", head_on_trajectories.time_step)
+    in_process.add(head_on_trajectories.scene_list)
+    try:
+        results = [
+            run_job(make_job(JobType.MONITORING_POST_HOC, {"trajectories": head_on_trajectories.to_dict(), "include_frames": frames}, job_id=f"monitor-{index}"), worker_node, RecordingReport())
+            for index, frames in enumerate((False, True))
+        ]
+        pool = worker_node.pools.get(Subsystem.MONITORING)
+        assert pool.names.container_name == f"scenegems-{control_node_id}-n1-monitoring-subsystem" and is_container_running(pool.names.container_name), "one long-lived container for both jobs"
+    finally:
+        worker_node.shutdown()
+    for result in results:
+        assert (result["scenes"], result["monitored_scenes"], result["time_step"]) == (121, 121, 1)
+        assert {key: result[key] for key in ("rules", "failed_rules", "encounters", "encounter_roles", "passed")} == json.loads(json.dumps(in_process.summary()))
+    assert "frames" not in results[0] and [frame["timestamp"] for frame in results[1]["frames"]] == list(range(121))
+    assert {frame["scenarioId"] for frame in results[1]["frames"]} == {"monitor-1-1"}
 
 
 def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):

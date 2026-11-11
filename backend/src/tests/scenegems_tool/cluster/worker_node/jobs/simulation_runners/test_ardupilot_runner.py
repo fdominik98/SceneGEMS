@@ -207,15 +207,13 @@ def test_a_run_without_the_monitor_has_no_verdicts_or_trajectories(fake_sitl, ma
     assert frames and all(frame["ruleResults"] == [] for frame in frames)
 
 
-def test_the_live_monitor_gives_the_post_hoc_result_of_the_observed_run(fake_sitl, make_job, head_on_trajectories):
+def test_the_live_monitor_gives_the_post_hoc_result_of_the_observed_run(fake_sitl, make_job, head_on_trajectories, post_hoc):
     """The monitor judges every lockstep step, observed or not, as monitoring.post_hoc judges the run's trajectories."""
-    from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job
-
     job = ardupilot_job(make_job, head_on_trajectories, monitor="live", include_trajectories=True)
     result = execute(job, _quiet)
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": result["trajectories"]}), _quiet)
+    judged = post_hoc(result["trajectories"])
     summary_keys = ("scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "passed")
-    assert {key: result["monitor"][key] for key in summary_keys} == {key: post_hoc[key] for key in summary_keys}
+    assert {key: result["monitor"][key] for key in summary_keys} == {key: judged[key] for key in summary_keys}
     assert result["monitor"]["scenes"] == 121 and result["monitor"]["stopped_early_at"] is None
     observed, _ = _observe(job, speed=1.0)
     assert observed == result  # the observation changes nothing in the result

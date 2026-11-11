@@ -1,194 +1,67 @@
-import json
-import threading
-import time
-from dataclasses import dataclass
-from queue import Queue
-from typing import Any, List, Optional, Sequence, Union
+"""The monitoring subsystem on the broker: a monitor-scenario request is one task, judging one series of scenes.
 
-import paho.mqtt.client as mqtt
+The pool, the task states and the channels are the ones every subsystem has (messaging/mqtt_pool_service.py).
+The scenes of a series follow its request as scenes signals, in time order, and a close signal ends it
+(subsystems/monitoring/monitoring_types.py). Two series of one scenario never run at once: the later one
+waits in the queue until the earlier is over; series of different scenarios run side by side, as many as the
+pool has places.
 
-from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredSceneWithResults
-from concrete_level.models.concrete_scene import ConcreteScene
-from scenegems_tool.gateway.serialization import serialize_monitored_frame
-from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
+A task publishes on sensor/monitored-scene one message per judged batch: the batch's index, how many scenes
+of the series are judged, and the monitored frames when the request asked for them. Once every rule has its
+final outcome it says so on exec/feedback (detail.stop-advised). At the close it publishes the verdict on
+sensor/monitor_result: the series' size and the rule outcomes (subsystems/monitoring/rule_outcomes.py).
+"""
+
+from typing import Any, Dict, List, Mapping
+
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_pool_service import PoolService
+from scenegems_tool.subsystems.monitoring.monitoring_types import (
+    CLOSE_SIGNAL,
+    MONITOR_RESULT_STREAM,
+    MONITOR_SCENARIO_TASK,
+    MONITORED_SCENE_STREAM,
+    MONITORING_SERVICE_NAME,
+    SCENES_SIGNAL,
+    MonitorScenarioTask,
+)
+from scenegems_tool.subsystems.monitoring.monitoring_worker import run_monitoring_worker
+from scenegems_tool.subsystems.pool.pool_task import PoolTask
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 
-@dataclass(frozen=True)
-class MqttMonitoringTask:
-    sender: str
-    task_uuid: str
-    scenario_id: str
-    scene: ConcreteScene
-    scene_timestamp: int
-    time_step: int
-    is_simulation_frame: bool
+class MqttMonitoringService(PoolService):
+    description = "Monitoring Subsystem"
+    task_name = MONITOR_SCENARIO_TASK
+    signals = (SCENES_SIGNAL, CLOSE_SIGNAL)
+    streams = (MONITORED_SCENE_STREAM, MONITOR_RESULT_STREAM)
+    worker = staticmethod(run_monitoring_worker)
 
-    @property
-    def trajectory_id(self) -> str:
-        return f"{self.sender}-{self.scenario_id}-{str(self.is_simulation_frame)}"
+    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, max_workers: int = 1, name: str = MONITORING_SERVICE_NAME, **options: Any):
+        super().__init__(mqtt_connection, reference_geofence, max_workers, name, **options)
 
-
-@dataclass(frozen=True)
-class MqttMonitoringBatchTask:
-    sender: str
-    task_uuid: str
-    scenario_id: str
-    scenes: Sequence[ConcreteScene]
-    scene_timestamps: Sequence[int]
-    time_step: int
-    is_simulation_frame: bool
-    # Set for a single generated/loaded scene; echoed back so the client can route it.
-    request_id: Optional[str] = None
-
-    @property
-    def trajectory_id(self) -> str:
-        return f"{self.sender}-{self.scenario_id}-{str(self.is_simulation_frame)}"
-
-
-class MqttMonitorService(MqttClient):
-    def __init__(self, mqtt_connection: MQttConnectionInfo, topic: str, agent_name: str, reference_geofence: Geofence):
-        super().__init__(name=agent_name, topic=topic, mqtt_connection=mqtt_connection, reference_geofence=reference_geofence)
-        self.info_update_rate = 1.0
-        self.monitoring_task_queue: Queue[Union[MqttMonitoringTask, MqttMonitoringBatchTask]] = Queue()
-        self._ready_event = threading.Event()
-
-    @property
-    def listen_topics(self) -> List[str]:
-        return [self.exec_command_topic]
-
-    @property
-    def base_topic(self) -> str:
-        return self.topic
-
-    @property
-    def monitored_scene_topic(self) -> str:
-        return f"{self.sensor_topic}/monitored-scene"
-
-    @property
-    def is_ready(self) -> bool:
-        # Ready means we are connected and on_connect has run, which performs topic subscriptions.
-        return self._ready_event.is_set() and self.is_connected
-
-    def on_connect(self, client, userdata, flags, rc):
-        super().on_connect(client, userdata, flags, rc)
-        if rc == 0:
-            self._ready_event.set()
-
-    def on_disconnect(self, client, userdata, rc):
-        self._ready_event.clear()
-        super().on_disconnect(client, userdata, rc)
-
-    def _on_message(self, msg: mqtt.MQTTMessage, payload: Any):
-        if payload["execution-unit"] != self.name:
-            return
-        if payload["command"] != "start-task":
-            return
-        match payload["task"]["name"]:
-            case "step-monitor":
-                self._on_step_monitor_task(payload)
-            case "step-monitor-batch":
-                self._on_step_monitor_batch_task(payload)
-
-    def _on_step_monitor_task(self, payload: Any):
-        scenario_id = payload["task"]["params"]["scenario-id"]
-        scene = ConcreteScene.from_dict(payload["task"]["params"]["scene"])
-        scene_timestamp = payload["task"]["params"]["scene-timestamp"]
-        time_Step = payload["task"]["params"]["time-step"]
-        is_simulation_frame = bool(payload["task"]["params"]["is-simulation-frame"])
-        self.monitoring_task_queue.put(
-            MqttMonitoringTask(
+    def make_tasks(self, task_uuid: str, request_id: str, seed: int, params: Mapping[str, Any]) -> List[PoolTask]:
+        scenario_id = str(params["scenario-id"])
+        time_step = int(params["time-step"])
+        constants = params["colregs-constraints-content"]  # named by every request; null for the general maritime defaults
+        if not scenario_id:
+            raise ValueError("a series names its scenario")
+        if time_step < 1:
+            raise ValueError(f"the time step of a series is at least 1, got {time_step}")
+        if constants is not None and not isinstance(constants, str):
+            raise TypeError("the COLREGS constants are YAML text, or null for the defaults")
+        return [
+            MonitorScenarioTask(
                 sender=self.name,
-                task_uuid=payload["task-uuid"],
+                task_uuid=task_uuid,
+                request_id=request_id,
+                seed=seed,
                 scenario_id=scenario_id,
-                scene=scene,
-                scene_timestamp=scene_timestamp,
-                time_step=time_Step,
-                is_simulation_frame=is_simulation_frame,
+                time_step=time_step,
+                colregs_constraints_content=constants,
+                include_frames=bool(params.get("include-frames", False)),
             )
-        )
-
-    def _on_step_monitor_batch_task(self, payload: Any) -> None:
-        params = payload["task"]["params"]
-        scenes = [ConcreteScene.from_dict(scene_dict) for scene_dict in params["scenes"]]
-        self.monitoring_task_queue.put(
-            MqttMonitoringBatchTask(
-                sender=self.name,
-                task_uuid=payload["task-uuid"],
-                scenario_id=params["scenario-id"],
-                scenes=scenes,
-                scene_timestamps=params["scene-timestamps"],
-                time_step=params["time-step"],
-                is_simulation_frame=bool(params["is-simulation-frame"]),
-                request_id=params.get("request-id"),
-            )
-        )
-
-    def publish_monitored_scene(self, task: MqttMonitoringTask, monitored_scene: MonitoredSceneWithResults):
-        monitored_scene_command = {
-            "stamp": time.time(),
-            "task_sender": task.sender,
-            "task-uuid": task.task_uuid,
-            "monitored-frame": serialize_monitored_frame(scenario_id=task.scenario_id, monitored_scene=monitored_scene, timestamp=task.scene_timestamp, time_step=task.time_step),
-            "is-simulation-frame": task.is_simulation_frame,
-        }
-        str_monitored_scene_command = json.dumps(monitored_scene_command)
-        self.client.publish(self.monitored_scene_topic, str_monitored_scene_command, qos=1)
-
-    def publish_monitored_scene_batch(
-        self,
-        batch_task: MqttMonitoringBatchTask,
-        monitored_results: Sequence[tuple[MqttMonitoringTask, MonitoredSceneWithResults]],
-    ) -> None:
-        monitored_frames = [
-            serialize_monitored_frame(
-                scenario_id=task.scenario_id,
-                monitored_scene=monitored_scene,
-                timestamp=task.scene_timestamp,
-                time_step=task.time_step,
-            )
-            for task, monitored_scene in monitored_results
         ]
-        if not monitored_frames:
-            return
-        monitored_scene_command = {
-            "stamp": time.time(),
-            "task_sender": batch_task.sender,
-            "task-uuid": batch_task.task_uuid,
-            "monitored-frames": monitored_frames,
-            "is-simulation-frame": batch_task.is_simulation_frame,
-        }
-        if batch_task.request_id is not None:
-            monitored_scene_command["request-id"] = batch_task.request_id
-        self.client.publish(self.monitored_scene_topic, json.dumps(monitored_scene_command), qos=1)
 
-    def publish_heartbeat_and_sensor_info(self, current_tasks: List[MqttMonitoringTask]):
-        heartbeat_command = {
-            "name": self.name,
-            "agent-type": "virtual",
-            "agent-description": "COLREGS Monitor",
-            "agent-uuid": self.uuid,
-            "levels": ["sensor", "direct execution"],
-            "rate": self.info_update_rate,
-            "stamp": time.time(),
-            "type": "HeartBeat",
-        }
-        str_heartbeat_command = json.dumps(heartbeat_command)
-        self.client.publish(self.heartbeat_topic, str_heartbeat_command, qos=1)
-        sensor_info_command = {"name": self.name, "rate": self.info_update_rate, "sensor-data-provided": ["monitored-scene"], "stamp": time.time(), "type": "SensorInfo"}
-
-        str_sensor_info_command = json.dumps(sensor_info_command)
-        self.client.publish(self.sensor_info_topic, str_sensor_info_command, qos=1)
-
-        tasks_executing = [{"name": "step-monitor", "uuid": current_task.task_uuid} for current_task in current_tasks]
-        direct_execution_info_command = {
-            "name": self.name,
-            "rate": self.info_update_rate,
-            "type": "DirectExecutionInfo",
-            "stamp": time.time(),
-            "tasks-available": [{"name": "step-monitor", "signals": []}],
-            "tasks-executing": tasks_executing,
-        }
-
-        str_direct_execution_info_command = json.dumps(direct_execution_info_command)
-        self.client.publish(self.direct_execution_topic, str_direct_execution_info_command, qos=1)
+    def stream_message(self, task: PoolTask, stream: str, payload: Mapping[str, Any], final: bool) -> Dict[str, Any]:
+        return {"scenario-id": getattr(task, "scenario_id", ""), **payload, "final": bool(final)}

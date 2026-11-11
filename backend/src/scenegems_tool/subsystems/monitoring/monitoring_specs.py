@@ -22,7 +22,7 @@ from scenegems_tool.architecture.architecture_model import (
     MetamodelNode,
 )
 from scenegems_tool.persistence.schema import MonitorImplementation
-from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, check_covers_enum, spec_edge, spec_node
+from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, check_covers_enum, pool_facts, spec_edge, spec_node
 
 DOCUMENT_ID = "monitoring"
 _MONITORING = "concrete_level/colregs_monitoring"
@@ -74,9 +74,9 @@ def monitor_specs() -> Tuple[MonitorSpec, ...]:
         MonitorSpec(
             MonitorImplementation.POST_HOC,
             "Post hoc",
-            "A monitoring job judges the recorded run after the simulation. The monitor result summary is passed or failed.",
+            "A monitoring job judges the recorded run after the simulation, as one series of scenes on the monitoring pool. The monitor result summary is passed or failed.",
             "scenegems_tool/cluster/worker_node/jobs/monitoring_post_hoc_job.py",
-            ("runner_container",),
+            ("mqtt_service",),
             True,
             (Fact("early_stop", "Early stop", False, GROUP_CAPABILITY),),
         ),
@@ -85,7 +85,7 @@ def monitor_specs() -> Tuple[MonitorSpec, ...]:
             "Live",
             "The engine runs inside the simulation, step by step, and can stop the run once every rule is decided.",
             "scenegems_tool/cluster/worker_node/jobs/simulation_job.py",
-            ("simulation_job", "mqtt_service"),
+            ("simulation_job",),
             True,
             (Fact("early_stop", "Early stop", True, GROUP_CAPABILITY),),
         ),
@@ -116,27 +116,34 @@ def rule_specs() -> Tuple[RuleSpec, ...]:
     )
 
 
+# The facts of the monitoring pool's request (subsystem_spec.pool_facts)
+_POOL = pool_facts(
+    "monitor-scenario",
+    "one per request: judging one series of scenes of one scenario, in time order. Two series of one scenario never run at once: the later one waits",
+    "the monitor draws nothing at random; the request's seed is carried into the task for the record",
+    "sensor/monitored-scene: one message per judged batch, with its monitored frames on request; sensor/monitor_result: the verdict when the series is closed; "
+    "exec/feedback: once every rule is decided; exec/response: every task state",
+)
+
+# (local id, label, description, code, tag, facts)
 _HOSTS = (
-    (
-        "runner_container",
-        "Runner container",
-        "A monitoring container of its own per monitoring.post_hoc job, so a worker node's slots bound the monitors that run at once.",
-        "scenegems_tool/cluster/worker_node/jobs/runner_container.py",
-        "cluster",
-    ),
     (
         "simulation_job",
         "Simulation job",
         "The simulation job: the engine steps with the simulation, and on the kinematic layer the run ends early once every rule is decided.",
         "scenegems_tool/cluster/worker_node/jobs/simulation_job.py",
         "cluster",
+        (),
     ),
     (
         "mqtt_service",
-        "MQTT monitor service",
-        "The monitoring service of a worker node: scenes arrive over MQTT in batches, monitored frames go back. Heartbeat and task acknowledgement every second.",
-        "scenegems_tool/subsystems/monitoring/monitoring_worker.py",
-        "workbench",
+        "Monitoring pool",
+        "The monitoring subsystem of a worker node: one long-lived container. A monitor-scenario request over the message broker, sent by the worker node's daemon for a job "
+        "it leased, becomes one task, which waits in the queue and then runs in a worker process of the pool. The scenes follow as signals, in batches of 100 and in time order, "
+        "and a close signal ends the series.",
+        "scenegems_tool/messaging/mqtt_monitor_service.py",
+        "cluster",
+        _POOL,
     ),
 )
 
@@ -230,7 +237,7 @@ def monitoring_document(measurements: Optional[Mapping[str, MeasuredFacts]] = No
     def node(local, lane, label, description, implements, code, facts=(), tags=()):
         return spec_node(DOCUMENT_ID, local, lane, label, description, implements, facts=(Fact("code", "Code", code, GROUP_PROPERTY), *facts), tags=tags, measurements=measurements)
 
-    nodes = [node(local, LANE_HOST, label, description, META_HOST, code, tags=(tag,)) for local, label, description, code, tag in _HOSTS]
+    nodes = [node(local, LANE_HOST, label, description, META_HOST, code, facts, tags=(tag,)) for local, label, description, code, tag, facts in _HOSTS]
     edges = []
     for spec in monitors:
         nodes.append(node(spec.monitor.value, LANE_MONITOR, spec.label, spec.description, META_MONITOR, spec.code, spec.facts))

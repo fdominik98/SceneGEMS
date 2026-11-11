@@ -1,32 +1,16 @@
-import base64
-import os
+"""The container of the monitoring subsystem: its pool on the broker (messaging/mqtt_monitor_service.py)."""
 
-from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.subsystems.monitoring.monitoring_worker import MonitoringWorker
-from utils.colregs_approximations import COLREGSConstraints
+import multiprocessing
+
+from scenegems_tool.messaging.mqtt_monitor_service import MqttMonitoringService
+from scenegems_tool.subsystems.monitoring.monitoring_types import MONITORING_SERVICE_NAME
+from scenegems_tool.subsystems.pool.pool_service_main import serve, service_from_environment
 
 
 def main() -> None:
-    mqtt_connection = MQttConnectionInfo.from_environment()
-    reference_geofence = geofence_from_environment()
-    agent_name = os.environ["MONITOR_AGENT_NAME"]
-    topic = os.environ["MONITOR_TOPIC"]
-    constraints_yaml = base64.b64decode(os.environ["COLREGS_CONSTRAINTS_YAML_B64"]).decode("utf-8")
-    colregs_constants = COLREGSConstraints.from_file_content(constraints_yaml)
-
-    worker = MonitoringWorker(
-        mqtt_connection=mqtt_connection,
-        topic=topic,
-        agent_name=agent_name,
-        reference_geofence=reference_geofence,
-        colregs_constants=colregs_constants,
-    )
-    try:
-        worker.run()
-    except KeyboardInterrupt:
-        worker.stop()
+    serve(service_from_environment(MqttMonitoringService, MONITORING_SERVICE_NAME))
 
 
 if __name__ == "__main__":
+    multiprocessing.set_start_method("spawn")
     main()

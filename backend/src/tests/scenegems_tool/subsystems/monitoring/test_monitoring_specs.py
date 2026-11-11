@@ -22,6 +22,21 @@ def test_only_the_monitors_that_judge_run_the_engine():
     assert not any(source == "monitoring/empty" and target == "monitoring/monitor_runtime" for source, target in edges)
 
 
+def test_the_post_hoc_monitor_runs_on_the_monitoring_pool_and_the_live_one_in_the_simulation():
+    document = monitoring_document()
+    hosts = {(edge.source, edge.target) for edge in document.edges if edge.target in ("monitoring/post_hoc", "monitoring/live")}
+    assert hosts == {("monitoring/mqtt_service", "monitoring/post_hoc"), ("monitoring/simulation_job", "monitoring/live")}
+    assert {node.id for node in document.nodes if node.lane == "host"} == {"monitoring/mqtt_service", "monitoring/simulation_job"}, "no container of its own per job any more"
+
+
+def test_the_monitoring_pool_says_how_it_runs_a_request():
+    [pool] = [node for node in monitoring_document().nodes if node.id == "monitoring/mqtt_service"]
+    facts = {fact.key: fact.value for fact in pool.facts}
+    assert (pool.label, facts["request"]) == ("Monitoring pool", "monitor-scenario")
+    assert "one scenario never run at once" in facts["tasks"] and "slots" in facts["pool"] and "seed" in facts["seed"]
+    assert "sensor/monitored-scene" in facts["publishes"] and "sensor/monitor_result" in facts["publishes"] and "queued" in facts["task_states"]
+
+
 def test_the_rule_list_names_real_rule_classes():
     for rule in rule_specs():
         assert hasattr(colregs_rules, rule.rule_class), rule.rule_class

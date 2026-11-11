@@ -1,11 +1,14 @@
-"""monitoring.post_hoc: judge a finished state log, or one scene, against COLREGS, in a monitoring container.
+"""monitoring.post_hoc: judge a finished state log, or one scene, against COLREGS, by the worker node's monitoring pool.
 
-The monitor runs in process over every scene of the trajectories, as the live monitor does
-for streamed batches, but without MQTT in between (the live path is the measured throughput
-limit, design doc 10.5). Each job gets its own container, so the worker node's slots bound the
-monitors that run at once. The result lists, per vessel pair and rule, when each outcome
-first held (subsystems/monitoring/rule_outcomes.py, the same summary as the live monitor
-of a kinematic simulation); the monitored frames are added on request.
+The job is one monitor-scenario request to the worker node's monitoring subsystem (jobs/pool_client.py
+run_pool_request), so the daemon only relays it. Once the request's task runs, the job sends the scenes in
+time order, SCENES_PER_BATCH at a time, and closes the series; the task judges them with one monitor from the
+first scene to the last and answers with the verdict (subsystems/monitoring/monitoring_worker.py). The pool
+judges as many series at once as the worker node has monitoring.post_hoc slots, and two series of one scenario
+never at the same time: the later one waits. A job that names no scenario is a scenario of its own.
+
+The result lists, per vessel pair and rule, when each outcome first held (subsystems/monitoring/rule_outcomes.py,
+the same summary as the live monitor of a kinematic simulation); the monitored frames are added on request.
 
 The payload names exactly one of trajectories (a state log or planned trajectories) and
 scene (a generated scene: a scene generation's EvaluationData, a scene, or a document with
@@ -16,10 +19,13 @@ rule outcomes at time 0. At time 0 only the rules that need one scene's state ar
 vessels move stay unknown, so a scene alone either fails or passes with no outcome listed.
 The safety domain guard applies: a pair inside its encounter's own domain is OTHER, so
 SafeDistance judges it against the default circle.
+
+A job that stops waiting without its verdict (cancelled, lost, released, timed out) cancels its own
+series by request id, so the pool's other series keep running.
 """
 
 import threading
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from pydantic import Field, model_validator
 
@@ -27,12 +33,12 @@ from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKin
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport, JobResultData
-from scenegems_tool.cluster.worker_node.jobs.job_payload import TrajectoriesInput, parse_payload, to_trajectories
-from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback, run_in_runner_container
+from scenegems_tool.cluster.worker_node.jobs.job_payload import TrajectoriesInput, parse_payload
+from scenegems_tool.cluster.worker_node.jobs.pool_client import request_id_of, run_pool_request
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
+from scenegems_tool.subsystems.monitoring.monitoring_types import CLOSE_SIGNAL, MONITOR_RESULT_STREAM, MONITOR_SCENARIO_TASK, MONITORED_SCENE_STREAM, SCENES_PER_BATCH, SCENES_SIGNAL
 
-_PROGRESS_EVERY_SCENES = 100
 SCENE_KEYS = ("best_scene", "scene", "initial_scene")  # where a document keeps its scene (EvaluationData uses best_scene)
 SCENE_TIME_STEP = 1  # the time step of a one-scene log
 
@@ -44,9 +50,10 @@ class PostHocMonitoringPayload(ProtocolModel):
     trajectories: Optional[TrajectoriesInput] = None  # the state log or planned trajectories to judge
     scene: Optional[artifact_or(Dict[str, Any])] = None  # a scene to judge as a one-scene log: EvaluationData or scene JSON
     colregs_constraints_content: Optional[str] = None  # COLREGS constants YAML; the general maritime defaults when None
-    scenario_id: str = "post-hoc"  # scenarioId of the returned frames
+    # scenarioId of the returned frames, and what orders the series of one scenario; the job's request id when None
+    scenario_id: Optional[str] = Field(default=None, min_length=1)
     include_frames: bool = False  # add every monitored frame in the workbench's wire format
-    timeout_s: float = Field(default=600.0, gt=0.0)
+    timeout_s: float = Field(default=600.0, gt=0.0)  # for the whole series, its wait in the pool's queue included
 
     @model_validator(mode="after")
     def _one_input(self) -> "PostHocMonitoringPayload":
@@ -56,11 +63,6 @@ class PostHocMonitoringPayload(ProtocolModel):
 
 
 PAYLOAD_MODEL = PostHocMonitoringPayload
-
-
-def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    payload = parse_payload(PostHocMonitoringPayload, job)
-    return run_in_runner_container(job, worker_node, report, Subsystem.MONITORING, timeout_s=payload.timeout_s, cancel=cancel)
 
 
 def scene_document(document: Mapping[str, Any]) -> Mapping[str, Any]:
@@ -89,32 +91,83 @@ def scene_as_trajectories(document: Any):
     return Trajectories(scene_list=[scene], time_step=SCENE_TIME_STEP)
 
 
-def execute(job: JobSpec, status: StatusCallback) -> JobResultData:
-    """The in-container part: monitor every scene in order and summarize the verdicts."""
-    from concrete_level.colregs_monitoring.colregs_monitor_runtime import ColregsMonitorRuntime, MonitoringTask
-    from scenegems_tool.gateway.serialization import serialize_monitored_frame
-    from scenegems_tool.subsystems.monitoring.rule_outcomes import RuleOutcomes
-    from utils.colregs_approximations import COLREGSConstraints
+def series_of(payload: PostHocMonitoringPayload) -> Tuple[List[Dict[str, Any]], int]:
+    """The scenes to judge, in time order and as they travel, and their time step."""
+    if payload.trajectories is not None:
+        if isinstance(payload.trajectories, ArtifactRef):
+            raise JobFailed(f"Artifact {payload.trajectories.sha256} was not resolved before the job ran", retryable=False)
+        return list(payload.trajectories["scene_list"]), int(payload.trajectories["time_step"])  # checked when the payload was parsed
+    trajectories = scene_as_trajectories(payload.scene)
+    return [scene.to_dict() for scene in trajectories.scene_list], trajectories.time_step
 
+
+class _Series:
+    """What the job has heard of its series: the batches the monitor judged, with their frames, and the verdict."""
+
+    def __init__(self, scene_count: int, report: JobReport):
+        self.scene_count = scene_count
+        self._report = report
+        self.judged: Dict[int, List[Dict[str, Any]]] = {}  # batch index: its monitored frames (none unless asked for)
+        self.verdict: Optional[Mapping[str, Any]] = None
+
+    def take(self, stream: str, message: Mapping[str, Any]) -> bool:
+        """Keep a message of the series; True once the verdict and every batch it counts are here."""
+        if stream == MONITORED_SCENE_STREAM:
+            index = int(message["index"])
+            if index not in self.judged:
+                self.judged[index] = list(message.get("monitored-frames") or [])
+                monitored = int(message.get("monitored-scenes", 0))
+                self._report.status(f"monitored {monitored} of {self.scene_count} scenes", min(1.0, monitored / self.scene_count))
+        elif stream == MONITOR_RESULT_STREAM:
+            self.verdict = message
+        return self.verdict is not None and len(self.judged) >= int(self.verdict["batches"])
+
+    def frames(self) -> List[Dict[str, Any]]:
+        return [frame for index in sorted(self.judged) for frame in self.judged[index]]
+
+
+def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
     payload = parse_payload(PostHocMonitoringPayload, job)
-    trajectories = to_trajectories(payload.trajectories) if payload.trajectories is not None else scene_as_trajectories(payload.scene)
-    constants = COLREGSConstraints.from_file_content(payload.colregs_constraints_content) if payload.colregs_constraints_content else COLREGSConstraints.default_general_maritime()
-    runtime = ColregsMonitorRuntime(constants)
-    time_step = trajectories.time_step
-    scene_count = len(trajectories.scene_list)
+    scenes, time_step = series_of(payload)
+    series = _Series(len(scenes), report)
+    starts = range(0, len(scenes), SCENES_PER_BATCH)
 
-    outcomes = RuleOutcomes()
-    frames = []
-    for index, scene in enumerate(trajectories.scene_list):
-        runtime.add_task(MonitoringTask(scene=scene, scene_timestamp=index * time_step, time_step=time_step))
-        for monitored_scene in runtime.monitor_current_tasks():
-            outcomes.add(monitored_scene)
-            if payload.include_frames:
-                frames.append(serialize_monitored_frame(scenario_id=payload.scenario_id, monitored_scene=monitored_scene, timestamp=monitored_scene.timestamp, time_step=time_step))
-        if (index + 1) % _PROGRESS_EVERY_SCENES == 0:
-            status(f"monitored {index + 1} of {scene_count} scenes", (index + 1) / scene_count)
+    def send_series(client: Any, request_id: str) -> None:
+        for index, start in enumerate(starts):
+            if cancel is not None and cancel.is_set():
+                raise JobFailed("cancelled", retryable=False)
+            client.publish_signal(SCENES_SIGNAL, request_id, {"index": index, "first-timestamp": start * time_step, "scenes": scenes[start : start + SCENES_PER_BATCH]})
+        client.publish_signal(CLOSE_SIGNAL, request_id, {"batches": len(starts)})
 
-    data: Dict[str, Any] = {"scenes": scene_count, "monitored_scenes": outcomes.monitored_scenes, "time_step": time_step, **outcomes.summary()}
+    reply = run_pool_request(
+        job,
+        worker_node,
+        report,
+        cancel,
+        subsystem=Subsystem.MONITORING,
+        task_name=MONITOR_SCENARIO_TASK,
+        params={
+            "scenario-id": payload.scenario_id or request_id_of(job),
+            "time-step": time_step,
+            "colregs-constraints-content": payload.colregs_constraints_content,
+            "include-frames": bool(payload.include_frames),
+        },
+        seed=None,  # the monitor draws nothing at random; the request still carries a seed, as every request does
+        streams=(MONITORED_SCENE_STREAM, MONITOR_RESULT_STREAM),
+        is_result=series.take,
+        timeout_s=payload.timeout_s,
+        pool_description="monitoring pool",
+        reply_description="monitor result",
+        on_running=send_series,
+    )
+    verdict = series.verdict or {}
+    data: Dict[str, Any] = {
+        "scenes": int(verdict["scenes"]),
+        "monitored_scenes": int(verdict["monitored-scenes"]),
+        "time_step": int(verdict["time-step"]),
+        **verdict["summary"],
+        "seed": reply.seed,
+    }
     if payload.include_frames:
-        data["frames"] = frames
+        data["frames"] = series.frames()
     return data

@@ -18,8 +18,14 @@ def test_every_job_type_has_a_module_with_a_runner():
 
 
 def test_runner_container_job_types_have_an_in_container_part():
-    for job_type in (JobType.SIMULATION, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
+    for job_type in (JobType.SIMULATION, JobType.CALIBRATION_DEVIATION):
         assert callable(JOB_TYPE_MODULES[job_type].execute)
+
+
+def test_the_job_types_of_a_pool_have_no_in_container_part():
+    """They are requests to a long-lived subsystem: no container is started for them."""
+    for job_type in (JobType.SCENE_GENERATION, JobType.TRAJECTORY_GENERATION, JobType.MONITORING_POST_HOC):
+        assert not hasattr(JOB_TYPE_MODULES[job_type], "execute")
 
 
 def test_run_job_dispatches_to_the_job_type(monkeypatch, worker_node, make_job):

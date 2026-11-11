@@ -16,6 +16,14 @@ def test_job_scope_is_per_attempt(worker_node, make_job):
 def test_pool_workers_come_from_the_slots(worker_node):
     assert worker_node.pool_workers(Subsystem.SCENE_GENERATION) == 3
     assert worker_node.pool_workers(Subsystem.TRAJECTORY_GENERATION) == 1  # no slots offered: the minimum
+    worker_node.slots[JobType.MONITORING_POST_HOC] = 4
+    assert worker_node.pool_workers(Subsystem.MONITORING) == 4, "as many series at once as the worker node has monitoring slots"
+
+
+def test_a_worker_node_offers_the_pools_of_its_components(worker_node):
+    assert worker_node.pool_subsystems() == [], "a worker node that names no components starts a pool when a job first asks for it"
+    worker_node.components = frozenset({"scene_generation", "monitoring", "simulation_layer/kinematic"})
+    assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION, Subsystem.MONITORING]
 
 
 def test_pools_start_once_with_scoped_names(monkeypatch, worker_node):

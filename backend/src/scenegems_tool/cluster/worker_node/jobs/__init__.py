@@ -9,7 +9,7 @@ design_space_exploration_job.py  design_space_exploration, in a container of the
 scene_generation_job.py       scene_generation, on the scene generation pool
 trajectory_generation_job.py  trajectory_generation, on the trajectory generation pool
 simulation_job.py             simulation, by the runner its payload names (simulation_runners/: kinematic, ardupilot)
-monitoring_post_hoc_job.py    monitoring.post_hoc, in a monitoring container
+monitoring_post_hoc_job.py    monitoring.post_hoc, on the monitoring pool
 calibration_deviation_job.py  calibration.deviation, in a simulation subsystem container
 in_container/                 the entry point inside a runner container
 """

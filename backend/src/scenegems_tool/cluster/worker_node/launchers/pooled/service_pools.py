@@ -13,6 +13,7 @@ import threading
 from typing import Callable, Dict, Iterable, List, Optional
 
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope, pooled_service_name
+from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_pool import TrajectoryGenerationPool
@@ -25,6 +26,7 @@ _logger = logging.getLogger(__name__)
 _POOL_CLASSES = {
     Subsystem.SCENE_GENERATION: SceneGenerationPool,
     Subsystem.TRAJECTORY_GENERATION: TrajectoryGenerationPool,
+    Subsystem.MONITORING: MonitoringPool,
 }
 
 

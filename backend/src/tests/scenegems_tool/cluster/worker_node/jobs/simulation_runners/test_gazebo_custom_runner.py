@@ -232,9 +232,8 @@ def test_an_observed_run_is_paced_and_unchanged(fake_actuator, make_job, head_on
     assert frames[-1]["scenarioId"] == job.job_id and set(frames[-1]["statesByActorId"]) == {"0", "1"}
 
 
-def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_states(fake_actuator, make_job, head_on_trajectories):
+def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_states(fake_actuator, make_job, head_on_trajectories, post_hoc):
     from concrete_level.models.trajectories import Trajectories
-    from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job
 
     job = custom_job(make_job, head_on_trajectories, fake_actuator, monitor="live", include_trajectories=True)
     result, frames, _ = _observe(job)
@@ -242,6 +241,6 @@ def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_
     assert frames[0]["ruleResults"] and frames[-1]["ruleResults"]
     run = Trajectories.from_dict(result["trajectories"])
     assert run.time_step == 1 and len(run.scene_list) == 21
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": result["trajectories"]}), _quiet)
+    judged = post_hoc(result["trajectories"])
     summary_keys = ("scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "passed")
-    assert {key: result["monitor"][key] for key in summary_keys} == {key: post_hoc[key] for key in summary_keys}
+    assert {key: result["monitor"][key] for key in summary_keys} == {key: judged[key] for key in summary_keys}
