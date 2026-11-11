@@ -28,6 +28,7 @@ _JOB_SUBSYSTEMS = {
 }
 # The job type whose slots size each pooled subsystem's worker pool.
 _POOL_JOB_TYPES = {
+    Subsystem.DESIGN_SPACE_EXPLORATION: JobType.DESIGN_SPACE_EXPLORATION,
     Subsystem.SCENE_GENERATION: JobType.SCENE_GENERATION,
     Subsystem.TRAJECTORY_GENERATION: JobType.TRAJECTORY_GENERATION,
     Subsystem.MONITORING: JobType.MONITORING_POST_HOC,

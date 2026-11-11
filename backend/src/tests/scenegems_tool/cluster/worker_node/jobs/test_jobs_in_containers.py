@@ -16,14 +16,17 @@ import uuid
 import paho.mqtt.client as mqtt
 import pytest
 
+from functional_level.models.model_parser import ModelParser
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import LogStream
+from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import execute as execute_calibration
 from scenegems_tool.cluster.worker_node.jobs.job_runner import run_job
 from scenegems_tool.cluster.worker_node.launchers.docker_cli import container_ids_for_instance, is_container_running
 from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem, subsystem_image
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.messaging.mqtt_client import CLUSTER_TOPIC_ROOT, MQttConnectionInfo
+from scenegems_tool.subsystems.design_space_exploration.design_space import default_specification, parse_scope
 from scenegems_tool.subsystems.monitoring.monitoring_worker import SeriesMonitor
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
@@ -164,6 +167,32 @@ def test_post_hoc_monitoring_runs_on_the_monitoring_pool(broker, control_node_id
         assert {key: result[key] for key in ("rules", "failed_rules", "encounters", "encounter_roles", "passed")} == json.loads(json.dumps(in_process.summary()))
     assert "frames" not in results[0] and [frame["timestamp"] for frame in results[1]["frames"]] == list(range(121))
     assert {frame["scenarioId"] for frame in results[1]["frames"]} == {"monitor-1-1"}
+
+
+def test_the_design_space_exploration_pool_explores_and_refuses_what_does_not_parse(broker, control_node_id, make_job):
+    """Needs the design space exploration image built from the pooled subsystems code. Both jobs go to one long-lived container."""
+    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.DESIGN_SPACE_EXPLORATION: 1})
+    report = RecordingReport()
+    try:
+        explored = make_job(JobType.DESIGN_SPACE_EXPLORATION, {"problem": default_specification(), "scopes": list(parse_scope("TS = 1, StaticObstacle = 0")), "timeout_s": 120}, job_id="explore-1")
+        result = run_job(explored, worker_node, report)
+        pool = worker_node.pools.get(Subsystem.DESIGN_SPACE_EXPLORATION)
+        assert pool.names.container_name == f"scenegems-{control_node_id}-n1-design-space-exploration-subsystem" and is_container_running(pool.names.container_name)
+        broken = make_job(JobType.DESIGN_SPACE_EXPLORATION, {"problem": "class A extends Missing.", "scopes": ["A=1"], "timeout_s": 60}, job_id="explore-2")
+        with pytest.raises(JobFailed) as failure:
+            run_job(broken, worker_node, RecordingReport())
+        assert not failure.value.retryable and str(failure.value)
+        assert is_container_running(pool.names.container_name), "a problem that does not parse ends its generator, not the subsystem"
+    finally:
+        worker_node.shutdown()
+    assert (result["stop_reason"], result["complete"], result["models_found"]) == ("exhausted", True, 7)
+    assert result["fecs"] == [{"index": index, "vessel_count": 2, "obstacle_count": 0} for index in range(7)]
+    scenarios = [ModelParser.parse_problem(source) for source in result["functional_scenarios"]]
+    assert len({scenario.fec_shape_hash() for scenario in scenarios}) == 7
+    assert all("\nTS(ts1).\n" in source and "tS1" not in source for source in result["functional_scenarios"])  # the catalog's name for the generator's tS1
+    assert all(source.startswith(default_specification().split("declare", 1)[0].rstrip()) for source in result["functional_scenarios"])  # the metamodel and constraints as given, then the model
+    messages = [(text, progress) for _, text, progress in report.statuses]
+    assert any(text.startswith("finished") for text, _ in messages) and messages[-1][1] == 1.0
 
 
 def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):

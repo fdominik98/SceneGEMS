@@ -32,9 +32,9 @@ def test_runner_without_networks_has_no_network():
     assert "networks" not in service
 
 
-def test_a_runner_image_with_its_own_program_gets_its_command_and_environment():
-    service = runner_service("scenegems-design-space-exploration-subsystem:latest", command=["generate-models", "job"], environment={})
-    assert (service["command"], service["environment"], service["network_mode"]) == (["generate-models", "job"], {}, "none")
+def test_a_runner_gets_the_environment_it_is_given_and_always_the_job_main_as_its_command():
+    service = runner_service("image", environment={"MQTT_HOST": "broker"})
+    assert (service["command"], service["environment"]) == (["python", "-m", JOB_CONTAINER_MAIN], {"MQTT_HOST": "broker"})
     assert runner_service("image")["environment"] == {"PYTHONUNBUFFERED": "1"}  # the Python job main's, unless one is given
 
 

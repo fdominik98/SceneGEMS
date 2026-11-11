@@ -7,14 +7,15 @@ the attempt at once with the subsystem's reason, and a job that stops waiting wi
 lost, released, timed out) cancels its own request, so the pool's other tasks keep running.
 
 A request whose task takes more than its start (a series of scenes that follows as signals) names
-on_running: it is called once, on the job's thread, when the task left the queue and runs.
+on_running: it is called once, on the job's thread, when the task left the queue and runs. A request
+whose task reports its progress (exec/feedback) may have it relayed as the job's status (relay_feedback).
 """
 
 import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport
@@ -90,6 +91,13 @@ class _FollowedRequest:
             if text:
                 self._report.status(text)
 
+    def on_feedback(self, request_id: str, message: Mapping[str, Any]) -> None:
+        """The task's progress as the job's status: its message and how far it is."""
+        if request_id != self.request_id or self.result is not None or not message.get("message"):
+            return
+        progress = message.get("progress")
+        self._report.status(str(message["message"]), progress if isinstance(progress, (int, float)) else None)
+
     def on_state(self, request_id: str, state: TaskState, reason: Optional[str], seed: Optional[int]) -> None:
         del seed  # the job sent the seed itself
         if request_id != self.request_id or self.result is not None or self.ended is not None:
@@ -124,13 +132,15 @@ def run_pool_request(
     reply_description: str,
     progress: Optional[Callable[[str, Mapping[str, Any]], Optional[str]]] = None,
     on_running: Optional[Callable[[Any, str], None]] = None,
+    relay_feedback: bool = False,
 ) -> PoolReply:
     """Run the job as one request on the worker node's pool of the subsystem and return the task's result.
 
     seed: the request's seed; a job that names none gets one drawn here, so every request carries one.
     is_result(stream, message) picks the task's result among its stream messages; progress turns any other
     stream message into a status line. on_running(client, request id) is called once when the task runs:
-    there the job sends what the task needs beyond its start (client.publish_signal). JobFailed when the
+    there the job sends what the task needs beyond its start (client.publish_signal). relay_feedback makes
+    the task's progress messages the job's status lines. JobFailed when the
     pool cannot be reached, the task fails or is aborted, or no result comes within timeout_s.
     """
     from scenegems_tool.messaging.mqtt_pool_client import MqttPoolClient
@@ -139,7 +149,10 @@ def run_pool_request(
     request_seed = draw_seed() if seed is None else seed
     followed = _FollowedRequest(request_id, is_result, progress, report)
     pool = worker_node.pools.get(subsystem)
-    client = MqttPoolClient(pool.mqtt_connection, pool.service_topic, worker_node.reference_geofence, pool.service_name, streams=streams, on_state=followed.on_state, on_stream=followed.on_stream)
+    handlers: Dict[str, Any] = {"on_state": followed.on_state, "on_stream": followed.on_stream}
+    if relay_feedback:
+        handlers["on_feedback"] = followed.on_feedback
+    client = MqttPoolClient(pool.mqtt_connection, pool.service_topic, worker_node.reference_geofence, pool.service_name, streams=streams, **handlers)
     try:
         client.connect()
     except RuntimeError as error:

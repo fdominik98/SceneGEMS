@@ -169,9 +169,11 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
     # The design space exploration image fetches the pinned Refinery fork (deploy/images/upstream_pins.env,
-    # which is then part of its fingerprint); nothing of backend/ goes into it.
+    # which is then part of its fingerprint) and puts the subsystem's request service, from backend/src, next to it.
     build_subsystem_if_stale "scenegems-design-space-exploration-subsystem:latest" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" "$SCRIPT_DIR/deploy/images/design_space_exploration"
+        "$SCRIPT_DIR/deploy/images/design_space_exploration/requirements.txt" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/design_space_exploration" \
+        "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src"
     build_subsystem_if_stale "scenegems-control-node-api:latest" "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"

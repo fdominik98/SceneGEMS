@@ -24,7 +24,7 @@ def test_runner_container_job_types_have_an_in_container_part():
 
 def test_the_job_types_of_a_pool_have_no_in_container_part():
     """They are requests to a long-lived subsystem: no container is started for them."""
-    for job_type in (JobType.SCENE_GENERATION, JobType.TRAJECTORY_GENERATION, JobType.MONITORING_POST_HOC):
+    for job_type in (JobType.DESIGN_SPACE_EXPLORATION, JobType.SCENE_GENERATION, JobType.TRAJECTORY_GENERATION, JobType.MONITORING_POST_HOC):
         assert not hasattr(JOB_TYPE_MODULES[job_type], "execute")
 
 

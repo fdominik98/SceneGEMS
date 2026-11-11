@@ -24,6 +24,9 @@ def test_a_worker_node_offers_the_pools_of_its_components(worker_node):
     assert worker_node.pool_subsystems() == [], "a worker node that names no components starts a pool when a job first asks for it"
     worker_node.components = frozenset({"scene_generation", "monitoring", "simulation_layer/kinematic"})
     assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION, Subsystem.MONITORING]
+    worker_node.components = frozenset({"design_space_exploration"})
+    worker_node.slots[JobType.DESIGN_SPACE_EXPLORATION] = 2
+    assert worker_node.pool_subsystems() == [Subsystem.DESIGN_SPACE_EXPLORATION] and worker_node.pool_workers(Subsystem.DESIGN_SPACE_EXPLORATION) == 2
 
 
 def test_pools_start_once_with_scoped_names(monkeypatch, worker_node):

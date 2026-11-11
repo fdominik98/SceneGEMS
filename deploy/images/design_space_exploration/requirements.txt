@@ -1,0 +1,8 @@
+# Runtime dependencies of the request service of scenegems-design-space-exploration-subsystem
+# (see deploy/images/design_space_exploration/Dockerfile): what a subsystem's pool service imports.
+# The model generator itself is the Refinery fork's Java program and needs none of these.
+paho-mqtt==2.1.0
+# The reference area every broker client is given (scenegems_tool.vessel_stack.contracts.local_frame)
+numpy==2.5.4
+pyproj==3.8.0
+haversine==2.9.0

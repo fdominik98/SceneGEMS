@@ -1,9 +1,10 @@
 """Architecture description of the design space exploration: the first step of the chain.
 
-What a design_space_exploration job runs: the specification and the scope make one Refinery problem, the Refinery
-model generator enumerates its models in a container per job, and every model comes back as the source of a
-functional equivalence class (FEC). A new scenario family is another specification text; a new generator adds one
-entry to the tuples below and an image that speaks the job folder protocol.
+What a design_space_exploration job runs: the specification and the scope make one Refinery problem, an
+explore-design-space request to the worker node's design space exploration subsystem becomes one task of its pool,
+the task runs the Refinery model generator, which enumerates the problem's models, and every model comes back as the
+source of a functional equivalence class (FEC). A new scenario family is another specification text; a new generator
+adds one entry to the tuples below and a program that speaks the job folder protocol.
 
 The names and numbers are literals so that describing the subsystem imports neither the job modules nor Docker; the
 test test_design_space_exploration_specs.py checks them against the code.
@@ -26,7 +27,7 @@ from scenegems_tool.architecture.architecture_model import (
     MetamodelEdge,
     MetamodelNode,
 )
-from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, spec_edge, spec_node
+from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, pool_facts, spec_edge, spec_node
 
 DOCUMENT_ID = "design_space_exploration"
 _PACKAGE = "scenegems_tool/subsystems/design_space_exploration"
@@ -39,7 +40,8 @@ LANE_OUTPUT = "output"
 # Checked against the code by the test
 JOB_TYPE = "design_space_exploration"
 IMAGE_REPOSITORY = "scenegems-design-space-exploration-subsystem"
-GENERATOR_COMMAND = "generate-models job"
+GENERATOR_COMMAND = "generate-models job -folder <task folder>"
+REQUEST = "explore-design-space"
 DEFAULT_SCOPE = "TS = 2, StaticObstacle = 0"
 DEFAULT_TIMEOUT_S = 600
 DEFAULT_MAX_FECS = 1000
@@ -72,13 +74,21 @@ class Part:
 def parts() -> Tuple[Part, ...]:
     return (
         Part(
-            "cluster_job",
+            "request",
             LANE_ENTRY,
-            "Cluster job",
-            "The design_space_exploration job: a container of its own per job, without a network, as many at once as the worker node has slots. A workbench run and a campaign's first step both queue this job.",
+            "Request",
+            "An explore-design-space request over the message broker, sent by the worker node's daemon for a design_space_exploration job it leased. The subsystem is one long-lived "
+            "container per worker node: the request becomes one task, which waits in the queue and then runs in a worker process of the pool. "
+            "A workbench run and a campaign's first step both queue this job.",
             META_REQUEST,
-            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
+            "scenegems_tool/messaging/mqtt_design_space_exploration_service.py",
             (
+                *pool_facts(
+                    REQUEST,
+                    "one per request: the whole exploration, which cannot be split. Different requests run side by side",
+                    "the request's seed is the generator's random seed and fixes the order the FECs are found in; a job that names none uses 1",
+                    "sensor/design_space: the explored FECs, or why the generator could not explore; exec/feedback: the generator's progress, a line a second; exec/response: every task state",
+                ),
                 Fact("max_fecs", "FEC cap", DEFAULT_MAX_FECS, GROUP_PARAMETER, note="a campaign's default; without a cap every FEC is generated"),
                 Fact("timeout", "Time limit", DEFAULT_TIMEOUT_S, GROUP_PARAMETER, unit="s", note="the FECs found until then are kept"),
             ),
@@ -118,6 +128,7 @@ def parts() -> Tuple[Part, ...]:
                 Fact("randomness", "Randomness", "seeded: one seed fixes the order the FECs are found in", GROUP_CAPABILITY),
                 Fact("partial", "Partial result", "the FECs found until the cap, the time limit or a stop", GROUP_CAPABILITY),
                 Fact("streaming", "Progress", "one status line per second with the FECs found so far", GROUP_CAPABILITY),
+                Fact("process", "Runs as", "a process of its own per task, in a folder of its own, ended when the task is cancelled", GROUP_PROPERTY),
             ),
         ),
         Part(
@@ -134,8 +145,8 @@ def parts() -> Tuple[Part, ...]:
 
 # (source local id, target local id, metamodel edge, label)
 _FLOW = (
-    ("cluster_job", "colregs_specification", "request_to_specification", "specification text"),
-    ("cluster_job", "scope_bounds", "request_to_scope", "scope"),
+    ("request", "colregs_specification", "request_to_specification", "specification text"),
+    ("request", "scope_bounds", "request_to_scope", "scope"),
     ("colregs_specification", "refinery", "specification_to_generator", "problem"),
     ("scope_bounds", "refinery", "scope_to_generator", "scope entries"),
     ("refinery", "fec_sources", "generator_to_fecs", "model sources"),
@@ -151,7 +162,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "A specification, a scope, a cap on the number of FECs, a time limit and a seed. The reply lists the FECs found and says whether they are the whole design space.",
             KIND_ROLE,
             ("problem: the specification text", "scopes: the scope's entries", "max_models, timeout_s, random_seed", "reply: stop_reason, complete, fecs, functional_scenarios"),
-            "Add a delivery path that submits a design_space_exploration job.",
+            "Add a delivery path that submits a design_space_exploration job, or send the subsystem an explore-design-space request.",
             "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
         ),
         MetamodelNode(
@@ -181,13 +192,13 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             "Enumerates the models of the problem within the scope, each once.",
             KIND_INTERFACE,
             (
-                "reads /job/job.json: the job with its payload",
+                "reads job.json of its task's folder: the request as its payload",
                 "writes scenegems-status lines: message and progress",
-                "writes /job/result.json: stop_reason, complete and each model's source",
-                "runs without a network",
+                "writes result.json into the folder: stop_reason, complete and each model's source",
+                "runs as a child process of the task's worker, without the broker",
             ),
-            "Another generator is an image that speaks the job folder protocol (cluster/worker_node/launchers/per_job/job_container_io.py) and returns each model's source.",
-            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
+            "Another generator is a program in the subsystem's image that speaks the job folder protocol (cluster/worker_node/launchers/per_job/job_container_io.py) and returns each model's source.",
+            "scenegems_tool/subsystems/design_space_exploration/design_space_exploration_worker.py",
         ),
         MetamodelNode(
             META_FECS,
@@ -197,7 +208,7 @@ def _metamodel() -> Tuple[Tuple[MetamodelNode, ...], Tuple[MetamodelEdge, ...]]:
             KIND_COMPONENT,
             ("functional_scenarios: one .problem text per FEC", "fecs: index, vessel count and obstacle count per FEC"),
             None,
-            "scenegems_tool/cluster/worker_node/jobs/design_space_exploration_job.py",
+            "scenegems_tool/subsystems/design_space_exploration/design_space.py",
         ),
     )
     edges = (

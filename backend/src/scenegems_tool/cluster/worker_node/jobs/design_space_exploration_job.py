@@ -1,21 +1,27 @@
-"""design_space_exploration: every model of a specification within a scope, in a container of the Refinery model generator.
+"""design_space_exploration: every model of a specification within a scope, by the worker node's design space exploration pool.
 
-The image (scenegems-design-space-exploration-subsystem, built from the pinned Refinery commit) brings its own program,
-`generate-models job`, which speaks the job folder protocol of the runner containers: it reads /job/job.json, writes a
-status line per second while it generates and leaves /job/result.json. It rejects payload fields it does not know, so
-the payload model here has exactly its fields and the job's payload goes in as validated.
+The job is one explore-design-space request to the worker node's design space exploration subsystem
+(jobs/pool_client.py run_pool_request), so the daemon only relays it. The subsystem runs the Refinery model
+generator for the request (subsystems/design_space_exploration/design_space_exploration_worker.py); the pool
+runs as many explorations at once as the worker node has design_space_exploration slots. The generator's status
+lines, one a second, are the job's status while it runs.
 
-The generator returns each model's Refinery source. A model is a functional equivalence class (FEC): the result lists
-them as functional_scenarios (texts, each stored as a functional scenario artifact of its own) with their vessel and
-obstacle counts under fecs, in the order they were found, the objects the generator named (tS1, staticObstacle1) with
-the catalog's names (ts1, obst1):
+The generator rejects payload fields it does not know, so the payload model here has exactly its fields.
+
+A model is a functional equivalence class (FEC): the result lists them as functional_scenarios (texts, each
+stored as a functional scenario artifact of its own) with their vessel and obstacle counts under fecs, in the
+order they were found, the objects the generator named (tS1, staticObstacle1) with the catalog's names (ts1, obst1):
 
     stop_reason   exhausted (these are all), unsatisfiable (the specification has no model), cap_reached
                   (max_models found, there may be more), timeout, stopped
     complete      whether the list is the whole design space
     models_found, max_models, random_seed, elapsed_s, message
 
-The exploration order, and so the list of a capped run, is fixed by random_seed.
+The exploration order, and so the list of a capped run, is fixed by random_seed: it is the seed of the request.
+
+A specification that does not parse, or a scope the generator refuses, fails the job for good with the
+generator's reason: another attempt fails the same way. A job that stops waiting without its design space
+(cancelled, lost, released, timed out) cancels its own exploration by request id, which ends its generator.
 """
 
 import threading
@@ -28,17 +34,12 @@ from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport, JobResultData
 from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
-from scenegems_tool.cluster.worker_node.jobs.runner_container import run_in_runner_container
+from scenegems_tool.cluster.worker_node.jobs.pool_client import run_pool_request
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.subsystems.design_space_exploration.design_space import catalog_object_names, count_instances, normalize_newlines
+from scenegems_tool.subsystems.design_space_exploration.design_space_exploration_types import DEFAULT_LOAD_TIMEOUT_S, DESIGN_SPACE_STREAM, EXPLORE_DESIGN_SPACE_TASK, STOP_MARGIN_S
 
-GENERATOR_COMMAND = ["generate-models", "job"]
-# The generator's own limits end the run with a result; the container is only killed this long after them
-STOP_MARGIN_S = 60.0
 DEFAULT_TIMEOUT_S = 600.0
-DEFAULT_LOAD_TIMEOUT_S = 120.0
-RESULT_SUMMARY_FIELDS = ("stop_reason", "complete", "models_found", "max_models", "random_seed", "elapsed_s", "message")
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = ()
 ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("functional_scenarios", ArtifactKind.FUNCTIONAL_SCENARIO, ArtifactContent.TEXT, many=True),)
@@ -51,7 +52,7 @@ class DesignSpaceExplorationPayload(ProtocolModel):
     max_models: Optional[int] = Field(default=None, ge=1)  # the cap; None generates every model
     scopes: List[str] = Field(default_factory=list)  # scope entries such as TS=2 or TS=1..3
     scope_overrides: List[str] = Field(default_factory=list)  # entries that replace the problem's scope of the same class
-    random_seed: int = Field(default=1, ge=0)  # the seed of the exploration order
+    random_seed: int = Field(default=1, ge=0)  # the seed of the request, and so of the exploration order
     timeout_s: float = Field(default=DEFAULT_TIMEOUT_S, gt=0.0)  # the generation's time limit; the models found until then are returned
     load_timeout_s: float = Field(default=DEFAULT_LOAD_TIMEOUT_S, gt=0.0)  # ends a parser that loops on a syntax error
     state_coder_depth: Optional[int] = Field(default=None, ge=1)  # neighborhood depth for telling models apart; Refinery's default when None
@@ -68,39 +69,51 @@ class DesignSpaceExplorationPayload(ProtocolModel):
 PAYLOAD_MODEL = DesignSpaceExplorationPayload
 
 
+def request_params(payload: DesignSpaceExplorationPayload) -> Dict[str, Any]:
+    """The payload as the subsystem's request names it; the seed travels as the request's seed."""
+    params: Dict[str, Any] = {
+        "problem": payload.problem,
+        "scopes": list(payload.scopes),
+        "scope-overrides": list(payload.scope_overrides),
+        "timeout": payload.timeout_s,
+        "load-timeout": payload.load_timeout_s,
+        "status-interval": payload.status_interval_s,
+    }
+    if payload.max_models is not None:
+        params["max-models"] = payload.max_models
+    if payload.state_coder_depth is not None:
+        params["state-coder-depth"] = payload.state_coder_depth
+    return params
+
+
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
     payload = parse_payload(DesignSpaceExplorationPayload, job)
-    # The generator gets the validated payload with its defaults, so its limits are the ones the container's timeout counts on
-    generator_job = job.model_copy(update={"payload": payload.model_dump(mode="json", exclude_none=True)})
-    generated = run_in_runner_container(
-        generator_job,
+    reply = run_pool_request(
+        job,
         worker_node,
         report,
-        Subsystem.DESIGN_SPACE_EXPLORATION,
+        cancel,
+        subsystem=Subsystem.DESIGN_SPACE_EXPLORATION,
+        task_name=EXPLORE_DESIGN_SPACE_TASK,
+        params=request_params(payload),
+        seed=payload.random_seed,
+        streams=(DESIGN_SPACE_STREAM,),
+        is_result=lambda stream, message: bool(message.get("final", True)),
+        # The generator's own limits end the exploration with a result; the job only stops waiting this long after them
         timeout_s=payload.load_timeout_s + payload.timeout_s + STOP_MARGIN_S,
-        cancel=cancel,
-        command=GENERATOR_COMMAND,
-        environment={},
+        pool_description="design space exploration pool",
+        reply_description="explored design space",
+        relay_feedback=True,
     )
-    return exploration_result(generated)
+    return design_space_of(reply.result)
 
 
-def exploration_result(generated: Mapping[str, Any]) -> JobResultData:
-    """The job's result from the generator's: the models' sources as functional scenarios with the catalog's object names, with their counts."""
-    models = generated.get("models")
-    if not isinstance(models, list):
-        raise JobFailed("the model generator returned no model list", retryable=False)
-    fecs: List[Dict[str, int]] = []
-    scenarios: List[str] = []
-    for index, model in enumerate(models):
-        source = model.get("source") if isinstance(model, Mapping) else None
-        if not isinstance(source, str) or not source.strip():
-            raise JobFailed(f"the model generator returned model {index} without its source", retryable=False)
-        source = catalog_object_names(normalize_newlines(source))
-        vessels, obstacles = count_instances(source)
-        fecs.append({"index": index, "vessel_count": vessels, "obstacle_count": obstacles})
-        scenarios.append(source)
-    result: JobResultData = {field: generated.get(field) for field in RESULT_SUMMARY_FIELDS}
-    result["fecs"] = fecs
-    result["functional_scenarios"] = scenarios
-    return result
+def design_space_of(message: Mapping[str, Any]) -> JobResultData:
+    """The job's result from the subsystem's message: the explored FECs, or the generator's error as the job's failure."""
+    error = message.get("error")
+    if error:
+        raise JobFailed(str(error), retryable=bool(message.get("retryable", False)))
+    design_space = message.get("design-space")
+    if not isinstance(design_space, Mapping):
+        raise JobFailed("the design space exploration pool answered without a design space", retryable=False)
+    return dict(design_space)

@@ -9,6 +9,7 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.worker_node.jobs import design_space_exploration_job
 from scenegems_tool.subsystems.design_space_exploration import design_space
 from scenegems_tool.subsystems.design_space_exploration import design_space_exploration_specs as specs
+from scenegems_tool.subsystems.design_space_exploration import design_space_exploration_types, design_space_exploration_worker
 from scenegems_tool.subsystems.design_space_exploration.design_space_exploration_specs import design_space_exploration_document
 from scenegems_tool.subsystems.subsystem_spec import default_measured_facts
 from utils.file_system_utils import BACKEND_ROOT
@@ -21,7 +22,8 @@ REPOSITORY_ROOT = Path(BACKEND_ROOT).parent
 def test_the_literals_match_the_job_the_image_and_the_defaults():
     assert specs.JOB_TYPE == JobType.DESIGN_SPACE_EXPLORATION.value
     assert specs.IMAGE_REPOSITORY == image_repository(DESIGN_SPACE_EXPLORATION_IMAGE)
-    assert specs.GENERATOR_COMMAND == " ".join(design_space_exploration_job.GENERATOR_COMMAND)
+    assert specs.GENERATOR_COMMAND == " ".join(design_space_exploration_worker.GENERATOR_COMMAND) + " <task folder>"
+    assert specs.REQUEST == design_space_exploration_types.EXPLORE_DESIGN_SPACE_TASK
     assert specs.DEFAULT_SCOPE == design_space.DEFAULT_SCOPE
     section = DesignSpaceExplorationConfig(specification="class A.", scope="A = 1")
     assert (specs.DEFAULT_TIMEOUT_S, specs.DEFAULT_MAX_FECS) == (section.timeout_s, section.max_fecs)
@@ -33,12 +35,22 @@ def test_the_request_flows_through_the_problem_and_the_generator_to_the_fecs():
     assert [lane.id for lane in document.lanes] == ["entry", "problem", "exploration", "output"]
     edges = {(edge.source.split("/")[1], edge.target.split("/")[1]) for edge in document.edges}
     assert edges == {
-        ("cluster_job", "colregs_specification"),
-        ("cluster_job", "scope_bounds"),
+        ("request", "colregs_specification"),
+        ("request", "scope_bounds"),
         ("colregs_specification", "refinery"),
         ("scope_bounds", "refinery"),
         ("refinery", "fec_sources"),
     }
+
+
+def test_the_request_says_how_the_pool_runs_it():
+    document = design_space_exploration_document()
+    [request] = [node for node in document.nodes if node.lane == "entry"]
+    facts = {fact.key: fact.value for fact in request.facts}
+    assert (request.id, facts["request"]) == ("design_space_exploration/request", "explore-design-space")
+    assert "whole exploration" in facts["tasks"] and "slots" in facts["pool"] and "random seed" in facts["seed"]
+    assert "sensor/design_space" in facts["publishes"] and "exec/feedback" in facts["publishes"] and "queued" in facts["task_states"]
+    assert facts["max_fecs"] == specs.DEFAULT_MAX_FECS, "the request's own parameters stay"
 
 
 def test_every_interface_of_the_metamodel_is_implemented():

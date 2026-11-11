@@ -1,13 +1,11 @@
 """monitoring.post_hoc against the monitoring subsystem in process: the series the job sends, the result shape the pipeline reads, frames on request, and a scene judged as a one-scene log.
 
 The job talks to the real monitoring service and its real worker; only the broker and the worker process are
-replaced (MonitoringSubsystem below), so what the job sends is what the subsystem takes.
+replaced (in_process_subsystem.py), so what the job sends is what the subsystem takes.
 """
 
 import math
 import threading
-from types import SimpleNamespace
-from typing import Any, Dict, List
 
 import pytest
 from pydantic import ValidationError
@@ -21,13 +19,11 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import validate_structu
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging import mqtt_pool_client
 from scenegems_tool.messaging.mqtt_monitor_service import MqttMonitoringService
-from scenegems_tool.subsystems.pool.pool_task import MAX_SEED, TaskState
+from scenegems_tool.subsystems.pool.pool_task import MAX_SEED
 from scenegems_tool.vessel_stack.calibration.reference_scenarios import make_vessel
-from tests.scenegems_tool.messaging.generation_fakes import CONNECTION, GEOFENCE, deliver, offline
-from tests.scenegems_tool.subsystems.pool.pool_fakes import manual_pool_factory
+from tests.scenegems_tool.cluster.worker_node.jobs.in_process_subsystem import InProcessSubsystem
 
 POOL_NAME = "monitoring-subsystem-3"  # the worker node's pool as the control node numbered it
-POOL_TOPIC = f"waraps/service/virtual/real/{POOL_NAME}"
 RESULT_KEYS = {"scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "encounters", "encounter_roles", "passed", "seed"}
 
 
@@ -39,108 +35,11 @@ class _Report:
         self.messages.append(message)
 
 
-class MonitoringSubsystem:
-    """The monitoring service with a pool whose workers run when the test says so, and what happened in it (events).
-
-    A series' worker runs when its close signal arrives, on the signals sent until then; `on_close` replaces that.
-    """
-
-    def __init__(self, max_workers: int = 1):
-        self.processes: Dict[str, Any] = {}
-        self.service = offline(MqttMonitoringService(CONNECTION, GEOFENCE, max_workers, name=POOL_NAME, pool_factory=manual_pool_factory(self.processes)))
-        self.clients: List["PoolClient"] = []
-        self.events: List[tuple] = []  # ("request", params), ("state", request id, state), ("signal", name, data), ("cancel", request id)
-        self.on_close = self.work
-        self.on_scenes = lambda request_id: None
-        self._relayed = 0
-        self._lock = threading.RLock()
-
-    def command(self, command: Dict[str, Any]) -> None:
-        with self._lock:
-            deliver(self.service, self.service.exec_command_topic, {"execution-unit": POOL_NAME, **command})
-            self.relay()
-
-    def work(self, request_id: str) -> None:
-        """Let the series' worker run to its end, as its process would."""
-        with self._lock:
-            self.processes[request_id].work()
-            self.relay()
-
-    def relay(self) -> None:
-        """Step the pool and hand what the service published since the last time to the clients, as the broker would."""
-        with self._lock:
-            self.service.pool.step()
-            published = self.service.client.published[self._relayed :]
-            self._relayed = len(self.service.client.published)
-            for topic, message in published:
-                if topic == self.service.exec_response_topic:
-                    self.events.append(("state", message["request-id"], message["response"]))
-                for client in self.clients:
-                    client.receive(topic, message)
-
-    def signals(self, name: str) -> List[Any]:
-        return [data for kind, signal, data in (event for event in self.events if event[0] == "signal") if signal == name]
-
-    def states(self, request_id: str) -> List[str]:
-        return [state for kind, request, state in (event for event in self.events if event[0] == "state") if request == request_id]
-
-
-class PoolClient:
-    """Stands in for the job's pool client: what the job publishes goes straight to the subsystem, what the subsystem publishes comes straight back."""
-
-    subsystem: MonitoringSubsystem
-    is_connected = is_heartbeat_valid = True
-
-    def __init__(self, mqtt_connection, topic, reference_geofence, service_name, *, streams=(), on_state=None, on_stream=None):
-        assert (topic, service_name) == (POOL_TOPIC, POOL_NAME), "the job talks to its own worker node's pool"
-        self.streams, self.on_state, self.on_stream = streams, on_state, on_stream
-        self.subsystem.clients.append(self)
-
-    def connect(self):
-        pass
-
-    def disconnect(self):
-        pass
-
-    def receive(self, topic: str, message: Dict[str, Any]) -> None:
-        service = self.subsystem.service
-        if topic == service.exec_response_topic:
-            self.on_state(message["request-id"], TaskState(message["response"]), message["fail-reason"], message["seed"])
-        for stream in self.streams:
-            if topic == service.stream_topic(stream):
-                self.on_stream(stream, message)
-
-    def publish_start_task(self, task_name, request_id, params, seed):
-        self.subsystem.events.append(("request", dict(params), seed))
-        self.subsystem.command({"command": "start-task", "task-uuid": f"u-{request_id}", "task": {"name": task_name, "params": {**params, "request-id": request_id, "seed": seed}}})
-        return f"u-{request_id}"
-
-    def publish_signal(self, signal_name, request_id, data=None):
-        self.subsystem.events.append(("signal", signal_name, data))
-        self.subsystem.command({"command": "signal-task", "signal": {"name": signal_name, "request-id": request_id, "data": data}})
-        if signal_name == "scenes":
-            self.subsystem.on_scenes(request_id)
-        if signal_name == "close":
-            self.subsystem.on_close(request_id)
-
-    def publish_cancel(self, request_id):
-        self.subsystem.events.append(("cancel", request_id))
-        self.subsystem.command({"command": "signal-task", "signal": {"name": "cancel", "request-id": request_id}})
-
-
 @pytest.fixture
 def subsystem(monkeypatch, worker_node):
-    """The worker node's monitoring pool, in process."""
-    made = MonitoringSubsystem()
-    monkeypatch.setattr(mqtt_pool_client, "MqttPoolClient", type("Client", (PoolClient,), {"subsystem": made}))
-    asked = []
-
-    def pool_of(subsystem):
-        asked.append(subsystem)
-        return SimpleNamespace(mqtt_connection=worker_node.mqtt_connection, service_name=POOL_NAME, service_topic=POOL_TOPIC)
-
-    monkeypatch.setattr(worker_node, "pools", SimpleNamespace(get=pool_of))
-    made.asked = asked
+    """The worker node's monitoring pool, in process. A series' worker runs when its close signal arrives, on the signals sent until then."""
+    made = InProcessSubsystem(MqttMonitoringService, POOL_NAME).serve(monkeypatch, worker_node)
+    made.hooks["close"] = made.work
     return made
 
 
@@ -174,7 +73,7 @@ def test_the_result_summarizes_the_rules(judge, subsystem, head_on_trajectories)
 def test_the_job_is_one_request_then_the_scenes_in_batches_in_time_order_then_the_close(judge, subsystem, head_on_trajectories):
     report = _Report()
     result = judge({"trajectories": head_on_trajectories.to_dict(), "scenario_id": "case-1#run0", "colregs_constraints_content": None}, report)
-    [(_, params, seed)] = [event for event in subsystem.events if event[0] == "request"]
+    [(params, seed)] = subsystem.requests()
     assert params == {"scenario-id": "case-1#run0", "time-step": 1, "colregs-constraints-content": None, "include-frames": False}
     assert 0 <= seed <= MAX_SEED and result["seed"] == seed, "every request carries a seed, and the result names it"
     first, second = subsystem.signals("scenes")
@@ -185,13 +84,13 @@ def test_the_job_is_one_request_then_the_scenes_in_batches_in_time_order_then_th
     kinds = [event[0] if event[0] != "state" else event[2] for event in subsystem.events]
     assert kinds == ["request", "received", "queued", "running", "signal", "signal", "signal", "finished"], "nothing is sent before the task runs"
     assert [message for message in report.messages if message.startswith("monitored")] == ["monitored 100 of 121 scenes", "monitored 121 of 121 scenes"]
-    assert not [event for event in subsystem.events if event[0] == "cancel"]
+    assert subsystem.cancels() == []
 
 
 def test_a_job_without_a_scenario_is_a_scenario_of_its_own(judge, subsystem, head_on_trajectories):
     """Two direct jobs never wait for each other: each is ordered by its own request id."""
     result = judge({"trajectories": head_on_trajectories.to_dict(), "include_frames": True}, job_id="abc", attempt=2)
-    [(_, params, _)] = [event for event in subsystem.events if event[0] == "request"]
+    [(params, _)] = subsystem.requests()
     assert params["scenario-id"] == "abc-2"
     assert {frame["scenarioId"] for frame in result["frames"]} == {"abc-2"}
 
@@ -233,24 +132,20 @@ def test_the_series_waits_in_the_queue_behind_another_series_of_its_scenario(jud
 
 
 def test_a_task_that_fails_fails_the_attempt_with_the_subsystems_reason(judge, subsystem, head_on_trajectories):
-    def lose_the_worker(request_id):
-        subsystem.processes[request_id].die()
-        subsystem.relay()
-
-    subsystem.on_close = lose_the_worker
+    subsystem.hooks["close"] = subsystem.die
     with pytest.raises(JobFailed, match="The task of the monitoring pool failed: the worker process ended without a result") as failure:
         judge({"trajectories": head_on_trajectories.to_dict()})
-    assert failure.value.retryable and not [event for event in subsystem.events if event[0] == "cancel"], "the task is over: there is nothing to cancel"
+    assert failure.value.retryable and subsystem.cancels() == [], "the task is over: there is nothing to cancel"
 
 
 def test_a_cancelled_job_stops_sending_and_cancels_its_own_series(judge, subsystem, head_on_trajectories):
     cancel = threading.Event()
-    subsystem.on_scenes = lambda request_id: cancel.set()  # the lease is cancelled while the job sends its scenes
+    subsystem.hooks["scenes"] = lambda request_id: cancel.set()  # the lease is cancelled while the job sends its scenes
     with pytest.raises(JobFailed, match="cancelled") as failure:
         judge({"trajectories": head_on_trajectories.to_dict()}, cancel=cancel)
     assert not failure.value.retryable
     assert len(subsystem.signals("scenes")) == 1 and subsystem.signals("close") == []
-    assert ("cancel", "job-1-1") in subsystem.events and subsystem.states("job-1-1")[-1] == "running"
+    assert subsystem.cancels() == ["job-1-1"] and subsystem.states("job-1-1")[-1] == "running"
     subsystem.work("job-1-1")
     assert subsystem.states("job-1-1")[-1] == "aborted", "the worker sees the cancel and ends its series"
 

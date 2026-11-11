@@ -5,7 +5,7 @@ job_types.py                  job type to module
 job_payload.py                shared payload pieces and payload parsing
 pool_client.py                a job as a request to its subsystem's pool (run_pool_request)
 runner_container.py           running a job in one runner container
-design_space_exploration_job.py  design_space_exploration, in a container of the Refinery model generator
+design_space_exploration_job.py  design_space_exploration, on the design space exploration pool
 scene_generation_job.py       scene_generation, on the scene generation pool
 trajectory_generation_job.py  trajectory_generation, on the trajectory generation pool
 simulation_job.py             simulation, by the runner its payload names (simulation_runners/: kinematic, ardupilot)

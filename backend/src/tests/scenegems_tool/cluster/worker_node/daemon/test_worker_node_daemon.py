@@ -305,6 +305,15 @@ def test_a_worker_node_with_the_monitoring_component_starts_its_monitoring_pool(
     assert worker_node.pool_subsystems() == [Subsystem.MONITORING] and worker_node.pools.get(Subsystem.MONITORING).workers == 3
 
 
+def test_a_worker_node_with_the_design_space_exploration_component_starts_its_exploration_pool(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):
+    fake_control_node.instance_number = 2
+    configuration = worker_node_configuration(SCENEGEMS_WORKER_NODE_SLOTS="design_space_exploration:2", SCENEGEMS_WORKER_NODE_COMPONENTS="design_space_exploration")
+    daemon, _, _ = connect(fake_control_node, start_daemon, configuration)
+    wait_for(lambda: ("start", "design-space-exploration-subsystem-2") in pools_without_docker)
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.pool_subsystems() == [Subsystem.DESIGN_SPACE_EXPLORATION] and worker_node.pools.get(Subsystem.DESIGN_SPACE_EXPLORATION).workers == 2
+
+
 def test_the_daemon_looks_after_its_pools_from_the_welcome_on(fake_control_node, worker_node_configuration, start_daemon, monkeypatch):
     from scenegems_tool.cluster.worker_node.daemon import worker_node_daemon
 

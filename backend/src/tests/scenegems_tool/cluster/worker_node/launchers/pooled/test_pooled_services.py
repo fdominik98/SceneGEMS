@@ -4,6 +4,7 @@ import pytest
 
 from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.pooled import pooled_service
+from scenegems_tool.cluster.worker_node.launchers.pooled.design_space_exploration_pool import DesignSpaceExplorationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.service_pools import ServicePools
@@ -71,6 +72,25 @@ def test_the_monitoring_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqt
     assert pool.project.name == "scenegems-m1-n1" and pool.names.instance == scope.key, "in the worker node's project, found by its label"
 
 
+def test_the_design_space_exploration_pool_is_sized_by_slots_and_reaches_the_broker(no_docker, mqtt_connection, geofence):
+    scope = InstanceScope.pooled("m1", "n1", "design_space_exploration")
+    pool = DesignSpaceExplorationPool.for_scope(
+        scope, mqtt_connection.with_topic_root("scenegems"), geofence, workers=2, broker_network="worker_node_broker_net", service_name="design-space-exploration-subsystem-2"
+    )
+    compose = pool.labelled(pool.build_compose())
+    service = compose["services"]["design-space-exploration-subsystem"]
+    assert service["container_name"] == "scenegems-m1-n1-design-space-exploration-subsystem" and service["labels"] == {INSTANCE_LABEL: "design-space-exploration-subsystem"}
+    assert service["cpus"] == 3, "a core per generator it runs at once, and one for the service"
+    assert "command" not in service and "network_mode" not in service, "the image's own service, on the broker's network: the generator alone had none"
+    assert "scenegems_broker" in service["networks"] and compose["networks"]["scenegems_broker"] == {"external": True, "name": "worker_node_broker_net"}
+    assert (service["environment"]["WORKER_COUNT"], service["environment"]["MQTT_SERVICE_NAME"]) == (
+        "2",
+        "design-space-exploration-subsystem-2",
+    ), "the pool size is also what the generators share the memory by"
+    assert (pool.service_name, pool.service_topic) == ("design-space-exploration-subsystem-2", "scenegems/service/virtual/real/design-space-exploration-subsystem-2")
+    assert DesignSpaceExplorationPool.default_service_name == "design-space-exploration-subsystem" and DesignSpaceExplorationPool.subsystem is Subsystem.DESIGN_SPACE_EXPLORATION
+
+
 def test_a_monitoring_pool_on_its_own_keeps_the_subsystems_name():
     assert MonitoringPool.default_service_name == "monitoring-subsystem" and MonitoringPool.subsystem is Subsystem.MONITORING
 
@@ -94,12 +114,14 @@ def container_of(pool) -> str:
 
 
 def test_the_pools_of_the_subsystems_start_together_each_once(pools):
-    pools.start([Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION, Subsystem.MONITORING, Subsystem.SIMULATION])
+    pools.start([Subsystem.DESIGN_SPACE_EXPLORATION, Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION, Subsystem.MONITORING, Subsystem.SIMULATION])
     scene = pools.get(Subsystem.SCENE_GENERATION)
     assert scene.service_name == "scene-generation-subsystem-4" and scene.workers == 2
     assert pools.get(Subsystem.TRAJECTORY_GENERATION).service_name == "trajectory-generation-subsystem-4"
     monitoring = pools.get(Subsystem.MONITORING)
     assert isinstance(monitoring, MonitoringPool) and (monitoring.service_name, monitoring.workers) == ("monitoring-subsystem-4", 2)
+    exploration = pools.get(Subsystem.DESIGN_SPACE_EXPLORATION)
+    assert isinstance(exploration, DesignSpaceExplorationPool) and (exploration.service_name, exploration.workers) == ("design-space-exploration-subsystem-4", 2)
     pools.start([Subsystem.SCENE_GENERATION])
     assert pools.get(Subsystem.SCENE_GENERATION) is scene, "a pool that is there is left alone; a subsystem without a pool yet is skipped"
 
