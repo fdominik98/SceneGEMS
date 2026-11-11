@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 
 from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
 from scenegems_tool.gateway.serialization import serialize_frame
-from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo, service_topic
 from scenegems_tool.subsystems.scene_generation.scene_generation_types import (  # noqa: F401 (re-exported names)
     MAX_SCENE_GENERATION_WORKERS,
     SCENE_GENERATION_SERVICE_NAME,
@@ -26,10 +26,11 @@ _logger = logging.getLogger(__name__)
 
 
 class MqttSceneGenerationService(MqttClient):
-    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, max_workers: int = MAX_SCENE_GENERATION_WORKERS):
+    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, max_workers: int = MAX_SCENE_GENERATION_WORKERS, name: str = SCENE_GENERATION_SERVICE_NAME):
         self.info_update_rate = 1.0
         self.max_workers = max_workers
-        super().__init__(SCENE_GENERATION_SERVICE_NAME, SCENE_GENERATION_SERVICE_TOPIC, mqtt_connection, reference_geofence)
+        # The name tells this instance from every other on the broker; the connection knows the broker's first topic level
+        super().__init__(name, service_topic(mqtt_connection.topic_root, name), mqtt_connection, reference_geofence)
         self.scene_generation_task_queue: Queue[MqttSceneGenerationTask] = Queue()
         self.generated_scene_queue: Queue[Tuple[MqttSceneGenerationTask, EvaluationData, bool]] = Queue()  # task, scene, final
         self.current_tasks: List[MqttSceneGenerationTask] = []  # queued and running, in arrival order

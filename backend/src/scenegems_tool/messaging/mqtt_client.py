@@ -11,9 +11,12 @@ from typing import Any, Dict, List, Mapping, Optional, Set
 
 import paho.mqtt.client as mqtt
 
+from scenegems_tool.messaging.topic_layout import CLUSTER_TOPIC_ROOT, WARAPS_TOPIC_ROOT, require_topic_root, service_topic  # noqa: F401 (the layout's names, for this module's users)
 from scenegems_tool.messaging.topic_scope import ScopedPahoClient, TopicScope
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
+TOPIC_ROOT_VARIABLE = "MQTT_TOPIC_ROOT"
+SERVICE_NAME_VARIABLE = "MQTT_SERVICE_NAME"  # the name a launcher gives the service it starts, unique on its broker
 _LOOPBACK_ALIASES = frozenset({"localhost", "127.0.0.1", "::1"})
 _DOCKER_HOST_GATEWAY = "host.docker.internal"
 
@@ -79,8 +82,10 @@ class MQttConnectionInfo:
     workbench's behaviour for external brokers such as WARA-PS: the system trust store, or
     no verification when `allow_certificates` is set.
 
-    `topic_prefix` is the instance scope on a shared broker (cluster/worker_node/instance_scope.py);
-    it is empty for the workbench.
+    `topic_root` is the first level of every agent topic (messaging/topic_layout.py): `waraps` on
+    a WARA-PS broker, which is the default, and `scenegems` on a control node's own broker.
+
+    `topic_prefix` scopes a live session on the control node's broker; it is empty everywhere else.
     """
 
     def __init__(
@@ -94,6 +99,7 @@ class MQttConnectionInfo:
         allow_certificates: bool,
         ca_certificate_path: Optional[str] = None,
         topic_prefix: str = "",
+        topic_root: str = WARAPS_TOPIC_ROOT,
     ):
         self.user = user
         self.password = password
@@ -104,11 +110,12 @@ class MQttConnectionInfo:
         self.allow_certificates = allow_certificates
         self.ca_certificate_path = ca_certificate_path
         self.topic_prefix = topic_prefix
+        self.topic_root = require_topic_root(topic_root)
 
     def __repr__(self) -> str:
         return (
             f"MQttConnectionInfo(user={self.user!r}, password=<hidden>, client_broker={self.client_broker!r}, port={self.port}, "
-            f"tls_connection={self.tls_connection}, ca_certificate_path={self.ca_certificate_path!r}, topic_prefix={self.topic_prefix!r})"
+            f"tls_connection={self.tls_connection}, ca_certificate_path={self.ca_certificate_path!r}, topic_root={self.topic_root!r}, topic_prefix={self.topic_prefix!r})"
         )
 
     def with_topic_prefix(self, topic_prefix: str) -> "MQttConnectionInfo":
@@ -117,11 +124,17 @@ class MQttConnectionInfo:
         scoped.topic_prefix = topic_prefix
         return scoped
 
+    def with_topic_root(self, topic_root: str) -> "MQttConnectionInfo":
+        """The same connection with another first topic level."""
+        rooted = copy.copy(self)
+        rooted.topic_root = require_topic_root(topic_root)
+        return rooted
+
     @classmethod
     def from_environment(cls, environ: Optional[Mapping[str, str]] = None) -> "MQttConnectionInfo":
         """The broker connection of a subsystem container, from the variables of mqtt_container_environment:
         MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, MQTT_TLS, MQTT_ALLOW_CERTIFICATES and, for the
-        cluster broker, MQTT_CA_CERTIFICATE and MQTT_TOPIC_PREFIX."""
+        cluster broker, MQTT_CA_CERTIFICATE, MQTT_TOPIC_ROOT and MQTT_TOPIC_PREFIX."""
         environ = os.environ if environ is None else environ
         return cls(
             user=environ.get("MQTT_USER", ""),
@@ -133,6 +146,7 @@ class MQttConnectionInfo:
             allow_certificates=_env_flag(environ, "MQTT_ALLOW_CERTIFICATES"),
             ca_certificate_path=environ.get("MQTT_CA_CERTIFICATE", "").strip() or None,
             topic_prefix=environ.get("MQTT_TOPIC_PREFIX", ""),
+            topic_root=environ.get(TOPIC_ROOT_VARIABLE, "").strip() or WARAPS_TOPIC_ROOT,
         )
 
     def apply_to(self, client: mqtt.Client) -> None:
@@ -155,8 +169,9 @@ def _env_flag(environ: Mapping[str, str], name: str) -> bool:
 def mqtt_container_environment(mqtt_connection: MQttConnectionInfo) -> Dict[str, str]:
     """Environment that hands a broker connection to a subsystem container (read by MQttConnectionInfo.from_environment).
 
-    The container dials the agent broker. The CA certificate path and the topic prefix are set
-    only when there is one, so workbench containers get exactly the variables they got before.
+    The container dials the agent broker. The CA certificate path, the topic prefix and a topic
+    root other than WARA-PS's are set only when there is one, so workbench containers get exactly
+    the variables they got before.
     The CA path must be valid inside the container: the launcher mounts the file there.
     """
     environment = {
@@ -171,7 +186,15 @@ def mqtt_container_environment(mqtt_connection: MQttConnectionInfo) -> Dict[str,
         environment["MQTT_CA_CERTIFICATE"] = mqtt_connection.ca_certificate_path
     if mqtt_connection.topic_prefix:
         environment["MQTT_TOPIC_PREFIX"] = mqtt_connection.topic_prefix
+    if mqtt_connection.topic_root != WARAPS_TOPIC_ROOT:
+        environment[TOPIC_ROOT_VARIABLE] = mqtt_connection.topic_root
     return environment
+
+
+def service_name_from_environment(default: str, environ: Optional[Mapping[str, str]] = None) -> str:
+    """The name a launcher gave the service it starts (SERVICE_NAME_VARIABLE), or the subsystem's own."""
+    environ = os.environ if environ is None else environ
+    return environ.get(SERVICE_NAME_VARIABLE, "").strip() or default
 
 
 class MqttClient(ABC):

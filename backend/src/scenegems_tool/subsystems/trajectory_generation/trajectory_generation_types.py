@@ -6,7 +6,8 @@ from typing import Optional
 # and the subsystem is scoped to one request at a time (see project spec). A node sizes
 # its pool by its slots. Kept apart from the service module, which imports the search.
 MAX_TRAJECTORY_GENERATION_WORKERS = 1
-TRAJECTORY_GENERATION_SERVICE_NAME = "trajectory_generation_service"
+# The service's name and base topic on its own; a worker node's instance takes the cluster's (scene_generation_types.py).
+TRAJECTORY_GENERATION_SERVICE_NAME = "trajectory-generation-subsystem"
 TRAJECTORY_GENERATION_SERVICE_TOPIC = f"waraps/service/virtual/real/{TRAJECTORY_GENERATION_SERVICE_NAME}"
 
 

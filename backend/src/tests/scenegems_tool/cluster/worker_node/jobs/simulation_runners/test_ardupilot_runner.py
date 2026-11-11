@@ -11,7 +11,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.simulation_job import SimulationPayload, execute
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import STACK_NETWORK, ArduPilotSimulationPayload, build_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE
+from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, project_compose
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import StampedState
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import MavlinkRunResult
 from utils.file_system_utils import RUNTIME_ASSETS_VOLUME
@@ -61,9 +61,14 @@ def test_generated_files_go_to_the_job_folder(instances_folder, worker_node, mak
 def test_two_jobs_get_disjoint_stacks(instances_folder, worker_node, make_job, head_on_trajectories):
     _, first = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="a")
     _, second = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="b")
-    first_names = {service["container_name"] for service in first.compose["services"].values()} | {first.project.name}
-    second_names = {service["container_name"] for service in second.compose["services"].values()} | {second.project.name}
+    first_names = {service["container_name"] for service in first.compose["services"].values()}
+    second_names = {service["container_name"] for service in second.compose["services"].values()}
     assert not first_names & second_names
+    assert first.project.name == second.project.name == "scenegems-m1-n1", "both stacks are in the worker node's project"
+    first_document, second_document = project_compose(first.scope, first.compose), project_compose(second.scope, second.compose)
+    assert not set(first_document["services"]) & set(second_document["services"]), "so compose needs their service keys to differ"
+    assert not set(first_document["networks"]) & set(second_document["networks"]), "and their network keys, or one stack would take the other's network away"
+    assert first.project.instance != second.project.instance, "and each is removed by its own label"
 
 
 def usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer="ardupilot_sim", **fields):

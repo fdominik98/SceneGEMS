@@ -24,6 +24,9 @@ class _Report:
         self.messages.append(message)
 
 
+POOL_NAME = "scene-generation-subsystem-3"  # the worker node's pool as the control node numbered it
+
+
 class _ScriptedClient:
     """Stands in for a generation client; `answer(client, command)` plays the pool's replies."""
 
@@ -58,7 +61,11 @@ def pool(monkeypatch, worker_node):
     def install(module, attribute, answer):
         client = type("Client", (_ScriptedClient,), {"answer": staticmethod(answer), "commands": [], "cancels": []})
         monkeypatch.setattr(module, attribute, client)
-        monkeypatch.setattr(worker_node, "pools", SimpleNamespace(get=lambda subsystem: SimpleNamespace(mqtt_connection=worker_node.mqtt_connection)))
+        monkeypatch.setattr(
+            worker_node,
+            "pools",
+            SimpleNamespace(get=lambda subsystem: SimpleNamespace(mqtt_connection=worker_node.mqtt_connection, service_name=POOL_NAME, service_topic=f"scenegems/service/virtual/real/{POOL_NAME}")),
+        )
         return client
 
     return install
@@ -79,6 +86,18 @@ def test_the_scene_job_sends_the_seed_and_takes_the_final_scene(pool, worker_nod
     assert result == {"request_id": "job-1-1", "valid": True, "evaluation_data": {"sample": 3}}
     assert client.commands[0][1] == {"seed": 17}
     assert "search sample 2" in report.messages
+
+
+def test_a_generation_job_talks_to_its_own_worker_nodes_pool(pool, worker_node, make_job):
+    addressed = {}
+
+    def answer(arguments, command):
+        addressed.update(topic=arguments["topic"], name=arguments["parent_service_name"])
+        arguments["on_scene_result"](command[0], {}, True, True)
+
+    pool(mqtt_scene_generation_client, "MqttSceneGenerationClient", answer)
+    scene_generation_job.run(make_job(JobType.SCENE_GENERATION, valid_payload(JobType.SCENE_GENERATION, seed=1)), worker_node, _Report())
+    assert addressed == {"topic": f"scenegems/service/virtual/real/{POOL_NAME}", "name": POOL_NAME}, "another worker node's pool never takes the task"
 
 
 def test_the_trajectory_job_returns_complete(pool, worker_node, make_job):

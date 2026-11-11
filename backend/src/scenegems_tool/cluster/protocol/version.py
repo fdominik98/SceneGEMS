@@ -29,9 +29,13 @@ the artifact routes read the X-Worker-Node-Id header.
 
 Version 9: the ASV software of a vessel stack is its ASV system. A vessel's stack names it asv_system, and the
 components are asv_system/replay and asv_system/usv_navigation.
+
+Version 10: Welcome carries the worker node's instance number. The pooled services of a worker node are named
+after it on the cluster broker (scene-generation-subsystem-<number>), whose topics no longer have a level for
+the control node, the worker node or the instance.
 """
 
-PROTOCOL_VERSION = 9
+PROTOCOL_VERSION = 10
 
 
 class ProtocolVersionMismatch(ValueError):

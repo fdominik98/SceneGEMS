@@ -32,7 +32,6 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.pool_client import wait_for_pool, wait_for_reply
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import SCENE_GENERATION_SERVICE_NAME, SCENE_GENERATION_SERVICE_TOPIC
 
 REPLY_MARGIN_S = 60.0  # time beyond the generation timeout for the worker to start and the reply to arrive
 MAX_SEED = 2**31 - 1
@@ -93,9 +92,9 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel:
     pool = worker_node.pools.get(Subsystem.SCENE_GENERATION)
     client = MqttSceneGenerationClient(
         mqtt_connection=pool.mqtt_connection,
-        topic=SCENE_GENERATION_SERVICE_TOPIC,
+        topic=pool.service_topic,
         reference_geofence=worker_node.reference_geofence,
-        parent_service_name=SCENE_GENERATION_SERVICE_NAME,
+        parent_service_name=pool.service_name,
         send_payload=lambda message: None,
         on_generated_scene=lambda request_id, scene, evaluation_data, valid: None,
         on_scene_result=on_scene_result,

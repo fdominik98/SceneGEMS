@@ -61,10 +61,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0015"]
+    assert scripts.get_heads() == ["0016"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -145,7 +145,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0015"
+            assert MigrationContext.configure(connection).get_current_revision() == "0016"
     finally:
         engine.dispose()
 
@@ -704,7 +704,6 @@ def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(
             )
         command.upgrade(config, "0013")
         with engine.connect() as connection:
-            assert compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True}), Base.metadata) == []
             assert connection.execute(text("SELECT name FROM worker_node WHERE id = 'node-1'")).scalar_one() == "worker-1"
             assert connection.execute(text("SELECT slots FROM worker_node_capability WHERE worker_node_id = 'node-1'")).scalar_one() == 2
             assert connection.execute(text("SELECT component FROM worker_node_component WHERE worker_node_id = 'node-1'")).scalar_one() == "simulation_layer/kinematic"
@@ -722,6 +721,10 @@ def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(
             assert connection.execute(text("SELECT allowed_nodes FROM job WHERE id = 'job-1'")).scalar_one() == ["node-1"]
             assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p1'")).scalar_one() == {"resources": {"nodes": ["node-1"], "priority": 2}}
         command.upgrade(config, "head")
+        with engine.connect() as connection:
+            # The renamed tables are the code's tables once the later revisions are in too (0016 adds a column to worker_node)
+            assert compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True}), Base.metadata) == []
+            assert connection.execute(text("SELECT instance_number FROM worker_node WHERE id = 'node-1'")).scalar_one() == 1
     finally:
         engine.dispose()
 
@@ -836,5 +839,32 @@ def test_revision_0015_renames_the_simulation_subsystem_image_in_stored_fingerpr
         assert before["job"] == old and before["tagged"] == tagged_old
         assert tuple(before["calibration"]) == (old, canonical_json_sha256(old))
         command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+def test_revision_0016_numbers_the_stored_worker_nodes_in_the_order_they_registered(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0015")
+    engine = create_engine(empty_database_url)
+    insert = text(
+        "INSERT INTO worker_node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+        " VALUES (:id, :id, 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+    )
+    try:
+        with engine.begin() as connection:
+            for worker_node_id, day in (("worker-late", 12), ("worker-early", 10), ("worker-middle", 11)):
+                connection.execute(insert, {"id": worker_node_id, "at": datetime(2026, 11, day, 9, 30, tzinfo=timezone.utc)})
+        command.upgrade(config, "0016")
+        with engine.connect() as connection:
+            numbers = dict(connection.execute(text("SELECT id, instance_number FROM worker_node")).all())
+        assert numbers == {"worker-early": 1, "worker-middle": 2, "worker-late": 3}
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text("UPDATE worker_node SET instance_number = 1 WHERE id = 'worker-late'"))  # a number belongs to one worker node
+        command.downgrade(config, "0015")
+        assert "instance_number" not in {column["name"] for column in inspect(engine).get_columns("worker_node")}
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert dict(connection.execute(text("SELECT id, instance_number FROM worker_node")).all()) == numbers
     finally:
         engine.dispose()

@@ -39,6 +39,8 @@ class WorkerNodeRow(Base):
     load_average: Mapped[float] = mapped_column(Float)
     registered_at: Mapped[datetime] = mapped_column(utc_timestamp())
     last_seen_at: Mapped[datetime] = mapped_column(utc_timestamp(), index=True)
+    # The worker node's number in the cluster, given at its first Hello (the lowest free one) and kept: it names the worker node's pooled services on MQTT
+    instance_number: Mapped[int] = mapped_column(Integer, unique=True)
 
     capabilities: Mapped[List["WorkerNodeCapabilityRow"]] = relationship(back_populates="worker_node", cascade="all, delete-orphan", order_by="WorkerNodeCapabilityRow.job_type")  # slots per job type
     components: Mapped[List["WorkerNodeComponentRow"]] = relationship(back_populates="worker_node", cascade="all, delete-orphan", order_by="WorkerNodeComponentRow.component")

@@ -1,6 +1,6 @@
 """Compose content of the pooled services: the workbench's is unchanged by instance scoping, a worker node's is scoped."""
 
-from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.compose_project import dump_compose
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitor_service import MonitorService
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
@@ -43,20 +43,30 @@ def workbench_pool_compose(service: str, image: str, cpus: int) -> dict:
 
 def test_scoped_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqtt_connection, geofence):
     scope = InstanceScope.pooled("m1", "n1", "scene_generation")
-    pool = SceneGenerationPool.for_scope(scope, mqtt_connection, geofence, workers=3, broker_network="worker_node_broker_net")
-    compose = pool.build_compose()
-    service = compose["services"]["scene_generation"]
-    assert service["container_name"] == service["hostname"] == "scenegems-m1-n1-scene_generation-0"
+    cluster_broker = mqtt_connection.with_topic_root("scenegems")
+    pool = SceneGenerationPool.for_scope(scope, cluster_broker, geofence, workers=3, broker_network="worker_node_broker_net", service_name="scene-generation-subsystem-2")
+    compose = pool.labelled(pool.build_compose())
+    service = compose["services"]["scene-generation-subsystem"]
+    assert service["container_name"] == service["hostname"] == "scenegems-m1-n1-scene-generation-subsystem"
+    assert service["labels"] == {INSTANCE_LABEL: "scene-generation-subsystem"}, "what the pool is removed by in the worker node's project"
     assert service["cpus"] == 4
     assert service["environment"]["WORKER_COUNT"] == "3"
-    assert service["environment"]["MQTT_TOPIC_PREFIX"] == "scenegems/m1/n1/scene_generation-0/"
-    assert compose["networks"]["scene_generation_net"]["name"] == "scenegems-m1-n1-scene_generation-0-net"
+    assert "MQTT_TOPIC_PREFIX" not in service["environment"], "no level for the worker node or the instance"
+    assert service["environment"]["MQTT_TOPIC_ROOT"] == "scenegems" and service["environment"]["MQTT_SERVICE_NAME"] == "scene-generation-subsystem-2"
+    assert compose["networks"]["scene_generation_net"] == {"name": "scenegems-m1-n1-scene-generation-subsystem-net", "driver": "bridge", "labels": {INSTANCE_LABEL: "scene-generation-subsystem"}}
     assert compose["networks"]["scenegems_broker"] == {"external": True, "name": "worker_node_broker_net"}
-    assert pool.project.name == scope.compose_project
+    assert pool.project.name == scope.compose_project == "scenegems-m1-n1" and pool.project.instance == scope.key
     assert pool.compose_filename == f"{scope.folder}/docker-compose.yml"
-    # Clients of the pool use the same prefix as the container.
-    assert pool.mqtt_connection.topic_prefix == scope.topic_prefix
-    assert mqtt_connection.topic_prefix == ""
+    # Clients of the pool address it by the name and the topic its container was given.
+    assert (pool.service_name, pool.service_topic) == ("scene-generation-subsystem-2", "scenegems/service/virtual/real/scene-generation-subsystem-2")
+    assert pool.mqtt_connection.topic_prefix == ""
+
+
+def test_a_pool_on_its_own_keeps_the_subsystems_name_on_a_waraps_topic(no_docker, mqtt_connection, geofence):
+    pool = SceneGenerationPool.for_scope(InstanceScope.pooled("m1", "n1", "scene_generation"), mqtt_connection, geofence, workers=1)
+    assert (pool.service_name, pool.service_topic) == ("scene-generation-subsystem", "waraps/service/virtual/real/scene-generation-subsystem")
+    environment = pool.build_compose()["services"]["scene-generation-subsystem"]["environment"]
+    assert environment["MQTT_SERVICE_NAME"] == "scene-generation-subsystem" and "MQTT_TOPIC_ROOT" not in environment
 
 
 def test_two_scoped_pools_share_no_docker_name(no_docker, mqtt_connection, geofence):
@@ -65,8 +75,8 @@ def test_two_scoped_pools_share_no_docker_name(no_docker, mqtt_connection, geofe
 
     def names(pool):
         compose = pool.build_compose()
-        service = compose["services"]["trajectory_generation"]
-        return {pool.project.name, service["container_name"], compose["networks"]["trajectory_generation_net"]["name"], pool.compose_filename, pool.mqtt_connection.topic_prefix}
+        service = compose["services"]["trajectory-generation-subsystem"]
+        return {pool.project.name, service["container_name"], compose["networks"]["trajectory_generation_net"]["name"], pool.compose_filename}
 
     assert not names(first) & names(second)
 
@@ -74,7 +84,7 @@ def test_two_scoped_pools_share_no_docker_name(no_docker, mqtt_connection, geofe
 def test_image_override_applies_to_pools(no_docker, monkeypatch, mqtt_connection, geofence):
     monkeypatch.setenv("SCENE_GENERATION_IMAGE", "scenegems-scene-generation-subsystem:branch")
     pool = SceneGenerationPool.for_scope(InstanceScope.pooled("m1", "n1", "scene_generation"), mqtt_connection, geofence, workers=1, broker_network="worker_node_broker_net")
-    assert pool.build_compose()["services"]["scene_generation"]["image"] == "scenegems-scene-generation-subsystem:branch"
+    assert pool.build_compose()["services"]["scene-generation-subsystem"]["image"] == "scenegems-scene-generation-subsystem:branch"
 
 
 def test_workbench_monitor_compose_is_unchanged(no_docker, mqtt_connection, geofence):
@@ -108,9 +118,9 @@ def test_workbench_monitor_compose_is_unchanged(no_docker, mqtt_connection, geof
 def test_scoped_monitor_is_named_by_scope(no_docker, mqtt_connection, geofence):
     scope = InstanceScope.pooled("m1", "n1", "monitoring")
     monitor = MonitorService.for_scope(scope, mqtt_connection, geofence, "scenario_monitor", "waraps/service/virtual/real/scenario_monitor", "rules: []\n")
-    service = monitor.build_compose()["services"]["monitoring"]
-    assert service["container_name"] == "scenegems-m1-n1-monitoring-0"
-    assert service["environment"]["MQTT_TOPIC_PREFIX"] == "scenegems/m1/n1/monitoring-0/"
+    service = monitor.labelled(monitor.build_compose())["services"]["monitoring"]
+    assert service["container_name"] == "scenegems-m1-n1-monitoring-subsystem"
+    assert "MQTT_TOPIC_PREFIX" not in service["environment"] and service["labels"] == {INSTANCE_LABEL: "monitoring-subsystem"}
     assert monitor.names.scoped
 
 

@@ -34,6 +34,7 @@ from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 from scenegems_tool.cluster.protocol.worker_node_description import SlotOffer
 from scenegems_tool.cluster.worker_node.daemon.worker_node_daemon import DaemonStopped
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from tests.scenegems_tool.cluster.worker_node.daemon.conftest import FINGERPRINTS, make_job, make_offer, wait_for
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
 
@@ -277,8 +278,16 @@ def test_a_version_mismatch_error_from_the_control_node_stops_the_daemon(fake_co
     assert isinstance(error, DaemonStopped) and "control node speaks 2" in str(error)
 
 
+def test_the_welcome_gives_the_worker_node_its_instance_number(fake_control_node, worker_node_configuration, start_daemon):
+    fake_control_node.instance_number = 3
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.instance_number == 3
+    assert worker_node.pools.service_name(Subsystem.SCENE_GENERATION) == "scene-generation-subsystem-3", "the name its pool answers to on the cluster broker"
+
+
 def test_a_welcome_from_another_control_node_stops_the_daemon(fake_control_node, worker_node_configuration, start_daemon):
-    fake_control_node.hello_reply = lambda _hello: Welcome(control_node_id="other-control-node", heartbeat_interval_s=1.0, lease_timeout_s=3.0)
+    fake_control_node.hello_reply = lambda _hello: Welcome(control_node_id="other-control-node", instance_number=1, heartbeat_interval_s=1.0, lease_timeout_s=3.0)
     error = start_daemon(worker_node_configuration()).wait_exit()
     assert isinstance(error, DaemonStopped) and "'other-control-node'" in str(error)
 

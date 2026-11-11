@@ -95,8 +95,8 @@ class WorkerNodeConfiguration:
 
     @property
     def docker_name(self) -> str:
-        """The worker node's compose project and container name on this machine: one per control node and worker node name."""
-        return f"scenegems-worker-node-{self.control_node_id}-{self.worker_node_name}"
+        """The worker node's compose project on this machine, one per control node and worker node name: the daemon and every container it starts."""
+        return f"scenegems-{self.control_node_id}-{self.worker_node_name}"
 
     @classmethod
     def load(cls, environ: Optional[Mapping[str, str]] = None, env_file: Optional[Path] = None) -> "WorkerNodeConfiguration":

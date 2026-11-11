@@ -52,6 +52,7 @@ class _WorkerNode:
     last_seen_at: datetime
     machine: Optional[str] = None
     components: Tuple[str, ...] = ()
+    instance_number: int = 1
 
     def record(self) -> WorkerNodeRecord:
         return WorkerNodeRecord(
@@ -67,6 +68,7 @@ class _WorkerNode:
             last_seen_at=self.last_seen_at,
             machine=self.machine,
             components=self.components,
+            instance_number=self.instance_number,
         )
 
 
@@ -95,8 +97,14 @@ class InMemoryWorkerNodeStore:
                 last_seen_at=now,
                 machine=hello.machine,
                 components=tuple(sorted(set(hello.components))),
+                instance_number=existing.instance_number if existing else self._free_instance_number(),
             )
             return self.worker_nodes[hello.worker_node_id].record()
+
+    def _free_instance_number(self) -> int:
+        """The lowest number no worker node holds, as the store gives a new worker node."""
+        taken = {worker_node.instance_number for worker_node in self.worker_nodes.values()}
+        return next(number for number in range(1, len(taken) + 2) if number not in taken)
 
     def heartbeat(self, worker_node_id: str, heartbeat: Heartbeat) -> Optional[WorkerNodeRecord]:
         with self.lock:

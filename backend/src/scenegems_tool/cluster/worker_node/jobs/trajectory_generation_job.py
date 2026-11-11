@@ -26,11 +26,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.pool_client import wait_for_pool, wait_for_reply
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import (
-    TRAJECTORY_GENERATION_SERVICE_NAME,
-    TRAJECTORY_GENERATION_SERVICE_TOPIC,
-    TrajectoryGenerationParams,
-)
+from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TrajectoryGenerationParams
 
 # The keys TrajectoryGenerationParams.from_wire reads, as the workbench sends them.
 PARAM_KEYS = frozenset(
@@ -110,9 +106,9 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel:
     pool = worker_node.pools.get(Subsystem.TRAJECTORY_GENERATION)
     client = MqttTrajectoryGenerationClient(
         mqtt_connection=pool.mqtt_connection,
-        topic=TRAJECTORY_GENERATION_SERVICE_TOPIC,
+        topic=pool.service_topic,
         reference_geofence=worker_node.reference_geofence,
-        parent_service_name=TRAJECTORY_GENERATION_SERVICE_NAME,
+        parent_service_name=pool.service_name,
         send_payload=on_message,
         on_result=on_result,
     )

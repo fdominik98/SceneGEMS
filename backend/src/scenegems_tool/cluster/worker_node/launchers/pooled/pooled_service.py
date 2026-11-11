@@ -3,7 +3,11 @@
 The container runs the subsystem's MQTT service with a pool of worker processes, sized by
 the worker node's slots (WORKER_COUNT) or by the subsystem's own default in the workbench. The
 launcher starts it on a background thread, so the caller never blocks on Docker, and
-callers talk to it through `mqtt_connection`, which carries the instance's topic prefix.
+callers talk to it on `service_topic` under its `service_name`, which tells it from the
+same service of every other worker node on the broker.
+
+A worker node's pool is part of the worker node's compose project and carries its instance's
+label (instance_scope.py), by which it is removed again.
 """
 
 import logging
@@ -11,13 +15,13 @@ import os
 import shutil
 import threading
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
-from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.compose_project import ComposeProject
 from scenegems_tool.cluster.worker_node.launchers.container_environment import subsystem_environment
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_client import SERVICE_NAME_VARIABLE, MQttConnectionInfo, service_topic
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from utils.docker_compose_network import attach_broker_network_to_compose
 from utils.file_system_utils import merge_compose_volumes
@@ -35,25 +39,28 @@ class PoolNames:
     network_key: str
     network_name: str  # the instance's own bridge network, next to the broker network
     folder: str  # holds the compose file; emptied when the pool starts
-    topic_prefix: str
+    topic_prefix: str  # a live session's scope on the control node's broker; empty for a worker node's pool
     scoped: bool  # a cluster instance: its networks are removed with it
+    instance: Optional[str] = None  # the instance's label value in a worker node's project; None for a project of its own
 
     @classmethod
     def for_scope(cls, scope: InstanceScope, service_key: str) -> "PoolNames":
         return cls(
             compose_project=scope.compose_project,
-            service_key=service_key,
+            service_key=scope.instance_id,  # unique in the worker node's project, which the pool shares
             container_name=scope.docker_name,
             network_key=f"{service_key}_net",
             network_name=scope.network_name("net"),
             folder=scope.folder,
-            topic_prefix=scope.topic_prefix,
+            topic_prefix="",
             scoped=True,
+            instance=scope.key,
         )
 
 
 class PooledService:
     subsystem: Subsystem
+    default_service_name = ""  # the service's MQTT name on its own; a subclass that is addressed by name sets it
 
     def __init__(
         self,
@@ -64,18 +71,21 @@ class PooledService:
         cpus: float,
         workers: Optional[int] = None,
         broker_network: Optional[str] = None,
+        service_name: Optional[str] = None,
     ):
         self.names = names
-        # Every client of this instance, inside the container and outside, uses the instance prefix.
+        # Every client of this instance, inside the container and outside, uses the same connection, name and topic.
         self.mqtt_connection = mqtt_connection.with_topic_prefix(names.topic_prefix)
+        self.service_name = service_name or self.default_service_name
+        self.service_topic = service_topic(self.mqtt_connection.topic_root, self.service_name) if self.service_name else ""
         self.reference_geofence = reference_geofence
         self.cpus = cpus
         self.workers = workers
         self.broker_network = broker_network
-        self.project = ComposeProject(names.compose_project, f"{names.folder}/docker-compose.yml")
+        self.project = ComposeProject(names.compose_project, f"{names.folder}/docker-compose.yml", instance=names.instance)
         self.compose_filename = self.project.compose_filename
         self._shutdown = threading.Event()
-        docker_compose = self.build_compose()
+        docker_compose = self.labelled(self.build_compose())
         self._lifecycle_thread: Optional[threading.Thread] = threading.Thread(
             target=self._run_container_lifecycle_startup,
             args=(docker_compose,),
@@ -89,7 +99,7 @@ class PooledService:
             "image": subsystem_image(self.subsystem),
             "container_name": self.names.container_name,
             "hostname": self.names.container_name,
-            "environment": subsystem_environment(self.mqtt_connection, self.reference_geofence, self.workers),
+            "environment": {**subsystem_environment(self.mqtt_connection, self.reference_geofence, self.workers), **self.service_name_environment()},
             "cpus": self.cpus,
             "networks": [self.names.network_key],
         }
@@ -109,6 +119,22 @@ class PooledService:
                 self.broker_network,
             )
         )
+
+    def service_name_environment(self) -> Dict[str, str]:
+        """The variable that tells the service its name, when the launcher chose one."""
+        return {SERVICE_NAME_VARIABLE: self.service_name} if self.service_name else {}
+
+    def labelled(self, docker_compose: dict) -> dict:
+        """The compose document with the instance's label on every service and on every network of its own."""
+        if self.names.instance is None:
+            return docker_compose
+        label = {INSTANCE_LABEL: self.names.instance}
+        for service in docker_compose.get("services", {}).values():
+            service["labels"] = {**service.get("labels", {}), **label}
+        for definition in docker_compose.get("networks", {}).values():
+            if isinstance(definition, dict) and not definition.get("external"):
+                definition["labels"] = {**definition.get("labels", {}), **label}
+        return docker_compose
 
     def _run_container_lifecycle_startup(self, docker_compose: dict) -> None:
         try:

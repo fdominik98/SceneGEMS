@@ -170,7 +170,14 @@ class ControlPlane:
         frames = await self.leases.reconcile(session, hello.running_lease_ids)
         # Nothing awaits between ready and the Welcome taking the socket's send lock, so no offer can go first
         session.ready = True
-        await session.send(Welcome(control_node_id=self.control_node_id, heartbeat_interval_s=self.timing.heartbeat_interval_s, lease_timeout_s=self.timing.lease_timeout_s))
+        await session.send(
+            Welcome(
+                control_node_id=self.control_node_id,
+                instance_number=record.instance_number,
+                heartbeat_interval_s=self.timing.heartbeat_interval_s,
+                lease_timeout_s=self.timing.lease_timeout_s,
+            )
+        )
         for frame in frames:
             await session.send(frame)
         self.observations.worker_node_connected(session)

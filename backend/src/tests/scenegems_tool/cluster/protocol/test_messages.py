@@ -75,7 +75,7 @@ def test_progress_is_a_fraction():
 
 def test_welcome_needs_positive_intervals():
     with pytest.raises(ValidationError):
-        Welcome(control_node_id="m1", heartbeat_interval_s=0.0, lease_timeout_s=30.0)
+        Welcome(control_node_id="m1", instance_number=1, heartbeat_interval_s=0.0, lease_timeout_s=30.0)
 
 
 def test_observe_defaults_to_ten_times_real_time_within_bounds():

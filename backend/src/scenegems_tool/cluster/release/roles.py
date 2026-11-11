@@ -142,7 +142,7 @@ def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "description": "Worker node: the worker node daemon, which leases jobs from its control node and runs them in subsystem containers; it needs no deployed control node",
         "count": "many",
         "stack": "worker_node",
-        "project": "scenegems-worker-node-{cluster}-{name}",
+        "project": "scenegems-{cluster}-{name}",
         "images": [tagged(WORKER_NODE_REPOSITORY, image_tag)],
         "env": {
             "SCENEGEMS_CONTROL_NODE_ID": "{cluster}",
@@ -173,7 +173,7 @@ def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "secrets": [],
         "setup": [],
         "outputs": {},
-        "ready": {"running": ["worker-node"]},
+        "ready": {"running": ["daemon"]},
     }
 
 

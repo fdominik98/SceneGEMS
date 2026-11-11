@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 import paho.mqtt.client as mqtt
 
-from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo, service_topic
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import (  # noqa: F401 (re-exported names)
     MAX_TRAJECTORY_GENERATION_WORKERS,
     TRAJECTORY_GENERATION_SERVICE_NAME,
@@ -25,10 +25,10 @@ _logger = logging.getLogger(__name__)
 
 
 class MqttTrajectoryGenerationService(MqttClient):
-    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, max_workers: int = MAX_TRAJECTORY_GENERATION_WORKERS):
+    def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence, max_workers: int = MAX_TRAJECTORY_GENERATION_WORKERS, name: str = TRAJECTORY_GENERATION_SERVICE_NAME):
         self.info_update_rate = 1.0
         self.max_workers = max_workers
-        super().__init__(TRAJECTORY_GENERATION_SERVICE_NAME, TRAJECTORY_GENERATION_SERVICE_TOPIC, mqtt_connection, reference_geofence)
+        super().__init__(name, service_topic(mqtt_connection.topic_root, name), mqtt_connection, reference_geofence)
         self.task_queue: Queue[MqttTrajectoryGenerationTask] = Queue()
         self.preview_queue: Queue = Queue()
         self.result_queue: Queue = Queue()

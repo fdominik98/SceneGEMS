@@ -7,6 +7,7 @@ from scenegems_tool.cluster.control_node.live.topics import WorkerNodesTopic, cr
 from scenegems_tool.cluster.protocol.routes import LIVE_PATH
 from tests.scenegems_tool.cluster.control_node.live.fake_broker import FakeBroker
 from tests.scenegems_tool.cluster.control_node.live.live_browser import LiveBrowser
+from tests.scenegems_tool.persistence.stores.builders import make_hello
 
 
 def _paths(app):
@@ -41,9 +42,14 @@ def test_the_operator_app_makes_a_channel_on_the_control_plane_when_given_none(p
 def test_the_operator_listener_closes_the_broker_connection_at_shutdown(plane):
     broker = FakeBroker()
     channel = create_live_channel(plane, broker=lambda: broker)
+    plane.registry._worker_nodes.register(make_hello("lab-1"))
     with TestClient(create_operator_app(plane, live=channel)) as client:
         browser = LiveBrowser(client)
         browser.send({"type": "subscribe", "topic": "instance:no-such-worker-node/scene_generation-0"})
-        assert browser.receive()["type"] == "error"  # the broker was opened for it nonetheless, then the topic left
+        assert browser.receive()["type"] == "error"
+        assert broker.started == 0, "no worker node, so no pool to name on the broker"
+        browser.send({"type": "subscribe", "topic": "instance:lab-1/scene_generation-0"})
+        assert browser.receive()["type"] == "subscribed"
+        assert broker.started == 1 and broker.filters == ["scenegems/service/virtual/real/scene-generation-subsystem-1/sensor/generated_scene"]
         browser.close()
     assert broker.started == 1 and broker.filters == [] and broker.stopped == 1

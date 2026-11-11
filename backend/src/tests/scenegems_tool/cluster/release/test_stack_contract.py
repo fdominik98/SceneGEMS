@@ -165,13 +165,13 @@ def test_the_control_node_passes_the_allowed_origins_to_control_node_api_with_th
 
 
 def test_the_worker_node_passes_its_machine_on_and_lists_it_in_its_env_template():
-    service = _compose("worker-node")["services"]["worker-node"]
+    service = _compose("worker-node")["services"]["daemon"]
     assert service["environment"]["SCENEGEMS_WORKER_NODE_MACHINE"] == "${SCENEGEMS_WORKER_NODE_MACHINE:-}"  # optional for a hand-written .env
     assert "SCENEGEMS_WORKER_NODE_MACHINE" in _template_keys("worker-node") and "SCENEGEMS_WORKER_NODE_MACHINE" in scenegems_roles()["worker-node"]["env"]
 
 
 def test_the_worker_node_caches_artifacts_in_its_state_volume():
-    service = _compose("worker-node")["services"]["worker-node"]
+    service = _compose("worker-node")["services"]["daemon"]
     state = service["environment"]["SCENEGEMS_WORKER_NODE_STATE_DIR"]
     assert f"state:{state}" in service["volumes"]
     assert service["environment"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR"].startswith(state + "/")
@@ -191,7 +191,7 @@ def test_the_control_node_observes_the_plain_cluster_broker_on_the_compose_netwo
 
 def test_the_worker_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials_the_control_node_url():
     compose = _compose("worker-node")
-    service = compose["services"]["worker-node"]
+    service = compose["services"]["daemon"]
     assert "SCENEGEMS_CONTROL_NODE_URL" in service["environment"] and "SCENEGEMS_BROKER_PORT" in service["environment"]
     settings = _settings_of(compose)
     for word in ("pairing", "ca_sha256", "trust", "token"):
@@ -222,7 +222,7 @@ def test_every_image_scenegems_builds_carries_the_release_tag():
     tag = "${SCENEGEMS_IMAGE_TAG:-latest}"
     control_node, worker_node = _compose("control-node")["services"], _compose("worker-node")["services"]
     assert control_node["control-node-api"]["image"] == f"scenegems-control-node-api:{tag}" and control_node["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
-    assert worker_node["worker-node"]["image"] == f"scenegems-worker-node:{tag}"
-    assert worker_node["worker-node"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the worker node names its jobs' images with it"
+    assert worker_node["daemon"]["image"] == f"scenegems-worker-node:{tag}"
+    assert worker_node["daemon"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the worker node names its jobs' images with it"
     roles = scenegems_roles("abc123")
     assert roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123"

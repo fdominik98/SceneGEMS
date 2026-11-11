@@ -135,7 +135,7 @@ def artifact_worker_node(cluster, tmp_path_factory):
 
 
 def _running_runners(control_node_id: str, worker_node_id: str) -> int:
-    prefix = InstanceScope.per_job(control_node_id, worker_node_id, "x").docker_name.rsplit("job-", 1)[0] + "job-"
+    prefix = f"{InstanceScope.per_job(control_node_id, worker_node_id, Subsystem.SIMULATION.value, 'x').compose_project}-"  # every container of the worker node
     names = _docker("ps", "--format", "{{.Names}}", check=False).stdout.split()
     return sum(1 for name in names if name.startswith(prefix) and name.endswith("-runner"))
 

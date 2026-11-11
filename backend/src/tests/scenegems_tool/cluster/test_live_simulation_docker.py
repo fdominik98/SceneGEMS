@@ -151,7 +151,7 @@ def worker_node(control_node, tmp_path_factory):
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
     compose = ["docker", "compose", "-f", str(COMPOSE_FILE), "--env-file", str(env_file)]
     subprocess.run([*compose, "up", "-d"], capture_output=True, text=True, check=True, timeout=300)
-    container = f"scenegems-worker-node-{control_node.control_node_id}-{worker_node_name}"
+    container = f"scenegems-{control_node.control_node_id}-{worker_node_name}-daemon"
     try:
         deadline = time.monotonic() + TIMEOUT_S
         while not [view for view in control_node.get(WORKER_NODES_PATH) if view["connected"]]:

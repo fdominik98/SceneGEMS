@@ -59,7 +59,7 @@ def worker_node_frames(resources, instant):
 @pytest.fixture
 def control_node_frames(job_spec, instant):
     return [
-        Welcome(control_node_id="m1", heartbeat_interval_s=5.0, lease_timeout_s=30.0),
+        Welcome(control_node_id="m1", instance_number=1, heartbeat_interval_s=5.0, lease_timeout_s=30.0),
         LeaseOffer(lease_id="l1", job=job_spec, expires_at=instant),
         LeaseRenewed(lease_id="l1", expires_at=instant),
         Drain(reason="maintenance"),

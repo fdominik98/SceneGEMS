@@ -4,7 +4,7 @@ import paho.mqtt.client as mqtt
 import pytest
 
 from scenegems_tool.messaging import mqtt_client
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, mqtt_container_environment, resolve_mqtt_broker_endpoints, service_name_from_environment
 
 
 class _RecordingClient:
@@ -124,3 +124,22 @@ def test_a_tls_broker_keeps_its_name(in_container):
 def test_outside_a_container_loopback_stays(monkeypatch):
     monkeypatch.setattr(mqtt_client, "_running_in_container", lambda: False)
     assert resolve_mqtt_broker_endpoints("localhost", "127.0.0.1", 1883, tls_connection=False) == ("localhost", "127.0.0.1", 1883)
+
+
+def test_the_topic_root_is_waraps_unless_the_broker_is_the_clusters():
+    plain = MQttConnectionInfo("", "", "broker", "broker", 1883, False, False)
+    assert plain.topic_root == "waraps" and "MQTT_TOPIC_ROOT" not in mqtt_container_environment(plain), "a WARA-PS or other external broker"
+    cluster = plain.with_topic_root("scenegems")
+    assert cluster.topic_root == "scenegems" and plain.topic_root == "waraps", "a copy"
+    environment = mqtt_container_environment(cluster)
+    assert environment["MQTT_TOPIC_ROOT"] == "scenegems"
+    assert MQttConnectionInfo.from_environment(environment).topic_root == "scenegems", "the container reads it back"
+    assert MQttConnectionInfo.from_environment(mqtt_container_environment(plain)).topic_root == "waraps"
+    with pytest.raises(ValueError):
+        plain.with_topic_root("scenegems/local-cluster")
+
+
+def test_a_service_takes_the_name_its_launcher_chose():
+    assert service_name_from_environment("scene-generation-subsystem", {"MQTT_SERVICE_NAME": "scene-generation-subsystem-2"}) == "scene-generation-subsystem-2"
+    assert service_name_from_environment("scene-generation-subsystem", {"MQTT_SERVICE_NAME": "  "}) == "scene-generation-subsystem"
+    assert service_name_from_environment("scene-generation-subsystem", {}) == "scene-generation-subsystem"

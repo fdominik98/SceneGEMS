@@ -5,7 +5,7 @@ its name, and it dials the configured control node and keeps retrying while that
 
 Start-up order:
     1. build the WorkerNodeContext and remove instances a crashed predecessor left;
-    2. connect: Hello, then the control node's Welcome sets the heartbeat interval and lease timeout;
+    2. connect: Hello, then the control node's Welcome sets the worker node's instance number, the heartbeat interval and the lease timeout;
     3. serve lease messages until the connection drops, then reconnect with backoff.
 
 Running jobs belong to the LeaseManager, not to a connection, so they keep running
@@ -201,6 +201,7 @@ class WorkerNodeDaemon:
             raise DaemonStopped(
                 f"The control node at {self.configuration.control_node_url} is {welcome.control_node_id!r}, but this worker node is configured for {configured_control_node!r}: check SCENEGEMS_CONTROL_NODE_URL and SCENEGEMS_CONTROL_NODE_ID"
             )
+        self.manager.worker_node.set_instance_number(welcome.instance_number)
         self.manager.set_lease_timeout(welcome.lease_timeout_s)
         self._heartbeat_interval_s = welcome.heartbeat_interval_s
         self._next_heartbeat = time.monotonic() + welcome.heartbeat_interval_s

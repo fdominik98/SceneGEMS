@@ -221,7 +221,7 @@ def test_shutdown_releases_running_leases_and_sends_finished_results(manager, se
 
 
 def test_non_lease_messages_are_left_to_the_daemon(manager):
-    assert not manager.handle(Welcome(control_node_id="m", heartbeat_interval_s=1.0, lease_timeout_s=3.0))
+    assert not manager.handle(Welcome(control_node_id="m", instance_number=1, heartbeat_interval_s=1.0, lease_timeout_s=3.0))
 
 
 # Observation: the control node's Observe, the run's frames (added here as the job stack's log follower adds them) and the relay

@@ -7,9 +7,10 @@ online, so a drain must be issued again after an outage.
 """
 
 from datetime import timedelta
+from itertools import count
 from typing import List, Optional
 
-from sqlalchemy import case, delete, select, update
+from sqlalchemy import case, delete, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -20,6 +21,8 @@ from scenegems_tool.persistence.schema import JobRow, WorkerNodeCapabilityRow, W
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES
 from scenegems_tool.persistence.stores.worker_node_records import WorkerNodeRecord
 
+INSTANCE_NUMBER_LOCK = 7_365_001  # advisory lock of the transaction that gives a new worker node its instance number
+
 
 class WorkerNodeStore:
     def __init__(self, session_factory: sessionmaker[Session], clock: Clock = utc_now):
@@ -29,7 +32,8 @@ class WorkerNodeStore:
     def register(self, hello: Hello) -> WorkerNodeRecord:
         """Creates or updates the worker node from its Hello and replaces its slots, components and fingerprints.
 
-        Slot usage starts at zero until the first heartbeat.
+        Slot usage starts at zero until the first heartbeat. A worker node new to the control node gets the lowest instance
+        number no other worker node holds, and keeps it.
         """
         now = self._clock()
         resources = hello.resources
@@ -50,7 +54,7 @@ class WorkerNodeStore:
             # The upsert locks the row, so two Hellos of one worker node apply one after the other
             session.execute(
                 insert(WorkerNodeRow)
-                .values(id=hello.worker_node_id, status=WorkerNodeStatus.ONLINE, registered_at=now, **values)
+                .values(id=hello.worker_node_id, status=WorkerNodeStatus.ONLINE, registered_at=now, instance_number=self._instance_number(session, hello.worker_node_id), **values)
                 .on_conflict_do_update(
                     index_elements=[WorkerNodeRow.id],
                     set_=dict(values, status=case((worker_node_table.c.status == WorkerNodeStatus.DRAINING.value, WorkerNodeStatus.DRAINING.value), else_=WorkerNodeStatus.ONLINE.value)),
@@ -64,6 +68,16 @@ class WorkerNodeStore:
             session.add_all(WorkerNodeFingerprintRow(worker_node_id=hello.worker_node_id, image=image, fingerprint=fingerprint) for image, fingerprint in hello.fingerprints.items())
             session.flush()
             return WorkerNodeRecord.from_row(self._load(session, hello.worker_node_id))
+
+    @staticmethod
+    def _instance_number(session: Session, worker_node_id: str) -> int:
+        """The worker node's number, or the lowest free one for a worker node without a row; one registration at a time picks a number."""
+        session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": INSTANCE_NUMBER_LOCK})
+        numbers = dict(session.execute(select(WorkerNodeRow.id, WorkerNodeRow.instance_number)).all())
+        if worker_node_id in numbers:
+            return numbers[worker_node_id]
+        taken = set(numbers.values())
+        return next(number for number in count(1) if number not in taken)
 
     def heartbeat(self, worker_node_id: str, heartbeat: Heartbeat) -> Optional[WorkerNodeRecord]:
         """Records the worker node as seen now with its resources and slot usage; None for an unknown worker node."""

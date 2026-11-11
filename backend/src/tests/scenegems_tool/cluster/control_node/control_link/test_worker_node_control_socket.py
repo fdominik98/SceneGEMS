@@ -24,7 +24,7 @@ def _submit(on_loop, plane, **fields):
 def test_hello_is_answered_with_welcome_and_the_worker_node_is_online(make_worker_node, plane, stores):
     worker_node = make_worker_node("lab 1")
     welcome = worker_node.connect()
-    assert welcome == Welcome(control_node_id="lab-control-node", heartbeat_interval_s=5.0, lease_timeout_s=30.0)
+    assert welcome == Welcome(control_node_id="lab-control-node", instance_number=1, heartbeat_interval_s=5.0, lease_timeout_s=30.0)
     assert stores.worker_nodes.get(worker_node.worker_node_id).status == WorkerNodeStatus.ONLINE
     assert [session.worker_node_id for session in plane.registry.connected()] == [worker_node.worker_node_id]
 
@@ -162,3 +162,9 @@ def test_the_expected_fingerprints_are_in_every_offer(make_worker_node, plane, o
     _submit(on_loop, plane)
     schedule()
     assert set(worker_node.expect(LeaseOffer).job.requirements.fingerprints.items()) <= set(EXPECTED_BY_REPOSITORY.items())
+
+
+def test_each_worker_node_is_welcomed_with_its_own_instance_number(make_worker_node):
+    first, second = make_worker_node("lab 1"), make_worker_node("lab 2")
+    numbers = [first.connect().instance_number, second.connect().instance_number, first.connect().instance_number]
+    assert numbers == [1, 2, 1], "a worker node keeps its number over a reconnect: it names its pooled services on the broker"

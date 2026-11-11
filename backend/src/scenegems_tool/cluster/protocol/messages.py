@@ -134,6 +134,8 @@ class ObservationFrames(ProtocolFrame):
 class Welcome(ProtocolFrame):
     type: Literal["welcome"] = "welcome"
     control_node_id: str
+    # The worker node's number in the cluster, the same on every connection: it names the worker node's pooled services on MQTT
+    instance_number: int = Field(ge=1)
     heartbeat_interval_s: float = Field(gt=0.0)
     lease_timeout_s: float = Field(gt=0.0)
 

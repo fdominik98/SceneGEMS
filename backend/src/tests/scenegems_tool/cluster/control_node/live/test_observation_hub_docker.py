@@ -22,7 +22,8 @@ from scenegems_tool.cluster.control_node.live.observation_hub import GENERATED_S
 from scenegems_tool.cluster.control_node.live.topics import create_live_channel
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
 from scenegems_tool.cluster.protocol.live import instance_topic
-from scenegems_tool.cluster.worker_node.instance_scope import worker_node_topic_scope
+from scenegems_tool.cluster.worker_node.instance_scope import pooled_service_name
+from scenegems_tool.messaging.mqtt_client import CLUSTER_TOPIC_ROOT, service_topic
 from tests.scenegems_tool.cluster.control_node.fake_stores import InMemoryJobStore, InMemoryWorkerNodeStore
 from tests.scenegems_tool.cluster.control_node.live.conftest import Browser
 from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_hello
@@ -81,7 +82,8 @@ async def test_a_pools_scene_sample_reaches_the_observer_through_the_broker(brok
         deadline = time.monotonic() + TIMEOUT_S
         while not browser.socket.sent:  # the hub's subscription becomes active once its connection is up
             assert time.monotonic() < deadline, "the sample never reached the browser"
-            pool.publish(f"{worker_node_topic_scope(CONTROL_NODE_ID, WORKER_NODE_ID)}{POOL}/{GENERATED_SCENE_TOPIC}", json.dumps(sample), qos=1)
+            # the first worker node the control node registered is number 1
+            pool.publish(f"{service_topic(CLUSTER_TOPIC_ROOT, pooled_service_name('scene_generation', 1))}/{GENERATED_SCENE_TOPIC}", json.dumps(sample), qos=1)
             await anyio.sleep(0.2)
         update = (await browser.messages(1))[0]
         assert update["type"] == "update" and update["data"]["kind"] == "scene_sample" and update["data"]["request_id"] == "r1" and update["data"]["final"] is True

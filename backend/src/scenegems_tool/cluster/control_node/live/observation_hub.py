@@ -4,7 +4,8 @@ An instance topic is `instance:<worker node id>/<instance>` (cluster/protocol/li
 
     pool    <subsystem>-<index>, a worker node's scene or trajectory generation pool. While a browser
             observes it, the hub subscribes with the control node's own broker account to the
-            pool's preview topics under its scope, scenegems/<control node>/<worker node>/<instance>/, and
+            pool's preview topics under its base topic, scenegems/service/virtual/real/<name>/ with
+            the name the worker node's instance number gives it (instance_scope.pooled_service_name), and
             translates what the pool publishes into scene_sample and trajectory_preview
             updates (rate limited; a final sample or result is never dropped). The last
             observer leaving ends the subscription. One broker connection serves every pool;
@@ -54,19 +55,18 @@ from scenegems_tool.cluster.protocol.live import (
     job_instance,
     parse_instance,
 )
-from scenegems_tool.cluster.worker_node.instance_scope import worker_node_topic_scope
+from scenegems_tool.cluster.worker_node.instance_scope import pooled_service_name
+from scenegems_tool.messaging.topic_layout import CLUSTER_TOPIC_ROOT, SERVICE_TOPIC_LEVELS, service_topic
 from scenegems_tool.persistence.stores import JobRecord
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import SCENE_GENERATION_SERVICE_TOPIC
-from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TRAJECTORY_GENERATION_SERVICE_TOPIC
 
 logger = logging.getLogger(__name__)
 
 InstanceUpdateModel = Union[SceneSample, TrajectoryPreview, SimulationFrames, InstanceStatus]
 
-GENERATED_SCENE_TOPIC = f"{SCENE_GENERATION_SERVICE_TOPIC}/sensor/generated_scene"
-TRAJECTORY_PREVIEW_TOPIC = f"{TRAJECTORY_GENERATION_SERVICE_TOPIC}/sensor/planned_trajectory_preview"
-TRAJECTORY_RESULT_TOPIC = f"{TRAJECTORY_GENERATION_SERVICE_TOPIC}/sensor/planned_trajectory"
-# The topics a pool publishes its previews on, relative to its scope (messaging/mqtt_*_generation_service.py)
+GENERATED_SCENE_TOPIC = "sensor/generated_scene"
+TRAJECTORY_PREVIEW_TOPIC = "sensor/planned_trajectory_preview"
+TRAJECTORY_RESULT_TOPIC = "sensor/planned_trajectory"
+# The topics a pool publishes its previews on, relative to its base topic (messaging/mqtt_*_generation_service.py)
 POOL_TOPICS: Dict[InstanceKind, Tuple[str, ...]] = {
     InstanceKind.SCENE_GENERATION: (GENERATED_SCENE_TOPIC,),
     InstanceKind.TRAJECTORY_GENERATION: (TRAJECTORY_PREVIEW_TOPIC, TRAJECTORY_RESULT_TOPIC),
@@ -141,7 +141,7 @@ class PahoBrokerClient:
 
 
 def translate_pool_message(topic: str, message: Mapping[str, Any]) -> Optional[InstanceUpdateModel]:
-    """A pool's message on one of its preview topics (relative to its scope) as an instance update; None for anything else."""
+    """A pool's message on one of its preview topics (relative to its base topic) as an instance update; None for anything else."""
     request_id = str(message.get("request-id", ""))
     try:
         if topic == GENERATED_SCENE_TOPIC:
@@ -174,7 +174,7 @@ class _Observed:
     worker_node_id: str
     instance: str
     name: InstanceName
-    prefix: str = ""  # a pool's scope on the broker
+    prefix: str = ""  # a pool's base topic on the broker, with the closing '/'; empty until its snapshot has read the worker node
     filters: Tuple[str, ...] = ()
 
 
@@ -186,7 +186,7 @@ class ObservationHub:
         self._broker: Optional[BrokerClient] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._observed: Dict[str, _Observed] = {}  # by live topic
-        self._pools: Dict[str, _Observed] = {}  # by broker scope prefix
+        self._pools: Dict[str, _Observed] = {}  # by the pool's base topic on the broker
         self._jobs: Dict[str, Set[str]] = {}  # job id to its observed instance topics
         self._job_attempts: Dict[str, int] = {}  # the latest attempt of an observed job
         self._job_states: Dict[str, str] = {}
@@ -213,6 +213,9 @@ class ObservationHub:
         worker_node = await self._plane.registry.worker_node(topic.worker_node_id)
         if worker_node is None:
             raise UnknownTopic(f"no worker node {topic.worker_node_id}")
+        observed = self._observed.get(topic.name)
+        if observed is not None:  # still observed after the read
+            self._subscribe_pool(observed, worker_node.instance_number)
         return InstanceSnapshot(worker_node_id=topic.worker_node_id, instance=topic.instance, kind=name.kind, state=worker_node.status.value).model_dump(mode="json")
 
     async def _job_snapshot(self, topic: Topic, name: InstanceName) -> Any:
@@ -266,15 +269,6 @@ class ObservationHub:
         if name.is_job:
             self._jobs.setdefault(name.job_id, set()).add(topic.name)
             self._tell_worker_node(observed, True)
-            return
-        if not self.broker_configured:
-            return
-        observed.prefix = f"{worker_node_topic_scope(self._plane.control_node_id, topic.worker_node_id)}{topic.instance}/"
-        observed.filters = tuple(observed.prefix + suffix for suffix in POOL_TOPICS[name.kind])
-        self._pools[observed.prefix] = observed
-        broker = self._ensure_broker()
-        for topic_filter in observed.filters:
-            broker.subscribe(topic_filter)
 
     def deactivate(self, topic: Topic) -> None:
         observed = self._observed.pop(topic.name, None)
@@ -293,10 +287,29 @@ class ObservationHub:
                 self._speeds.pop(job_id, None)
             self._tell_worker_node(observed, False)
             return
+        self._unsubscribe_pool(observed)
+
+    def _subscribe_pool(self, observed: _Observed, instance_number: int) -> None:
+        """Subscribes to an observed pool's preview topics: the worker node's instance number names the pool on the broker."""
+        prefix = f"{service_topic(CLUSTER_TOPIC_ROOT, pooled_service_name(observed.name.kind.value, instance_number))}/"
+        if prefix == observed.prefix:
+            return
+        self._unsubscribe_pool(observed)
+        observed.prefix = prefix
+        observed.filters = tuple(prefix + suffix for suffix in POOL_TOPICS[observed.name.kind])
+        self._pools[prefix] = observed
+        broker = self._ensure_broker()
+        for topic_filter in observed.filters:
+            broker.subscribe(topic_filter)
+
+    def _unsubscribe_pool(self, observed: _Observed) -> None:
+        if not observed.prefix:
+            return
         self._pools.pop(observed.prefix, None)
         if self._broker is not None:
             for topic_filter in observed.filters:
                 self._broker.unsubscribe(topic_filter)
+        observed.prefix, observed.filters = "", ()
 
     # Publishing
 
@@ -389,7 +402,7 @@ class ObservationHub:
     def deliver(self, topic: str, payload: bytes) -> None:
         """A message from the broker, on the event loop: translated and published when its pool is observed."""
         levels = topic.split("/")
-        prefix = "/".join(levels[:4]) + "/"
+        prefix = "/".join(levels[:SERVICE_TOPIC_LEVELS]) + "/"
         observed = self._pools.get(prefix)
         if observed is None:
             return

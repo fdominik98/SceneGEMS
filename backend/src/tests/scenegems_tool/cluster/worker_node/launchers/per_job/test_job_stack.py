@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from scenegems_tool.cluster.protocol.messages import LogStream
-from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
 from scenegems_tool.cluster.worker_node.launchers.per_job import job_stack
@@ -20,9 +20,9 @@ from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io impor
     format_frame_line,
     format_status_line,
 )
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, forward_runner_line, runner_service, scope_services
+from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, forward_runner_line, project_compose, runner_service, scope_services
 
-SCOPE = InstanceScope.per_job("m1", "n1", "j7-1")
+SCOPE = InstanceScope.per_job("m1", "n1", "simulation", "j7")
 
 
 def test_runner_without_networks_has_no_network():
@@ -55,14 +55,49 @@ def test_runner_on_a_stack_network_waits_for_the_stack():
 
 def test_scoped_services_get_scope_names_and_no_published_ports():
     services = scope_services(SCOPE, {"gazebo": {"image": "gz", "container_name": "gazebo", "ports": ["11345:11345"], "restart": "unless-stopped"}})
-    assert services["gazebo"] == {"image": "gz", "container_name": "scenegems-m1-n1-job-j7-1-gazebo", "logging": job_stack.bounded_logging()}
+    assert services["gazebo"] == {"image": "gz", "container_name": "scenegems-m1-n1-simulation-subsystem-j7-gazebo", "logging": job_stack.bounded_logging()}
 
 
 def test_job_stack_names_the_runner_container_by_scope():
     stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image")})
-    assert stack.runner_container == "scenegems-m1-n1-job-j7-1-runner"
-    assert stack.project.name == SCOPE.compose_project
+    assert stack.runner_container == "scenegems-m1-n1-simulation-subsystem-j7-runner"
+    assert stack.project.name == SCOPE.compose_project == "scenegems-m1-n1", "the worker node's project, which every instance shares"
+    assert stack.project.instance == SCOPE.key == "j7-1", "so the stack is removed by its own label"
     assert stack.project.compose_filename == f"{SCOPE.folder}/docker-compose.yml"
+
+
+def test_a_stack_in_the_worker_nodes_project_has_unique_service_keys_and_keeps_its_names_as_aliases():
+    stack = JobStack(
+        SCOPE,
+        {
+            RUNNER_SERVICE: runner_service("image", networks=["maritime_net"], depends_on=["kinematic_sim", "vessel_0_asv_system"]),
+            "kinematic_sim": {"image": "sim", "networks": ["maritime_net"]},
+            "vessel_0_asv_system": {"image": "asv", "networks": ["maritime_net", "scenegems_broker"], "labels": ["role=asv"]},
+        },
+        networks={"maritime_net": {"driver": "bridge"}, "scenegems_broker": {"external": True, "name": "scenegems-m1-n1"}},
+        volumes={"runtime": {"external": True}},
+    )
+    document = project_compose(SCOPE, stack.compose)
+    runner, simulator, asv_system = (f"simulation-subsystem-j7-{part}" for part in ("runner", "kinematic-sim", "vessel-0-asv-system"))
+    assert list(document["services"]) == [runner, simulator, asv_system], "compose tells a project's containers apart by these keys"
+    assert document["services"][runner]["depends_on"] == [simulator, asv_system]
+    network = "simulation-subsystem-j7-maritime-net"
+    assert document["services"][simulator]["networks"] == {network: {"aliases": ["kinematic_sim"]}}, "the name the runner dials"
+    assert document["services"][asv_system]["networks"] == {network: {"aliases": ["vessel_0_asv_system"]}, "scenegems_broker": None}, "no alias on a network other instances share"
+    assert document["services"][asv_system]["labels"] == {"role": "asv", INSTANCE_LABEL: "j7-1"}
+    assert all(service["labels"][INSTANCE_LABEL] == "j7-1" for service in document["services"].values())
+    assert list(document["networks"]) == [network, "scenegems_broker"], "compose tells a project's networks apart by their keys too"
+    assert document["networks"][network] == {"driver": "bridge", "name": "scenegems-m1-n1-simulation-subsystem-j7-maritime-net", "labels": {INSTANCE_LABEL: "j7-1"}}
+    assert document["networks"]["scenegems_broker"] == {"external": True, "name": "scenegems-m1-n1"}, "the worker node's network stays as it is"
+    assert document["volumes"] == {"runtime": {"external": True}}
+    assert list(stack.compose["services"]) == [RUNNER_SERVICE, "kinematic_sim", "vessel_0_asv_system"], "the stack itself keeps its own names"
+
+
+def test_a_runner_without_a_network_gets_only_its_key_and_label():
+    document = project_compose(SCOPE, JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image")}).compose)
+    ((key, service),) = document["services"].items()
+    assert key == "simulation-subsystem-j7-runner" and service["network_mode"] == "none" and "networks" not in service
+    assert "networks" not in document
 
 
 def test_job_stack_needs_a_runner():

@@ -1,20 +1,23 @@
 # One worker node instance of one control node: the worker node daemon (scenegems_tool.cluster.worker_node.daemon) in its
-# container. It holds the Docker socket and starts every job in a subsystem container next to it.
+# container. It holds the Docker socket and starts every job in a subsystem container next to it, in this
+# compose project: Docker lists the daemon, the pooled services and the containers of every job as one group.
 # The deployment tool installs this file with .env into one folder per worker node
 # (scenegems_tool.cluster.release.roles) and runs `docker compose up -d` there.
 #
-# The values come from .env (template: deploy/worker_node/.env.example). The project, the container,
-# the network and the volumes are all named scenegems-worker-node-<control node id>-<worker node name>, so one
+# The values come from .env (template: deploy/worker_node/.env.example). The project and the network are named
+# scenegems-<control node id>-<worker node name>, and the daemon's container and the volumes start with that name, so one
 # machine can run worker nodes for several control nodes, and several worker nodes of one control node, side by side.
+# The containers the daemon starts are not in this file: `up --remove-orphans` would remove the containers of
+# running jobs, and `down --remove-orphans` removes a worker node together with everything it started.
 # The worker node needs no control node to start: it dials SCENEGEMS_CONTROL_NODE_URL and retries until the control node is up.
 # Control node and worker nodes trust the VPN, so there is nothing to pair. The cache of downloaded artifacts
 # lives in the state volume.
-name: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID:?set SCENEGEMS_CONTROL_NODE_ID in the env file}-${SCENEGEMS_WORKER_NODE_NAME:?set SCENEGEMS_WORKER_NODE_NAME in the env file}
+name: scenegems-${SCENEGEMS_CONTROL_NODE_ID:?set SCENEGEMS_CONTROL_NODE_ID in the env file}-${SCENEGEMS_WORKER_NODE_NAME:?set SCENEGEMS_WORKER_NODE_NAME in the env file}
 
 services:
-  worker-node:
+  daemon:
     image: scenegems-worker-node:${SCENEGEMS_IMAGE_TAG:-latest}
-    container_name: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}
+    container_name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-daemon
     restart: unless-stopped
     # Time for running jobs to stop, remove their containers and give their leases back.
     stop_grace_period: 60s
@@ -35,8 +38,8 @@ services:
       # Paths inside this container and the Docker names job containers use; not for the env file.
       SCENEGEMS_WORKER_NODE_STATE_DIR: /var/lib/scenegems-worker-node
       SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR: /var/lib/scenegems-worker-node/artifacts
-      SCENEGEMS_DOCKER_NETWORK: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}
-      SCENEGEMS_RUNTIME_VOLUME: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-runtime
+      SCENEGEMS_DOCKER_NETWORK: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}
+      SCENEGEMS_RUNTIME_VOLUME: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-runtime
       # Subsystem images; empty means scenegems-<subsystem>:<SCENEGEMS_IMAGE_TAG> (scenegems_tool/cluster/worker_node/subsystem.py).
       SCENE_GENERATION_IMAGE: ${SCENE_GENERATION_IMAGE:-}
       TRAJECTORY_GENERATION_IMAGE: ${TRAJECTORY_GENERATION_IMAGE:-}
@@ -56,10 +59,10 @@ services:
 # Pooled services join this network; it is removed with the worker node.
 networks:
   worker-node:
-    name: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}
+    name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}
 
 volumes:
   runtime:
-    name: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-runtime
+    name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-runtime
   state:
-    name: scenegems-worker-node-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-state
+    name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}-state
