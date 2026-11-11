@@ -7,7 +7,7 @@ import { describeClusterPlan, isPacedByWatchSpeed, KINEMATIC_SIMULATION_JOB, pla
 import { describeResources } from "../cluster/workbenchResources";
 import { formatClock } from "../scene/encounterGeometry";
 import { activateLiveMode, getLatestSimulationTimestamp, watchClusterRun } from "./livePlayback";
-import { groundControlEndpointLabels } from "./simulationInitConfig";
+import { groundControlEndpointLabels, vesselReadinessLabels } from "./simulationInitConfig";
 import { SimulationInitControls, type SimulationInitControlsHandle } from "./SimulationInitControls";
 import type { SimulationStreamControls } from "./types";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
@@ -87,6 +87,8 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const endpoints = onCluster
     ? groundControlEndpointLabels(clusterActive ? run.groundControlPorts : {}, run.workerNodeAddress ?? (run.workerNodeId ? `worker node ${run.workerNodeId}` : "the worker node"))
     : groundControlEndpointLabels(groundControlPorts);
+  // With a real vessel the job is ready to start only when every vessel is: until then it says what each one lacks
+  const waitingVessels = attendedPlan && run.status === "running" && run.phase === "preparing" ? vesselReadinessLabels(run.vesselStates) : [];
   const latestTimestamp = getLatestSimulationTimestamp(simulationFrames);
   const firstTimestamp = simulationFrames[0]?.timestamp ?? null;
 
@@ -259,6 +261,11 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
         {previewMonitor.status === "running" || previewMonitor.status === "failed" ? (
           <p className={`step-line step-row-full${previewMonitor.status === "failed" ? " warning" : ""}`}>
             {previewMonitor.status === "running" ? previewMonitor.message : `The preview stays unmonitored: ${previewMonitor.message}`}
+          </p>
+        ) : null}
+        {waitingVessels.length > 0 ? (
+          <p className="step-line step-row-full" title="The run can start when every vessel is on the broker, at its start point and, when commanded, armable">
+            Not ready to start: {waitingVessels.join("; ")}
           </p>
         ) : null}
         {endpoints.length > 0 ? (

@@ -317,6 +317,14 @@ describe("an attended run's status detail", () => {
     expect(attendedRunDetail({ phase: "running" })).toEqual({ phase: "running" });
   });
 
+  it("gives what each vessel of a run with a real vessel reports before the Start", () => {
+    const vessels = { "0": { connected: true, armable: false }, "1": { connected: true, position: "soon" }, "2": "gone" };
+    expect(attendedRunDetail({ phase: "preparing", vessels })).toEqual({
+      phase: "preparing",
+      vesselStates: { "0": { connected: true, armable: false }, "1": { connected: true }, "2": {} },
+    });
+  });
+
   it("changes nothing for a status without a detail, so the latest phase stays", () => {
     expect(attendedRunDetail(null)).toEqual({});
     expect(attendedRunDetail(undefined)).toEqual({});

@@ -208,7 +208,12 @@ export interface SimulationEntryInput {
 export function simulationStack(plan: ClusterRunPlan, geofence: ReferenceGeofence = defaultReferenceGeofence): Record<string, unknown> {
   if (plan.runner === "attended") {
     // `campaign_config.AttendedStackConfig`: the setup as it is; only a workbench entry may have one
-    return { attended: true, simulation: plan.simulation, geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters } };
+    return {
+      attended: true,
+      simulation: plan.simulation,
+      geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
+      ...(plan.broker ? { broker: plan.broker } : {}),
+    };
   }
   if (plan.runner === "kinematic") {
     return { simulation_layer: "kinematic", mode: plan.mode };

@@ -210,4 +210,11 @@ describe("attended simulation entries", () => {
     );
     expect(stack).toEqual({ attended: true, simulation, geofence: { latitude: 58.1, longitude: 15.2, radius_meters: 35 } });
   });
+
+  it("name the broker of a run with a real vessel when it is not the control node's own", () => {
+    const simulation = { simulatorType: "ArduPilot Sim", connectionsByAgentId: { "1": { context: "real", asvSystem: "on_board" } } };
+    const broker = { host: "broker.waraps.org", port: 8883, tls: true, allow_certificates: false, user: "lab", password: "secret" };
+    const stack = simulationStack({ where: "cluster", jobType: "simulation", runner: "attended", simulation, reason: "a real vessel", broker, components: [], summary: "" });
+    expect(stack).toMatchObject({ attended: true, simulation, broker });
+  });
 });

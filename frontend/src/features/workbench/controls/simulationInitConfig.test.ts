@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StackOptionsPayload, StackOptionWire } from "../../../domain/simulation/wireTypes";
-import { asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
+import { asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, vesselReadinessLabels, vesselTopic, withVesselName, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
 
 const vessels: VesselDescriptor[] = [
   { id: "os", isOwnShip: true },
@@ -11,17 +11,17 @@ const vessels: VesselDescriptor[] = [
 describe("simulationInitConfig", () => {
   it("creates deterministic default vessel names and topics", () => {
     const drafts = buildInitialVesselConnectionDrafts(vessels);
-    expect(drafts[0]?.agentName).toBe("os_sim");
-    expect(drafts[0]?.topic).toBe("waraps/unit/surface/simulation/os_sim");
+    expect(drafts[0]?.agentName).toBe("os");
+    expect(drafts[0]?.topic).toBe("waraps/unit/surface/simulation/os");
     expect(drafts[0]?.asvSystem).toBe("replay");
     expect(drafts[0]?.controlLayer).toBe("ardupilot");
     expect(drafts[0]?.context).toBe("simulation");
     expect(drafts[0]?.port).toBe(14570);
-    expect(drafts[1]?.agentName).toBe("ts1_sim");
+    expect(drafts[1]?.agentName).toBe("ts1");
     expect(drafts[1]?.asvSystem).toBe("replay");
     expect(drafts[1]?.context).toBe("simulation");
     expect(drafts[1]?.port).toBe(14571);
-    expect(drafts[2]?.agentName).toBe("ts2_sim");
+    expect(drafts[2]?.agentName).toBe("ts2");
     expect(drafts[2]?.asvSystem).toBe("replay");
     expect(drafts[2]?.context).toBe("simulation");
     expect(drafts[2]?.port).toBe(14572);
@@ -125,16 +125,32 @@ describe("simulationInitConfig", () => {
     const generated = buildInitialVesselConnectionDrafts(vessels);
     const withModel: VesselInitConnectionDraft = {
       ...generated[0]!,
-      agentName: "custom_agent",
+      port: 14999,
       gazeboVesselModel: "<sdf>large</sdf>",
     };
     const persisted = toPersistedVesselDrafts([withModel]);
     expect(persisted[0]).not.toHaveProperty("gazeboVesselModel");
-    expect(persisted[0]?.agentName).toBe("custom_agent");
+    expect(persisted[0]?.port).toBe(14999);
 
     const restored = mergePersistedVesselSettings(persisted, generated);
-    expect(restored[0]?.agentName).toBe("custom_agent");
+    expect(restored[0]?.port).toBe(14999);
     expect(restored[0]?.gazeboVesselModel).toBeUndefined();
+  });
+
+  it("does not restore a name or a simulated vessel's topic saved while they could be typed", () => {
+    const generated = buildInitialVesselConnectionDrafts(vessels);
+    const typed = toPersistedVesselDrafts([{ ...generated[0]!, agentName: "custom_agent", topic: "waraps/unit/surface/simulation/custom_agent" }]);
+    const [restored] = mergePersistedVesselSettings(typed, generated);
+    expect(restored).toMatchObject({ agentName: "os", topic: "waraps/unit/surface/simulation/os" });
+  });
+
+  it("keeps the topic the operator gave a real vessel, under the vessel's own name", () => {
+    const generated = buildInitialVesselConnectionDrafts(vessels);
+    const real = toPersistedVesselDrafts([{ ...generated[1]!, context: "real", agentName: "piraya", topic: "waraps/unit/surface/real/piraya" }]);
+    const restored = mergePersistedVesselSettings(real, generated);
+    expect(restored[1]).toMatchObject({ context: "real", agentName: "ts1", topic: "waraps/unit/surface/real/piraya" });
+    expect(withVesselName({ ...generated[1]!, context: "real", topic: "  " }, "ts1").topic).toBe("waraps/unit/surface/real/ts1");
+    expect(vesselTopic("real", "ts1")).toBe("waraps/unit/surface/real/ts1");
   });
 
   it("sends no ArduAgent control mode for USV Navigation", () => {
@@ -272,5 +288,17 @@ describe("the Mission Planner endpoints of an attended job", () => {
   it("name the worker node that runs the vessels", () => {
     expect(groundControlEndpointLabels({ "0": 49153 }, "10.88.0.7")).toEqual(["vessel 0: TCP 10.88.0.7:49153"]);
     expect(groundControlEndpointLabels({}, "10.88.0.7")).toEqual([]);
+  });
+});
+
+describe("what the vessels of a run with a real vessel still lack", () => {
+  it("is said per vessel that is not ready, in the operator's words", () => {
+    const states = {
+      "1": { connected: true, position: false, at_start: false },
+      "0": { connected: true, position: true, armable: true, at_start: true },
+      "2": { connected: false, heading: false },
+    };
+    expect(vesselReadinessLabels(states)).toEqual(["vessel 1 waits for a position, to be at its start point", "vessel 2 waits for its agent on the broker, heading"]);
+    expect(vesselReadinessLabels({})).toEqual([]);
   });
 });

@@ -111,3 +111,24 @@ describe("connect message", () => {
     expect(connection.connectionFormIsValid({ ...FORM, port: 70000, selectedPreset: "" })).toBe(false);
   });
 });
+
+describe("the broker of an attended run with a real vessel", () => {
+  it("is not named for the control node's own broker", () => {
+    expect(connection.attendedBroker({ ...FORM, selectedPreset: "control_node_broker" })).toBeNull();
+  });
+
+  it("is any other broker by the address the vessels' agents dial, trimmed", () => {
+    const broker = connection.attendedBroker({
+      ...FORM,
+      user: " lab ",
+      password: "secret",
+      agentBroker: " broker.waraps.org ",
+      clientBroker: "localhost",
+      port: 8883,
+      tlsConnection: true,
+      allowCertificates: false,
+      selectedPreset: "waraps_tls_broker",
+    });
+    expect(broker).toEqual({ host: "broker.waraps.org", port: 8883, tls: true, allow_certificates: false, user: "lab", password: "secret" });
+  });
+});

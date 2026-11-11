@@ -1,5 +1,6 @@
 import { attendedSetupComponents, SIMULATION_JOB, simulationPayloadComponents } from "../../../domain/cluster/components";
 import type { JobSubmission } from "../../../domain/cluster/operatorApi";
+import type { AttendedBroker } from "../connection/connectionLibrary";
 import type { ReferenceGeofence } from "../connection/referenceGeofence";
 import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } from "../controls/simulationInitConfig";
 
@@ -10,10 +11,10 @@ import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } 
  * on the custom controller in a Gazebo world the runner steps (runner gazebo_custom). Each runs
  * every vessel on replay, or USV Navigation on the own ship and replay on the others. A setup none
  * of them takes (Mission Planner, USV Navigation on a target ship, mixed control layers, the weather
- * a job does not apply) runs as an attended job (runner attended): the job brings the stack up and
- * waits for the operator's Start. Only a setup with a real vessel is still a live session on the
- * control node over the MQTT broker. A plan names the components its job needs, so the workbench
- * counts the worker nodes that have them.
+ * a job does not apply, a real vessel) runs as an attended job (runner attended): the job brings the
+ * stack up and waits for the operator's Start. With a real vessel every vessel runs through its
+ * ArduAgent on the MQTT broker: the control node's own, or the one the plan names. A plan names the
+ * components its job needs, so the workbench counts the worker nodes that have them.
  */
 
 export { SIMULATION_JOB };
@@ -40,6 +41,8 @@ export interface SimulationSetup {
   speedup: number;
   /** The whole setup as the control node takes it (simulatorType, windVector, wave, simulationSpeed, connectionsByAgentId): what an attended job runs. */
   body?: Record<string, unknown>;
+  /** With a real vessel: the broker its agent is on, when it is not the control node's own. */
+  broker?: AttendedBroker | null;
 }
 
 export type KinematicRunPlan = {
@@ -87,6 +90,8 @@ export type AttendedRunPlan = {
   simulation: Record<string, unknown>;
   /** Why no unattended runner takes the setup. */
   reason: string;
+  /** With a real vessel: the broker of the run, when it is not the control node's own. */
+  broker?: AttendedBroker;
   components: string[];
   summary: string;
 };
@@ -135,14 +140,17 @@ function attended(setup: SimulationSetup, reason: string): SimulationRunPlan {
   if (setup.body === undefined) {
     return { where: "session", reason };
   }
+  const realVessel = setup.vessels.some((vessel) => vessel.context === "real");
+  const missionPlanner = setup.vessels.some((vessel) => vessel.asvSystem === "mission_planner");
   return {
     where: "cluster",
     jobType: SIMULATION_JOB,
     runner: "attended",
     simulation: setup.body,
     reason,
+    ...(realVessel && setup.broker ? { broker: setup.broker } : {}),
     components: attendedSetupComponents(setup.body),
-    summary: setup.vessels.some((vessel) => vessel.asvSystem === "mission_planner") ? "you steer a vessel from Mission Planner" : "the setup as it is, vessel by vessel",
+    summary: realVessel ? "a real vessel takes part through its agent on the MQTT broker" : missionPlanner ? "you steer a vessel from Mission Planner" : "the setup as it is, vessel by vessel",
   };
 }
 
@@ -150,7 +158,7 @@ function attended(setup: SimulationSetup, reason: string): SimulationRunPlan {
 function planUnattendedRun(setup: SimulationSetup): SimulationRunPlan {
   const { vessels } = setup;
   if (vessels.some((vessel) => vessel.context === "real")) {
-    return { where: "session", reason: "A real vessel joins only a live session over the MQTT broker." };
+    return { where: "session", reason: "A real vessel takes part through its agent on the MQTT broker: the run is ready to start when every vessel is at its start point and reports there." };
   }
   if (vessels.some((vessel) => vessel.asvSystem === "mission_planner")) {
     return { where: "session", reason: "Mission Planner is flown from the desktop in a live session." };
@@ -179,12 +187,12 @@ function planUnattendedRun(setup: SimulationSetup): SimulationRunPlan {
 }
 
 /**
- * Where the setup runs: as an unattended job where a runner takes it, as an attended job otherwise, and as a live
- * session on the control node only with a real vessel (or before a scenario is loaded).
+ * Where the setup runs: as an unattended job where a runner takes it, as an attended job otherwise (a real vessel
+ * included), and as a live session on the control node only before a scenario is loaded or its setup is known.
  */
 export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   const plan = planUnattendedRun(setup);
-  if (plan.where === "cluster" || setup.vessels.length === 0 || setup.vessels.some((vessel) => vessel.context === "real")) {
+  if (plan.where === "cluster" || setup.vessels.length === 0) {
     return plan;
   }
   return attended(setup, plan.reason);
@@ -319,6 +327,7 @@ export function attendedSimulationSubmission(plan: AttendedRunPlan, trajectories
     simulation: plan.simulation,
     trajectories,
     geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
+    ...(plan.broker ? { broker: plan.broker } : {}),
     ...liveMonitorFields(colregsConstraintsContent),
   };
   return { job_type: plan.jobType, payload, max_attempts: 1 };

@@ -41,7 +41,7 @@ describe("where a simulation runs", () => {
     expect(clusterPlan(plan).components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
   });
 
-  it("keeps real vessels and Mission Planner in a live session", () => {
+  it("keeps real vessels and Mission Planner in a live session while the setup's body is not known", () => {
     expect(planSimulationRun(setup([vessel("0"), vessel("1", { context: "real", controlLayer: "real_vessel" })]))).toMatchObject({ where: "session", reason: expect.stringContaining("real vessel") });
     expect(planSimulationRun(setup([vessel("0", { asvSystem: "mission_planner" })], { simulatorType: "ArduPilot Sim" }))).toMatchObject({ where: "session", reason: expect.stringContaining("Mission Planner") });
   });
@@ -219,11 +219,44 @@ describe("an attended run", () => {
     expect(planSimulationRun(twoNavigators)).toMatchObject({ runner: "attended" });
   });
 
-  it("leaves a setup a runner takes to that runner, and a real vessel to a live session", () => {
+  it("leaves a setup a runner takes to that runner, and an empty one to nobody", () => {
     expect(planSimulationRun(setup([vessel("0"), vessel("1")], { body }))).toMatchObject({ runner: "kinematic" });
-    const real = setup([vessel("0", { context: "real" }), vessel("1")], { body });
-    expect(planSimulationRun(real)).toMatchObject({ where: "session", reason: expect.stringContaining("real vessel") });
     expect(planSimulationRun(setup([], { body }))).toMatchObject({ where: "session" });
+  });
+
+  describe("with a real vessel", () => {
+    const realConnection = { context: "real", asvSystem: "on_board", controlLayer: "real_vessel", agentName: "ts1", topic: "waraps/unit/surface/real/piraya" };
+    const realBody = { ...body, connectionsByAgentId: { "0": { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot" }, "1": realConnection } };
+    const vessels = [vessel("0", { controlLayer: "ardupilot" }), vessel("1", { context: "real", asvSystem: "on_board", controlLayer: "real_vessel" })];
+    const broker = { host: "broker.waraps.org", port: 8883, tls: true, allow_certificates: false, user: "lab", password: "secret" };
+
+    it("is an attended job on the control node's broker, with the real vessel's components", () => {
+      const plan = planSimulationRun(setup(vessels, { simulatorType: "ArduPilot Sim", body: realBody, broker: null }));
+      expect(plan).toMatchObject({
+        where: "cluster",
+        runner: "attended",
+        simulation: realBody,
+        reason: expect.stringContaining("real vessel"),
+        summary: expect.stringContaining("real vessel"),
+        components: ["asv_system/replay", "asv_system/on_board", "control_layer/ardupilot", "control_layer/real_vessel", "simulation_layer/ardupilot_sim", "simulation_layer/real_vessel"],
+      });
+      expect(plan).not.toHaveProperty("broker");
+      const submission = simulationSubmission(plan as ClusterRunPlan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+      expect(submission.payload).not.toHaveProperty("broker");
+    });
+
+    it("names another broker in the plan and in the job", () => {
+      const plan = planSimulationRun(setup(vessels, { simulatorType: "ArduPilot Sim", body: realBody, broker })) as ClusterRunPlan;
+      expect(plan).toMatchObject({ runner: "attended", broker });
+      const submission = simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+      expect(submission.payload).toMatchObject({ runner: "attended", simulation: realBody, broker });
+    });
+
+    it("names no broker for a setup of simulated vessels, whatever the connection form says", () => {
+      const plan = planSimulationRun(setup([vessel("0", { asvSystem: "mission_planner", controlLayer: "ardupilot" })], { simulatorType: "ArduPilot Sim", body, broker }));
+      expect(plan).toMatchObject({ runner: "attended" });
+      expect(plan).not.toHaveProperty("broker");
+    });
   });
 
   it("submits the setup as it is, with the live monitor", () => {

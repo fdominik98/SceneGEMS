@@ -5,6 +5,7 @@ import { DownloadIcon } from "../../../components/icons";
 import { NumberSetting, Setting, StepRow } from "../pages/StepPanel";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
+import { attendedBroker, useConnectionStore } from "../connection/connectionStore";
 import type { ActorStaticInfo } from "../../../domain/simulation/types";
 import { downloadBlob } from "../scene/sceneExport";
 import type { WaveInfoWire } from "../../../domain/simulation/wireTypes";
@@ -27,7 +28,7 @@ import {
   realVesselSoftwareChoice,
   round2,
   toPersistedVesselDrafts,
-  toTopicSegment,
+  vesselTopic,
   type AsvSystem,
   type ControlLayer,
   DEFAULT_SIMULATION_SPEED,
@@ -253,6 +254,8 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     setPersistedVesselSettings(toPersistedVesselDrafts(vesselConnectionDrafts));
   }, [vesselConnectionDrafts, setPersistedVesselSettings]);
 
+  // The broker a real vessel's agent is on: the one of the connection form, named in the job unless it is the control node's own
+  const brokerKey = useConnectionStore((s) => JSON.stringify(attendedBroker(s)));
   const ownShipIds = useMemo(
     () => new Set([...animationActors, ...simulationActors].filter((actor) => actor.isOwnShip).map((actor) => actor.id)),
     [animationActors, simulationActors]
@@ -277,8 +280,9 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
         wave: waveToWire(wave),
         connectionsByAgentId: buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
       },
+      broker: stackDrafts.some((draft) => draft.context === "real") ? JSON.parse(brokerKey) : null,
     });
-  }, [onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave, windEast, windNorth, windUp]);
+  }, [brokerKey, onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave, windEast, windNorth, windUp]);
 
   useEffect(() => {
     const mergeWithExistingDrafts = (vessels: { id: string; isOwnShip: boolean }[]) => {
@@ -325,13 +329,9 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
           return draft;
         }
         const updatedDraft = { ...draft, [key]: value };
-        if (key === "context" || key === "agentName") {
-          return {
-            ...updatedDraft,
-            topic: `waraps/unit/surface/${toTopicSegment(
-              (key === "context" ? value : updatedDraft.context) as SimulationContext
-            )}/${(key === "agentName" ? value : updatedDraft.agentName) as string}`,
-          };
+        if (key === "context") {
+          // The topic follows the kind: a simulated vessel's is the job's, a real vessel's starts at the default of its name
+          return { ...updatedDraft, topic: vesselTopic(value as SimulationContext, updatedDraft.agentName) };
         }
         return updatedDraft;
       })
@@ -491,7 +491,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
               <thead>
                 <tr>
                   <th>Vessel</th>
-                  <th>Agent name</th>
                   <th>Topic</th>
                   <th>Port</th>
                 </tr>
@@ -503,10 +502,13 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                       <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
                     </td>
                     <td>
-                      <input aria-label={`Agent name of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} value={draft.agentName} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
-                    </td>
-                    <td>
-                      <input aria-label={`Topic of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} title={draft.topic} value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
+                      {draft.context === "real" ? (
+                        <input aria-label={`Topic of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} title="Where the agent on board the vessel publishes" value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
+                      ) : (
+                        <span className="step-value-note" title="A simulated vessel gets its topic from the job that runs it: the vessel's name and the job's id">
+                          set by the job
+                        </span>
+                      )}
                     </td>
                     <td className="sim-port-cell">
                       {draft.context === "simulation" ? (

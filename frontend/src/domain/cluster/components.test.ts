@@ -30,7 +30,8 @@ function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots:
 
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
-    expect(COMPONENTS).toHaveLength(14);
+    expect(COMPONENTS).toHaveLength(17);
+    expect(componentLabel("control_layer/real_vessel")).toBe("Real vessel autopilot");
     expect(componentLabel("asv_system/mission_planner")).toBe("Mission Planner");
     expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_system/replay", "monitoring", "gpu"])).toEqual(["asv_system/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
     expect(componentLabel("simulation_layer/ardupilot_sim")).toBe("ArduPilot SITL");
@@ -113,5 +114,21 @@ describe("the components of an attended run", () => {
     const kinematic = { simulatorType: "Kinematic", connectionsByAgentId: { "0": { asvSystem: "usv_navigation" } } };
     expect(attendedSetupComponents(kinematic)).toEqual(["asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
     expect(attendedSetupComponents(undefined)).toEqual(["simulation_layer/kinematic"]);
+  });
+});
+
+describe("the components of an attended run with a real vessel", () => {
+  it("are the real vessel's own layers beside the simulated vessels'", () => {
+    const simulated = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot" };
+    const real = { context: "real", asvSystem: "on_board", controlLayer: "real_vessel" };
+    const setup = { simulatorType: "ArduPilot Sim", connectionsByAgentId: { "0": simulated, "1": real } };
+    expect(attendedSetupComponents(setup)).toEqual([
+      "asv_system/replay",
+      "asv_system/on_board",
+      "control_layer/ardupilot",
+      "control_layer/real_vessel",
+      "simulation_layer/ardupilot_sim",
+      "simulation_layer/real_vessel",
+    ]);
   });
 });

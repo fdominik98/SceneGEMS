@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { ClientToServerMessage } from "../../../domain/simulation/wireTypes";
-import { CONTROL_NODE_BROKER_PRESET, type MqttConnectionInfo, type MqttConnectionPresetKey } from "./connectionLibrary";
+import { CONTROL_NODE_BROKER_PRESET, type AttendedBroker, type MqttConnectionInfo, type MqttConnectionPresetKey } from "./connectionLibrary";
 import { defaultReferenceGeofence, type ReferenceGeofence } from "./referenceGeofence";
 
 export type MqttConnectionAttempt = "idle" | "connecting" | "connected" | "failed";
@@ -184,5 +184,20 @@ export function buildConnectMessage(state: ConnectionFields): ClientToServerMess
     allow_certificates: state.allowCertificates,
     geofence: state.geofence,
     use_control_node_broker: state.selectedPreset === CONTROL_NODE_BROKER_PRESET,
+  };
+}
+
+/** The broker an attended run with a real vessel names in its job: none for the control node's own broker, any other by the address agents dial. */
+export function attendedBroker(state: ConnectionFields): AttendedBroker | null {
+  if (state.selectedPreset === CONTROL_NODE_BROKER_PRESET) {
+    return null;
+  }
+  return {
+    host: state.agentBroker.trim(),
+    port: state.port,
+    tls: state.tlsConnection,
+    allow_certificates: state.allowCertificates,
+    user: state.user.trim(),
+    password: state.password,
   };
 }

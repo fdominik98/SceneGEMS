@@ -37,3 +37,16 @@ export const PRESET_LABELS: Record<MqttConnectionPresetKey | "", string> = {
   waraps_tls_broker: "broker.waraps.org over TLS",
   "": "Other broker",
 };
+
+/**
+ * The broker of an attended run with a real vessel, as the job's payload names it (`attended_runner.BrokerPayload`): the
+ * address the vessels' agents dial. A run on the control node's own broker names none.
+ */
+export interface AttendedBroker {
+  host: string;
+  port: number;
+  tls: boolean;
+  allow_certificates: boolean;
+  user: string;
+  password: string;
+}

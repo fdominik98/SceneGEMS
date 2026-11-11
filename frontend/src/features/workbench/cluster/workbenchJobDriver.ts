@@ -170,12 +170,23 @@ interface PageTask {
   workbenchEntry: boolean;
 }
 
-/** An attended run's phase and Mission Planner ports from a job status detail; nothing for a status without one. */
-export function attendedRunDetail(detail: Record<string, unknown> | null | undefined): { phase?: string; groundControlPorts?: Record<string, number> } {
+type AttendedRunDetail = { phase?: string; groundControlPorts?: Record<string, number>; vesselStates?: Record<string, Record<string, boolean>> };
+
+/** A vessel's state in a status detail: the flags its agent reports; anything else in it is left out. */
+function vesselState(state: unknown): Record<string, boolean> {
+  return Object.fromEntries(Object.entries(typeof state === "object" && state !== null ? state : {}).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"));
+}
+
+/** An attended run's phase, Mission Planner ports and vessel states from a job status detail; nothing for a status without one. */
+export function attendedRunDetail(detail: Record<string, unknown> | null | undefined): AttendedRunDetail {
   if (!detail) {
     return {};
   }
-  const patch: { phase?: string; groundControlPorts?: Record<string, number> } = {};
+  const patch: AttendedRunDetail = {};
+  const vessels = detail.vessels;
+  if (typeof vessels === "object" && vessels !== null) {
+    patch.vesselStates = Object.fromEntries(Object.entries(vessels).map(([agentId, state]) => [agentId, vesselState(state)]));
+  }
   if (typeof detail.phase === "string") {
     patch.phase = detail.phase;
   }
@@ -783,14 +794,14 @@ export class WorkbenchJobDriver {
     const cluster = this.access().cluster;
     const blocker = this.blocker(plan.jobType, plan.components);
     if (cluster === null || blocker !== null) {
-      run.update({ status: "failed", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: blocker ?? "No cluster is selected." });
+      run.update({ status: "failed", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: blocker ?? "No cluster is selected." });
       return;
     }
     const task = this.newTask(true);
     this.simulationJob = task;
     const signal = task.controller.signal;
     usePlaybackStore.getState().clearSimulationTrajectories();
-    run.update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: "Creating the workbench entry..." });
+    run.update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: "Creating the workbench entry..." });
     try {
       const item = await resolveInputItem(cluster.client, request.input, request.scenarioContent, "trajectories", signal);
       const config = simulationEntryConfig({
@@ -954,7 +965,7 @@ export class WorkbenchJobDriver {
     const cluster = this.access().cluster;
     const blocker = this.blocker(submission.job_type, jobComponents(submission.job_type, submission.payload));
     if (cluster === null || blocker !== null) {
-      run.update({ status: "failed", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: blocker ?? "No cluster is selected." });
+      run.update({ status: "failed", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: blocker ?? "No cluster is selected." });
       return;
     }
     const task = this.newTask(false);
@@ -962,7 +973,7 @@ export class WorkbenchJobDriver {
     const signal = task.controller.signal;
     usePlaybackStore.getState().clearSimulationTrajectories();
     PAGE_STORES.simulation.getState().setStatus("running", null, null);
-    run.update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: "Waiting for a free slot on the cluster..." });
+    run.update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: "Waiting for a free slot on the cluster..." });
     try {
       const job = await this.watchSimulation(cluster, task, (onProgress) => runClusterJob(cluster, submission, { signal, onProgress }));
       if (job === null) {
@@ -1116,7 +1127,7 @@ export class WorkbenchJobDriver {
         this.abortTask(this.simulationJob);
         this.simulationJob = task;
         usePlaybackStore.getState().clearSimulationTrajectories();
-        useClusterRunStore.getState().update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: "Following the running entry..." });
+        useClusterRunStore.getState().update({ status: "queued", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: "Following the running entry..." });
         try {
           await this.followSimulationCase(cluster, entry, task);
         } catch (error) {
@@ -1225,7 +1236,7 @@ export class WorkbenchJobDriver {
   clearPage(page: WorkbenchPage, message: string | null): void {
     clearPageOutput(page);
     if (page === "simulation") {
-      useClusterRunStore.getState().update({ status: "idle", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, workerNodeAddress: null, message: null });
+      useClusterRunStore.getState().update({ status: "idle", jobId: null, workerNodeId: null, phase: null, groundControlPorts: {}, vesselStates: {}, workerNodeAddress: null, message: null });
     }
     PAGE_STORES[page].getState().clearLoaded(message);
   }
