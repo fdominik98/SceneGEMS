@@ -8,6 +8,7 @@ from scenegems_tool.cluster.worker_node.launchers.pooled.design_space_exploratio
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.service_pools import ServicePools
+from scenegems_tool.cluster.worker_node.launchers.pooled.simulation_pool import SimulationPool, image_overrides
 from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_pool import TrajectoryGenerationPool
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 
@@ -91,6 +92,34 @@ def test_the_design_space_exploration_pool_is_sized_by_slots_and_reaches_the_bro
     assert DesignSpaceExplorationPool.default_service_name == "design-space-exploration-subsystem" and DesignSpaceExplorationPool.subsystem is Subsystem.DESIGN_SPACE_EXPLORATION
 
 
+def test_the_simulation_pool_gets_what_it_needs_to_start_the_stacks_of_its_tasks(no_docker, monkeypatch, mqtt_connection, geofence):
+    """The one pool that starts containers: the Docker socket, the runtime volume its stacks' files are on, and the names its stacks are built with."""
+    monkeypatch.setenv("SITL_IMAGE", "scenegems-ardupilot-sitl:branch")
+    monkeypatch.setenv("SCENEGEMS_IMAGE_TAG", "release-7")
+    scope = InstanceScope.pooled("m1", "n1", "simulation")
+    pool = SimulationPool.for_scope(scope, mqtt_connection.with_topic_root("scenegems"), geofence, workers=2, broker_network="scenegems-m1-n1", service_name="simulation-subsystem-2")
+    compose = pool.labelled(pool.build_compose())
+    service = compose["services"]["simulation-subsystem"]
+    assert service["container_name"] == "scenegems-m1-n1-simulation-subsystem" and service["labels"] == {INSTANCE_LABEL: "simulation-subsystem"}
+    assert service["image"].startswith("scenegems-simulation-subsystem:") and "command" not in service, "the image's own service"
+    assert service["volumes"][0] == "/var/run/docker.sock:/var/run/docker.sock"
+    volume, _, mounted_at = service["volumes"][1].partition(":")
+    assert volume in compose["volumes"] and compose["volumes"][volume] == {"external": True} and mounted_at.replace("\\", "/").endswith("assets/runtime_assets")
+    environment = service["environment"]
+    assert (environment["SCENEGEMS_CONTROL_NODE_ID"], environment["SCENEGEMS_WORKER_NODE_ID"]) == ("m1", "n1"), "its stacks are named after the worker node, as the daemon named them"
+    assert (environment["SCENEGEMS_DOCKER_NETWORK"], environment["SCENEGEMS_RUNTIME_VOLUME"]) == ("scenegems-m1-n1", volume)
+    assert (environment["SITL_IMAGE"], environment["SCENEGEMS_IMAGE_TAG"]) == ("scenegems-ardupilot-sitl:branch", "release-7"), "its stacks run the images the daemon would have run"
+    assert (environment["WORKER_COUNT"], environment["MQTT_SERVICE_NAME"], service["cpus"]) == ("2", "simulation-subsystem-2", 3)
+    assert "scenegems_broker" in service["networks"]
+    assert (pool.service_name, pool.service_topic) == ("simulation-subsystem-2", "scenegems/service/virtual/real/simulation-subsystem-2")
+
+
+def test_only_set_image_overrides_and_the_tag_are_passed_on():
+    environment = {"SITL_IMAGE": "sitl:branch", "GAZEBO_IMAGE": " ", "SCENEGEMS_IMAGE_TAG": "r7", "PATH": "/bin", "IMAGE_CACHE": "x"}
+    assert image_overrides(environment) == {"SITL_IMAGE": "sitl:branch", "SCENEGEMS_IMAGE_TAG": "r7"}
+    assert image_overrides({"PATH": "/bin"}) == {}
+
+
 def test_a_monitoring_pool_on_its_own_keeps_the_subsystems_name():
     assert MonitoringPool.default_service_name == "monitoring-subsystem" and MonitoringPool.subsystem is Subsystem.MONITORING
 
@@ -122,8 +151,10 @@ def test_the_pools_of_the_subsystems_start_together_each_once(pools):
     assert isinstance(monitoring, MonitoringPool) and (monitoring.service_name, monitoring.workers) == ("monitoring-subsystem-4", 2)
     exploration = pools.get(Subsystem.DESIGN_SPACE_EXPLORATION)
     assert isinstance(exploration, DesignSpaceExplorationPool) and (exploration.service_name, exploration.workers) == ("design-space-exploration-subsystem-4", 2)
+    simulation = pools.get(Subsystem.SIMULATION)
+    assert isinstance(simulation, SimulationPool) and (simulation.service_name, simulation.workers, simulation.worker_node_id) == ("simulation-subsystem-4", 2, "n1")
     pools.start([Subsystem.SCENE_GENERATION])
-    assert pools.get(Subsystem.SCENE_GENERATION) is scene, "a pool that is there is left alone; a subsystem without a pool yet is skipped"
+    assert pools.get(Subsystem.SCENE_GENERATION) is scene, "a pool that is there is left alone"
 
 
 def test_a_pool_whose_container_is_gone_is_started_again(pools):

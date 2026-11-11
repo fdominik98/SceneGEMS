@@ -292,8 +292,9 @@ def test_the_pools_of_the_worker_nodes_subsystems_start_with_the_welcome_not_wit
     daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
     wait_for(lambda: ("start", "scene-generation-subsystem-3") in pools_without_docker)
     worker_node = daemon.daemon.manager.worker_node
-    assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION], "its components name scene generation, not trajectory generation"
-    assert [name for event, name in pools_without_docker if event == "start"] == ["scene-generation-subsystem-3"]
+    wait_for(lambda: ("start", "simulation-subsystem-3") in pools_without_docker)
+    assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION, Subsystem.SIMULATION], "its components name scene generation and a simulation layer, not trajectory generation"
+    assert sorted(name for event, name in pools_without_docker if event == "start") == ["scene-generation-subsystem-3", "simulation-subsystem-3"]
 
 
 def test_a_worker_node_with_the_monitoring_component_starts_its_monitoring_pool(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):

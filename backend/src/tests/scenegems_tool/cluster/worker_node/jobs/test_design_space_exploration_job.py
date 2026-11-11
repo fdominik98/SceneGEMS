@@ -22,7 +22,7 @@ from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging.mqtt_design_space_exploration_service import REQUEST_FIELDS, MqttDesignSpaceExplorationService
 from scenegems_tool.subsystems.design_space_exploration.design_space import explored_fecs
 from scenegems_tool.subsystems.design_space_exploration.design_space_exploration_worker import explore
-from tests.scenegems_tool.cluster.worker_node.jobs.in_process_subsystem import InProcessSubsystem
+from tests.scenegems_tool.cluster.worker_node.jobs.in_process_subsystem import REQUEST, InProcessSubsystem
 from tests.scenegems_tool.subsystems.design_space_exploration.generator_fakes import MODEL, NAMED_MODEL, STAND_IN_COMMAND, generated
 
 POOL_NAME = "design-space-exploration-subsystem-3"  # the worker node's pool as the control node numbered it
@@ -111,7 +111,7 @@ def subsystem(monkeypatch, worker_node):
     """The worker node's design space exploration pool, in process: an exploration runs, with the stand-in generator, as soon as its request is in."""
     made = InProcessSubsystem(MqttDesignSpaceExplorationService, POOL_NAME).serve(monkeypatch, worker_node)
     made.service.pool.worker = lambda task, channel: explore(task, channel, command=STAND_IN_COMMAND, pool_size=1)
-    made.hooks["start"] = made.work
+    made.hooks[REQUEST] = made.work
     return made
 
 
@@ -174,7 +174,7 @@ def test_a_generator_that_dies_fails_the_attempt_which_may_be_retried(explore_jo
 
 def test_a_cancelled_job_cancels_its_own_exploration_which_ends_its_generator(explore_job, subsystem):
     cancel = threading.Event()
-    subsystem.hooks["start"] = lambda request_id: cancel.set()  # the lease is cancelled while the generator works
+    subsystem.hooks[REQUEST] = lambda request_id: cancel.set()  # the lease is cancelled while the generator works
     with pytest.raises(JobFailed, match="cancelled") as failure:
         explore_job({"problem": "// stand-in: hang\nclass A."}, cancel=cancel)
     assert not failure.value.retryable and subsystem.cancels() == ["job-1-1"]

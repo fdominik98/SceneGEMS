@@ -9,6 +9,11 @@ lost, released, timed out) cancels its own request, so the pool's other tasks ke
 A request whose task takes more than its start (a series of scenes that follows as signals) names
 on_running: it is called once, on the job's thread, when the task left the queue and runs. A request
 whose task reports its progress (exec/feedback) may have it relayed as the job's status (relay_feedback).
+
+While a job waits, its pool has to keep heartbeating: a pool that is silent for HEARTBEAT_LOST_S is gone
+with its tasks, and the attempt fails at once instead of at its deadline. A request whose subsystem keeps
+the time rules of its task itself (a simulation: observed time, the wait for an operator) has no deadline
+here (timeout_s None) and ends by its task's state or by that check.
 """
 
 import logging
@@ -27,6 +32,7 @@ CANCEL_FLUSH_TIMEOUT_S = 2.0  # how long the job waits for the broker to take it
 RESULT_GRACE_S = 2.0  # how long a finished task's result may still be on its way
 
 POOL_STARTUP_TIMEOUT_S = 180.0  # a cold pool: container start, imports and the broker handshake
+HEARTBEAT_LOST_S = 30.0  # how long a pool may be silent, beyond a heartbeat's validity, before its tasks count as lost
 _POLL_S = 0.1
 
 
@@ -42,14 +48,37 @@ def wait_for_pool(is_ready: Callable[[], bool], report: JobReport, description: 
         time.sleep(_POLL_S)
 
 
-def wait_for_reply(replied: threading.Event, report: JobReport, description: str, cancel: Optional[threading.Event], timeout_s: float) -> None:
+def wait_for_reply(replied: threading.Event, report: JobReport, description: str, cancel: Optional[threading.Event], timeout_s: Optional[float], check: Optional[Callable[[], None]] = None) -> None:
+    """Block until replied is set. timeout_s None waits without a deadline; check is called at every look and raises JobFailed when waiting is pointless."""
     report.status(f"waiting for the {description}")
-    deadline = time.monotonic() + timeout_s
+    deadline = None if timeout_s is None else time.monotonic() + timeout_s
     while not replied.wait(_POLL_S):
         if cancel is not None and cancel.is_set():
             raise JobFailed("cancelled", retryable=False)
-        if time.monotonic() > deadline:
+        if deadline is not None and time.monotonic() > deadline:
             raise JobFailed(f"No {description} within {timeout_s:g} s", retryable=True)
+        if check is not None:
+            check()
+
+
+class PoolLiveness:
+    """Whether the pool a job waits for still heartbeats; check raises once it was silent for too long."""
+
+    def __init__(self, client: Any, pool_description: str, clock: Callable[[], float] = time.monotonic):
+        self._client = client
+        self._description = pool_description
+        self._clock = clock
+        self._silent_since: Optional[float] = None
+
+    def check(self) -> None:
+        if self._client.is_heartbeat_valid:
+            self._silent_since = None
+            return
+        now = self._clock()
+        if self._silent_since is None:
+            self._silent_since = now
+        elif now - self._silent_since > HEARTBEAT_LOST_S:
+            raise JobFailed(f"The {self._description} stopped heartbeating: its tasks are lost", retryable=True)
 
 
 def request_id_of(job: JobSpec) -> str:
@@ -69,8 +98,16 @@ class PoolReply:
 class _FollowedRequest:
     """What a job has heard of its request: the result, or how its task ended without one. done is set when the job has nothing more to wait for."""
 
-    def __init__(self, request_id: str, is_result: Callable[[str, Mapping[str, Any]], bool], progress: Optional[Callable[[str, Mapping[str, Any]], Optional[str]]], report: JobReport):
+    def __init__(
+        self,
+        request_id: str,
+        is_result: Callable[[str, Mapping[str, Any]], bool],
+        progress: Optional[Callable[[str, Mapping[str, Any]], Optional[str]]],
+        report: JobReport,
+        relay_detail: bool = False,
+    ):
         self.request_id = request_id
+        self._relay_detail = relay_detail
         self._is_result = is_result
         self._progress = progress
         self._report = report
@@ -92,11 +129,15 @@ class _FollowedRequest:
                 self._report.status(text)
 
     def on_feedback(self, request_id: str, message: Mapping[str, Any]) -> None:
-        """The task's progress as the job's status: its message and how far it is."""
+        """The task's progress as the job's status: its message and how far it is, with its detail for a request that relays it."""
         if request_id != self.request_id or self.result is not None or not message.get("message"):
             return
-        progress = message.get("progress")
-        self._report.status(str(message["message"]), progress if isinstance(progress, (int, float)) else None)
+        progress, detail = message.get("progress"), message.get("detail")
+        progress = progress if isinstance(progress, (int, float)) else None
+        if self._relay_detail and isinstance(detail, Mapping) and detail:
+            self._report.status(str(message["message"]), progress, dict(detail))
+        else:
+            self._report.status(str(message["message"]), progress)
 
     def on_state(self, request_id: str, state: TaskState, reason: Optional[str], seed: Optional[int]) -> None:
         del seed  # the job sent the seed itself
@@ -127,12 +168,13 @@ def run_pool_request(
     seed: Optional[int],
     streams: Sequence[str],
     is_result: Callable[[str, Mapping[str, Any]], bool],
-    timeout_s: float,
+    timeout_s: Optional[float],
     pool_description: str,
     reply_description: str,
     progress: Optional[Callable[[str, Mapping[str, Any]], Optional[str]]] = None,
     on_running: Optional[Callable[[Any, str], None]] = None,
     relay_feedback: bool = False,
+    relay_detail: bool = False,
 ) -> PoolReply:
     """Run the job as one request on the worker node's pool of the subsystem and return the task's result.
 
@@ -140,14 +182,16 @@ def run_pool_request(
     is_result(stream, message) picks the task's result among its stream messages; progress turns any other
     stream message into a status line. on_running(client, request id) is called once when the task runs:
     there the job sends what the task needs beyond its start (client.publish_signal). relay_feedback makes
-    the task's progress messages the job's status lines. JobFailed when the
-    pool cannot be reached, the task fails or is aborted, or no result comes within timeout_s.
+    the task's progress messages the job's status lines, relay_detail with the detail they carry (what a
+    simulation says about its phase, its vessels and its ports). JobFailed when the
+    pool cannot be reached or stops heartbeating, the task fails or is aborted, or no result comes within
+    timeout_s (None: no deadline here, the subsystem ends the task by its own rules).
     """
     from scenegems_tool.messaging.mqtt_pool_client import MqttPoolClient
 
     request_id = request_id_of(job)
     request_seed = draw_seed() if seed is None else seed
-    followed = _FollowedRequest(request_id, is_result, progress, report)
+    followed = _FollowedRequest(request_id, is_result, progress, report, relay_detail)
     pool = worker_node.pools.get(subsystem)
     handlers: Dict[str, Any] = {"on_state": followed.on_state, "on_stream": followed.on_stream}
     if relay_feedback:
@@ -162,12 +206,13 @@ def run_pool_request(
         wait_for_pool(lambda: client.is_connected and client.is_heartbeat_valid, report, pool_description, cancel)
         client.publish_start_task(task_name, request_id, params, request_seed)
         sent = True
-        deadline = time.monotonic() + timeout_s
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        liveness = PoolLiveness(client, pool_description)
         if on_running is not None:
-            wait_for_reply(followed.started, report, f"{pool_description} to start the task", cancel, timeout_s)
+            wait_for_reply(followed.started, report, f"{pool_description} to start the task", cancel, timeout_s, liveness.check)
             if not followed.done.is_set():
                 on_running(client, request_id)
-        wait_for_reply(followed.done, report, reply_description, cancel, max(0.0, deadline - time.monotonic()))
+        wait_for_reply(followed.done, report, reply_description, cancel, None if deadline is None else max(0.0, deadline - time.monotonic()), liveness.check)
     finally:
         if sent and followed.result is None and followed.ended is None:
             _cancel_request(client, request_id)

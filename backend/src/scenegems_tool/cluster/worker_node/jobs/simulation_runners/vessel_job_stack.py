@@ -13,8 +13,9 @@ broker they join the network the worker node's pooled services reach it on; an e
 dialled from the stack's own network.
 
 The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the
-runtime assets volume, so such a job must run where that volume is mounted at
-RUNTIME_ASSETS_FOLDER: the worker node daemon's container or the workbench backend's.
+runtime assets volume, so a stack is built where that volume is mounted at
+RUNTIME_ASSETS_FOLDER: the container of the worker node's simulation subsystem, whose tasks
+build and start their stacks (subsystems/simulation/simulation_worker.py).
 """
 
 from typing import TYPE_CHECKING, Dict, Optional, Tuple

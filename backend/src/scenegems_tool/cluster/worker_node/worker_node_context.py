@@ -7,7 +7,7 @@ The worker node daemon builds one WorkerNodeContext from its configuration
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, List, Optional
 
-from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS
+from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, SIMULATION_LAYER_PREFIX
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.worker_node.artifacts.worker_node_artifacts import ArtifactTransport
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
@@ -32,6 +32,7 @@ _POOL_JOB_TYPES = {
     Subsystem.SCENE_GENERATION: JobType.SCENE_GENERATION,
     Subsystem.TRAJECTORY_GENERATION: JobType.TRAJECTORY_GENERATION,
     Subsystem.MONITORING: JobType.MONITORING_POST_HOC,
+    Subsystem.SIMULATION: JobType.SIMULATION,
 }
 
 
@@ -66,8 +67,17 @@ class WorkerNodeContext:
         return max(1, self.slots.get(_POOL_JOB_TYPES[subsystem], 1))
 
     def pool_subsystems(self) -> List[Subsystem]:
-        """The pooled subsystems this worker node offers by its components; none for a worker node that names no components."""
-        return [subsystem for subsystem, job_type in _POOL_JOB_TYPES.items() if JOB_TYPE_COMPONENTS[job_type] in self.components]
+        """The pooled subsystems this worker node offers by its components; none for a worker node that names no components.
+
+        A simulation has no component of its own: its components are the layers of the vessel stacks it runs. A worker
+        node that has a simulation layer runs simulations, so it runs the simulation subsystem.
+        """
+        return [subsystem for subsystem, job_type in _POOL_JOB_TYPES.items() if self._offers(job_type)]
+
+    def _offers(self, job_type: JobType) -> bool:
+        if job_type == JobType.SIMULATION:
+            return any(component.startswith(SIMULATION_LAYER_PREFIX) for component in self.components)
+        return JOB_TYPE_COMPONENTS[job_type] in self.components
 
     def start_pools(self) -> None:
         """Start the pools of the subsystems the worker node offers, so they are up before the first job (the daemon, once it has its number)."""

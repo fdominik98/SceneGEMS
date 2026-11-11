@@ -8,7 +8,7 @@ runner_container.py           running a job in one runner container
 design_space_exploration_job.py  design_space_exploration, on the design space exploration pool
 scene_generation_job.py       scene_generation, on the scene generation pool
 trajectory_generation_job.py  trajectory_generation, on the trajectory generation pool
-simulation_job.py             simulation, by the runner its payload names (simulation_runners/: kinematic, ardupilot)
+simulation_job.py             simulation, on the simulation pool, whose task runs the runner the payload names (simulation_runners/)
 monitoring_post_hoc_job.py    monitoring.post_hoc, on the monitoring pool
 calibration_deviation_job.py  calibration.deviation, in a simulation subsystem container
 in_container/                 the entry point inside a runner container

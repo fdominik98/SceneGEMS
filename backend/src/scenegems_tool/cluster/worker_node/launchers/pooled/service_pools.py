@@ -17,6 +17,7 @@ from scenegems_tool.cluster.worker_node.launchers.pooled.design_space_exploratio
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
+from scenegems_tool.cluster.worker_node.launchers.pooled.simulation_pool import SimulationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_pool import TrajectoryGenerationPool
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
@@ -29,6 +30,7 @@ _POOL_CLASSES = {
     Subsystem.SCENE_GENERATION: SceneGenerationPool,
     Subsystem.TRAJECTORY_GENERATION: TrajectoryGenerationPool,
     Subsystem.MONITORING: MonitoringPool,
+    Subsystem.SIMULATION: SimulationPool,
 }
 
 

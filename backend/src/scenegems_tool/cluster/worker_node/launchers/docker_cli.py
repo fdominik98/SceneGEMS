@@ -81,6 +81,14 @@ def instance_keys_of_project(project: str) -> List[str]:
     return sorted({key for key in (containers.stdout + "\n" + networks.stdout).split() if key})
 
 
+def instance_keys_with_name_prefix(project: str, prefix: str) -> List[str]:
+    """The instances of a worker node's project that have a container whose name starts with prefix, by their label values."""
+    label = f'{{{{.Label "{INSTANCE_LABEL}"}}}}'
+    filters = ["--filter", f"label={COMPOSE_PROJECT_LABEL}={project}", "--filter", f"label={INSTANCE_LABEL}", "--filter", f"name=^{prefix}"]
+    containers = subprocess.run(["docker", "ps", "-a", "--format", label, *filters], capture_output=True, text=True, check=False)
+    return sorted({key for key in containers.stdout.split() if key})
+
+
 def _remove_networks(network_ids: List[str]) -> None:
     network_ids = [network_id for network_id in network_ids if network_id]
     if network_ids:

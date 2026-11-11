@@ -14,11 +14,13 @@ from scenegems_tool.subsystems.pool.pool_task import TaskState
 from tests.scenegems_tool.messaging.generation_fakes import CONNECTION, GEOFENCE, deliver, offline
 from tests.scenegems_tool.subsystems.pool.pool_fakes import manual_pool_factory
 
+REQUEST = "request arrived"  # the hook after a job's request; no signal has this name
+
 
 class InProcessSubsystem:
     """A subsystem's service with a pool whose workers run when the test says so, and what happened in it (events).
 
-    hooks: what happens right after the service took a command of the job, by "start" or the signal's name; each is
+    hooks: what happens right after the service took a command of the job, by REQUEST (its request) or the signal's name; each is
     called with the request id. A test lets a worker run there (work), kills it (die) or does anything else.
     events: ("request", params, seed), ("state", request id, state), ("signal", name, data), ("feedback", request id, message), ("cancel", request id).
     """
@@ -41,10 +43,9 @@ class InProcessSubsystem:
             self.relay()
 
     def work(self, request_id: str) -> None:
-        """Let the task's worker run to its end, as its process would."""
-        with self._lock:
-            self.processes[request_id].work()
-            self.relay()
+        """Let the task's worker run to its end, as its process would. Commands of the job still reach the service while it runs."""
+        self.processes[request_id].work()
+        self.relay()
 
     def die(self, request_id: str) -> None:
         """The task's worker process ends without a word."""
@@ -126,7 +127,7 @@ class InProcessPoolClient:
     def publish_start_task(self, task_name, request_id, params, seed):
         self.subsystem.events.append(("request", dict(params), seed))
         self.subsystem.command({"command": "start-task", "task-uuid": f"u-{request_id}", "task": {"name": task_name, "params": {**params, "request-id": request_id, "seed": seed}}})
-        self._after("start", request_id)
+        self._after(REQUEST, request_id)
         return f"u-{request_id}"
 
     def publish_signal(self, signal_name, request_id, data=None):
