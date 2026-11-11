@@ -112,11 +112,12 @@ describe("MatrixView", () => {
     expect((html.match(/<tr>/g) ?? []).length).toBe(1 + 4);
   });
 
-  it("names the cluster job of an available stack, or says it runs as a live session", () => {
+  it("names the cluster job of an available stack, or says none runs it", () => {
     const html = renderToStaticMarkup(<MatrixView document={document} />);
     expect(html).toContain("job sim.e");
     expect(html).toContain("job sim.f");
-    expect((html.match(/no cluster job, live session/g) ?? []).length).toBe(2);
+    expect((html.match(/no cluster job/g) ?? []).length).toBe(2);
+    expect(html).not.toContain("live session");
   });
 
   it("says so when a document has no matrix", () => {

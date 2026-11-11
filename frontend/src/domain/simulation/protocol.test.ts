@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseFrame, parseServerMessage } from "./protocol";
 import { CPA_POSITIONS, RULE_16_ID, RULE_8_ID, monitoredFrame } from "../../test/fixtures/monitoredFrames";
 import { sampleFrames } from "../../test/fixtures/sampleFrames";
-import { sampleRunRecordingMessages } from "../../test/fixtures/historyViews";
+import { RETIRED_GATEWAY_MESSAGES } from "./wireTypes";
 
 describe("parseFrame", () => {
   it("accepts canonical simulation payload", () => {
@@ -46,12 +46,18 @@ describe("parseFrame", () => {
 });
 
 describe("parseServerMessage", () => {
-  it("parses legacy raw frame without type", () => {
-    const msg = parseServerMessage(sampleFrames[0]);
-    expect(msg.kind).toBe("frame");
-    if (msg.kind === "frame") {
-      expect(msg.frame.timestamp).toBe(0);
-    }
+  it("does not read a frame without a type: the gateway pushes none", () => {
+    const raw = sampleFrames[0];
+    expect(parseServerMessage(raw)).toEqual({ kind: "unknown", raw });
+  });
+
+  it.each([...RETIRED_GATEWAY_MESSAGES])("does not read %s, a message of the former live session", (type) => {
+    const raw = { type, status: "connected", frames: [sampleFrames[0]], chunkIndex: 0, isLast: true };
+    expect(parseServerMessage(raw)).toEqual({ kind: "unknown", raw });
+  });
+
+  it("names the messages a control node from before the worker-only revision still sends", () => {
+    expect([...RETIRED_GATEWAY_MESSAGES].sort()).toEqual(["frame", "monitor_status", "mqtt_broker_status", "run_recording", "simulation_status", "simulation_trajectory_chunk"]);
   });
 
   it("parses initial_state envelope with trajectory length", () => {
@@ -78,21 +84,6 @@ describe("parseServerMessage", () => {
     expect(msg.kind).toBe("initial_state");
     if (msg.kind === "initial_state") {
       expect(msg.scenarioId).toBe("scen-99");
-    }
-  });
-
-  it("parses simulation_trajectory_chunk", () => {
-    const msg = parseServerMessage({
-      type: "simulation_trajectory_chunk",
-      scenarioId: "scen-a",
-      fromTimestamp: 0,
-      toTimestamp: 2,
-      frames: sampleFrames.slice(0, 3),
-    });
-    expect(msg.kind).toBe("simulation_trajectory_chunk");
-    if (msg.kind === "simulation_trajectory_chunk") {
-      expect(msg.scenarioId).toBe("scen-a");
-      expect(msg.frames.length).toBe(3);
     }
   });
 
@@ -215,100 +206,6 @@ describe("parseServerMessage", () => {
     }
   });
 
-  it("parses mqtt_broker_status with the control node broker", () => {
-    const msg = parseServerMessage({
-      type: "mqtt_broker_status",
-      status: "connected",
-      controlNodeBroker: "cluster-broker:1883",
-    });
-    expect(msg.kind).toBe("mqtt_broker_status");
-    if (msg.kind === "mqtt_broker_status") {
-      expect(msg.status).toBe("connected");
-      expect(msg.controlNodeBroker).toBe("cluster-broker:1883");
-    }
-  });
-
-  it("parses mqtt_broker_status from a server without a control node broker", () => {
-    const msg = parseServerMessage({ type: "mqtt_broker_status", status: "disconnected" });
-    expect(msg.kind === "mqtt_broker_status" && msg.controlNodeBroker).toBe(null);
-  });
-
-  it("parses monitor_status", () => {
-    const msg = parseServerMessage({
-      type: "monitor_status",
-      status: "disconnected",
-    });
-    expect(msg.kind).toBe("monitor_status");
-    if (msg.kind === "monitor_status") {
-      expect(msg.status).toBe("disconnected");
-    }
-  });
-
-  it("parses every status of run_recording", () => {
-    const parsed = sampleRunRecordingMessages.map((raw) => parseServerMessage(raw));
-    expect(parsed.map((msg) => msg.kind === "run_recording" && msg.status)).toEqual(["recording", "saved", "failed", "unavailable"]);
-    expect(parsed[0]).toEqual({
-      kind: "run_recording",
-      status: "recording",
-      campaignId: "wb3",
-      caseId: 1,
-      message: "Recording the run as a workbench entry",
-    });
-    expect(parsed[3]).toEqual({
-      kind: "run_recording",
-      status: "unavailable",
-      campaignId: null,
-      caseId: null,
-      message: "the gateway runs without a control node",
-    });
-  });
-
-  it("parses run_recording without the optional fields and with snake_case names", () => {
-    expect(parseServerMessage({ type: "run_recording", status: "unavailable" })).toEqual({
-      kind: "run_recording",
-      status: "unavailable",
-      campaignId: null,
-      caseId: null,
-      message: null,
-    });
-    const msg = parseServerMessage({ type: "run_recording", status: "saved", campaign_id: "wb9", case_id: 4 });
-    expect(msg.kind === "run_recording" && [msg.campaignId, msg.caseId]).toEqual(["wb9", 4]);
-  });
-
-  it("rejects a run_recording status it does not know", () => {
-    expect(() => parseServerMessage({ type: "run_recording", status: "paused" })).toThrow();
-  });
-
-  it("parses simulation_status", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "agents are preparing",
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.status).toBe("agents are preparing");
-    }
-  });
-
-  it("parses the ground control station ports of a simulation_status", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "ready to start",
-      groundControlPortsByAgentId: { "1": 49153 },
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.groundControlPortsByAgentId).toEqual({ "1": 49153 });
-    }
-  });
-
-  it("gives a simulation_status without ports an empty port map", () => {
-    const msg = parseServerMessage({ type: "simulation_status", status: "running" });
-    if (msg.kind === "simulation_status") {
-      expect(msg.groundControlPortsByAgentId).toEqual({});
-    }
-  });
-
   it("parses stack_options", () => {
     const combination = {
       simulatorType: "Kinematic",
@@ -350,28 +247,6 @@ describe("parseServerMessage", () => {
     if (msg.kind === "simulation_models") {
       expect(msg.vesselModelsByAgentId.os).toBe("<sdf><os/></sdf>");
       expect(msg.vesselModelsByAgentId.ts1).toBeNull();
-    }
-  });
-
-  it("parses simulation_status starting", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "starting",
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.status).toBe("starting");
-    }
-  });
-
-  it("parses simulation_status when offline", () => {
-    const msg = parseServerMessage({
-      type: "simulation_status",
-      status: "offline",
-    });
-    expect(msg.kind).toBe("simulation_status");
-    if (msg.kind === "simulation_status") {
-      expect(msg.status).toBe("offline");
     }
   });
 

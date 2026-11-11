@@ -66,7 +66,6 @@ export function TrajectoryGenerationControls({
   onNavigateToSimulation,
 }: TrajectoryGenerationControlsProps) {
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
-  const simulationInitializing = usePlaybackStore((s) => s.simulationInitializing);
   const setTrajectoryPreviewFrames = useTrajectoryPlaybackStore((s) => s.setTrajectoryPreviewFrames);
   const input = useTrajectoryPageStore((s) => s.input);
   // The scene page shows a valid scene to take in one click.
@@ -316,7 +315,7 @@ export function TrajectoryGenerationControls({
             <button
               type="button"
               className={hasResult ? "primary-btn accent" : undefined}
-              disabled={running || simulationInitializing || !connected || !hasResult}
+              disabled={running || !connected || !hasResult}
               title={hasResult ? "Make this trajectory the simulation page's input and open it" : "Plan a trajectory, or open one from Campaign History, first"}
               onClick={handleLoadForSimulation}
             >

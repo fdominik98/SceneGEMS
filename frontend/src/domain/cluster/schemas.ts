@@ -131,8 +131,6 @@ export const controlNodeStatusSchema = z.object({
     images: stringMap,
   }),
   connected_worker_nodes: z.array(z.string()),
-  /** Whether the control node's workbench gateway starts live sessions (it needs the Docker socket); absent from older control nodes. */
-  live_sessions: z.boolean().optional(),
 });
 export type WorkerNodeView = z.infer<typeof workerNodeViewSchema>;
 export type WorkerNodeComponentView = z.infer<typeof workerNodeComponentSchema>;

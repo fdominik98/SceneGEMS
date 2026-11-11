@@ -17,13 +17,7 @@ import { useLoadedRefresh, useTargetConsumer } from "../features/workbench/pages
 import type { WorkbenchPage, WorkbenchTarget } from "../features/workbench/pages/workbenchTarget";
 import { rightPaneShown, useUiStore, type WorkbenchView } from "./uiStore";
 import { usePersistedState } from "./usePersistedState";
-import {
-  buildConnectMessage,
-  connectionFormIsValid,
-  useConnectionStore,
-} from "../features/workbench/connection/connectionStore";
 import { useSimulationWorkflow } from "../domain/simulation/useSimulationWorkflow";
-import type { ClientToServerMessage } from "../domain/simulation/wireTypes";
 import { SimulationRunPanel } from "../features/workbench/controls/SimulationRunPanel";
 import { SceneGenerationControls } from "../features/workbench/controls/SceneGenerationControls";
 import { SceneGenerationSidebar } from "../features/workbench/controls/SceneGenerationSidebar";
@@ -34,7 +28,6 @@ import { placeOfInput } from "../features/workbench/controls/sceneSelection";
 import { TrajectoryGenerationControls } from "../features/workbench/controls/TrajectoryGenerationControls";
 import { TrajectoryMonitorSidebar } from "../features/workbench/controls/TrajectoryMonitorSidebar";
 import { MqttBrokerPanel } from "../features/workbench/connection/MqttBrokerPanel";
-import { buildInitializeMonitorMessage, canInitializeMonitor } from "../features/workbench/controls/monitorConfig";
 import { DESIGN_SPACE_EXPLORATION_JOB, SCENE_GENERATION_JOB } from "../features/workbench/cluster/workbenchJobs";
 import { DesignSpaceExplorationControls } from "../features/workbench/designSpace/DesignSpaceExplorationControls";
 import { DesignSpaceSidebar } from "../features/workbench/designSpace/DesignSpaceSidebar";
@@ -85,7 +78,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const streamControls = useSimulationWorkflow();
   const streamControlsRef = useRef(streamControls);
   streamControlsRef.current = streamControls;
-  const autoConnectAttemptedRef = useRef(false);
   // Each page plays its own frames.
   usePlaybackTicker(usePlaybackStore);
   usePlaybackTicker(useScenePlaybackStore);
@@ -184,49 +176,14 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
     previousViewRef.current = activeView;
   }, [activeView, requestAutoFit]);
 
-  // Auto-connect to the configured MQTT broker (the control node's by default) once the server
-  // socket connects, so a reconnect or refresh re-establishes the session hands-free.
-  useEffect(() => {
-    const attemptAutoConnect = () => {
-      const conn = useConnectionStore.getState();
-      if (usePlaybackStore.getState().mqttBrokerStatus === "connected") {
-        return;
-      }
-      // Honour an explicit user Disconnect: do not silently reconnect on a
-      // transient backend-socket blip.
-      if (conn.userDisconnected) {
-        return;
-      }
-      if (!connectionFormIsValid(conn)) {
-        return;
-      }
-      // Mark the attempt so a failure lands in the connection panel with its hints,
-      // exactly as it would for a Connect click.
-      conn.beginConnectionAttempt();
-      streamControlsRef.current.sendMessage(buildConnectMessage(conn));
-    };
-    const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
-      if (state.streamStatus === "connected" && prev.streamStatus !== "connected") {
-        if (!autoConnectAttemptedRef.current) {
-          autoConnectAttemptedRef.current = true;
-          attemptAutoConnect();
-        }
-      } else if (state.streamStatus !== "connected" && prev.streamStatus === "connected") {
-        autoConnectAttemptedRef.current = false;
-      }
-    });
-    return unsubscribe;
-  }, []);
-
-  // The live monitor of the interactive simulation starts with the broker connection: it is
-  // part of the session, not something to set up by hand.
+  // The COLREGS constants the cluster's monitor judges with, for callbacks that outlive a render.
   const colregsTextRef = useRef(colregsConstraintsText);
   useEffect(() => {
     colregsTextRef.current = colregsConstraintsText;
   }, [colregsConstraintsText]);
 
   // After a reload the simulation page has its input's name but not its trajectories: they load
-  // again once the gateway is connected (the live session needs it) and the domain configuration
+  // again once the gateway is connected (it reads the scenario) and the domain configuration
   // and the machines are known (the cluster's monitor judges the preview). Once per page load.
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
   const workerNodesKnown = useWorkerNodesStore((s) => s.loaded || s.unreachable);
@@ -352,16 +309,6 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
   const specificationPage = activeView === "sceneGeneration" || activeView === "designSpaceExploration";
   useTargetConsumer(active ? activePage : null, openTarget);
   useLoadedRefresh(streamControls.operatorUrl, refreshLoaded);
-  useEffect(() => {
-    const unsubscribe = usePlaybackStore.subscribe((state, prev) => {
-      if (state.mqttBrokerStatus === "connected" && prev.mqttBrokerStatus !== "connected") {
-        if (canInitializeMonitor(state.mqttBrokerStatus, state.monitorStatus, colregsTextRef.current)) {
-          streamControlsRef.current.sendMessage(buildInitializeMonitorMessage(colregsTextRef.current));
-        }
-      }
-    });
-    return unsubscribe;
-  }, []);
 
   const getClampedPaneWidth = useCallback((clientX: number) => {
     const rect = mainLayoutRef.current?.getBoundingClientRect();
@@ -607,7 +554,7 @@ export function WorkbenchSection({ active, errorSlot }: WorkbenchSectionProps) {
         <section className="center-pane">
           {activeView === "connections" ? (
             <div className="load-scenario-layout mqtt-broker-view">
-              <MqttBrokerPanel sendMessage={(message: ClientToServerMessage) => streamControls.sendMessage(message)} />
+              <MqttBrokerPanel />
             </div>
           ) : activeView === "designSpaceExploration" ? (
             <div

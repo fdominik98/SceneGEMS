@@ -6,7 +6,7 @@ export type AsvSystemWire = "replay" | "usv_navigation" | "mission_planner" | "o
 export type ControlLayerWire = "ardupilot" | "custom" | "none" | "real_vessel";
 
 /**
- * Per-agent connection info for `initialize_simulation` (matches server TypedDict).
+ * Per-agent connection info of a simulation setup (matches server TypedDict `SimulationConnectionInfo`).
  * `asvSystem` and `controlLayer` choose the vessel's stack; `controlMode` is ArduAgent's mode
  * for the same ASV system (absent for USV Navigation, which ArduAgent cannot drive).
  */
@@ -18,7 +18,6 @@ export type SimulationConnectionInfo =
       controlMode?: "autonomous" | "external";
       agentName: string;
       topic: string;
-      port: number;
       /**
        * Optional Gazebo SDF model file content for this vessel. When omitted, the
        * server generates a model automatically.
@@ -48,8 +47,8 @@ export interface WaveInfoWire {
 }
 
 /**
- * Shared payload fields for `initialize_simulation`, `generate_simulation_models`
- * and the `simulation_models` server response (all carry identical fields).
+ * A simulation setup: the payload of `generate_simulation_models`, of the `simulation_models`
+ * server response, and the setup an attended simulation job runs (all carry identical fields).
  *
  * The Gazebo world is always generated/abstracted server-side, so it is not part
  * of this payload.
@@ -126,44 +125,13 @@ export type ClientToServerMessage =
       filePath: string;
       fileContent: string;
     }
-  | { type: "start_simulation" }
   | { type: "query_stack_options" }
-  | ({ type: "initialize_simulation" } & SimulationModelsPayload)
-  | ({ type: "generate_simulation_models" } & SimulationModelsPayload)
-  | { type: "reset_simulation" }
-  | {
-      type: "initialize_monitor";
-      scope: "internal" | "external";
-      name: string;
-      topic: string;
-      colregsConstraintsContent: string;
-    }
-  | { type: "shut_down_monitor" }
-  /*
-   * Scene generation, trajectory generation and monitoring of loaded scenes are not gateway
-   * messages: the workbench runs them as jobs on the active cluster (features/workbench/cluster/).
-   */
-  | {
-      /**
-       * Connect the interactive simulation to an MQTT broker. With `use_control_node_broker` the
-       * broker is the control node's own (named in `mqtt_broker_status.controlNodeBroker`) and the
-       * address, user and TLS fields are ignored.
-       */
-      type: "connect_to_mqtt_broker";
-      user: string;
-      password: string;
-      agent_broker: string;
-      client_broker: string;
-      port: number;
-      tls_connection: boolean;
-      allow_certificates: boolean;
-      geofence: {
-        latitude: number;
-        longitude: number;
-        radius_meters: number;
-      };
-      use_control_node_broker?: boolean;
-    }
-  | { type: "disconnect_from_mqtt_broker" };
+  | ({ type: "generate_simulation_models" } & SimulationModelsPayload);
+/*
+ * Nothing else is a gateway message. Scene generation, trajectory generation, monitoring and
+ * simulation run as jobs on the active cluster's worker nodes (features/workbench/cluster/);
+ * the control node connects to no broker and runs no simulation or monitor for the console.
+ */
 
-export type RunRecordingStatus = "recording" | "saved" | "failed" | "unavailable";
+/** The gateway messages of the former live session: a control node of an earlier release still sends them, and the console ignores them. */
+export const RETIRED_GATEWAY_MESSAGES: readonly string[] = ["mqtt_broker_status", "monitor_status", "simulation_status", "simulation_trajectory_chunk", "run_recording", "frame"];

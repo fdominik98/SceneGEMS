@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("SimulationInitControls", () => {
   it("names each vessel as the scenario does, with what it is written out", () => {
-    render(<SimulationInitControls streamControls={streamControls} liveSession paceApplies />);
+    render(<SimulationInitControls streamControls={streamControls} attended paceApplies />);
     const table = screen.getByRole("table");
     const names = within(table)
       .getAllByRole("row")
@@ -48,7 +48,7 @@ describe("SimulationInitControls", () => {
 
   it("lets nobody name a vessel, and asks for a topic only where a real vessel publishes", async () => {
     const user = userEvent.setup();
-    render(<SimulationInitControls streamControls={streamControls} liveSession paceApplies />);
+    render(<SimulationInitControls streamControls={streamControls} attended paceApplies />);
     await user.click(screen.getByRole("button", { name: /Agent connections/ }));
     expect(screen.queryByRole("textbox", { name: /Agent name of/ })).toBeNull();
     expect(screen.queryByRole("textbox", { name: /Topic of/ })).toBeNull();

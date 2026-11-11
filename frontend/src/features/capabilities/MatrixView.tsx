@@ -30,7 +30,7 @@ function Cell({ cell }: { cell: MatrixCell | undefined }) {
       <span className="cap-matrix-facts">
         {job && (
           <span className={`cap-fact-value cap-fact-value--${factTone(job)}`} title={job.note ?? undefined}>
-            {job.value === null ? "no cluster job, live session" : `job ${formatFactValue(job)}`}
+            {job.value === null ? "no cluster job" : `job ${formatFactValue(job)}`}
           </span>
         )}
         {tier && <span className={`cap-fact-value cap-fact-value--${factTone(tier)}`}>{formatFactValue(tier)}</span>}

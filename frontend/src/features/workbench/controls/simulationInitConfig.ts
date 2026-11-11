@@ -68,7 +68,6 @@ export interface VesselInitConnectionDraft {
   controlLayer: ControlLayer;
   agentName: string;
   topic: string;
-  port: number;
   /** Gazebo SDF model file content; undefined means the server generates one. */
   gazeboVesselModel?: string;
 }
@@ -81,7 +80,6 @@ export type SimulationConnectionWire =
       controlMode?: ControlMode;
       agentName: string;
       topic: string;
-      port: number;
       gazeboVesselModel?: string;
     }
   | {
@@ -122,14 +120,12 @@ export function buildInitialVesselConnectionDrafts(
   vessels: VesselDescriptor[]
 ): VesselInitConnectionDraft[] {
   const nameOf = createActorNamer();
-  return vessels.map((vessel, index) => {
+  return vessels.map((vessel) => {
     // The agent is named as the vessel: os, ts1.
     const agentName = nameOf(vessel.id, { isOwnShip: vessel.isOwnShip, isVessel: true });
     const context: SimulationContext = "simulation";
     const parsedId = Number.parseInt(vessel.id, 10);
-    const hasNumericId = Number.isFinite(parsedId);
-    const portOffset = hasNumericId ? parsedId : index;
-    const asvSystem: AsvSystem = hasNumericId && parsedId === 0 ? "mission_planner" : "replay";
+    const asvSystem: AsvSystem = Number.isFinite(parsedId) && parsedId === 0 ? "mission_planner" : "replay";
     return {
       vesselId: vessel.id,
       context,
@@ -137,7 +133,6 @@ export function buildInitialVesselConnectionDrafts(
       controlLayer: "ardupilot",
       agentName,
       topic: vesselTopic(context, agentName),
-      port: 14570 + portOffset,
     };
   });
 }
@@ -164,7 +159,6 @@ function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire
     ...mode,
     agentName: draft.agentName,
     topic: draft.topic,
-    port: draft.port,
     ...(hasModel ? { gazeboVesselModel: draft.gazeboVesselModel } : {}),
   };
 }
@@ -196,12 +190,14 @@ export function toPersistedVesselDrafts(
 
 /**
  * Settings saved before the stack choices existed carry a controlMode instead of an ASV system, and settings saved
- * while the ASV system was called the ASV software carry it under that name.
+ * while the ASV system was called the ASV software carry it under that name. Settings saved while a vessel had a
+ * ground station port carry one, which is dropped: Docker assigns the port a job publishes.
  */
-type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode; asvSoftware?: PersistedVesselConnectionDraft["asvSystem"] };
+type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode; asvSoftware?: PersistedVesselConnectionDraft["asvSystem"]; port?: number };
 
 function upgradePersistedDraft(saved: LegacyPersistedDraft): Partial<PersistedVesselConnectionDraft> {
-  const { controlMode, asvSoftware: formerName, ...rest } = saved;
+  const { controlMode, asvSoftware: formerName, port: formerPort, ...rest } = saved;
+  void formerPort;
   if (rest.asvSystem === undefined && formerName !== undefined) {
     return { ...rest, asvSystem: formerName };
   }

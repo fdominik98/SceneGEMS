@@ -52,7 +52,7 @@ describe("BackendWsClient", () => {
 
     old.onclose?.();
     old.onerror?.();
-    old.onmessage?.({ data: JSON.stringify({ type: "monitor_status", status: "connected" }) });
+    old.onmessage?.({ data: JSON.stringify({ type: "simulation_models", connectionsByAgentId: {} }) });
     expect(h.statuses).toEqual([]);
     expect(h.onServerMessage).not.toHaveBeenCalled();
     expect(h.onError).not.toHaveBeenCalled();
@@ -65,7 +65,7 @@ describe("BackendWsClient", () => {
     const socket = FakeSocket.created[0]!;
     socket.readyState = FakeSocket.OPEN;
     socket.onopen?.();
-    socket.onmessage?.({ data: JSON.stringify({ type: "monitor_status", status: "connected" }) });
+    socket.onmessage?.({ data: JSON.stringify({ type: "simulation_models", connectionsByAgentId: {} }) });
     expect(h.statuses).toEqual(["connecting", "connected"]);
     expect(h.onServerMessage).toHaveBeenCalledTimes(1);
   });

@@ -1,53 +1,27 @@
 import { useCallback } from "react";
-import { useSelectedCluster } from "../../../domain/cluster/clusterStore";
 import { Disclosure } from "../../../components/Disclosure";
 import { PageHeader } from "../../../components/PageHeader";
-import { usePlaybackStore } from "../../../domain/playback/playbackStore";
-import type { ClientToServerMessage } from "../../../domain/simulation/wireTypes";
 import {
   CONTROL_NODE_BROKER_PRESET,
   mqttConnectionLibrary,
   PRESET_LABELS,
   type MqttConnectionPresetKey,
 } from "./connectionLibrary";
-import { buildConnectMessage, connectionFormIsValid, useConnectionStore } from "./connectionStore";
-import { useControlNodeStatus } from "../../cluster/useControlNodeStatus";
-import { connectionHints, liveSessionsOffNote } from "./connectionHints";
+import { useConnectionStore } from "./connectionStore";
 import { ReferenceGeofenceMap } from "./ReferenceGeofenceMap";
-
-interface MqttBrokerPanelProps {
-  sendMessage: (message: ClientToServerMessage) => void;
-}
 
 const PRESET_ORDER: (MqttConnectionPresetKey | "")[] = ["control_node_broker", "waraps_tls_broker", ""];
 
 /**
- * The Connections page: the MQTT broker the workbench's live simulations run over. Simulated
- * vessels, ArduAgent, real vessels and the live monitor meet there. Scene and trajectory
- * generation run as jobs on the active cluster and do not need it.
+ * The Connections page: the settings of a simulation that reaches outside the cluster. The MQTT
+ * broker is where a real vessel's agent is found, and the reference area is where the scenario's
+ * local frame lies on the map. Nothing connects from here: a simulation is a job on a worker
+ * node, and an attended job with a real vessel takes the broker with it.
  */
-export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
-  const streamStatus = usePlaybackStore((s) => s.streamStatus);
-  const brokerStatus = usePlaybackStore((s) => s.mqttBrokerStatus);
-  const controlNodeBroker = usePlaybackStore((s) => s.controlNodeBroker);
-  const monitorStatus = usePlaybackStore((s) => s.monitorStatus);
-
+export function MqttBrokerPanel() {
   const form = useConnectionStore();
-  const {
-    selectedPreset,
-    geofence,
-    connectionAttempt,
-    connectionError,
-    setSelectedPreset,
-    applyConnection,
-    setGeofence,
-    setUserDisconnected,
-    beginConnectionAttempt,
-    clearConnectionAttempt,
-  } = form;
+  const { selectedPreset, geofence, setSelectedPreset, applyConnection, setGeofence } = form;
   const usesControlNode = selectedPreset === CONTROL_NODE_BROKER_PRESET;
-  const controlNodeStatus = useControlNodeStatus(useSelectedCluster()?.operatorUrl ?? null);
-  const liveSessionsOff = liveSessionsOffNote(controlNodeStatus.data?.live_sessions);
 
   const choosePreset = useCallback(
     (preset: MqttConnectionPresetKey | "") => {
@@ -59,73 +33,14 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
     [applyConnection, setSelectedPreset]
   );
 
-  const connected = brokerStatus === "connected";
-  const controlNodeMissing = usesControlNode && streamStatus === "connected" && controlNodeBroker === null;
-  const canConnect = streamStatus === "connected" && connectionFormIsValid(form) && !controlNodeMissing && liveSessionsOff === null;
-  const target = usesControlNode ? (controlNodeBroker ?? "the control node broker") : `${form.clientBroker || "no broker"}:${form.port}${form.tlsConnection ? ", TLS" : ""}`;
-
-  const connect = () => {
-    setUserDisconnected(false);
-    beginConnectionAttempt();
-    sendMessage(buildConnectMessage(form));
-  };
-  const disconnect = () => {
-    setUserDisconnected(true);
-    clearConnectionAttempt();
-    sendMessage({ type: "disconnect_from_mqtt_broker" });
-  };
+  const target = `${form.agentBroker || "no broker"}:${form.port}${form.tlsConnection ? ", TLS" : ""}`;
 
   return (
     <div className="mqtt-broker-layout">
       <PageHeader
         title="Connections"
-        description="The MQTT broker live simulations run over: simulated vessels, ArduAgent, real vessels and the live monitor meet there. Scene and trajectory generation run on the cluster and do not need it."
-        meta={
-          <p className="mqtt-broker-status-row">
-            <span className="meta">
-              Server: <span className={`status-text ${streamStatus}`}>{streamStatus}</span>
-            </span>
-            <span className="meta">
-              MQTT broker: <span className={`status-text ${brokerStatus}`}>{connected ? `connected to ${target}` : brokerStatus}</span>
-            </span>
-            {connected ? (
-              <span className="meta">
-                Live monitor: <span className={`status-text ${monitorStatus}`}>{monitorStatus}</span>
-              </span>
-            ) : null}
-          </p>
-        }
-        actions={
-          connected ? (
-            <button disabled={streamStatus !== "connected"} onClick={disconnect}>
-              Disconnect
-            </button>
-          ) : (
-            <button className="primary-btn accent" disabled={!canConnect} onClick={connect}>
-              {connectionAttempt === "connecting" ? "Connecting..." : "Connect"}
-            </button>
-          )
-        }
+        description="The MQTT broker a real vessel's agent is on, and where the scenario lies on the map. A simulation job on a worker node uses them; nothing connects from this page."
       />
-
-      {liveSessionsOff && (
-        <p className="meta warning" role="status">
-          {liveSessionsOff}
-        </p>
-      )}
-
-      {connectionAttempt === "failed" && connectionError && (
-        <div className="mqtt-broker-connection-error" role="alert">
-          <p className="error">{connectionError}</p>
-          <Disclosure id="mqtt-broker:error-hints" variant="link" headingLevel={null} title="What to check" openTitle="Hide the checks" defaultOpen>
-            <ul className="meta">
-              {connectionHints(usesControlNode, form.clientBroker, form.port, form.tlsConnection).map((hint) => (
-                <li key={hint}>{hint}</li>
-              ))}
-            </ul>
-          </Disclosure>
-        </div>
-      )}
 
       <section className="panel mqtt-broker-panel">
         <label className="field">
@@ -139,20 +54,16 @@ export function MqttBrokerPanel({ sendMessage }: MqttBrokerPanelProps) {
           </select>
         </label>
         {usesControlNode ? (
-          <p className="meta">
-            {controlNodeBroker === null
-              ? streamStatus === "connected"
-                ? "This server has no control node broker. Choose another broker."
-                : "The control node names its broker once the server is connected."
-              : `The control node's own broker, ${controlNodeBroker}: plain MQTT on the cluster's VPN. A real vessel must reach the control node over the VPN to join.`}
-          </p>
+          <p className="meta">The control node's own broker: plain MQTT on the cluster's VPN. The agent of a real vessel must reach the control node over the VPN to take part.</p>
         ) : (
-          <p className="meta">{target}</p>
+          <p className="meta">
+            {target}. A simulation with a real vessel runs its vessels on this broker; the worker node that runs it must reach the broker.
+          </p>
         )}
       </section>
 
       {!usesControlNode && (
-        <Disclosure id="mqtt-broker:details" title="Broker address" hint="User, brokers, port, TLS" defaultOpen={selectedPreset === ""} headingLevel={3}>
+        <Disclosure id="mqtt-broker:details" title="Broker address" hint="User, host, port, TLS" defaultOpen={selectedPreset === ""} headingLevel={3}>
           <BrokerAddressFields />
         </Disclosure>
       )}
@@ -184,25 +95,14 @@ function BrokerAddressFields() {
         <input type="password" value={form.password} onChange={(e) => form.setPassword(e.target.value)} placeholder="password" />
       </label>
       <label className="field">
-        <span>Broker host (as the server dials it)</span>
-        <input
-          value={form.clientBroker}
-          onChange={(e) => {
-            markCustom();
-            form.setClientBroker(e.target.value);
-          }}
-          placeholder="broker.example.org"
-        />
-      </label>
-      <label className="field">
-        <span>Broker host (as the simulation's containers dial it)</span>
+        <span>Broker host (as the worker node's containers dial it)</span>
         <input
           value={form.agentBroker}
           onChange={(e) => {
             markCustom();
             form.setAgentBroker(e.target.value);
           }}
-          placeholder="usually the same host"
+          placeholder="broker.example.org"
         />
       </label>
       <label className="field">

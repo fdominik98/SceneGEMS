@@ -22,7 +22,7 @@ interface StepPanelProps {
   page: WorkbenchPage;
   title: string;
   status: StepStatus;
-  /** Where the run happens and what it has there (the cluster's slots, a live session). */
+  /** Where the run happens and what it has there (the cluster's slots). */
   where?: ReactNode;
   /** The run buttons at the right of the header. */
   actions: ReactNode;

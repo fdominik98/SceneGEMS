@@ -100,7 +100,7 @@ describe("a worker node's components", () => {
 });
 
 describe("the components of an attended run", () => {
-  const connection = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot", agentName: "typed", topic: "", port: 14570, gazeboVesselModel: null };
+  const connection = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot", agentName: "typed", topic: "", gazeboVesselModel: null };
   const setup = { simulatorType: "ArduPilot Sim", windVector: [0, 0, 0], simulationSpeed: 1, connectionsByAgentId: { "0": { ...connection, asvSystem: "mission_planner" }, "1": connection } };
   const expected = ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
 

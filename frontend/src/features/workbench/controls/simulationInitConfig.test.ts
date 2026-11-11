@@ -16,25 +16,21 @@ describe("simulationInitConfig", () => {
     expect(drafts[0]?.asvSystem).toBe("replay");
     expect(drafts[0]?.controlLayer).toBe("ardupilot");
     expect(drafts[0]?.context).toBe("simulation");
-    expect(drafts[0]?.port).toBe(14570);
+    expect(drafts[0]).not.toHaveProperty("port");
     expect(drafts[1]?.agentName).toBe("ts1");
     expect(drafts[1]?.asvSystem).toBe("replay");
     expect(drafts[1]?.context).toBe("simulation");
-    expect(drafts[1]?.port).toBe(14571);
     expect(drafts[2]?.agentName).toBe("ts2");
     expect(drafts[2]?.asvSystem).toBe("replay");
     expect(drafts[2]?.context).toBe("simulation");
-    expect(drafts[2]?.port).toBe(14572);
   });
 
-  it("computes default ports from numeric vessel id", () => {
+  it("gives the own ship numbered 0 Mission Planner and every other vessel replay", () => {
     const drafts = buildInitialVesselConnectionDrafts([
       { id: "0", isOwnShip: true },
       { id: "3", isOwnShip: false },
     ]);
-    expect(drafts[0]?.port).toBe(14570);
     expect(drafts[0]?.asvSystem).toBe("mission_planner");
-    expect(drafts[1]?.port).toBe(14573);
     expect(drafts[1]?.asvSystem).toBe("replay");
   });
 
@@ -43,7 +39,7 @@ describe("simulationInitConfig", () => {
     expect(toTopicSegment("real")).toBe("real");
   });
 
-  it("builds backend map by agent id (simulation includes port and the stack)", () => {
+  it("builds backend map by agent id (a simulated vessel with its stack, and no port: Docker assigns the one a job publishes)", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "simulation",
@@ -51,7 +47,6 @@ describe("simulationInitConfig", () => {
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
-      port: 14572,
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
     expect(map).toEqual({
@@ -62,12 +57,11 @@ describe("simulationInitConfig", () => {
         controlMode: "autonomous",
         agentName: "os_sim",
         topic: "waraps/unit/surface/simulation/os_sim",
-        port: 14572,
       },
     });
   });
 
-  it("sends a real vessel on its own autopilot, without a port", () => {
+  it("sends a real vessel on its own autopilot", () => {
     const draft: VesselInitConnectionDraft = {
       vesselId: "os",
       context: "real",
@@ -75,7 +69,6 @@ describe("simulationInitConfig", () => {
       controlLayer: "ardupilot",
       agentName: "os_real",
       topic: "waraps/unit/surface/real/os_real",
-      port: 14572,
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
     expect(map).toEqual({
@@ -88,7 +81,6 @@ describe("simulationInitConfig", () => {
         topic: "waraps/unit/surface/real/os_real",
       },
     });
-    expect("port" in map.os!).toBe(false);
   });
 
   it("includes gazeboVesselModel in backend map when present", () => {
@@ -99,7 +91,6 @@ describe("simulationInitConfig", () => {
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
-      port: 14570,
       gazeboVesselModel: "<sdf></sdf>",
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
@@ -114,7 +105,6 @@ describe("simulationInitConfig", () => {
       controlLayer: "ardupilot",
       agentName: "os_sim",
       topic: "waraps/unit/surface/simulation/os_sim",
-      port: 14570,
       gazeboVesselModel: "",
     };
     const map = buildInitializeSimulationConnectionsByAgentIdMap([draft]);
@@ -125,16 +115,24 @@ describe("simulationInitConfig", () => {
     const generated = buildInitialVesselConnectionDrafts(vessels);
     const withModel: VesselInitConnectionDraft = {
       ...generated[0]!,
-      port: 14999,
+      asvSystem: "usv_navigation",
       gazeboVesselModel: "<sdf>large</sdf>",
     };
     const persisted = toPersistedVesselDrafts([withModel]);
     expect(persisted[0]).not.toHaveProperty("gazeboVesselModel");
-    expect(persisted[0]?.port).toBe(14999);
+    expect(persisted[0]?.asvSystem).toBe("usv_navigation");
 
     const restored = mergePersistedVesselSettings(persisted, generated);
-    expect(restored[0]?.port).toBe(14999);
+    expect(restored[0]?.asvSystem).toBe("usv_navigation");
     expect(restored[0]?.gazeboVesselModel).toBeUndefined();
+  });
+
+  it("drops the ground station port saved while a vessel had one", () => {
+    const generated = buildInitialVesselConnectionDrafts(vessels);
+    const saved = [{ ...toPersistedVesselDrafts(generated)[0]!, port: 14999 }];
+    const [restored] = mergePersistedVesselSettings(saved, generated);
+    expect(restored).not.toHaveProperty("port");
+    expect(restored).toMatchObject({ vesselId: generated[0]!.vesselId, agentName: generated[0]!.agentName });
   });
 
   it("does not restore a name or a simulated vessel's topic saved while they could be typed", () => {

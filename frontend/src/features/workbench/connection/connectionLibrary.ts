@@ -1,17 +1,17 @@
 export interface MqttConnectionInfo {
   user: string;
   password: string;
+  /** The broker's host as the containers of a simulation dial it. */
   agent_broker: string;
-  client_broker: string;
   port: number;
   tls_connection: boolean;
   allow_certificates?: boolean;
 }
 
 /**
- * The broker profiles of the Connections page. The control node's own broker is the default: the
- * server knows its address (`mqtt_broker_status.controlNodeBroker`), so the form sends
- * `use_control_node_broker` instead of an address. Any other broker is an external one.
+ * The broker profiles of the Connections page. The control node's own broker is the default: a
+ * simulation job on a worker node already knows it, so a job names no broker then. Any other
+ * broker is an external one, which an attended job with a real vessel names by its address.
  */
 export type MqttConnectionPresetKey = "control_node_broker" | "waraps_tls_broker";
 
@@ -22,7 +22,6 @@ export const waraps_tls_broker: MqttConnectionInfo = {
   user: "mqtt",
   password: "",
   agent_broker: "broker.waraps.org",
-  client_broker: "broker.waraps.org",
   port: 8883,
   tls_connection: true,
 };

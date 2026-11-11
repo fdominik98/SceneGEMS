@@ -13,7 +13,6 @@ describe("playbackStore", () => {
       activeScenarioId: null,
       serverTimeStep: null,
       simulationInitialized: false,
-      simulationInitializing: false,
       autoFitPending: false,
       hasTrajectoryChunk: false,
       currentTimestamp: 0,
@@ -24,7 +23,6 @@ describe("playbackStore", () => {
       hasSimulationTrajectoryChunk: false,
       simulationFrames: [],
       simulationFrameIndexByTimestamp: {},
-      simulationStatus: "not initialized",
     });
   });
 
