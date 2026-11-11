@@ -17,7 +17,7 @@ from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
 
 TIMEOUT_S = 10.0
-FINGERPRINTS = {"scenegems-scenario-execution-subsystem:latest": "f" * 64}
+FINGERPRINTS = {"scenegems-simulation-subsystem:latest": "f" * 64}
 
 
 def make_job(job_id: str = "job-1", job_type: JobType = JobType.SIMULATION, attempt: int = 1, payload: Optional[dict] = None) -> JobSpec:

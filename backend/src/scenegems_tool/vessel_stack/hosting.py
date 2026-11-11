@@ -70,7 +70,7 @@ class ContainerHosting:
 
     endpoints replaces the address of a service, by service name: by default every component is
     reached by its service name on the stack's network (contracts/stack_services.py), which is
-    where a job's runner and a live session's scenario execution service are.
+    where a job's runner and a live session's simulation service are.
     """
 
     def __init__(self, endpoints: Optional[Mapping[str, Endpoint]] = None, *, connect_timeout_s: float = DEFAULT_CONNECT_TIMEOUT_S):

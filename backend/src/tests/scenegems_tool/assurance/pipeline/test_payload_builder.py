@@ -14,7 +14,7 @@ from scenegems_tool.assurance.pipeline.payload_builder import (
     validate_payload,
 )
 from scenegems_tool.assurance.pipeline.stage_graph import SCENE_MONITOR_STEP, SCENE_STEP, TRAJECTORIES_MONITOR_STEP, Step
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENE_GENERATION_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import PipelineStage
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict, format2_dict
@@ -99,7 +99,7 @@ def test_a_submission_requires_the_pinned_fingerprints_of_its_images_and_the_lab
     assert submission.requirements.labels == {"site": "lab"} and submission.priority == 5 and submission.idempotency_key == "key"
     assert submission.allowed_worker_nodes == []  # any worker node
     assert submission.requirements.components == ["scene_generation"]
-    assert required_fingerprints(["calibration"], EXPECTED) == {image_repository(SCENARIO_EXECUTION_IMAGE): "fp-execution"}
+    assert required_fingerprints(["calibration"], EXPECTED) == {image_repository(SIMULATION_IMAGE): "fp-execution"}
     with pytest.raises(PayloadError, match="invalid simulation payload"):
         builder.submission(Step(PipelineStage.SIMULATE, 0, 0), {"trajectories": {"scene_list": []}}, "key", EXPECTED)
 

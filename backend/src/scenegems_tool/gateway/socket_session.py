@@ -9,7 +9,7 @@ from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_sta
 from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder, LiveRunSetup, LiveSessionRecording
 from scenegems_tool.gateway.protocol import ClientMessage, ServerMessage, make_error_message, make_monitor_status_message, make_mqtt_broker_status_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
-from scenegems_tool.subsystems.scenario_execution.lockstep_simulation_driver import uses_lockstep_driver
+from scenegems_tool.subsystems.simulation.lockstep_simulation_driver import uses_lockstep_driver
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS

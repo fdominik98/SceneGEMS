@@ -30,7 +30,7 @@ Options:
 
   -1, --backend           scenegems-control-node-api and the Python subsystems (monitoring,
                           scene-generation, trajectory-generation,
-                          scenario-execution, design-space-exploration)
+                          the simulation subsystem, design-space-exploration)
 
   -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
                           sessions with ArduPilot run it on the control node's machine
@@ -156,8 +156,8 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/deploy/images/monitoring/requirements.txt" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
-    build_subsystem_if_stale "scenegems-scenario-execution-subsystem:latest" "$SCRIPT_DIR/deploy/images/scenario_execution/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/scenario_execution/requirements.txt" "$SCRIPT_DIR/deploy/images/scenario_execution/Dockerfile" \
+    build_subsystem_if_stale "scenegems-simulation-subsystem:latest" "$SCRIPT_DIR/deploy/images/simulation/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/simulation/requirements.txt" "$SCRIPT_DIR/deploy/images/simulation/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
     build_subsystem_if_stale "scenegems-scene-generation-subsystem:latest" "$SCRIPT_DIR/deploy/images/scene_generation/Dockerfile" \

@@ -2,8 +2,8 @@
 
 Ported from the old test_mqtt_session_task_lifecycle.py, which tested OldWARAPSSession of
 scenegems_tool.subsystems_integration.mqtt_session (start, abort and reset of the agents, and the
-runtime tasks that stayed alive). That class no longer exists: the session now relays the scenario
-execution worker's state over MQTT, so the checks are on the commands it publishes and on the state
+runtime tasks that stayed alive). That class no longer exists: the session now relays the simulation
+worker's state over MQTT, so the checks are on the commands it publishes and on the state
 it forwards to the monitor and the browser.
 """
 
@@ -13,8 +13,8 @@ from typing import List
 import pytest
 
 from scenegems_tool.gateway.protocol import SimulationStatus
-from scenegems_tool.subsystems.scenario_execution import live_simulation_session
-from scenegems_tool.subsystems.scenario_execution.live_simulation_session import LiveSimulationSession
+from scenegems_tool.subsystems.simulation import live_simulation_session
+from scenegems_tool.subsystems.simulation.live_simulation_session import LiveSimulationSession
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, SimulationLayerId
 from tests.scenegems_tool.gateway.conftest import settle
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
@@ -48,7 +48,7 @@ class FakeClient:
 
 
 class FakeContainer:
-    service_topic = "waraps/service/virtual/real/scenario_execution_service"
+    service_topic = "waraps/service/virtual/real/simulation_service"
 
     def __init__(self, *args, on_ground_control_ports=None, scope=None):
         self.args = args
@@ -78,7 +78,7 @@ class RecordingMonitor:
 
 @pytest.fixture
 async def setup(monkeypatch):
-    monkeypatch.setattr(live_simulation_session, "MqttScenarioExecutionClient", FakeClient)
+    monkeypatch.setattr(live_simulation_session, "MqttSimulationClient", FakeClient)
     monkeypatch.setattr(live_simulation_session, "SimulationSessionStack", type("Container", (FakeContainer,), {"service_topic": FakeContainer.service_topic}))
     sent: List[dict] = []
     monitor = RecordingMonitor()

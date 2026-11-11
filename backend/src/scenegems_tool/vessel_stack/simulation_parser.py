@@ -64,7 +64,7 @@ class SimulationParser:
             if chain.asv_adapter is None or chain.asv_adapter.id not in ARDUAGENT_ADAPTER_IDS
         ]
         if not_arduagent:
-            raise StackUnavailableError([f"the scenario execution worker drives vessels only through ArduAgent: {', '.join(not_arduagent)}"])
+            raise StackUnavailableError([f"the simulation worker drives vessels only through ArduAgent: {', '.join(not_arduagent)}"])
         mission_trajectories = cap_mission_trajectories(trajectories)
         # The service's own topics carry the session's prefix; a real vessel's ArduAgent, and so every agent of its instance, the unscoped ones.
         agent_connection = agent_mqtt_connection(mqtt_connection, simulation_config)

@@ -2,7 +2,7 @@
 
 ArduAgent drives an instance with real vessels (vessel_stack/simulation_parser.py), because a
 real vessel is reached over WARA-PS MQTT. An instance of simulated vessels only is run from
-the scenario execution worker by the runner its stacks resolve to. The worker is the runner of
+the simulation worker by the runner its stacks resolve to. The worker is the runner of
 the session's stack: every layer has its own container there, and the runner steps them
 (vessel_stack/hosting.py):
 

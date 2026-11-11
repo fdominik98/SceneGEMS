@@ -39,7 +39,7 @@ def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, mak
     services = stack.compose["services"]
     own_ship, target = services["vessel_0_asv_system"], services["vessel_1_asv_system"]
     assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server"
-    assert "scenegems-scenario-execution-subsystem" in target["image"], "the other vessel replays"
+    assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
 
 def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_and_the_runner(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -50,7 +50,7 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
     vessel_services = {f"vessel_{vessel}_{layer}" for vessel in (0, 1) for layer in ("controller", "asv_system")}
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
-        assert services[name]["image"].endswith("scenegems-scenario-execution-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
+        assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
     assert services["vessel_0_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
     assert services["vessel_0_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
     gazebo = services["gazebo"]
@@ -61,7 +61,7 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service
     runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-scenario-execution-subsystem:latest"
+    assert runner["image"] == "scenegems-simulation-subsystem:latest"
     assert runner["networks"] == [STACK_NETWORK] and set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
     assert stack.project.name == scope.compose_project
 
@@ -101,9 +101,9 @@ def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_
     ],
 )
 def test_a_gazebo_worker_node_without_sitl_runs_it(head_on_trajectories, fields, components, asv_images):
-    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the scenario execution image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
+    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the simulation subsystem image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
     assert payload_components(JobType.SIMULATION, custom_payload(head_on_trajectories, **fields)) == components
-    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-scenario-execution-subsystem:latest"} | asv_images
+    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-simulation-subsystem:latest"} | asv_images
 
 
 @pytest.mark.parametrize(

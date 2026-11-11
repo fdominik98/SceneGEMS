@@ -5,8 +5,8 @@ from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.gateway.protocol import ServerMessage
 from scenegems_tool.subsystems.monitoring.empty_monitor_session import EmptyMonitorSession
 from scenegems_tool.subsystems.monitoring.monitor_session import MonitorSession
-from scenegems_tool.subsystems.scenario_execution.empty_simulation_session import EmptySimulationSession
-from scenegems_tool.subsystems.scenario_execution.simulation_session import SimulationSession
+from scenegems_tool.subsystems.simulation.empty_simulation_session import EmptySimulationSession
+from scenegems_tool.subsystems.simulation.simulation_session import SimulationSession
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.workbench.scenario_session import ScenarioSession
 

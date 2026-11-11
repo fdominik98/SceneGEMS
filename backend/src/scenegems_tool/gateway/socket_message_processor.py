@@ -7,7 +7,7 @@ from scenegems_tool.gateway.socket_session import SocketSession
 from scenegems_tool.gateway.stack_options import stack_options_message
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
-# The messages that start a live session's containers on the gateway's Docker (the scenario execution
+# The messages that start a live session's containers on the gateway's Docker (the simulation subsystem
 # service, the monitor, the vessel stacks); a control node without the Docker socket refuses them.
 LIVE_SESSION_MESSAGES = frozenset({"connect_to_mqtt_broker", "initialize_simulation", "initialize_monitor"})
 

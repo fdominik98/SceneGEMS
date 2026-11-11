@@ -12,7 +12,7 @@ def no_docker(monkeypatch):
     for launcher in (PooledService, MonitorService):
         monkeypatch.setattr(launcher, "_run_container_lifecycle_startup", lambda self, compose: None)
     monkeypatch.delenv("SCENEGEMS_DOCKER_NETWORK", raising=False)
-    for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SCENARIO_EXECUTION_IMAGE"):
+    for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SIMULATION_IMAGE"):
         monkeypatch.delenv(variable, raising=False)
 
 

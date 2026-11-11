@@ -44,7 +44,7 @@ def test_the_stack_is_the_simulator_an_asv_system_container_per_vessel_and_the_r
     assert set(services) == {"kinematic_sim", "vessel_0_asv_system", "vessel_1_asv_system", RUNNER_SERVICE}
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
-        assert "scenegems-scenario-execution-subsystem" in service["image"], "the simulator, replay and the runner start from the scenario execution image"
+        assert "scenegems-simulation-subsystem" in service["image"], "the simulator, replay and the runner start from the simulation subsystem image"
         assert service["networks"] == [STACK_NETWORK] and "ports" not in service
     assert set(services[RUNNER_SERVICE]["depends_on"]) == set(services) - {RUNNER_SERVICE}
     assert stack.compose["networks"] == {STACK_NETWORK: {"driver": "bridge"}}, "the job's own network, which reaches nothing else"
@@ -55,7 +55,7 @@ def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instance
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1)
     services = stack.compose["services"]
     assert "scenegems-usv-navigation" in services["vessel_1_asv_system"]["image"]
-    assert "scenegems-scenario-execution-subsystem" in services["vessel_0_asv_system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["vessel_0_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):

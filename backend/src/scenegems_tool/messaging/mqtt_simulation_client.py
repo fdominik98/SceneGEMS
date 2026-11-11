@@ -11,7 +11,7 @@ from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 
-class MqttScenarioExecutionClient(MqttClient):
+class MqttSimulationClient(MqttClient):
     def __init__(
         self,
         mqtt_connection: MQttConnectionInfo,
@@ -20,7 +20,7 @@ class MqttScenarioExecutionClient(MqttClient):
         parent_service_name: str,
         on_simulation_state: Callable[[Dict[str, Any]], None],
     ):
-        super().__init__(name="scenario_execution_client", topic=topic, mqtt_connection=mqtt_connection, reference_geofence=reference_geofence)
+        super().__init__(name="simulation_client", topic=topic, mqtt_connection=mqtt_connection, reference_geofence=reference_geofence)
         self.parent_service_name = parent_service_name
         self.on_simulation_state = on_simulation_state
         self.last_heartbeat_timestamp = 0.0
@@ -80,7 +80,7 @@ class MqttScenarioExecutionClient(MqttClient):
         while not self.is_heartbeat_valid or not self.is_connected:
             time.sleep(0.1)
             if time.time() - start_time > self.timeout_sec:
-                raise ValueError("Timeout: Failed to connect to scenario execution service")
+                raise ValueError("Timeout: Failed to connect to simulation service")
 
     def publish_start_simulation_command(self) -> None:
         self.wait_for_heartbeat()

@@ -26,7 +26,7 @@ SCOPE = InstanceScope.per_job("m1", "n1", "j7-1")
 
 
 def test_runner_without_networks_has_no_network():
-    service = runner_service("scenegems-scenario-execution-subsystem:latest")
+    service = runner_service("scenegems-simulation-subsystem:latest")
     assert service["command"] == ["python", "-m", JOB_CONTAINER_MAIN]
     assert service["network_mode"] == "none"
     assert "networks" not in service

@@ -21,7 +21,7 @@ from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_sta
     session_trajectories_file,
 )
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.subsystems.scenario_execution import empty_simulation_session
+from scenegems_tool.subsystems.simulation import empty_simulation_session
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselStackConfig
@@ -56,22 +56,22 @@ def test_new_scopes_belong_to_the_control_node_and_differ_per_session():
 
 
 def test_unified_compose_names_everything_from_the_session_scope(monkeypatch):
-    monkeypatch.delenv("SCENARIO_EXECUTION_IMAGE", raising=False)
+    monkeypatch.delenv("SIMULATION_IMAGE", raising=False)
     monkeypatch.delenv("SCENEGEMS_DOCKER_NETWORK", raising=False)
     config = SimulationInstanceConfig(simulation_layer=SimulationLayerId.ARDUPILOT_SIM, environment=EnvironmentConfig.calm())
     compose = _unified(VESSEL_STACK, config)
 
     service = compose["services"][SERVICE_NAME]
-    assert service["container_name"] == "scenegems-m1-workbench-live-ab12cd34-scenario_execution"
-    assert service["hostname"] == "scenario_execution"
+    assert service["container_name"] == "scenegems-m1-workbench-live-ab12cd34-simulation"
+    assert service["hostname"] == "simulation"
     assert compose["services"]["vessel_0"]["container_name"] == "scenegems-m1-workbench-live-ab12cd34-vessel_0"
-    assert service["image"] == "scenegems-scenario-execution-subsystem:latest"
+    assert service["image"] == "scenegems-simulation-subsystem:latest"
     assert service["depends_on"] == ["vessel_0"]
     assert service["environment"]["TRAJECTORIES_PATH"] == docker_volume_path(session_trajectories_file(SCOPE))
     assert "MQTT_TOPIC_PREFIX" not in service["environment"]
     assert list(compose["services"]) == ["vessel_0", SERVICE_NAME]
-    assert list(compose["networks"]) == ["scenario_execution_net", "maritime_net", "scenegems_broker"]
-    assert compose["networks"]["scenario_execution_net"]["name"] == "scenegems-m1-workbench-live-ab12cd34-scenario_execution_net"
+    assert list(compose["networks"]) == ["simulation_net", "maritime_net", "scenegems_broker"]
+    assert compose["networks"]["simulation_net"]["name"] == "scenegems-m1-workbench-live-ab12cd34-simulation_net"
     assert compose["networks"]["maritime_net"]["name"] == "scenegems-m1-workbench-live-ab12cd34-maritime_net"
     assert "name" not in VESSEL_STACK["networks"]["maritime_net"], "the generated stack is not changed in place"
 
@@ -95,7 +95,7 @@ def test_two_sessions_have_disjoint_names():
     assert not names(first) & names(second), "only the external broker network is shared"
 
 
-def test_the_scenario_execution_service_joins_the_vessel_network_to_drive_the_lockstep_runners():
+def test_the_simulation_service_joins_the_vessel_network_to_drive_the_lockstep_runners():
     config = SimulationInstanceConfig(simulation_layer=SimulationLayerId.ARDUPILOT_SIM, environment=EnvironmentConfig.calm())
     assert "maritime_net" in _unified(VESSEL_STACK, config)["services"][SERVICE_NAME]["networks"]
 

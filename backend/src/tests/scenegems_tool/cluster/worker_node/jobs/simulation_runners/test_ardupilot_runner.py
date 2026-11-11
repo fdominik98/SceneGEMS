@@ -36,7 +36,7 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
     runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-scenario-execution-subsystem:latest"
+    assert runner["image"] == "scenegems-simulation-subsystem:latest"
     assert runner["networks"] == [STACK_NETWORK]
     assert set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
     # The stack network has no fixed name, so compose scopes it by the project name.
@@ -81,7 +81,7 @@ def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_fold
     assert set(services) == expected
     assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
     assert "scenegems-usv-navigation" in services["vessel_0_asv_system"]["image"]
-    assert "scenegems-scenario-execution-subsystem" in services["vessel_1_asv_system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["vessel_1_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):

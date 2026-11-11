@@ -9,10 +9,10 @@ from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.per_job.simulation_session_stack import SimulationSessionStack
 from scenegems_tool.gateway.protocol import ServerMessage, SimulationStatus, make_error_message
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.messaging.mqtt_scenario_execution_client import MqttScenarioExecutionClient
-from scenegems_tool.messaging.mqtt_scenario_execution_service import SCENARIO_EXECUTION_SERVICE_NAME
+from scenegems_tool.messaging.mqtt_simulation_client import MqttSimulationClient
+from scenegems_tool.messaging.mqtt_simulation_service import SIMULATION_SERVICE_NAME
 from scenegems_tool.subsystems.monitoring.monitor_session import MonitorSession, iter_scene_batches
-from scenegems_tool.subsystems.scenario_execution.simulation_session import SimulationSession
+from scenegems_tool.subsystems.simulation.simulation_session import SimulationSession
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.workbench.scenario_session import ScenarioSession
@@ -82,11 +82,11 @@ class LiveSimulationSession(SimulationSession):
             on_ground_control_ports=self._set_ground_control_ports,
             scope=session_scope,
         )
-        self._client = MqttScenarioExecutionClient(
+        self._client = MqttSimulationClient(
             mqtt_connection=mqtt_connection,
             topic=SimulationSessionStack.service_topic,
             reference_geofence=reference_geofence,
-            parent_service_name=SCENARIO_EXECUTION_SERVICE_NAME,
+            parent_service_name=SIMULATION_SERVICE_NAME,
             on_simulation_state=self._handle_simulation_state,
         )
         self._client.connect()
@@ -131,7 +131,7 @@ class LiveSimulationSession(SimulationSession):
         try:
             self._client.disconnect()
         except Exception:
-            _logger.exception("Failed to disconnect scenario execution MQTT client")
+            _logger.exception("Failed to disconnect simulation MQTT client")
         self._container.cancel()
         self.live_trajectory_builder = TrajectoryBuilder(time_step=self.time_step)
         self._last_processed_clock = None
@@ -142,7 +142,7 @@ class LiveSimulationSession(SimulationSession):
         try:
             self._client.disconnect()
         except Exception:
-            _logger.exception("Failed to disconnect scenario execution MQTT client")
+            _logger.exception("Failed to disconnect simulation MQTT client")
         self._container.destroy()
         self.live_trajectory_builder = TrajectoryBuilder(time_step=self.time_step)
         self._last_processed_clock = None

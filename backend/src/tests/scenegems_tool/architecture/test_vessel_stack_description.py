@@ -137,8 +137,8 @@ def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
         == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}", "${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}"}
     )
     assert images(edges["mission_planner_gcs_port"]) == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}"}
-    replay_container = {"${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}"}
+    replay_container = {"${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}"}
     assert images(edges["replay_mavlink_lockstep"]) == images(edges["replay_state_follower"]) == replay_container, "the vessel's replay container, and no MAVProxy or ArduAgent"
     assert images(nodes["asv_system/usv_navigation"]) == {"${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"}
-    assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the scenario execution image too"
+    assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the simulation subsystem image too"
     assert images(nodes["control_layer/none"]) == set(), "no controller, no container"

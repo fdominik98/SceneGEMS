@@ -1,6 +1,6 @@
 import re
 
-from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SCENARIO_EXECUTION_IMAGE, component_images
+from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SIMULATION_IMAGE, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.release.roles import NAME_PATTERN, POSTGRES_IMAGE, WORKER_NODE_IMAGE, component_item_images, role_images, scenegems_roles, slot_item_images
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
@@ -60,8 +60,8 @@ def test_component_items_are_the_catalog_with_its_images():
     assert list(images) == list(COMPONENTS)
     assert all(images[component] == list(component_images()[component]) for component in COMPONENTS)
     assert images["control_layer/ardupilot"] == [SITL_IMAGE]
-    assert images["simulation_layer/gazebo"] == sorted([SCENARIO_EXECUTION_IMAGE, GAZEBO_IMAGE])
-    assert images["asv_system/replay"] == images["control_layer/custom"] == [SCENARIO_EXECUTION_IMAGE], "their containers start from the scenario execution image"
+    assert images["simulation_layer/gazebo"] == sorted([SIMULATION_IMAGE, GAZEBO_IMAGE])
+    assert images["asv_system/replay"] == images["control_layer/custom"] == [SIMULATION_IMAGE], "their containers start from the simulation subsystem image"
     assert images["asv_system/usv_navigation"] == ["scenegems-usv-navigation:latest"], "a worker node that offers USV Navigation gets its image"
     assert images["control_layer/none"] == []
 

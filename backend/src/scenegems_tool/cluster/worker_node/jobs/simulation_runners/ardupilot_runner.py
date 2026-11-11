@@ -6,7 +6,7 @@ runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
 replay. The worker node resolves the instance, generates the vessel stack into the job's folder and adds
-a runner from the scenario execution image on the stack network (vessel_job_stack.py). Every
+a runner from the simulation subsystem image on the stack network (vessel_job_stack.py). Every
 vessel has its SITL and its ASV system container; the runner steps the ASV system, sends its
 commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 

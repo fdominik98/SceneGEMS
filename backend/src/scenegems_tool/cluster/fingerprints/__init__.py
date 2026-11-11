@@ -7,5 +7,5 @@
 
 A fingerprint is computed by deploy/scripts/docker-common.sh and stored in the built image as the
 label org.scenegems.fingerprint. Image names are the full tags, for example
-scenegems-scenario-execution-subsystem:latest.
+scenegems-simulation-subsystem:latest.
 """

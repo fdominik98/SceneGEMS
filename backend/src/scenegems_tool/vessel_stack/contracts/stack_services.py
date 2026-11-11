@@ -20,10 +20,10 @@ _CONTROLLER_SUFFIX = "_controller"
 
 
 def backend_component_container(server_module: str) -> ContainerSpec:
-    """The container of a component that is part of the SceneGEMS backend: the scenario execution image, started at the component's server module."""
+    """The container of a component that is part of the SceneGEMS backend: the simulation subsystem image, started at the component's server module."""
     return ContainerSpec(
-        image=image_reference("SCENARIO_EXECUTION_IMAGE", "scenegems-scenario-execution-subsystem"),
-        build_fingerprint_source="deploy/images/scenario_execution",
+        image=image_reference("SIMULATION_IMAGE", "scenegems-simulation-subsystem"),
+        build_fingerprint_source="deploy/images/simulation",
         entrypoint=f"python -m {server_module}",
         extra_fingerprint_sources=("backend/src",),
     )

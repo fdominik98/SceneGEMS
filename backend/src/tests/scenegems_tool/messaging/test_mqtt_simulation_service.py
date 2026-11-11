@@ -1,24 +1,24 @@
-"""The scenario execution service queues start-simulation tasks and reports the simulation state."""
+"""The simulation service queues start-simulation tasks and reports the simulation state."""
 
 import pytest
 
 from scenegems_tool.gateway.protocol import SimulationStatus
-from scenegems_tool.messaging.mqtt_scenario_execution_service import (
-    SCENARIO_EXECUTION_SERVICE_NAME,
-    SCENARIO_EXECUTION_SERVICE_TOPIC,
-    MqttScenarioExecutionService,
+from scenegems_tool.messaging.mqtt_simulation_service import (
+    SIMULATION_SERVICE_NAME,
+    SIMULATION_SERVICE_TOPIC,
+    MqttSimulationService,
     MqttStartSimulationTask,
 )
 from tests.scenegems_tool.messaging.generation_fakes import CONNECTION, GEOFENCE, deliver, offline
 
 
 def _service():
-    return offline(MqttScenarioExecutionService(CONNECTION, GEOFENCE))
+    return offline(MqttSimulationService(CONNECTION, GEOFENCE))
 
 
 def _command(**changes):
     command = {
-        "execution-unit": SCENARIO_EXECUTION_SERVICE_NAME,
+        "execution-unit": SIMULATION_SERVICE_NAME,
         "command": "start-task",
         "task": {"name": "start-simulation", "params": {}},
         "task_sender": "client",
@@ -30,9 +30,9 @@ def _command(**changes):
 
 def test_service_name_and_topics():
     service = _service()
-    assert service.topic == SCENARIO_EXECUTION_SERVICE_TOPIC
+    assert service.topic == SIMULATION_SERVICE_TOPIC
     assert service.listen_topics == [service.exec_command_topic]
-    assert service.simulation_state_topic == f"{SCENARIO_EXECUTION_SERVICE_TOPIC}/sensor/simulation-state"
+    assert service.simulation_state_topic == f"{SIMULATION_SERVICE_TOPIC}/sensor/simulation-state"
 
 
 def test_a_start_simulation_command_is_queued():
@@ -69,7 +69,7 @@ def test_the_simulation_state_is_published_with_status_clock_and_scene():
     service.publish_simulation_state(SimulationStatus.INITIALIZING, 1.5, {"scene": 1})
     [(topic, message)] = service.client.published
     assert topic == service.simulation_state_topic
-    assert (message["task_sender"], message["status"], message["clock"], message["scene"]) == (SCENARIO_EXECUTION_SERVICE_NAME, SimulationStatus.INITIALIZING.value, 1.5, {"scene": 1})
+    assert (message["task_sender"], message["status"], message["clock"], message["scene"]) == (SIMULATION_SERVICE_NAME, SimulationStatus.INITIALIZING.value, 1.5, {"scene": 1})
 
 
 def test_heartbeat_lists_the_tracked_tasks_as_executing():
@@ -82,7 +82,7 @@ def test_heartbeat_lists_the_tracked_tasks_as_executing():
     service.untrack_task(task)  # untracking twice is harmless
     service.publish_heartbeat_and_sensor_info()
     published = {topic: message for topic, message in service.client.published}
-    assert published[service.heartbeat_topic]["agent-description"] == "Scenario Execution Subsystem"
+    assert published[service.heartbeat_topic]["agent-description"] == "Simulation Subsystem"
     assert published[service.sensor_info_topic]["sensor-data-provided"] == ["simulation-state"]
     info = published[service.direct_execution_topic]
     assert info["tasks-available"] == [{"name": "start-simulation", "signals": []}]

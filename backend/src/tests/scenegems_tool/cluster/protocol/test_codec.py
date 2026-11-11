@@ -41,7 +41,7 @@ def worker_node_frames(resources, instant):
             components=["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "scene_generation"],
             labels={"site": "lab"},
             resources=resources,
-            fingerprints={"scenegems-scenario-execution": "abc123"},
+            fingerprints={"scenegems-simulation": "abc123"},
             running_lease_ids=["l0"],
         ),
         Heartbeat(resources=resources, slots_in_use={JobType.SIMULATION: 2}, running_lease_ids=["l1", "l2"]),
@@ -51,7 +51,7 @@ def worker_node_frames(resources, instant):
         LeaseRelease(lease_id="l1", reason="draining"),
         JobStatus(lease_id="l1", job_id="j1", progress=0.5, message="step 150 of 300"),
         JobResult(lease_id="l1", job_id="j1", idempotency_key="j1/1", outcome=JobOutcome.SUCCEEDED, result={"state_digest": "ff"}),
-        LogLines(lease_id="l1", job_id="j1", lines=[LogLine(timestamp=instant, stream=LogStream.STDOUT, source="scenario_execution.n1.0", text="ready")]),
+        LogLines(lease_id="l1", job_id="j1", lines=[LogLine(timestamp=instant, stream=LogStream.STDOUT, source="simulation.n1.0", text="ready")]),
         ObservationFrames(lease_id="l1", job_id="j1", attempt=1, seq=3, frames=[{"scenarioId": "j1", "timestamp": 12, "statesByActorId": {"0": {"x": 1.5}}}]),
     ]
 

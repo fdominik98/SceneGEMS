@@ -7,7 +7,7 @@ from scenegems_tool.cluster.control_node.api.control_node_apps import create_ope
 from scenegems_tool.cluster.control_node.api.operator_routes import STATUS_PATH, WORKER_NODES_PATH
 from scenegems_tool.cluster.control_node.control_plane import ControlPlane
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENE_GENERATION_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream
 from scenegems_tool.cluster.protocol.routes import JOBS_PATH
@@ -116,7 +116,7 @@ def test_cancel_tells_the_worker_node(client, make_worker_node, schedule):
 def test_worker_nodes_show_connection_and_fingerprint_state(client, make_worker_node, schedule):
     current = make_worker_node("current", slots={SCENE: 1}, components=["scene_generation"])
     stale = make_worker_node(
-        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "control_layer/none"], fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"})
+        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "control_layer/none"], fingerprints=dict(EXPECTED, **{SIMULATION_IMAGE: "old"})
     )
     current.connect()
     stale.connect()
@@ -124,12 +124,12 @@ def test_worker_nodes_show_connection_and_fingerprint_state(client, make_worker_
     worker_nodes = {worker_node["worker_node_id"]: worker_node for worker_node in client.get(WORKER_NODES_PATH).json()}
     assert worker_nodes[current.worker_node_id]["connected"] and not worker_nodes[current.worker_node_id]["out_of_date"]
     assert worker_nodes[stale.worker_node_id]["out_of_date"]
-    assert worker_nodes[stale.worker_node_id]["fingerprint_mismatches"] == [{"image": image_repository(SCENARIO_EXECUTION_IMAGE), "required": "fp-execution", "actual": "old"}]
+    assert worker_nodes[stale.worker_node_id]["fingerprint_mismatches"] == [{"image": image_repository(SIMULATION_IMAGE), "required": "fp-execution", "actual": "old"}]
     assert worker_nodes[current.worker_node_id]["slots"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
     assert worker_nodes[current.worker_node_id]["components"] == [{"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"}]
     assert worker_nodes[stale.worker_node_id]["components"] == [
         {"component": "control_layer/none", "images": [], "state": "usable"},  # the absence of a controller has no container
-        {"component": "simulation_layer/kinematic", "images": [SCENARIO_EXECUTION_IMAGE], "state": "out_of_date"},
+        {"component": "simulation_layer/kinematic", "images": [SIMULATION_IMAGE], "state": "out_of_date"},
         {"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"},
     ], "in catalog order, the stale one marked"
     assert "capabilities" not in worker_nodes[current.worker_node_id]

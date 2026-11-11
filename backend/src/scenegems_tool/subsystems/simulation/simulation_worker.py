@@ -15,8 +15,8 @@ from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from scenegems_tool.gateway.protocol import SimulationStatus, simulation_config_from_body
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.messaging.mqtt_scenario_execution_service import MqttScenarioExecutionService, MqttStartSimulationTask
-from scenegems_tool.subsystems.scenario_execution.lockstep_simulation_driver import LockstepSimulationDriver, uses_lockstep_driver
+from scenegems_tool.messaging.mqtt_simulation_service import MqttSimulationService, MqttStartSimulationTask
+from scenegems_tool.subsystems.simulation.lockstep_simulation_driver import LockstepSimulationDriver, uses_lockstep_driver
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.simulation_parser import SimulationParser
@@ -26,8 +26,8 @@ from utils.math_utils import rotate_heading as rotate_heading_util
 _logger = logging.getLogger(__name__)
 
 
-class ScenarioExecutionWorker:
-    """Runs simulation orchestration inside the scenario-execution Docker container.
+class SimulationWorker:
+    """Runs simulation orchestration inside the simulation Docker container.
 
     An instance of simulated vessels runs through the registry's lockstep runners
     (lockstep_simulation_driver.py); one with real vessels through ArduAgent over WARA-PS MQTT
@@ -52,7 +52,7 @@ class ScenarioExecutionWorker:
         trajectories: Trajectories,
         time_step: int,
     ):
-        self.mqtt_service = MqttScenarioExecutionService(mqtt_connection, reference_geofence)
+        self.mqtt_service = MqttSimulationService(mqtt_connection, reference_geofence)
         self.simulation_config = simulation_config
         self.trajectories = trajectories
         self.time_step = time_step
@@ -79,7 +79,7 @@ class ScenarioExecutionWorker:
         # self._start_obstacle_distances_loop()
 
     @classmethod
-    def from_environment(cls, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence) -> "ScenarioExecutionWorker":
+    def from_environment(cls, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence) -> "SimulationWorker":
         time_step = int(os.environ.get("TIME_STEP", ONE_SECOND))
         simulation_body = json.loads(base64.b64decode(os.environ["SIMULATION_CONFIG_JSON_B64"]).decode("utf-8"))
         trajectories_path = os.environ["TRAJECTORIES_PATH"]
@@ -120,7 +120,7 @@ class ScenarioExecutionWorker:
     def _start_heartbeat_thread(self) -> None:
         self._heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop,
-            name="scenario_execution_heartbeat",
+            name="simulation_heartbeat",
             daemon=True,
         )
         self._heartbeat_thread.start()
@@ -164,7 +164,7 @@ class ScenarioExecutionWorker:
         self._stop_runtime()
         self._simulation_is_starting = True
         self._publish_simulation_state()
-        self._runtime_thread = threading.Thread(target=self._run_simulation_runtime, name="scenario_execution_runtime", daemon=True)
+        self._runtime_thread = threading.Thread(target=self._run_simulation_runtime, name="simulation_runtime", daemon=True)
         self._runtime_thread.start()
 
     def _stop_runtime(self) -> None:
@@ -194,7 +194,7 @@ class ScenarioExecutionWorker:
             self._simulation_is_starting = False
             self._stream_simulation_clock_ticks()
         except Exception:
-            _logger.exception("Scenario execution runtime failed")
+            _logger.exception("Simulation runtime failed")
             self._simulation_is_starting = False
             self._publish_simulation_state()
 
@@ -210,7 +210,7 @@ class ScenarioExecutionWorker:
         try:
             driver.run(on_scene, self._lockstep_stop)
         except Exception:
-            _logger.exception("Scenario execution lockstep run failed")
+            _logger.exception("Simulation lockstep run failed")
         finally:
             self._simulation_is_starting = False
             self._running_simulation_clock = None

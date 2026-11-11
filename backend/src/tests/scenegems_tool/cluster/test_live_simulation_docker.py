@@ -4,7 +4,7 @@ The control node is real and runs in this process (control plane on in-memory st
 over plain HTTP on all interfaces, the operator listener with the live channel on loopback, one event
 loop as in the control node process). The worker node is the scenegems-worker-node image started from
 deploy/worker_node/docker-compose.yml; it connects to the control node, which it trusts without pairing, and runs the job in a runner
-container of the scenario execution image. The browser subscribes to the job's instance topic
+container of the simulation subsystem image. The browser subscribes to the job's instance topic
 with a speed as soon as the job is leased, and the frames of the paced run reach it.
 
 Images: scenegems-worker-node:<SCENEGEMS_TEST_WORKER_NODE_IMAGE_TAG> and the subsystem images with
@@ -124,7 +124,7 @@ class ControlNode:
 def control_node():
     if _docker("info", check=False).returncode != 0:
         pytest.skip("Docker engine is not reachable")
-    for image in (f"scenegems-worker-node:{WORKER_NODE_IMAGE_TAG}", _image(Subsystem.SCENARIO_EXECUTION)):
+    for image in (f"scenegems-worker-node:{WORKER_NODE_IMAGE_TAG}", _image(Subsystem.SIMULATION)):
         if _docker("image", "inspect", image, check=False).returncode != 0:
             pytest.fail(f"Image {image} is missing; build it from this checkout or set the test image tags")
     control_node = ControlNode().start()

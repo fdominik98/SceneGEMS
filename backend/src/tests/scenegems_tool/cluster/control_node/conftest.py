@@ -18,7 +18,7 @@ from scenegems_tool.cluster.control_node.api.operator_routes import operator_rou
 from scenegems_tool.cluster.control_node.control_plane import ControlPlane
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
 from scenegems_tool.cluster.fingerprints.comparison import by_repository
-from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SCENE_GENERATION_IMAGE, SIMULATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.stores import JobStore, WorkerNodeStore
 from tests.scenegems_tool.cluster.control_node.fake_stores import InMemoryJobStore, InMemoryWorkerNodeStore
@@ -30,7 +30,7 @@ from tests.scenegems_tool.persistence.stores.builders import ManualClock, make_h
 EXPECTED = {
     SCENE_GENERATION_IMAGE: "fp-scene",
     TRAJECTORY_GENERATION_IMAGE: "fp-trajectory",
-    SCENARIO_EXECUTION_IMAGE: "fp-execution",
+    SIMULATION_IMAGE: "fp-execution",
     MONITORING_IMAGE: "fp-monitoring",
     SITL_IMAGE: "fp-sitl",
     GAZEBO_IMAGE: "fp-gazebo",

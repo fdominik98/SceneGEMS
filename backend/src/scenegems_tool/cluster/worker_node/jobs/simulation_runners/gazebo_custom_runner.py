@@ -5,7 +5,7 @@ line-of-sight waypoint follower, or in mode usv_navigation the own ship (the sce
 own_ship_id names another vessel) on USV Navigation and the others on replay, as the kinematic
 runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
-scenario execution image on the stack network (vessel_job_stack.py). Every vessel has its ASV
+simulation subsystem image on the stack network (vessel_job_stack.py). Every vessel has its ASV
 system container and its controller container. The stack has no SITL: the Gazebo service starts
 paused with the gz-transport actuator listening (GZ_START_PAUSED, GZ_ACTUATOR_PORT), and the
 runner steps the world itself and carries the messages between the containers

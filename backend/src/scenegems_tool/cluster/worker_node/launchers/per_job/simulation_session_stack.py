@@ -3,16 +3,16 @@
 It holds the generated vessel stack, every layer in its own container (the simulator of the
 scenario, and per vessel its controller and its ASV system: Gazebo or the kinematic simulator,
 SITL or the custom controller, ArduAgent with MAVProxy, replay or USV Navigation), and the
-scenario execution service, which the workbench drives over MQTT. Every live session has its own
+simulation service, which the workbench drives over MQTT. Every live session has its own
 scope (InstanceScope.live_session: worker node `workbench`, instance `live-<session>`), and the
 stack's compose project, container names, networks and generated files come from it, so
 several live sessions run side by side on one machine. On the control node's broker the session's
 topics are scoped too (gateway/socket_session.py); the worker node runs cluster simulations as
 per-job stacks instead (per_job/job_stack.py).
 
-The scenario execution service joins the vessel stack's network, since an instance of
+The simulation service joins the vessel stack's network, since an instance of
 simulated vessels is driven by its lockstep runner from there, which steps the stack's
-containers (subsystems/scenario_execution/lockstep_simulation_driver.py). Host ports are published only where a person
+containers (subsystems/simulation/lockstep_simulation_driver.py). Host ports are published only where a person
 connects: Docker picks a free host port for each Mission Planner vessel's ground control
 station, which is read back once the stack is up and handed to on_ground_control_ports.
 
@@ -39,7 +39,7 @@ from scenegems_tool.cluster.worker_node.launchers.docker_cli import compose_proj
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.gateway.protocol import make_simulation_models_body
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.messaging.mqtt_scenario_execution_service import SCENARIO_EXECUTION_SERVICE_TOPIC
+from scenegems_tool.messaging.mqtt_simulation_service import SIMULATION_SERVICE_TOPIC
 from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
@@ -52,8 +52,8 @@ from utils.file_system_utils import docker_volume_path, merge_compose_volumes, r
 # The fixed project names of the single stack per machine, before live sessions had scopes.
 LEGACY_COMPOSE_PROJECTS = ("scenegems-scenario-execution-subsystem", SIMULATION_COMPOSE_PROJECT)
 DEFAULT_CONTROL_NODE_ID = "local"  # a gateway without a control node (SCENEGEMS_CONTROL_NODE_ID unset)
-SERVICE_NAME = "scenario_execution"
-SERVICE_NETWORK = "scenario_execution_net"
+SERVICE_NAME = "simulation"
+SERVICE_NETWORK = "simulation_net"
 SERVICE_CPU = 2
 GROUND_CONTROL_PORT_ATTEMPTS = 30  # seconds to wait for Docker to publish the ground station ports after up
 GroundControlPortsObserver = Callable[[Dict[str, int]], None]  # host port by agent id
@@ -181,9 +181,9 @@ def schedule_leftover_sweep(environ: Optional[Mapping[str, str]] = None) -> None
 
 
 class SimulationSessionStack:
-    """Spawns and tears down one live session's compose stack: the vessel stack and the scenario execution service."""
+    """Spawns and tears down one live session's compose stack: the vessel stack and the simulation service."""
 
-    service_topic = SCENARIO_EXECUTION_SERVICE_TOPIC  # relative: the session's MQTT clients add its topic prefix
+    service_topic = SIMULATION_SERVICE_TOPIC  # relative: the session's MQTT clients add its topic prefix
 
     def __init__(
         self,
@@ -313,7 +313,7 @@ def build_unified_compose(
     time_step: int,
     scope: InstanceScope,
 ) -> dict:
-    """The vessel stack's services plus the scenario execution service that drives them, named from the session's scope.
+    """The vessel stack's services plus the simulation service that drives them, named from the session's scope.
 
     Service keys stay as generated, so the services still reach each other by them (SITL's
     `gazebo`, MAVProxy's `<agent>`) on the session's own networks.
@@ -323,8 +323,8 @@ def build_unified_compose(
     services = {key: {**service, "container_name": scope.container_name(key)} for key, service in stack_compose["services"].items()}
     agent_service_names = list(services)
     stack_networks = {key: {**definition, "name": scope.network_name(key)} for key, definition in stack_compose.get("networks", {}).items()}
-    scenario_execution_service = {
-        "image": subsystem_image(Subsystem.SCENARIO_EXECUTION),
+    simulation_service = {
+        "image": subsystem_image(Subsystem.SIMULATION),
         "container_name": scope.container_name(SERVICE_NAME),
         "hostname": SERVICE_NAME,
         **({"depends_on": agent_service_names} if agent_service_names else {}),
@@ -347,7 +347,7 @@ def build_unified_compose(
             {
                 "services": {
                     **services,
-                    SERVICE_NAME: scenario_execution_service,
+                    SERVICE_NAME: simulation_service,
                 },
                 "networks": {
                     SERVICE_NETWORK: {"name": scope.network_name(SERVICE_NETWORK), "driver": "bridge"},

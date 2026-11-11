@@ -11,8 +11,8 @@ from scenegems_tool.gateway.protocol import SimulationStatus
 from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
-SCENARIO_EXECUTION_SERVICE_NAME = "scenario_execution_service"
-SCENARIO_EXECUTION_SERVICE_TOPIC = f"waraps/service/virtual/real/{SCENARIO_EXECUTION_SERVICE_NAME}"
+SIMULATION_SERVICE_NAME = "simulation_service"
+SIMULATION_SERVICE_TOPIC = f"waraps/service/virtual/real/{SIMULATION_SERVICE_NAME}"
 
 
 @dataclass(frozen=True)
@@ -21,10 +21,10 @@ class MqttStartSimulationTask:
     task_uuid: str
 
 
-class MqttScenarioExecutionService(MqttClient):
+class MqttSimulationService(MqttClient):
     def __init__(self, mqtt_connection: MQttConnectionInfo, reference_geofence: Geofence):
         self.info_update_rate = 1.0
-        super().__init__(SCENARIO_EXECUTION_SERVICE_NAME, SCENARIO_EXECUTION_SERVICE_TOPIC, mqtt_connection, reference_geofence)
+        super().__init__(SIMULATION_SERVICE_NAME, SIMULATION_SERVICE_TOPIC, mqtt_connection, reference_geofence)
         self.task_queue: Queue[MqttStartSimulationTask] = Queue()
         self._ready_event = threading.Event()
         self._current_tasks: List[MqttStartSimulationTask] = []
@@ -84,7 +84,7 @@ class MqttScenarioExecutionService(MqttClient):
         heartbeat_command = {
             "name": self.name,
             "agent-type": "virtual",
-            "agent-description": "Scenario Execution Subsystem",
+            "agent-description": "Simulation Subsystem",
             "agent-uuid": self.uuid,
             "levels": ["sensor", "direct execution"],
             "rate": self.info_update_rate,

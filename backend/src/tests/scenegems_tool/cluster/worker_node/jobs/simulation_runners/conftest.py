@@ -5,7 +5,7 @@ from scenegems_tool.cluster.worker_node import instance_scope
 
 @pytest.fixture
 def instances_folder(monkeypatch, tmp_path):
-    """The folder the worker node keeps its job stacks in, and the default scenario execution image."""
+    """The folder the worker node keeps its job stacks in, and the default simulation subsystem image."""
     monkeypatch.setattr(instance_scope, "INSTANCES_FOLDER", str(tmp_path).replace("\\", "/"))
-    monkeypatch.delenv("SCENARIO_EXECUTION_IMAGE", raising=False)
+    monkeypatch.delenv("SIMULATION_IMAGE", raising=False)
     return tmp_path

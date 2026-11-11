@@ -11,7 +11,7 @@ class Subsystem(str, Enum):
     SCENE_GENERATION = "scene_generation"
     TRAJECTORY_GENERATION = "trajectory_generation"
     MONITORING = "monitoring"
-    SCENARIO_EXECUTION = "scenario_execution"
+    SIMULATION = "simulation"
 
 
 _DEFAULT_IMAGES = {
@@ -19,7 +19,7 @@ _DEFAULT_IMAGES = {
     Subsystem.SCENE_GENERATION: tagged("scenegems-scene-generation-subsystem"),
     Subsystem.TRAJECTORY_GENERATION: tagged("scenegems-trajectory-generation-subsystem"),
     Subsystem.MONITORING: tagged("scenegems-monitoring-subsystem"),
-    Subsystem.SCENARIO_EXECUTION: tagged("scenegems-scenario-execution-subsystem"),
+    Subsystem.SIMULATION: tagged("scenegems-simulation-subsystem"),
 }
 # Environment variables that replace a default image, for the workbench and the worker node alike.
 IMAGE_ENVIRONMENT_VARIABLES = {
@@ -27,7 +27,7 @@ IMAGE_ENVIRONMENT_VARIABLES = {
     Subsystem.SCENE_GENERATION: "SCENE_GENERATION_IMAGE",
     Subsystem.TRAJECTORY_GENERATION: "TRAJECTORY_GENERATION_IMAGE",
     Subsystem.MONITORING: "MONITORING_IMAGE",
-    Subsystem.SCENARIO_EXECUTION: "SCENARIO_EXECUTION_IMAGE",
+    Subsystem.SIMULATION: "SIMULATION_IMAGE",
 }
 
 

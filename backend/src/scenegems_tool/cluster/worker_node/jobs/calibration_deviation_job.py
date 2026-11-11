@@ -1,4 +1,4 @@
-"""calibration.deviation: how far K repeats of one case on one stack drift apart, in a scenario execution container.
+"""calibration.deviation: how far K repeats of one case on one stack drift apart, in a simulation subsystem container.
 
 The payload holds the K runs' trajectories (the simulation results, inline or referenced),
 a free description of the stack and the name of the reference. The runs are exact when
@@ -39,7 +39,7 @@ PAYLOAD_MODEL = CalibrationDeviationPayload
 
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
     payload = parse_payload(CalibrationDeviationPayload, job)
-    return run_in_runner_container(job, worker_node, report, Subsystem.SCENARIO_EXECUTION, timeout_s=payload.timeout_s, cancel=cancel)
+    return run_in_runner_container(job, worker_node, report, Subsystem.SIMULATION, timeout_s=payload.timeout_s, cancel=cancel)
 
 
 def trajectories_digest(trajectories) -> str:

@@ -154,7 +154,7 @@ def test_post_hoc_monitoring_runs_in_a_container(broker, control_node_id, make_j
 
 
 def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):
-    """Needs the scenario execution image built from Phase 4 (P4.2) code."""
+    """Needs the simulation subsystem image built from Phase 4 (P4.2) code."""
     worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 1})
     job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False, "monitor": "live"})
     result = run_job(job, worker_node, RecordingReport())
@@ -163,7 +163,7 @@ def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, contr
 
 
 def test_calibration_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):
-    """Needs the scenario execution image built from Phase 4 (P4.2) code."""
+    """Needs the simulation subsystem image built from Phase 4 (P4.2) code."""
     worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.CALIBRATION_DEVIATION: 1})
     job = make_job(JobType.CALIBRATION_DEVIATION, {"trajectories": [head_on_trajectories.to_dict()] * 2, "reference": "head_on"})
     result = run_job(job, worker_node, RecordingReport())

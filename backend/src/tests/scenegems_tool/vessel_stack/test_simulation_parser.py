@@ -59,7 +59,7 @@ def fake_clients(monkeypatch):
     yield
 
 
-PARENT = SimpleNamespace(name="scenario_execution_service", reference_geofence=GEOFENCE)
+PARENT = SimpleNamespace(name="simulation_service", reference_geofence=GEOFENCE)
 
 
 def parser_for(instance, trajectories=None, connection=None):
@@ -74,7 +74,7 @@ def test_one_connected_client_per_vessel_with_its_agent_connection():
     assert [client.agent_name for client in parser.clients] == ["agent_0", "agent_1"]
     assert all(client.connected for client in FakeAgentClient.created)
     assert [client.topic for client in parser.clients] == ["waraps/unit/surface/agent_0", "waraps/unit/surface/agent_1"]
-    assert all(client.parent_service_name == "scenario_execution_service" for client in parser.clients)
+    assert all(client.parent_service_name == "simulation_service" for client in parser.clients)
 
 
 def test_replay_vessels_run_the_autonomous_control_mode():

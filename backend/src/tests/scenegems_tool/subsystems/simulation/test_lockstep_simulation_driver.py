@@ -5,7 +5,7 @@ import threading
 import pytest
 
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.subsystems.scenario_execution.lockstep_simulation_driver import LockstepSimulationDriver, uses_lockstep_driver
+from scenegems_tool.subsystems.simulation.lockstep_simulation_driver import LockstepSimulationDriver, uses_lockstep_driver
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig
 from scenegems_tool.vessel_stack.control_layers.custom.hull_surge_yaw_model import HullState, HullSurgeYawModel

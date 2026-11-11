@@ -13,7 +13,7 @@ it is given per worker node, and the control node judges a worker node out of da
 
 A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image):
 every layer runs in a container of its own. An ASV system adds those of the adapters that run it on the
-runners' stacks, and a simulation layer adds the scenario execution image the simulation runner runs in. The
+runners' stacks, and a simulation layer adds the simulation subsystem image the simulation runner runs in. The
 simulation job's runners and the vessel stacks each runs are declared here too (RUNNER_STACKS), so
 the Capabilities page can name the runner of a stack without loading the job modules. The registry
 is read on first use, so importing this module (the control node does at start) loads neither it nor numpy.
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 DESIGN_SPACE_EXPLORATION_IMAGE = tagged("scenegems-design-space-exploration-subsystem")  # the Refinery model generator, built from the pinned Refinery commit
 SCENE_GENERATION_IMAGE = tagged("scenegems-scene-generation-subsystem")
 TRAJECTORY_GENERATION_IMAGE = tagged("scenegems-trajectory-generation-subsystem")
-SCENARIO_EXECUTION_IMAGE = tagged("scenegems-scenario-execution-subsystem")
+SIMULATION_IMAGE = tagged("scenegems-simulation-subsystem")
 MONITORING_IMAGE = tagged("scenegems-monitoring-subsystem")
 
 ComponentId = str
@@ -63,7 +63,7 @@ SUBSYSTEM_IMAGES: Dict[ComponentId, Tuple[str, ...]] = {
     SCENE_GENERATION: (SCENE_GENERATION_IMAGE,),
     TRAJECTORY_GENERATION: (TRAJECTORY_GENERATION_IMAGE,),
     MONITORING: (MONITORING_IMAGE,),
-    CALIBRATION: (SCENARIO_EXECUTION_IMAGE,),  # the deviation between repeats runs in a scenario execution container
+    CALIBRATION: (SIMULATION_IMAGE,),  # the deviation between repeats runs in a simulation subsystem container
 }
 # The subsystem component of each job type other than the simulation, whose components come from its vessels' stacks
 JOB_TYPE_COMPONENTS: Dict[JobType, ComponentId] = {
@@ -157,7 +157,7 @@ def _layer_images(layer: LayerImplementationId) -> Tuple[str, ...]:
     images = {container.default_image for container in spec.containers} if spec is not None else set()
     role = LayerRef.of(layer).role
     if role == Role.SIMULATION_LAYER:
-        images.add(SCENARIO_EXECUTION_IMAGE)  # the simulation runner
+        images.add(SIMULATION_IMAGE)  # the simulation runner
     elif role == Role.ASV_SYSTEM:
         images.update(_asv_adapter_images(layer))
     return tuple(sorted(images))

@@ -32,7 +32,7 @@ class ArduPilotControlLayer:
             agent_name=connection.agent_name,
             reference_geofence=request.reference_geofence,
             initial_state=state,
-            parent_service_name="scenario_execution_service",
+            parent_service_name="simulation_service",
             mission_waypoints=[],
         )
 

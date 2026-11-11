@@ -9,7 +9,7 @@ from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_scenegems_client import MqttSceneGEMSClient
 from scenegems_tool.messaging.mqtt_scenegems_service import MqttSceneGEMSService
 from scenegems_tool.subsystems.monitoring.live_monitor_session import LiveMonitorSession
-from scenegems_tool.subsystems.scenario_execution.live_simulation_session import LiveSimulationSession
+from scenegems_tool.subsystems.simulation.live_simulation_session import LiveSimulationSession
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.workbench.scenario_session import ScenarioSession

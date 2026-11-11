@@ -7,7 +7,7 @@ import pytest
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import CampaignActualState, CampaignDesiredState, CampaignEventKind, MonitorImplementation, PipelineStage, VerdictState
 from tests.scenegems_tool.assurance.pipeline.checks import assert_consistent
@@ -46,9 +46,9 @@ def test_each_run_is_simulated_by_a_job_needing_its_stacks_components_with_their
     assert [job.job_type for job in (kinematic, sitl, world)] == [JobType.SIMULATION] * 3
     assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO]
     assert (kinematic.payload["runner"], sitl.payload["runner"], world.payload["runner"]) == ("kinematic", "ardupilot", "ardupilot")
-    assert set(kinematic.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE]))
-    assert set(sitl.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE, SITL_IMAGE]))
-    assert set(world.requirements.fingerprints) == set(repositories([SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]))
+    assert set(kinematic.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE]))
+    assert set(sitl.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE, SITL_IMAGE]))
+    assert set(world.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]))
     assert (sitl.payload["simulation_layer"], sitl.payload["include_trajectories"], "monitor" not in sitl.payload) == ("ardupilot_sim", True, True)
     assert (world.payload["monitor"], world.payload["speedup"], world.payload["seed"]) == ("live", 2, harness.stores.results.list_run_records(campaign.campaign_id)[2].seed)
     assert {job.priority for job in (kinematic, sitl, world)} == {7}
@@ -101,7 +101,7 @@ def test_repeats_of_an_ardupilot_run_are_calibrated_against_the_images_it_ran_on
     assert len(calibrate.payload["trajectories"]) == 3 and calibrate.payload["stack"]["simulation_layer"] == "ardupilot_sim"
     (calibration,) = harness.stores.calibrations.list_results()
     assert (calibration.exact, calibration.deviation_bound_m, calibration.repeats) == (False, 0.8, 3)
-    assert calibration.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE], SITL_IMAGE: EXPECTED[SITL_IMAGE]})
+    assert calibration.fingerprints == by_repository({SIMULATION_IMAGE: EXPECTED[SIMULATION_IMAGE], SITL_IMAGE: EXPECTED[SITL_IMAGE]})
     (verdict,) = harness.stores.results.list_verdicts(campaign.campaign_id)
     assert verdict.sensitive is False, "the stack was calibrated on these fingerprints"
     assert {record.repeatability_tier for record in harness.stores.results.list_run_records(campaign.campaign_id)} == {"bounded"}

@@ -93,7 +93,7 @@ def build_simulation_docker_stack_artifacts(
             if contributor is not None:
                 contributor.add_vessel(artifacts, request, vessel_config, vessel, state)
     simulation_layer.finish(artifacts, request)
-    # The scenario execution worker reads the trajectories from the shared gen folder.
+    # The simulation worker reads the trajectories from the shared gen folder.
     artifacts.pending_writes.append((f"{gen_folder}/trajectories.json", json.dumps(trajectories.to_dict())))
 
     if embedded_in_subsystem:

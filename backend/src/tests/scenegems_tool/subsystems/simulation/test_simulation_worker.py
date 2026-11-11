@@ -1,4 +1,4 @@
-"""ScenarioExecutionWorker: which driver runs an instance, and the states a lockstep run publishes."""
+"""SimulationWorker: which driver runs an instance, and the states a lockstep run publishes."""
 
 import queue
 from types import SimpleNamespace
@@ -7,8 +7,8 @@ import pytest
 
 from scenegems_tool.gateway.protocol import SimulationStatus
 from scenegems_tool.messaging.mqtt_agent_client import MqttAgentClient
-from scenegems_tool.subsystems.scenario_execution import scenario_execution_worker
-from scenegems_tool.subsystems.scenario_execution.scenario_execution_worker import ScenarioExecutionWorker
+from scenegems_tool.subsystems.simulation import simulation_worker
+from scenegems_tool.subsystems.simulation.simulation_worker import SimulationWorker
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
@@ -31,12 +31,12 @@ class FakeParser:
 
 @pytest.fixture(autouse=True)
 def fake_messaging(monkeypatch):
-    monkeypatch.setattr(scenario_execution_worker, "MqttScenarioExecutionService", FakeService)
-    monkeypatch.setattr(scenario_execution_worker, "SimulationParser", FakeParser)
+    monkeypatch.setattr(simulation_worker, "MqttSimulationService", FakeService)
+    monkeypatch.setattr(simulation_worker, "SimulationParser", FakeParser)
 
 
 def worker(instance, timespan=10):
-    return ScenarioExecutionWorker(mqtt_connection(), GEOFENCE, instance, encounter_trajectories("head_on", timespan), 1)
+    return SimulationWorker(mqtt_connection(), GEOFENCE, instance, encounter_trajectories("head_on", timespan), 1)
 
 
 def test_simulated_vessels_run_through_the_lockstep_driver():

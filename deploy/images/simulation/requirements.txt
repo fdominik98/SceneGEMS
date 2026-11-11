@@ -1,4 +1,4 @@
-# Runtime dependencies for scenegems-scenario-execution-subsystem (see deploy/images/scenario_execution/Dockerfile).
+# Runtime dependencies for scenegems-simulation-subsystem (see deploy/images/simulation/Dockerfile).
 paho-mqtt==2.1.0
 pyyaml==6.0.3
 numpy==2.5.4

@@ -50,7 +50,7 @@ def _run(case, run_index=0, repeat_index=0, digest="d" * 64):
         artifacts={"trajectories": sha256_of("simulated")},
         job_id=None,
         worker_node_id="worker-node-a",
-        fingerprints={"scenegems-scenario-execution": "fp-execution"},
+        fingerprints={"scenegems-simulation": "fp-execution"},
         durations_s={"scene_generation": 2.5, "simulation": 0.4},
     )
 

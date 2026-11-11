@@ -3,7 +3,7 @@
 Every simulation runner builds its stack here. The instance is resolved first, so a stack the
 worker node cannot run fails the job before anything starts. The vessel stack then brings its
 containers (vessel_stack/simulation_docker_stack.py): the simulator of the scenario, and per
-vessel its controller and its ASV system. The runner, from the scenario execution image, joins
+vessel its controller and its ASV system. The runner, from the simulation subsystem image, joins
 their network and steps them (vessel_stack/hosting.py, ContainerHosting).
 
 The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the
@@ -45,6 +45,6 @@ def build_vessel_job_stack(job: JobSpec, worker_node: WorkerNodeContext, instanc
     stack_services = list(stack_compose["services"])
     services = {
         **stack_compose["services"],
-        RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SCENARIO_EXECUTION), networks=[STACK_NETWORK], depends_on=stack_services),
+        RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SIMULATION), networks=[STACK_NETWORK], depends_on=stack_services),
     }
     return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"))

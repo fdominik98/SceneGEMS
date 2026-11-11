@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
+from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.database import DATABASE_URL_ENV, DatabaseNotConfigured
 from scenegems_tool.persistence.migrate import MIGRATIONS_FOLDER, alembic_config, main, upgrade_database
 from scenegems_tool.persistence.schema import (
@@ -60,10 +61,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0014"]
+    assert scripts.get_heads() == ["0015"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -144,7 +145,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0014"
+            assert MigrationContext.configure(connection).get_current_revision() == "0015"
     finally:
         engine.dispose()
 
@@ -767,6 +768,73 @@ def test_revision_0014_renames_the_stored_asv_system_names_and_back(empty_databa
             assert components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none"]
             assert connection.execute(text("SELECT required_components FROM job WHERE id = 'job-1'")).scalar_one() == ["asv_software/replay", "control_layer/none"]
             assert connection.execute(text("SELECT payload FROM job WHERE id = 'job-1'")).scalar_one() == payload
+        command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+def test_revision_0015_renames_the_simulation_subsystem_image_in_stored_fingerprints_and_back(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0014")
+    at = datetime(2026, 11, 11, 9, 30, tzinfo=timezone.utc)
+    old = {"scenegems-scenario-execution-subsystem": "f1", "scenegems-gazebo-harmonic": "g1"}
+    new = {"scenegems-simulation-subsystem": "f1", "scenegems-gazebo-harmonic": "g1"}
+    tagged_old = {"scenegems-scenario-execution-subsystem:latest": "f1"}
+    engine = create_engine(empty_database_url)
+
+    def stored(connection):
+        return {
+            "images": connection.execute(text("SELECT image FROM worker_node_fingerprint ORDER BY image")).scalars().all(),
+            "job": connection.execute(text("SELECT required_fingerprints FROM job WHERE id = 'job-1'")).scalar_one(),
+            "tagged": connection.execute(text("SELECT required_fingerprints FROM job WHERE id = 'job-2'")).scalar_one(),
+            "calibration": connection.execute(text("SELECT fingerprints, fingerprints_hash FROM calibration_result")).one(),
+        }
+
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO worker_node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('worker-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO worker_node_fingerprint (worker_node_id, image, fingerprint) VALUES"
+                    " ('worker-1', 'scenegems-scenario-execution-subsystem', 'f1'), ('worker-1', 'scenegems-scenario-execution-subsystem:latest', 'f1'), ('worker-1', 'scenegems-gazebo-harmonic', 'g1')"
+                )
+            )
+            for job_id, fingerprints in (("job-1", old), ("job-2", tagged_old)):
+                connection.execute(
+                    text(
+                        "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+                        " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at, required_components)"
+                        " VALUES (:id, 'simulation', '{}', '{}', CAST(:fingerprints AS jsonb), 0, 0, 0, 3, :id, 'queued', 0, 0, :at, :at, :at, '[]')"
+                    ),
+                    {"at": at, "id": job_id, "fingerprints": json.dumps(fingerprints)},
+                )
+            connection.execute(
+                text(
+                    "INSERT INTO calibration_result (stack, stack_hash, fingerprints, fingerprints_hash, environment, environment_hash, reference_scenario,"
+                    " repeats, exact, envelope, created_at, updated_at)"
+                    " VALUES ('{}', :stack_hash, CAST(:fingerprints AS jsonb), :fingerprints_hash, '{}', :stack_hash, 'reference', 3, true, '{}', :at, :at)"
+                ),
+                {"at": at, "stack_hash": canonical_json_sha256({}), "fingerprints": json.dumps(old), "fingerprints_hash": canonical_json_sha256(old)},
+            )
+        command.upgrade(config, "0015")
+        with engine.connect() as connection:
+            after = stored(connection)
+        assert after["images"] == ["scenegems-gazebo-harmonic", "scenegems-simulation-subsystem", "scenegems-simulation-subsystem:latest"]
+        assert after["job"] == new
+        assert after["tagged"] == {"scenegems-simulation-subsystem:latest": "f1"}
+        assert tuple(after["calibration"]) == (new, canonical_json_sha256(new)), "a calibration result is found by the hash of its renamed fingerprints"
+        command.downgrade(config, "0014")
+        with engine.connect() as connection:
+            before = stored(connection)
+        assert before["images"] == ["scenegems-gazebo-harmonic", "scenegems-scenario-execution-subsystem", "scenegems-scenario-execution-subsystem:latest"]
+        assert before["job"] == old and before["tagged"] == tagged_old
+        assert tuple(before["calibration"]) == (old, canonical_json_sha256(old))
         command.upgrade(config, "head")
     finally:
         engine.dispose()

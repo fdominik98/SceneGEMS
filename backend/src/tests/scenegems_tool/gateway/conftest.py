@@ -3,7 +3,7 @@ from typing import List
 
 import pytest
 
-from scenegems_tool.subsystems.scenario_execution import empty_simulation_session
+from scenegems_tool.subsystems.simulation import empty_simulation_session
 
 
 class FakeWebSocket:

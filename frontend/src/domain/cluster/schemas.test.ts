@@ -44,7 +44,7 @@ describe("operator API schemas", () => {
     expect(workerNode.machine).toBe("lab-gpu-1");
     expect(workerNode.slots.simulation).toEqual({ slots: 8, slots_in_use: 8 });
     expect(workerNode, "no capabilities alias of the slots").not.toHaveProperty("capabilities");
-    expect(workerNode.components[2]).toEqual({ component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" });
+    expect(workerNode.components[2]).toEqual({ component: "simulation_layer/kinematic", images: ["scenegems-simulation-subsystem:latest"], state: "usable" });
 
     const { machine: _machine, ...withoutMachine } = sampleWorkerNode();
     void _machine;

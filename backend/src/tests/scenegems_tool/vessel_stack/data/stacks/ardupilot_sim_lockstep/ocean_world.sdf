@@ -132,11 +132,11 @@
     
     <!-- Vessel Models -->
         <include>
-      <uri><backend>/assets/runtime_assets/scenario_execution/gen_tmp/agent_0_model.sdf</uri>
+      <uri><backend>/assets/runtime_assets/simulation/gen_tmp/agent_0_model.sdf</uri>
       <pose>0.0 0.0 0 0 0 0.0</pose>
     </include>
     <include>
-      <uri><backend>/assets/runtime_assets/scenario_execution/gen_tmp/agent_1_model.sdf</uri>
+      <uri><backend>/assets/runtime_assets/simulation/gen_tmp/agent_1_model.sdf</uri>
       <pose>6000.0 0.0 0 0 0 3.141592653589793</pose>
     </include>
 </world>

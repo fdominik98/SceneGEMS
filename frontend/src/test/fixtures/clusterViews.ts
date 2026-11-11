@@ -22,7 +22,7 @@ export function sampleWorkerNode(overrides: Record<string, unknown> = {}): Recor
     components: [
       { component: "asv_system/replay", images: [], state: "usable" },
       { component: "control_layer/none", images: [], state: "usable" },
-      { component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" },
+      { component: "simulation_layer/kinematic", images: ["scenegems-simulation-subsystem:latest"], state: "usable" },
       { component: "scene_generation", images: ["scenegems-scene-generation-subsystem:latest"], state: "usable" },
     ],
     leases: ["lease-1"],

@@ -1,5 +1,5 @@
 # The workbench's live sessions on this control node (MQTT broker, real vessels, Mission Planner,
-# ArduPilot live): control-node-api starts their containers, the scenario execution service, the
+# ArduPilot live): control-node-api starts their containers, the simulation service, the
 # monitor and the vessel stacks, on this machine's Docker. Compose reads this file on top of
 # docker-compose.yml when COMPOSE_FILE in .env names it, which is the control node role's default
 # (scenegems_tool.cluster.release.roles). Without it control-node-api has no Docker socket and

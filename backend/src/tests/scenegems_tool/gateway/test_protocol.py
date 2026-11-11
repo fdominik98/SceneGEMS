@@ -236,7 +236,7 @@ class TestRoundTrip:
         assert make_simulation_models_body(config)["connectionsByAgentId"]["0"]["gazeboVesselModel"] == "<sdf/>"
 
     def test_every_stack_survives_the_round_trip(self, body):
-        """The scenario execution worker gets the body back, so a kinematic or USV Navigation instance must read back the same."""
+        """The simulation worker gets the body back, so a kinematic or USV Navigation instance must read back the same."""
         del body["connectionsByAgentId"]["2"]
         body["simulatorType"] = "Kinematic"
         body["connectionsByAgentId"]["0"].update(asvSystem="usv_navigation", controlLayer="none")

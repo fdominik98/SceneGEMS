@@ -3,7 +3,7 @@
 Two modes: replay of every vessel's generated trajectory (kinematic_runner.run_kinematic_replay),
 or USV Navigation on the own ship against replaying targets (run_kinematic_closed_loop).
 The stack holds the kinematic simulator, one container for the scenario, and an ASV system
-container per vessel (vessel_job_stack.py); the runner, from the scenario execution image, owns
+container per vessel (vessel_job_stack.py); the runner, from the simulation subsystem image, owns
 the clock and carries the commands and states between them. The stack's network is its own and
 reaches nothing else. A run is bit-identical for the same payload, and the result carries its
 state digest.
