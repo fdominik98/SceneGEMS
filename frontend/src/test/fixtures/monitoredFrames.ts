@@ -9,7 +9,7 @@
  */
 
 export const RULE_16 = "Rule 16: Give-Way Vessel Takes Early and Substantial Action";
-export const RULE_8 = "Rule 8: Passing at a Safe Distance";
+export const RULE_8 = "Rule 8(d): Passing at a Safe Distance";
 
 export interface MonitoredFrameOptions {
   /** Seconds of the frame. */
@@ -26,7 +26,7 @@ export interface MonitoredFrameOptions {
 }
 
 export const RULE_16_ID = "rule:16:give-way-vessel-takes-early-and-substantial-action:0-0:0";
-export const RULE_8_ID = "rule:8:passing-at-a-safe-distance:0-1:-";
+export const RULE_8_ID = "rule:8(d):passing-at-a-safe-distance:0-1:-";
 /** Where the fixture's vessels meet at their closest point of approach, while it is ahead. */
 export const CPA_POSITIONS = { "0": { x: 300, y: 130 }, "1": { x: 310, y: 140 } };
 
@@ -147,7 +147,7 @@ export function monitoredFrame({ timestamp, timeStep = 1, failFrom, monitorHisto
           {
             name: RULE_8,
             title: "Passing at a Safe Distance",
-            ruleNumber: "8",
+            ruleNumber: "8(d)",
             kind: "rule",
             description: "Action taken to avoid collision should result in the vessels passing at a safe distance.",
             subjectActorId: null,

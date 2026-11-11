@@ -117,7 +117,7 @@ export interface RuleEvaluation {
   ruleName: string;
   /** Short title without the rule-number prefix. */
   title: string;
-  /** COLREGS rule number ("8", "16", "17"); empty for advisory suggestions. */
+  /** COLREGS rule number with its paragraph ("8(b)", "16", "17(a)(i)"); empty for advisory suggestions. */
   ruleNumber: string;
   /** "rule" (a compliance failure matters) or "suggestion" (advisory only). */
   kind: RuleKind;

@@ -27,6 +27,17 @@ describe("sortEvaluations", () => {
     expect(sorted.map((item) => item.title)).toEqual(["Safe Distance", "Readily Apparent", "Stand-On", "Pass Around"]);
   });
 
+  it("orders the paragraphs of one rule, and a rule with a paragraph by its number", () => {
+    const sorted = sortEvaluations([
+      evaluation({ ruleNumber: "17(a)(i)", title: "Stand-On" }),
+      evaluation({ ruleNumber: "16", title: "Early Action" }),
+      evaluation({ ruleNumber: "8(d)", title: "Safe Distance" }),
+      evaluation({ ruleNumber: "8(b)", title: "Readily Apparent" }),
+      evaluation({ ruleNumber: "8(c)", title: "No New Situation" }),
+    ]);
+    expect(sorted.map((item) => item.ruleNumber)).toEqual(["8(b)", "8(c)", "8(d)", "16", "17(a)(i)"]);
+  });
+
   it("orders one rule of two vessels by vessel, whatever order the frame lists them in", () => {
     const target = evaluation({ subjectActorId: "1", subjectActorName: "ts1" });
     const own = evaluation({});

@@ -3,6 +3,7 @@
 import dataclasses
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -10,7 +11,10 @@ import numpy as np
 import pytest
 
 from concrete_level.colregs_monitoring.colregs_monitor_runtime import ColregsMonitorRuntime, MonitoringTask
-from scenegems_tool.gateway.serialization import _safety_domain_payload, _to_json_safe, serialize_frame, serialize_monitored_frame
+from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import COLREGSRule
+from concrete_level.models.relation import Relation
+from scenegems_tool.gateway.serialization import _safety_domain_payload, _to_json_safe, rule_display_order, serialize_frame, serialize_monitored_frame
+from tests.concrete_level.colregs_monitoring.monitor_runs import OWN_SHIP
 from tests.scenegems_tool.vessel_stack.scenarios import encounter_trajectories
 from utils.colregs_approximations import COLREGSConstraints
 from utils.file_system_utils import COLREGS_CONSTANTS_FOLDER
@@ -122,13 +126,29 @@ class TestEncounterRules:
     def test_the_stand_on_vessel_has_its_rule_17_in_the_encounter(self, frame):
         """Per-vessel rules live under the vessel related to itself, which the frames left out."""
         (encounter,) = frame["ruleResults"]
-        assert ("17", "1") in {(rule["ruleNumber"], rule["subjectActorId"]) for rule in encounter["rules"]}
-        assert {"Rule 8: Readily Apparent Course Change"} <= {rule["name"] for rule in encounter["rules"]}
+        assert ("17(a)(i)", "1") in {(rule["ruleNumber"], rule["subjectActorId"]) for rule in encounter["rules"]}
+        assert {"Rule 8(b): Readily Apparent Course Change"} <= {rule["name"] for rule in encounter["rules"]}
 
-    def test_rules_are_listed_by_kind_number_and_vessel(self, frame):
+    def test_rules_are_listed_by_kind_number_paragraph_and_vessel(self, frame):
         (encounter,) = frame["ruleResults"]
-        keys = [(rule["kind"] != "rule", int(rule["ruleNumber"] or 10**6), rule["subjectActorName"]) for rule in encounter["rules"]]
+
+        def key(rule):
+            leading = re.match(r"\d+", rule["ruleNumber"])
+            return (rule["kind"] != "rule", int(leading.group()) if leading else 10**6, rule["ruleNumber"], rule["subjectActorName"])
+
+        keys = [key(rule) for rule in encounter["rules"]]
         assert keys == sorted(keys)
+
+    def test_the_paragraphs_of_rule_8_come_in_order_before_rule_16_and_17(self, frame):
+        (encounter,) = frame["ruleResults"]
+        numbers = list(dict.fromkeys(rule["ruleNumber"] for rule in encounter["rules"]))
+        assert numbers == ["8(a)", "8(b)", "8(c)", "8(d)", "16", "17(a)(i)", ""]
+
+    def test_a_rule_number_orders_by_its_number_then_its_paragraph(self):
+        def order(number):
+            return rule_display_order(COLREGSRule(Relation(OWN_SHIP, OWN_SHIP), number, "title", ""))
+
+        assert sorted(["17(a)(i)", "16", "8(d)", "8", "8(b)", "17"], key=order) == ["8", "8(b)", "8(d)", "16", "17", "17(a)(i)"]
 
     def test_the_order_does_not_depend_on_the_hash_seed(self):
         script = (
@@ -160,7 +180,7 @@ def run():
 
 
 class TestRuleIdsAndFirstFailures:
-    STAND_ON_RULE = "rule:17:stand-on-vessel-keeps-course-and-speed:1-1:1"
+    STAND_ON_RULE = "rule:17(a)(i):stand-on-vessel-keeps-course-and-speed:1-1:1"
 
     def test_every_rule_has_an_id_unique_in_its_encounter(self, run):
         (encounter,) = serialize_monitored_frame("s", run[40], 40, 1)["ruleResults"]

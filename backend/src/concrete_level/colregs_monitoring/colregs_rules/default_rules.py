@@ -1,7 +1,19 @@
-from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import GiveWayEarlyActionRule, GoAroundCollisionDomainSuggestion, HoldAvoidanceCourseRule, PersistingCourseAfterCourseChangeRule, ReadilyApparentCourseChangeRule, ReadilyApparentCoursePersistenceRule, ReadilyApparentSpeedChangeRule, SafeDistanceRule, StandOnCoursePersistenceRule
+from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import (
+    GiveWayEarlyActionRule,
+    GoAroundCollisionDomainSuggestion,
+    HoldAvoidanceCourseRule,
+    NoNewSituationRule,
+    PersistingCourseAfterCourseChangeRule,
+    ReadilyApparentCourseChangeRule,
+    ReadilyApparentCoursePersistenceRule,
+    ReadilyApparentSpeedChangeRule,
+    SafeDistanceRule,
+    StandOnCoursePersistenceRule,
+)
 from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import GiveWayEarlyActionCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.go_around_collision_domain_condition import GoAroundCollisionDomainCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.hold_avoidance_course_condition import HoldAvoidanceCourseCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.no_new_situation_condition import NoNewSituationCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.persisting_course_after_course_change_condition import PersistingCourseAfterCourseChangeCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.readily_apparent_course_change_condition import ReadilyApparentCourseChangeCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.readily_apparent_course_persistence_condition import ReadilyApparentCoursePersistenceCondition
@@ -24,6 +36,7 @@ def make_maneuver_default_rules(maneuver_context: ManeuverContext) -> COLREGSRul
             ReadilyApparentSpeedChangeRule(actor, colregs_constants): ReadilyApparentSpeedChangeCondition(relation, actor, colregs_constants),
             ReadilyApparentCoursePersistenceRule(actor, colregs_constants): ReadilyApparentCoursePersistenceCondition(relation, actor, colregs_constants),
             PersistingCourseAfterCourseChangeRule(actor, colregs_constants): PersistingCourseAfterCourseChangeCondition(relation, actor, colregs_constants),
+            NoNewSituationRule(actor, colregs_constants): NoNewSituationCondition(relation, actor, colregs_constants),
             StandOnCoursePersistenceRule(actor, colregs_constants): StandOnCoursePersistenceCondition(relation, actor, colregs_constants),
             # overturning_suggestion: OverturningCondition(maneuver_context.relation, maneuver_context.vessel),
         }

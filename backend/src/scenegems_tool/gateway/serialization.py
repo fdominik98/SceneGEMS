@@ -6,6 +6,7 @@ Replace `build_stub_frame` with serializers from your `MonitoredTrajectory` / mo
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rule_results import COLREGSRuleResultMap
@@ -129,14 +130,18 @@ def _effective_avoidance_direction(monitored_scene: MonitoredSceneWithResults, r
     return direction.name
 
 
-def rule_display_order(rule: COLREGSRule) -> Tuple[int, int, str, int, str]:
-    """The order rules are listed in: rules before suggestions, by rule number, then by vessel and title.
+def rule_display_order(rule: COLREGSRule) -> Tuple[int, int, str, str, int, str]:
+    """The order rules are listed in: rules before suggestions, by rule number and paragraph, then by vessel and title.
 
-    The same order as compareRules in the frontend's rule timeline, so every list of one
-    encounter shows its rules in one fixed order from frame to frame.
+    The rule number leads with the COLREGS rule ("8", "17") and may name a paragraph
+    ("8(b)", "17(a)(i)"): 8(b) comes before 8(d), and both before 16. The same order as
+    compareRules in the frontend's rule timeline, so every list of one encounter shows its
+    rules in one fixed order from frame to frame.
     """
-    number = int(rule.rule_number) if rule.rule_number.isdigit() else 10**6
-    return (0 if rule.kind == RULE_KIND else 1, number, rule.subject_actor_name, rule.subject_actor_id, rule.name)
+    leading_digits = re.match(r"\d+", rule.rule_number)
+    number = int(leading_digits.group()) if leading_digits else 10**6
+    paragraph = rule.rule_number[leading_digits.end() :] if leading_digits else rule.rule_number
+    return (0 if rule.kind == RULE_KIND else 1, number, paragraph, rule.subject_actor_name, rule.subject_actor_id, rule.name)
 
 
 def _first_failed_at(monitored_scene: MonitoredSceneWithResults, relation: Relation, rule: COLREGSRule) -> Optional[int]:

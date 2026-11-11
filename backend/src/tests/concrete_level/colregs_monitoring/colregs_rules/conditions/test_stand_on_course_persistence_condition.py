@@ -25,7 +25,7 @@ CLEAR_AHEAD = (3600.0, -3000.0)
 
 def rule_17(result) -> COLREGSRuleResult:
     results = result.monitor_result_map_set.get_result(Relation(TARGET, TARGET))
-    (value,) = [value for rule, value in results.items() if rule.rule_number == "17"]
+    (value,) = [value for rule, value in results.items() if rule.rule_number == "17(a)(i)"]
     return value
 
 
@@ -71,7 +71,7 @@ def test_the_stand_on_vessel_holding_its_course_passes_once_released():
     assert {rule_17(result) for result in run[1:released]} == {COLREGSRuleResult.UNKNOWN}
     # the pass holds while the vessel stays released
     assert {rule_17(result) for result in run[released:]} == {COLREGSRuleResult.PASSED}
-    assert all(not rule.rule_number == "17" for _, rule in run[-1].first_failed_at)
+    assert all(not rule.rule_number == "17(a)(i)" for _, rule in run[-1].first_failed_at)
 
 
 def test_the_stand_on_vessel_holding_its_course_passes_when_the_encounter_ends():

@@ -146,7 +146,7 @@ describe("buildPairModels with the monitor's rule ids and first failures", () =>
     const [pair] = buildPairModels(frames[30]!, null);
     const r16 = pair!.rules.find((rule) => rule.key === RULE_16_ID)!;
     expect([r16.result, r16.firstFailure]).toEqual(["FAILED", 12]);
-    expect(pair!.rules.find((rule) => rule.ruleNumber === "8")!.firstFailure).toBeNull();
+    expect(pair!.rules.find((rule) => rule.ruleNumber === "8(d)")!.firstFailure).toBeNull();
   });
 
   it("trusts a rule that never failed over the timeline", () => {

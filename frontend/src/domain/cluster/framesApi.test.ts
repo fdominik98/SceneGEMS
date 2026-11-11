@@ -270,7 +270,7 @@ describe("parseFrames", () => {
     expect(result).toMatchObject({ relationId: "0->1", overallStatus: "FAILED", failedRules: [RULE_16] });
     expect(result.evaluations.map((evaluation) => [evaluation.ruleNumber, evaluation.result, evaluation.subjectActorId])).toEqual([
       ["16", "FAILED", "0"],
-      ["8", "PASSED", null],
+      ["8(d)", "PASSED", null],
     ]);
     // `giveWayByActorId` and the `actors...ById` states are renamed
     expect(frame.situationContexts[0].isGiveWayByActorId).toEqual({ "0": true, "1": false });

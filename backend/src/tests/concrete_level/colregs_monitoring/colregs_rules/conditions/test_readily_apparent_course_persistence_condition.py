@@ -10,7 +10,7 @@ from concrete_level.models.concrete_scene import ConcreteScene
 from scenegems_tool.subsystems.monitoring.rule_outcomes import RuleOutcomes
 from tests.concrete_level.colregs_monitoring.monitor_runs import OWN_SHIP, SPEED, TARGET, constants
 
-PERSISTENCE = "Rule 8: Course Change Persistence"
+PERSISTENCE = "Rule 8(b): Course Change Persistence"
 EARLY_ACTION = "Rule 16: Give-Way Vessel Takes Early and Substantial Action"
 TURN_S = 16  # at 2 degrees per second: 32 degrees, readily apparent
 RATE = math.radians(2.0)

@@ -52,6 +52,7 @@ describe("isVesselScopedRule", () => {
       "Readily Apparent Speed Change",
       "Course Change Persistence",
       "Course Held After the Manoeuvre",
+      "No New Situation While Manoeuvring",
       "Stand-On Vessel Keeps Course and Speed",
     ]) {
       expect(isVesselScopedRule(rule("8", title, "0")), title).toBe(true);

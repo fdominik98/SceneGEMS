@@ -223,6 +223,21 @@ describe("failed rule text", () => {
     expect(splitFailedRule("0->1: Rule 16: Give-Way Vessel")).toEqual({ relation: "0->1", rule: "Rule 16: Give-Way Vessel" });
   });
 
+  it("splits a rule whose number names a COLREGS paragraph", () => {
+    expect(splitFailedRule("os - ts1: Rule 8(d): Passing at a Safe Distance (os - ts1)")).toEqual({
+      relation: "os - ts1",
+      rule: "Rule 8(d): Passing at a Safe Distance (os - ts1)",
+    });
+    expect(splitFailedRule("os - os: Rule 8(c): No New Situation While Manoeuvring (os)")).toEqual({
+      relation: "os - os",
+      rule: "Rule 8(c): No New Situation While Manoeuvring (os)",
+    });
+    expect(splitFailedRule("Rule 17(a)(i): Stand-On Vessel Keeps Course and Speed (ts1)")).toEqual({
+      relation: null,
+      rule: "Rule 17(a)(i): Stand-On Vessel Keeps Course and Speed (ts1)",
+    });
+  });
+
   it("leaves a text without a relation alone, also when a rule name holds a dash", () => {
     expect(splitFailedRule("rule_8")).toEqual({ relation: null, rule: "rule_8" });
     expect(splitFailedRule("Rule 8: Passing")).toEqual({ relation: null, rule: "Rule 8: Passing" });

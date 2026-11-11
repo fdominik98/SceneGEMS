@@ -63,7 +63,7 @@ class MonitorSpec:
 class RuleSpec:
     local: str
     rule_class: str
-    number: str  # COLREGS rule number, "" for an advisory suggestion
+    number: str  # COLREGS rule number with its paragraph ("8(b)", "17(a)(i)"), "" for an advisory suggestion
     title: str
     scope: str  # situation (per vessel pair) or maneuver (per vessel)
     kind: str  # rule | suggestion
@@ -103,15 +103,16 @@ def monitor_specs() -> Tuple[MonitorSpec, ...]:
 
 def rule_specs() -> Tuple[RuleSpec, ...]:
     return (
-        RuleSpec("safe_distance", "SafeDistanceRule", "8", "Passing at a Safe Distance", "situation", "rule"),
+        RuleSpec("safe_distance", "SafeDistanceRule", "8(d)", "Passing at a Safe Distance", "situation", "rule"),
         RuleSpec("give_way_early_action", "GiveWayEarlyActionRule", "16", "Give-Way Vessel Takes Early and Substantial Action", "situation", "rule"),
-        RuleSpec("hold_avoidance_course", "HoldAvoidanceCourseRule", "8", "Give-Way Steering After First Evasive", "situation", "rule"),
+        RuleSpec("hold_avoidance_course", "HoldAvoidanceCourseRule", "8(a)", "Give-Way Steering After First Evasive", "situation", "rule"),
         RuleSpec("go_around_collision_domain", "GoAroundCollisionDomainSuggestion", "", "Pass Around the Collision Domain", "situation", "suggestion"),
-        RuleSpec("stand_on_course_persistence", "StandOnCoursePersistenceRule", "17", "Stand-On Vessel Keeps Course and Speed", "maneuver", "rule"),
-        RuleSpec("readily_apparent_course_change", "ReadilyApparentCourseChangeRule", "8", "Readily Apparent Course Change", "maneuver", "rule"),
-        RuleSpec("readily_apparent_speed_change", "ReadilyApparentSpeedChangeRule", "8", "Readily Apparent Speed Change", "maneuver", "rule"),
-        RuleSpec("readily_apparent_course_persistence", "ReadilyApparentCoursePersistenceRule", "8", "Course Change Persistence", "maneuver", "rule"),
-        RuleSpec("persisting_course_after_course_change", "PersistingCourseAfterCourseChangeRule", "8", "Course Held After the Manoeuvre", "maneuver", "rule"),
+        RuleSpec("stand_on_course_persistence", "StandOnCoursePersistenceRule", "17(a)(i)", "Stand-On Vessel Keeps Course and Speed", "maneuver", "rule"),
+        RuleSpec("readily_apparent_course_change", "ReadilyApparentCourseChangeRule", "8(b)", "Readily Apparent Course Change", "maneuver", "rule"),
+        RuleSpec("readily_apparent_speed_change", "ReadilyApparentSpeedChangeRule", "8(b)", "Readily Apparent Speed Change", "maneuver", "rule"),
+        RuleSpec("readily_apparent_course_persistence", "ReadilyApparentCoursePersistenceRule", "8(b)", "Course Change Persistence", "maneuver", "rule"),
+        RuleSpec("persisting_course_after_course_change", "PersistingCourseAfterCourseChangeRule", "8(b)", "Course Held After the Manoeuvre", "maneuver", "rule"),
+        RuleSpec("no_new_situation", "NoNewSituationRule", "8(c)", "No New Situation While Manoeuvring", "maneuver", "rule"),
     )
 
 

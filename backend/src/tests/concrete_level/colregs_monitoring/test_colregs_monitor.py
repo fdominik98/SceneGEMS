@@ -75,7 +75,7 @@ def test_the_planner_monitor_leaves_the_initial_scene_unjudged():
 
 def test_the_first_failure_time_is_kept_on_later_scenes():
     run = monitored_run(CROSSING, 120, turn_at=30, turn_s=30)
-    rule_17 = next(key for key in run[-1].first_failed_at if key[1].rule_number == "17")
+    rule_17 = next(key for key in run[-1].first_failed_at if key[1].rule_number == "17(a)(i)")
     assert rule_17[0] == Relation(TARGET, TARGET)
     assert all(rule_17 not in monitored.first_failed_at for monitored in run[:31])
     assert {monitored.first_failed_at[rule_17] for monitored in run[31:]} == {31}

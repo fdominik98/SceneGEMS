@@ -19,8 +19,10 @@ class COLREGSRule(ABC):
     The display text is assembled from structured parts so every rule is
     labelled consistently:
 
-    - ``rule_number`` : the COLREGS rule number ("8", "16", "17"), or "" for a
-      suggestion that is not tied to a numbered rule.
+    - ``rule_number`` : the COLREGS rule number with the paragraph the rule checks, in
+      the notation of the COLREGS text ("8(b)", "16", "17(a)(i)"), or "" for a
+      suggestion that is not tied to a numbered rule. Several rules may share one
+      paragraph; the title tells them apart.
     - ``title`` : a short human-readable name in title case.
     - ``kind`` : ``RULE_KIND`` or ``SUGGESTION_KIND``.
     - ``subject_actor_id`` / ``subject_actor_name`` : the vessel the rule
@@ -52,8 +54,8 @@ class COLREGSRule(ABC):
 
         ``kind:number:title-slug:actor1-actor2:subject``, with ``-`` for an empty rule
         number and for an encounter-scoped rule's subject, e.g.
-        ``rule:8:passing-at-a-safe-distance:1-2:-`` or
-        ``rule:17:stand-on-vessel-keeps-course-and-speed:2-2:2``. Actor ids, not names, so
+        ``rule:8(d):passing-at-a-safe-distance:1-2:-`` or
+        ``rule:17(a)(i):stand-on-vessel-keeps-course-and-speed:2-2:2``. Actor ids, not names, so
         renaming a vessel keeps the id; no hashing, so it is the same in every process.
         """
         slug = re.sub(r"[^a-z0-9]+", "-", self.title.lower()).strip("-")
@@ -105,7 +107,7 @@ class PersistingCourseAfterCourseChangeRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "8",
+            "8(b)",
             "Course Held After the Manoeuvre",
             "Once an avoidance course change is complete, the vessel should keep the changed heading and not drift back toward its original course. "
             "A give-way vessel may steer any way after its first evasive manoeuvre.",
@@ -119,7 +121,7 @@ class ReadilyApparentCourseChangeRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "8",
+            "8(b)",
             "Readily Apparent Course Change",
             f"If a course change is used to avoid collision, it should be at least {degrees(colregs_constants.READILY_APPARENT_HEADING_CHANGE):.0f} deg "
             f"within {colregs_constants.READILY_APPARENT_COURSE_CHANGE_TIME} seconds so that it is readily apparent to the other vessel.",
@@ -133,7 +135,7 @@ class ReadilyApparentCoursePersistenceRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "8",
+            "8(b)",
             "Course Change Persistence",
             f"After a readily apparent course change, the new heading should be held for at least {colregs_constants.HEADING_PERSISTENCE_TIME} seconds. "
             "A give-way vessel may steer any way after its first evasive manoeuvre.",
@@ -147,10 +149,24 @@ class ReadilyApparentSpeedChangeRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "8",
+            "8(b)",
             "Readily Apparent Speed Change",
             f"If a speed change is used to avoid collision, it should be at least {colregs_constants.READILY_APPARENT_SPEED_CHANGE} m/s "
             f"within {colregs_constants.READILY_APPARENT_COURSE_CHANGE_TIME} seconds so that it is readily apparent to the other vessel.",
+            RULE_KIND,
+            actor.id,
+            actor.name,
+        )
+
+
+class NoNewSituationRule(COLREGSRule):
+    def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
+        super().__init__(
+            Relation(actor, actor),
+            "8(c)",
+            "No New Situation While Manoeuvring",
+            "An alteration of course made to avoid collision must not result in another close-quarters situation: "
+            "the vessel fails when a new COLREGS situation begins for it after it has altered course in an encounter that is still running.",
             RULE_KIND,
             actor.id,
             actor.name,
@@ -161,7 +177,7 @@ class SafeDistanceRule(COLREGSRule):
     def __init__(self, relation: Relation, colregs_constants: COLREGSConstraints):
         super().__init__(
             relation,
-            "8",
+            "8(d)",
             "Passing at a Safe Distance",
             "Action taken to avoid collision should result in the vessels passing at a safe distance, checked until the other vessel is finally past and clear.",
             RULE_KIND,
@@ -186,7 +202,7 @@ class StandOnCoursePersistenceRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "17",
+            "17(a)(i)",
             "Stand-On Vessel Keeps Course and Speed",
             "The stand-on vessel should keep her course and speed while the give-way vessel is expected to act, "
             "changing only when it is clear the give-way vessel is not taking appropriate action or collision cannot be avoided by her action alone.",
@@ -200,7 +216,7 @@ class HoldAvoidanceCourseRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
             Relation(actor, actor),
-            "8",
+            "8(a)",
             "Give-Way Steering After First Evasive",
             "The give-way vessel's first alteration of course must keep out of the way. After that first evasive manoeuvre it may steer any way, including back toward its original course.",
             RULE_KIND,

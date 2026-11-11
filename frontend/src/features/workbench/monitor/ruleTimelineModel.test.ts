@@ -10,7 +10,7 @@ import {
   valueAt,
 } from "./ruleTimelineModel";
 import { parseFrame } from "../../../domain/simulation/protocol";
-import { RULE_16_ID, monitoredFrames } from "../../../test/fixtures/monitoredFrames";
+import { RULE_16_ID, RULE_8_ID, monitoredFrames } from "../../../test/fixtures/monitoredFrames";
 
 const R16 = "Rule 16: Give-Way Vessel Takes Early and Substantial Action";
 
@@ -131,7 +131,7 @@ describe("buildRuleTimeline with the monitor's rule ids and first failures", () 
           }
     );
     const pair = buildRuleTimeline(renamed).pairs[0]!;
-    expect(pair.rules.map((rule) => rule.key).sort()).toEqual([RULE_16_ID, "rule:8:passing-at-a-safe-distance:0-1:-"].sort());
+    expect(pair.rules.map((rule) => rule.key).sort()).toEqual([RULE_16_ID, RULE_8_ID].sort());
   });
 
   it("takes the first failure from the monitor when frames were thinned", () => {

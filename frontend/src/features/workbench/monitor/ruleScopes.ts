@@ -12,6 +12,7 @@ const VESSEL_RULE_SLUGS: ReadonlySet<string> = new Set([
   "readily-apparent-speed-change",
   "course-change-persistence",
   "course-held-after-the-manoeuvre",
+  "no-new-situation-while-manoeuvring",
   "stand-on-vessel-keeps-course-and-speed",
 ]);
 

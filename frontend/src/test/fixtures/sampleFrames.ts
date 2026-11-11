@@ -93,9 +93,9 @@ function buildFrame(timestamp: number): SimulationFrame {
             result: timestamp > 150 ? "FAILED" : "PASSED",
           },
           {
-            ruleName: "Rule 8: Passing at a Safe Distance",
+            ruleName: "Rule 8(d): Passing at a Safe Distance",
             title: "Passing at a Safe Distance",
-            ruleNumber: "8",
+            ruleNumber: "8(d)",
             kind: "rule",
             description:
               "Action taken to avoid collision should result in the vessels passing at a safe distance.",

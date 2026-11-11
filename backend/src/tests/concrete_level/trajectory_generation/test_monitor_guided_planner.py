@@ -122,9 +122,12 @@ class TestRepair:
 def test_a_scene_with_a_second_encounter_is_repaired_to_a_clean_plan():
     """Own ship head-on with TS3 while TS1 overtakes it, and overtaking TS2 itself.
 
-    The own ship and TS2 stay in sight, so their encounter starts again as soon as the own
-    ship is back on its heading (135 s). The seed has no corridor for it and fails Rule 16
-    there; the window repair clears that.
+    The own ship and TS2 stay in sight, so their encounter would start again as soon as the
+    own ship is back on its heading (135 s), while the head-on with TS3 is still running. A
+    plan that lets it restart fails there: the seed has no corridor for it (Rule 16), and it
+    is a new situation for a vessel that altered course in a running encounter (Rule 8(c)).
+    The window repair gives a plan in which the encounter with TS2 does not start again, so
+    the plan is over at 1050 s.
     """
     with open(os.path.join(os.path.dirname(__file__), "data", "four_vessel_head_on_overtaken.json"), encoding="utf-8") as file:
         scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
@@ -134,5 +137,5 @@ def test_a_scene_with_a_second_encounter_is_repaired_to_a_clean_plan():
     trajectories, iterations = planner.plan_trajectory()
     assert planner.first_failed_step is None
     assert iterations == 240, "the seed runs the whole hour"
-    assert len(trajectories) == 140, "the repaired plan ends once every give-way ship is back on its track"
+    assert len(trajectories) == 71, "the repaired plan ends once every give-way ship is back on its track"
     assert len(previews) > iterations  # the repair kept reporting after the last seed step

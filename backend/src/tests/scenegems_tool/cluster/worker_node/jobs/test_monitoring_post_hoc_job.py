@@ -71,7 +71,7 @@ def _scene_at(distance):
 def test_a_scene_starting_inside_the_safe_distance_fails_at_0(make_job):
     result = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"scene": _scene_at(80.0)}), _quiet)
     assert not result["passed"]
-    assert result["failed_rules"] == [{"relation": "os - ts1", "rule": "Rule 8: Passing at a Safe Distance (os - ts1)", "first_failed_at": 0}]
+    assert result["failed_rules"] == [{"relation": "os - ts1", "rule": "Rule 8(d): Passing at a Safe Distance (os - ts1)", "first_failed_at": 0}]
     assert result["encounters"] == {"os - ts1": ["OTHER"]}  # inside its encounter's own domain a pair is OTHER
     assert result["encounter_roles"] == {}
 
