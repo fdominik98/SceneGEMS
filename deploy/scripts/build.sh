@@ -32,8 +32,8 @@ Options:
                           scene-generation, trajectory-generation,
                           the simulation subsystem, design-space-exploration)
 
-  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
-                          sessions with ArduPilot run it on the control node's machine
+  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); an attended
+                          simulation with a real vessel runs it on a worker node
 
   -5, --worker-node       Worker node daemon image only (scenegems-worker-node:latest);
                           a worker node also needs the images of the components it offers

@@ -18,10 +18,7 @@ two jobs never share even when their short names do.
 
 The ids are lowercase letters, digits, '-' and '_', so every derived name is valid as a Docker
 container name and a compose project name. MQTT topics do not come from here: a topic names the
-subsystem or vessel that publishes and not the worker node it runs on (messaging/mqtt_client.py).
-
-A live session of the workbench still runs on the control node as a compose project of its own with
-a topic prefix (LiveSessionScope); it goes away with the control node's live sessions.
+subsystem or vessel that publishes and not the worker node it runs on (messaging/topic_layout.py).
 """
 
 import re
@@ -34,8 +31,6 @@ SCOPE_ROOT = "scenegems"
 SUBSYSTEM_SUFFIX = "-subsystem"
 JOB_ID_LENGTH = 8  # characters of the job id in a job instance's name
 INSTANCE_LABEL = "scenegems.instance"  # on every container and network of an instance; its value is the scope's key
-LIVE_SESSION_WORKER_NODE_ID = "workbench"  # the worker node level of the workbench's live sessions
-LIVE_SESSION_INSTANCE_PREFIX = "live-"
 INSTANCES_FOLDER = f"{RUNTIME_ASSETS_FOLDER}/instances"  # compose files and generated files of scoped instances, one folder each
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _UNSAFE_ID_CHARACTERS = re.compile(r"[^a-z0-9_-]+")
@@ -83,11 +78,6 @@ def worker_node_project(control_node_id: str, worker_node_id: str) -> str:
     return f"{SCOPE_ROOT}-{_require_id('control node id', control_node_id)}-{_require_id('worker node id', worker_node_id)}"
 
 
-def live_session_project_prefix(control_node_id: str) -> str:
-    """The compose project names of every live session of one control node start with this."""
-    return f"{SCOPE_ROOT}-{_require_id('control node id', control_node_id)}-{LIVE_SESSION_WORKER_NODE_ID}-{LIVE_SESSION_INSTANCE_PREFIX}"
-
-
 @dataclass(frozen=True)
 class InstanceScope:
     control_node_id: str
@@ -116,11 +106,6 @@ class InstanceScope:
             raise ValueError(f"An attempt is at least 1: {attempt}")
         retry = f"-{attempt}" if attempt > 1 else ""
         return cls(control_node_id, worker_node_id, f"{subsystem_name(subsystem)}-{short_job_id(job_id)}{retry}", key=f"{safe_id(job_id)}-{attempt}")
-
-    @classmethod
-    def live_session(cls, control_node_id: str, session_id: str) -> "LiveSessionScope":
-        """One live session of the workbench: its simulation stack, and its topics on the control node's broker."""
-        return LiveSessionScope(control_node_id, LIVE_SESSION_WORKER_NODE_ID, f"{LIVE_SESSION_INSTANCE_PREFIX}{safe_id(session_id)}")
 
     @property
     def compose_project(self) -> str:
@@ -151,32 +136,3 @@ class InstanceScope:
     def folder(self) -> str:
         """Local folder of the instance's compose file and generated files, on the runtime assets volume."""
         return f"{INSTANCES_FOLDER}/{self.docker_name}"
-
-
-@dataclass(frozen=True)
-class LiveSessionScope(InstanceScope):
-    """A live session on the control node: a compose project of its own, and a topic prefix on the control node's broker.
-
-    Other brokers carry unscoped WARA-PS topics, so the prefix is used only there (gateway/socket_session.py).
-    """
-
-    @property
-    def compose_project(self) -> str:
-        return f"{SCOPE_ROOT}-{self.control_node_id}-{self.worker_node_id}-{self.instance_id}"
-
-    @property
-    def docker_name(self) -> str:
-        return self.compose_project
-
-    @property
-    def topic_prefix(self) -> str:
-        return f"{SCOPE_ROOT}/{self.control_node_id}/{self.worker_node_id}/{self.instance_id}/"
-
-    def service_key(self, service: str) -> str:
-        return service
-
-    def container_name(self, service: str) -> str:
-        return f"{self.docker_name}-{safe_id(service)}"
-
-    def network_name(self, key: str) -> str:
-        return f"{self.docker_name}-{safe_id(key)}"

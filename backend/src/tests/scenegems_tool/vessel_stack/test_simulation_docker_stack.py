@@ -7,9 +7,10 @@ review the diff of the data files and commit them with the change.
 
 import pytest
 
+from scenegems_tool.vessel_stack import simulation_docker_stack
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, VesselStackConfig
-from scenegems_tool.vessel_stack.simulation_docker_stack import SIMULATION_COMPOSE_PROJECT, build_simulation_docker_stack_artifacts
+from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
 from tests.scenegems_tool.vessel_stack.stack_cases import CASE_NAMES
 
@@ -46,24 +47,22 @@ def test_generation_is_deterministic(stacks, case):
 
 
 @pytest.mark.parametrize("case", CASE_NAMES)
-def test_trajectories_are_written_last_for_the_worker(stacks, case):
+def test_trajectories_are_written_last(stacks, case):
     assert stacks[case].pending_paths[-1] == "trajectories.json"
 
 
 @pytest.mark.parametrize("case", CASE_NAMES)
 def test_every_service_joins_the_maritime_network(stacks, case):
     compose = stacks[case].compose
-    assert compose["networks"] == {"maritime_net": {"name": SIMULATION_COMPOSE_PROJECT, "driver": "bridge"}}
+    assert compose["networks"] == {"maritime_net": {"driver": "bridge"}}, "unnamed: the job that runs the stack names its network"
     for service in compose["services"].values():
         assert service["networks"] == ["maritime_net"]
 
 
-def test_embedded_stack_uses_an_unnamed_network():
-    from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection
-    from tests.scenegems_tool.vessel_stack.stack_cases import _instance
-
-    _, compose = build_simulation_docker_stack_artifacts(_instance("ardupilot_sim_lockstep"), encounter_trajectories("head_on", 10), mqtt_connection(), GEOFENCE, embedded_in_subsystem=True)
-    assert compose["networks"] == {"maritime_net": {"driver": "bridge"}}
+def test_a_stack_is_only_generated_never_started_from_here():
+    """A simulation job starts the stack it generated (cluster/worker_node/launchers/per_job/job_stack.py); nothing runs one on its own."""
+    for name in ("run_simulation_docker_stack_startup", "destroy_simulation_docker_stack", "SIMULATION_COMPOSE_PROJECT"):
+        assert not hasattr(simulation_docker_stack, name), name
 
 
 def test_unavailable_stack_is_rejected_before_anything_is_generated():
@@ -89,29 +88,28 @@ def test_an_unsupported_environment_is_rejected_before_anything_is_generated():
         build_simulation_docker_stack_artifacts(stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0], environment=environment), encounter_trajectories("head_on", 10), mqtt_connection(), GEOFENCE)
 
 
-SESSION_PREFIX = "scenegems/m1/workbench/live-ab12cd34/"
-
-
 def _arduagent_environments(instance, connection):
-    _, compose = build_simulation_docker_stack_artifacts(instance, encounter_trajectories("head_on", 20), connection, GEOFENCE, embedded_in_subsystem=True)
+    _, compose = build_simulation_docker_stack_artifacts(instance, encounter_trajectories("head_on", 20), connection, GEOFENCE)
     return {key: dict(item.split("=", 1) for item in service["environment"]) for key, service in compose["services"].items() if key.endswith("_arduagent")}
 
 
-def test_arduagent_containers_of_simulated_vessels_get_the_session_prefix():
+def test_arduagent_containers_get_no_topic_prefix_and_no_ground_station_address():
+    """An agent is told apart by the name in its topics, and a ground station connects to MAVProxy's TCP port: nothing is sent to the Docker host."""
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
-    environments = _arduagent_environments(instance, mqtt_connection().with_topic_prefix(SESSION_PREFIX))
-    assert {key: environment.get("MQTT_TOPIC_PREFIX") for key, environment in environments.items()} == {"agent_0_arduagent": SESSION_PREFIX, "agent_1_arduagent": SESSION_PREFIX}
-    assert all("MQTT_TOPIC_PREFIX" not in environment for environment in _arduagent_environments(instance, mqtt_connection()).values()), "unscoped without a prefix"
+    environments = _arduagent_environments(instance, mqtt_connection())
+    assert set(environments) == {"agent_0_arduagent", "agent_1_arduagent"}
+    for environment in environments.values():
+        assert not {"MQTT_TOPIC_PREFIX", "GCS_1", "LOCAL_BRIDGE"} & set(environment)
 
 
-def test_arduagent_containers_next_to_a_real_vessel_stay_unscoped():
+def test_a_real_vessel_brings_its_own_arduagent():
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
     instance.vessels["1"].context = AgentContext.REAL
     instance.vessels["1"].stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
     instance.vessels["1"].adapter_ids = ("replay_arduagent_real_vessel",)
-    environments = _arduagent_environments(instance, mqtt_connection().with_topic_prefix(SESSION_PREFIX))
+    environments = _arduagent_environments(instance, mqtt_connection())
     assert list(environments) == ["agent_0_arduagent"], "the real vessel runs its own ArduAgent"
-    assert "MQTT_TOPIC_PREFIX" not in environments["agent_0_arduagent"]
+    assert environments["agent_0_arduagent"]["OTHER_POSITIONS_TOPICS"] == "waraps/unit/surface/agent_1/sensor/position", "the simulated vessel still takes its position"
 
 
 def test_gazebo_has_no_fixed_container_name_and_no_host_port(stacks):

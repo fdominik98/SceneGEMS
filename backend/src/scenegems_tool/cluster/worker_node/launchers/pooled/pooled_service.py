@@ -39,9 +39,7 @@ class PoolNames:
     network_key: str
     network_name: str  # the instance's own bridge network, next to the broker network
     folder: str  # holds the compose file; emptied when the pool starts
-    topic_prefix: str  # a live session's scope on the control node's broker; empty for a worker node's pool
-    scoped: bool  # a cluster instance: its networks are removed with it
-    instance: Optional[str] = None  # the instance's label value in a worker node's project; None for a project of its own
+    instance: Optional[str] = None  # the instance's label value in the worker node's project, which its containers and networks are found by
 
     @classmethod
     def for_scope(cls, scope: InstanceScope, service_key: str) -> "PoolNames":
@@ -52,8 +50,6 @@ class PoolNames:
             network_key=f"{service_key}_net",
             network_name=scope.network_name("net"),
             folder=scope.folder,
-            topic_prefix="",
-            scoped=True,
             instance=scope.key,
         )
 
@@ -75,7 +71,7 @@ class PooledService:
     ):
         self.names = names
         # Every client of this instance, inside the container and outside, uses the same connection, name and topic.
-        self.mqtt_connection = mqtt_connection.with_topic_prefix(names.topic_prefix)
+        self.mqtt_connection = mqtt_connection
         self.service_name = service_name or self.default_service_name
         self.service_topic = service_topic(self.mqtt_connection.topic_root, self.service_name) if self.service_name else ""
         self.reference_geofence = reference_geofence
@@ -160,6 +156,5 @@ class PooledService:
         if self._lifecycle_thread is not None:
             self._lifecycle_thread.join(timeout=STARTUP_JOIN_TIMEOUT_S)
             self._lifecycle_thread = None
-        self.project.force_remove(networks=self.names.scoped)
-        if self.names.scoped:
-            shutil.rmtree(self.names.folder, ignore_errors=True)
+        self.project.force_remove(networks=True)
+        shutil.rmtree(self.names.folder, ignore_errors=True)

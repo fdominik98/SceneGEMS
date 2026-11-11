@@ -85,7 +85,6 @@ services:
     - maritime_net
 networks:
   maritime_net:
-    name: asv_maritime_net
     driver: bridge
 volumes:
   scenegems_runtime_assets:

@@ -17,8 +17,7 @@ workbench gateway.
     POST WORKER_NODES_PATH/<worker node id>/drain      no new jobs; running ones finish
     POST WORKER_NODES_PATH/<worker node id>/resume     ends the drain
     POST WORKER_NODES_PATH/<worker node id>/remove     forgets an offline worker node; 409 while it is not offline or holds a lease
-    GET  STATUS_PATH                     control node id, expected fingerprints (by image repository), connected
-                                         worker nodes, and live_sessions: whether the workbench gateway starts live sessions
+    GET  STATUS_PATH                     control node id, expected fingerprints (by image repository) and connected worker nodes
 
 The worker node view carries the machine the worker node runs on (null until a worker node that reports it says hello) and, while it is
 connected, the address its control link comes from: where a ground control station reaches the ports its jobs publish.
@@ -46,14 +45,14 @@ STATUS_PATH = "/cluster/status"
 MAX_LISTED_JOBS = 1000
 
 
-def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = None, live_sessions: bool = False) -> APIRouter:
+def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = None) -> APIRouter:
     router = APIRouter()
     router.include_router(catalog_router())
     router.include_router(setting_router(assurance))
     router.include_router(unavailable_router() if assurance is None else campaign_router(assurance, plane))
     router.include_router(_job_routes(plane))
     router.include_router(_job_start_routes(plane))
-    router.include_router(_worker_node_routes(plane, live_sessions))
+    router.include_router(_worker_node_routes(plane))
     return router
 
 
@@ -116,7 +115,7 @@ def _job_start_routes(plane: ControlPlane) -> APIRouter:
     return router
 
 
-def _worker_node_routes(plane: ControlPlane, live_sessions: bool) -> APIRouter:
+def _worker_node_routes(plane: ControlPlane) -> APIRouter:
     router = APIRouter()
 
     @router.get(WORKER_NODES_PATH)
@@ -137,7 +136,6 @@ def _worker_node_routes(plane: ControlPlane, live_sessions: bool) -> APIRouter:
             "control_node_id": plane.control_node_id,
             "expected_fingerprints": {"state": plane.expected.state.value, "error": plane.expected.error, "images": expected or {}},
             "connected_worker_nodes": [session.worker_node_id for session in plane.registry.connected()],
-            "live_sessions": live_sessions,
         }
 
     router.include_router(_worker_node_control_routes(plane))

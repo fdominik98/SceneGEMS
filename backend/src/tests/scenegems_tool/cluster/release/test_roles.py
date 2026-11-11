@@ -148,7 +148,8 @@ def test_a_release_s_images_carry_its_tag_and_the_pulled_one_keeps_its_own():
     assert scenegems_roles()["worker-node"]["images"] == [WORKER_NODE_IMAGE] and WORKER_NODE_IMAGE.endswith(":latest")
 
 
-def test_the_control_node_reads_its_compose_files_from_a_parameter():
+def test_the_control_node_role_names_its_one_compose_file():
+    """Fixed, not a parameter: a redeploy overwrites a .env that still names the former live sessions overlay."""
     control_node = scenegems_roles()["control-node"]
-    assert control_node["parameters"]["COMPOSE_FILE"]["default"] == "docker-compose.yml:docker-compose.live-sessions.yml"
-    assert control_node["env"]["COMPOSE_PATH_SEPARATOR"] == ":"
+    assert control_node["env"]["COMPOSE_FILE"] == "docker-compose.yml"
+    assert "COMPOSE_FILE" not in control_node["parameters"] and "COMPOSE_PATH_SEPARATOR" not in control_node["env"]

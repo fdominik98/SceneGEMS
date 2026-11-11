@@ -213,7 +213,7 @@ def gz_custom_instance(
             str(vessel.id): VesselConfig(
                 agent_id=str(vessel.id),
                 stack=VesselStackConfig(asv_system.get(vessel.id, AsvSystemId.REPLAY), ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
-                connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic="", port=None),
+                connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic=""),
             )
             for vessel in trajectories.initial_scene.vessels
         },

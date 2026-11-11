@@ -14,4 +14,5 @@ COPY backend/src ./src
 COPY backend/assets/domain_config ./assets/domain_config
 RUN pip install --no-cache-dir --no-deps -e .
 
-CMD ["python", "-m", "scenegems_tool.subsystems.simulation.simulation_service_main"]
+# Every job gives its own command; the default is the job runner (cluster/worker_node/launchers/per_job/job_container_io.py JOB_CONTAINER_MAIN)
+CMD ["python", "-m", "scenegems_tool.cluster.worker_node.jobs.in_container.job_container_main"]

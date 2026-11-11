@@ -43,9 +43,8 @@ class AgentConfig:
     AGENT_MODEL: str = str(os.getenv("AGENT_MODEL"))
 
     # Every topic from the effective base after the BASE_TOPIC and OTHER_POSITIONS_TOPIC
-    # overrides, under MQTT_TOPIC_PREFIX when the agent is scoped (agent_topics.py).
+    # overrides (agent_topics.py).
     TOPICS: AgentTopics = AgentTopics.from_environment(os.environ)
-    TOPIC_PREFIX: str = TOPICS.prefix
     BASE_TOPIC: str = TOPICS.base
     COMMAND_TOPIC: str = TOPICS.command
     POSITION_TOPIC: str = TOPICS.position

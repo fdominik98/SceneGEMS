@@ -183,15 +183,15 @@ def test_status(client, make_worker_node):
     status = client.get(STATUS_PATH).json()
     assert status["control_node_id"] == "lab-control-node" and status["connected_worker_nodes"] == [worker_node.worker_node_id]
     assert status["expected_fingerprints"]["state"] == "ready" and status["expected_fingerprints"]["images"] == EXPECTED_BY_REPOSITORY
-    assert status["live_sessions"] is False  # no gateway
+    assert set(status) == {"control_node_id", "expected_fingerprints", "connected_worker_nodes"}
 
 
-def test_status_reports_whether_the_gateway_starts_live_sessions(plane):
-    gateway = FastAPI()
-    with TestClient(create_operator_app(plane, gateway)) as client:
-        assert client.get(STATUS_PATH).json()["live_sessions"] is True
-    with TestClient(create_operator_app(plane, gateway, live_sessions=False)) as client:
-        assert client.get(STATUS_PATH).json()["live_sessions"] is False
+def test_status_says_nothing_about_live_sessions_with_or_without_the_gateway(plane):
+    """The control node runs no live session, so its status has no such field."""
+    with TestClient(create_operator_app(plane, FastAPI())) as client:
+        assert "live_sessions" not in client.get(STATUS_PATH).json()
+    with TestClient(create_operator_app(plane)) as client:
+        assert "live_sessions" not in client.get(STATUS_PATH).json()
 
 
 def test_the_operator_app_answers_health_without_a_gateway(plane):

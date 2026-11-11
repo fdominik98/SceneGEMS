@@ -9,7 +9,7 @@ import pytest
 import yaml
 
 from scenegems_tool.cluster.release.bundle import STACK_COMPOSE_FILES
-from scenegems_tool.cluster.release.roles import DEFAULT_CONTROL_NODE_COMPOSE_FILES, LIVE_SESSIONS_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
+from scenegems_tool.cluster.release.roles import CONTROL_NODE_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
 ENV_TEMPLATES = {"control-node": "deploy/control_node/.env.example", "worker-node": "deploy/worker_node/.env.example"}
@@ -93,7 +93,6 @@ def _settings_of(compose: dict) -> str:
 
 def test_the_control_node_stack_has_no_security_tool_certificates_or_tokens():
     compose = _compose("control-node")
-    assert set(_compose_file(STACK_COMPOSE_FILES["control-node"][1])["services"]) == {"control-node-api"}, "the live sessions file only adds to control-node-api"
     assert set(compose["services"]) == {"postgres", "cluster-broker", "control-node-api"}
     settings = _settings_of(compose)
     for word in ("security", "pairing", "certificate", "auth_hook", "broker_control_node", "8883"):
@@ -199,23 +198,27 @@ def test_the_worker_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials
     assert set(compose["volumes"]) == {"runtime", "state"}
 
 
-def test_only_the_live_sessions_file_gives_control_node_api_the_docker_socket():
-    base, live = (_compose_file(path)["services"]["control-node-api"] for path in STACK_COMPOSE_FILES["control-node"])
-    assert Path(STACK_COMPOSE_FILES["control-node"][1]).name == LIVE_SESSIONS_COMPOSE_FILE
-    assert not any("docker.sock" in str(volume) for volume in base["volumes"])
-    assert "/var/run/docker.sock:/var/run/docker.sock" in live["volumes"]
-    assert base["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "false" and live["environment"]["SCENEGEMS_LIVE_SESSIONS"] == "true"
-    for key in ("SCENEGEMS_RUNTIME_VOLUME", "SCENEGEMS_DOCKER_NETWORK"):
-        assert key not in base["environment"] and key in live["environment"]
+def test_the_control_node_has_no_docker_socket_and_starts_no_containers():
+    """Every subsystem runs on a worker node: the control node's stack is one compose file without Docker access, a runtime volume or a network for containers of its own."""
+    assert STACK_COMPOSE_FILES["control-node"] == (f"deploy/control_node/{CONTROL_NODE_COMPOSE_FILE}",)
+    assert not (REPO_ROOT / "deploy" / "control_node" / "docker-compose.live-sessions.yml").exists()
+    compose = _compose("control-node")
+    service = compose["services"]["control-node-api"]
+    assert not any("docker.sock" in str(volume) for volume in service["volumes"])
+    for key in ("SCENEGEMS_LIVE_SESSIONS", "SCENEGEMS_RUNTIME_VOLUME", "SCENEGEMS_DOCKER_NETWORK"):
+        assert key not in service["environment"], key
+    assert "extra_hosts" not in service and set(compose["volumes"]) == {"postgres_data", "broker_data", "artifacts"}
+    dockerfile = (REPO_ROOT / "deploy" / "images" / "control_node_api" / "Dockerfile").read_text(encoding="utf-8")
+    assert "download.docker.com" not in dockerfile and "docker/compose/releases" not in dockerfile, "the image carries no Docker CLI"
 
 
-def test_compose_reads_both_control_node_files_by_default_through_compose_file():
+def test_the_role_names_the_one_compose_file_so_a_redeploy_corrects_an_older_env():
+    """A .env of an earlier release names the live sessions overlay in COMPOSE_FILE; the role writes the value, so it is no parameter an operator keeps."""
     role = scenegems_roles()["control-node"]
-    default = role["parameters"]["COMPOSE_FILE"]["default"]
-    assert default == DEFAULT_CONTROL_NODE_COMPOSE_FILES
-    assert default.split(role["env"]["COMPOSE_PATH_SEPARATOR"]) == [Path(path).name for path in STACK_COMPOSE_FILES["control-node"]]
+    assert role["env"]["COMPOSE_FILE"] == CONTROL_NODE_COMPOSE_FILE == "docker-compose.yml"
+    assert "COMPOSE_FILE" not in role["parameters"] and "COMPOSE_PATH_SEPARATOR" not in role["env"]
     template = (REPO_ROOT / ENV_TEMPLATES["control-node"]).read_text(encoding="utf-8").splitlines()
-    assert f"COMPOSE_FILE={default}" in template and "COMPOSE_PATH_SEPARATOR=:" in template
+    assert "COMPOSE_FILE=docker-compose.yml" in template and not [line for line in template if line.startswith("COMPOSE_PATH_SEPARATOR")]
 
 
 def test_every_image_scenegems_builds_carries_the_release_tag():

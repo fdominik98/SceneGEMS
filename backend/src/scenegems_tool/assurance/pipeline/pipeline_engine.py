@@ -65,27 +65,23 @@ and checks every class on its first tick; intents without a job are resubmitted 
 wake() runs a tick at once instead of after the interval (the create route calls it through
 ControlPlane.wake_pipeline, so a new campaign or workbench entry starts without waiting).
 
-Runs from outside the cluster: a live session entry (origin live_session) gets no case from
-the engine. record_external_run writes its one case with the recorded run (run record with
-source live_session and no job) and the intent of its post-hoc monitor in a transaction that
-holds the cursor row like a tick's, and submits the monitor job after the commit; from then
-on the case moves like any other. Ticks and recorded runs take turns on the event loop, so
-they never share the engine's state at once.
+Entries of origin live_session are history: the control node once recorded the runs of the
+workbench's live sessions as such entries (run records of source live_session, without a job).
+Nothing records them any more, and the engine starts no case of one that is still open.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Awaitable, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Awaitable, Callable, Collection, Dict, FrozenSet, List, Mapping, Optional, Sequence, Set
 
 import anyio
 from sqlalchemy.orm import Session
 
-from scenegems_tool.assurance.campaign.campaign_inputs import item_class_id
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.campaign_context import CampaignContext, CampaignContexts
-from scenegems_tool.assurance.pipeline.case_machine import CaseMachine, ExternalRun, RecordedRun, StepOutbox
+from scenegems_tool.assurance.pipeline.case_machine import CaseMachine, StepOutbox
 from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, decide_class, plan_new_cases
 from scenegems_tool.assurance.pipeline.engine_leadership import EngineLeadership, LeadershipLost
 from scenegems_tool.assurance.pipeline.payload_builder import required_fingerprints
@@ -212,8 +208,7 @@ class PipelineEngine:
         self._changed: Set[str] = set()
         self._wakeup = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None  # the loop run() ticks on, for wakes from other threads
-        self._turn = asyncio.Lock()  # a tick or a recorded run at a time
-        self._recorded_classes: Set[Tuple[str, str]] = set()  # classes of recorded runs for the next tick's coverage controller
+        self._turn = asyncio.Lock()  # a tick at a time
 
     @property
     def started(self) -> bool:
@@ -300,16 +295,11 @@ class PipelineEngine:
             if not await self.start():
                 return self._stand_by()
         worker_nodes = list(self._worker_nodes())
-        recorded, self._recorded_classes = self._recorded_classes, set()
         try:
-            plan = await anyio.to_thread.run_sync(self._step, worker_nodes, recorded)
+            plan = await anyio.to_thread.run_sync(self._step, worker_nodes)
         except LeadershipLost:
-            self._recorded_classes |= recorded
             self._lose_leadership()
             return self._stand_by()
-        except BaseException:
-            self._recorded_classes |= recorded
-            raise
         self._notify(plan.changed)
         cancelled = await self._cancel_jobs(plan.outbox)
         submitted = await self._submit_all(plan.submissions)
@@ -355,10 +345,9 @@ class PipelineEngine:
         self._check_every_class = True
         return outbox
 
-    def _step(self, worker_nodes: Sequence[WorkerNodeAvailability], recorded: Collection[Tuple[str, str]] = ()) -> StepPlan:
+    def _step(self, worker_nodes: Sequence[WorkerNodeAvailability]) -> StepPlan:
         now = self._clock()
         plan = StepPlan(StepOutbox())
-        plan.outbox.touched_classes.update(recorded)  # the coverage controller decides the classes of runs recorded since the last tick
         self._changed = set()
         with self.stores.transaction() as session:
             # The cursor row is locked and this engine holds the engine lock, so the cursor is where the
@@ -464,7 +453,7 @@ class PipelineEngine:
             logger.info("Campaign %s drains: %s", campaign_id, reason)
             return
         if campaign.origin == CampaignOrigin.LIVE_SESSION:
-            return  # its case comes from record_external_run
+            return  # a recorded live session of an earlier release: nothing runs for it
         self._start_cases(machine, session, context, queued)
 
     def _start_campaign(self, session: Session, campaign: CampaignRecord, now: datetime) -> Optional[CampaignRecord]:
@@ -611,46 +600,6 @@ class PipelineEngine:
             return
         planned = plan_new_cases(classes, next_case_indexes(session, context.campaign_id), room)
         machine.start_cases(context, planned)
-
-    # Runs from outside the cluster
-
-    async def record_external_run(self, campaign_id: str, run: ExternalRun, class_id: Optional[str] = None) -> RecordedRun:
-        """Records a simulation that ran outside the cluster (a live session) as the one case of an item class (item/0 by default).
-
-        Writes the case, its run record (source live_session, no job) and the intent of its
-        post-hoc monitor in one transaction holding the cursor row, then submits the monitor
-        job after the commit (a submission that fails is retried by the next tick) and wakes
-        the engine. The campaign's fingerprints are pinned now when it has none yet. Raises
-        ValueError when the campaign is finished or stopping, or does not take a recorded run
-        (CaseMachine.record_external_run says when it does).
-        """
-        class_id = class_id or item_class_id(0)
-        async with self._turn:
-            recorded, outbox, submissions, changed = await anyio.to_thread.run_sync(self._record, campaign_id, class_id, run)
-            self._recorded_classes.add((campaign_id, class_id))
-            self._notify(changed)
-            await self._cancel_jobs(outbox)
-            await self._submit_all(submissions)
-        self.wake()
-        return recorded
-
-    def _record(self, campaign_id: str, class_id: str, run: ExternalRun) -> Tuple[RecordedRun, StepOutbox, List[PlannedSubmission], Set[str]]:
-        outbox = StepOutbox()
-        self._changed = set()
-        with self.stores.transaction() as session:
-            self.stores.pipeline.read_cursor(lock=True, session=session)  # no tick writes meanwhile
-            campaign = self.stores.campaigns.get_campaign(campaign_id, lock=True, session=session)
-            if campaign is None or campaign.actual_state.is_final or campaign.desired_state == CampaignDesiredState.STOPPED:
-                raise ValueError(f"campaign {campaign_id} is not running, so it takes no recorded run")
-            expected = None if campaign.pinned_fingerprints else self._expected()
-            if expected:
-                pin_fingerprints(session, campaign_id, expected, self._clock())
-            self.contexts.refresh(self.stores.campaigns.unfinished_campaigns(session=session))
-            machine = CaseMachine(self.stores, session, self.contexts, outbox)
-            recorded = machine.record_external_run(self.contexts.get(campaign_id, session), class_id, run)
-            self._event(session, campaign_id, CampaignEventKind.NOTE, {"recorded_run": {"case_id": recorded.case_id, "run_record_id": recorded.run_record_id}}, class_id)
-            submissions = [planned for planned in self._pending_submissions(session, outbox) if planned.case_id == recorded.case_id]
-        return recorded, outbox, submissions, self._take_changes(outbox)
 
     # Submissions
 

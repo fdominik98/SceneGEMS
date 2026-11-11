@@ -12,7 +12,6 @@ from scenegems_tool.cluster.worker_node.instance_scope import (
     subsystem_name,
     worker_node_project,
 )
-from scenegems_tool.messaging.topic_scope import TopicScope
 
 DOCKER_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]+$")
 COMPOSE_PROJECT = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -119,11 +118,8 @@ def test_instance_folders_are_separate_per_scope():
     assert first.folder.endswith("/instances/scenegems-m1-n1-scene-generation-subsystem")
 
 
-def test_a_live_session_keeps_a_project_and_a_topic_prefix_of_its_own():
-    scope = InstanceScope.live_session("m1", "ab12cd34")
-    assert scope.compose_project == scope.docker_name == "scenegems-m1-workbench-live-ab12cd34"
-    assert scope.container_name("simulation") == "scenegems-m1-workbench-live-ab12cd34-simulation"
-    assert scope.network_name("simulation_net") == "scenegems-m1-workbench-live-ab12cd34-simulation_net"
-    assert scope.service_key("simulation") == "simulation"
-    assert scope.topic_prefix == "scenegems/m1/workbench/live-ab12cd34/"
-    TopicScope(scope.topic_prefix)  # a valid prefix: no wildcards, ends with '/'
+def test_every_instance_belongs_to_a_worker_node():
+    """The control node runs no instance: there is no live session scope with a project or a topic prefix of its own."""
+    assert not hasattr(InstanceScope, "live_session")
+    for scope in (InstanceScope.pooled("m1", "n1", "monitoring"), InstanceScope.per_job("m1", "n1", "simulation", JOB_ID)):
+        assert scope.compose_project == worker_node_project("m1", "n1") and not hasattr(scope, "topic_prefix")

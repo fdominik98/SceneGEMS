@@ -27,7 +27,7 @@ def test_the_broker_is_the_control_nodes_plain_anonymous_one_on_its_host(tmp_pat
     assert (connection.user, connection.password) == ("", "")
     assert connection.client_broker == connection.agent_broker == "192.168.1.10" and connection.port == 1883
     assert not connection.tls_connection and connection.ca_certificate_path is None
-    assert connection.topic_prefix == "" and connection.topic_root == "scenegems", "the first level of the cluster's topics; a name tells its services apart"
+    assert connection.topic_root == "scenegems", "the first level of the cluster's topics; a name tells its services apart"
     assert broker_connection(configuration(tmp_path, SCENEGEMS_BROKER_PORT="11883")).port == 11883
 
 

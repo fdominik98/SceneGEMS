@@ -19,10 +19,6 @@ set gets its monitor job beside the next step's job; the monitor's result is the
 pending verdict. Every move goes through CaseStore.move_case with the version the case was
 read at.
 
-A run recorded outside the cluster (a live session, record_external_run) creates the one case
-of its item class at simulate, with the run record (source live_session, no job) and the
-intent of its post-hoc monitor, as if its simulate job had succeeded.
-
 It leaves the pipeline early as
 
     dropped    the scene is invalid, or the trajectory generator found no trajectory, or no
@@ -75,13 +71,11 @@ from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobState
 from scenegems_tool.persistence.schema import (
     ArtifactHolderKind,
-    CampaignClassState,
     CampaignEventKind,
     CaseState,
     JobEventKind,
     MonitorImplementation,
     PipelineStage,
-    RunSource,
     StepKind,
     VerdictState,
 )
@@ -90,7 +84,6 @@ from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID, UNSET, Assur
 logger = logging.getLogger(__name__)
 
 SUCCEEDED, FAILED, CANCELLED = "succeeded", "failed", "cancelled"
-RECORDED = "recorded"  # the outcome of a simulate step that ran outside the cluster
 NO_LATER_STEP = "the campaign runs no step after the exploration"  # why the explored FECs of such a campaign are complete at once
 # What an exploration's stop reason says about the FECs it returned
 STOP_REASONS = {
@@ -100,39 +93,6 @@ STOP_REASONS = {
     "timeout": "the time limit ended the exploration, there may be more",
     "stopped": "the exploration was stopped, there may be more",
 }
-
-
-@dataclass(frozen=True)
-class ExternalRun:
-    """A simulation that ran outside the cluster (a live session), as record_external_run stores it.
-
-    state_log is the reference (wire form or ArtifactRef) of the stored state log, a
-    Trajectories document in the control node's artifact store; stack is the run's stack as the
-    session configured it (per vessel), environment its environment.
-    """
-
-    state_log: Any
-    stack: Mapping[str, Any]
-    environment: Mapping[str, Any] = field(default_factory=dict)
-    dt: Optional[float] = None
-    steps: Optional[int] = None
-    repeatability_tier: Optional[str] = None  # the resolver's tier of the session's stack
-    state_digest: Optional[str] = None
-    seed: Optional[int] = None  # the run seed of the case seed when None
-    trajectories_complete: bool = True
-    worker_node_id: Optional[str] = None
-    fingerprints: Mapping[str, str] = field(default_factory=dict)
-    durations_s: Mapping[str, float] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class RecordedRun:
-    """What record_external_run wrote: the case, its run record, and the key of its post-hoc monitor job (None when unmonitored)."""
-
-    campaign_id: str
-    case_id: int
-    run_record_id: int
-    monitor_key: Optional[str]
 
 
 @dataclass
@@ -473,73 +433,6 @@ class CaseMachine:
         if state != CaseState.CANCELLED:
             logger.info("Case %s (%s) is %s: %s", case.case_id, context.scenario_name(case), state.value, reason)
         return moved
-
-    # Runs from outside the cluster
-
-    def record_external_run(self, context: CampaignContext, class_id: str, run: ExternalRun) -> RecordedRun:
-        """Creates the class's one case with a recorded run 0 (repeat 0): its run record, and its post-hoc monitor's intent or its unmonitored verdict.
-
-        The campaign must simulate only, with one run of one repeat judged post_hoc or not at
-        all, and the class must be open without a case. Raises ValueError otherwise.
-        """
-        graph, campaign_id = context.graph, context.campaign_id
-        if graph.steps != (CampaignStep.SIMULATION,) or len(graph.runs) != 1 or graph.run(0).repeats != 1:
-            raise ValueError(f"campaign {campaign_id} does not take a recorded run: it needs the simulation step only, with one run of one repeat")
-        run_config = graph.run(0)
-        if run_config.monitor == MonitorImplementation.LIVE:
-            raise ValueError(f"campaign {campaign_id} judges its run live; a recorded run is judged post_hoc or not at all")
-        if not is_reference(run.state_log):
-            raise ValueError("a recorded run's state log must be stored as an artifact first")
-        record = self.stores.cases.get_class(campaign_id, class_id, session=self.session)
-        if record is None or record.state != CampaignClassState.OPEN:
-            raise ValueError(f"campaign {campaign_id} has no open FEC {class_id}")
-        if self.stores.cases.list_cases(campaign_id, class_id, session=self.session):
-            raise ValueError(f"FEC {class_id} of campaign {campaign_id} has its case already")
-        (case,) = self.stores.cases.create_cases(campaign_id, [self._new_case(context, class_id, 0)], session=self.session)
-        self.outbox.touched_classes.add((campaign_id, class_id))
-        simulate = Step(PipelineStage.SIMULATE, 0, 0)
-        progress = CaseProgress()
-        progress.mark(simulate, RECORDED)
-        state_log = run.state_log.model_dump(mode="json") if hasattr(run.state_log, "model_dump") else dict(run.state_log)
-        result = {
-            "trajectories": state_log,
-            "steps": run.steps,
-            "state_digest": run.state_digest,
-            "run_record": {"dt": run.dt, "repeatability_tier": run.repeatability_tier, "environment": dict(run.environment)},
-        }
-        run_record = self.stores.results.add_run_record(
-            new_run_record(
-                case_id=case.case_id,
-                run_index=0,
-                repeat_index=0,
-                generator=None,
-                trajectories_complete=run.trajectories_complete,
-                stack=run.stack,
-                environment=run.environment,
-                seed=run.seed if run.seed is not None else run_config.seed_for(case.seed),
-                simulation_result=result,
-                input_trajectories_hash=case.input_artifact,
-                job_id=None,
-                worker_node_id=run.worker_node_id,
-                fingerprints=run.fingerprints,
-                durations_s=run.durations_s,
-                tier=run.repeatability_tier,
-                source=RunSource.LIVE_SESSION,
-            ),
-            session=self.session,
-        )
-        record_references(self.stores, self.session, result, ArtifactHolderKind.RUN, run_record.run_record_id, campaign_id)
-        progress.set_run_record(0, 0, run_record.run_record_id)
-        progress.run(0)["tier"] = run_record.repeatability_tier
-        due = []
-        if graph.needs_monitor_job(0):
-            due.append((Step(PipelineStage.MONITOR, 0), context.builder.post_hoc_monitoring(f"{context.scenario_name(case)}#run0", result)))
-        else:
-            progress.run(0)["verdict"] = pending_unmonitored()
-        case = self._save(context, case, progress)
-        written = self._intents(context, case, due)
-        key = due[0][0].idempotency_key(campaign_id, case.case_id) if due and written else None
-        return RecordedRun(campaign_id, case.case_id, run_record.run_record_id, key)
 
     # Helpers
 

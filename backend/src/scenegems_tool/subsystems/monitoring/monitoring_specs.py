@@ -134,7 +134,7 @@ _HOSTS = (
     (
         "mqtt_service",
         "MQTT monitor service",
-        "The workbench's monitoring worker: scenes arrive over MQTT in batches, monitored frames go back. Heartbeat and task acknowledgement every second.",
+        "The monitoring service of a worker node: scenes arrive over MQTT in batches, monitored frames go back. Heartbeat and task acknowledgement every second.",
         "scenegems_tool/subsystems/monitoring/monitoring_worker.py",
         "workbench",
     ),

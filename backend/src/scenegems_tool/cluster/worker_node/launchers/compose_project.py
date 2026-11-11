@@ -4,7 +4,7 @@ An instance of a worker node (instance_scope.py) shares the worker node's projec
 and every other instance. Such a ComposeProject names its instance: compose is told to ignore the
 project's other containers, which its file does not list, and a teardown removes only the
 containers and networks that carry the instance's label. Without an instance the project is the
-file's alone, as a live session's is.
+file's alone.
 """
 
 import os

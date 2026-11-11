@@ -1,10 +1,10 @@
-"""Drives a workbench run whose vessels are all simulated with the registry's lockstep runners.
+"""Drives an attended run whose vessels are all simulated with the registry's lockstep runners.
 
-ArduAgent drives an instance with real vessels (vessel_stack/simulation_parser.py), because a
-real vessel is reached over WARA-PS MQTT. An instance of simulated vessels only is run from
-the simulation worker by the runner its stacks resolve to. The worker is the runner of
-the session's stack: every layer has its own container there, and the runner steps them
-(vessel_stack/hosting.py):
+ArduAgent drives an instance with real vessels (arduagent_simulation_driver.py), because a
+real vessel is reached over MQTT. An instance of simulated vessels only is run by the runner
+its stacks resolve to, from the runner container of the attended simulation job
+(cluster/worker_node/jobs/simulation_runners/attended_runner.py): every layer has its own
+container in the job's stack, and the runner steps them (vessel_stack/hosting.py):
 
 - kinematic: run_kinematic_instance against the kinematic simulator and each vessel's ASV
   system container (replay or USV Navigation);
@@ -14,7 +14,7 @@ the session's stack: every layer has its own container there, and the runner ste
 - custom on gazebo: run_gz_custom against each vessel's ASV system and controller containers
   and the gz-transport actuator in the Gazebo service.
 
-Every step's states reach the worker as a scene. SITL paces itself to the instance's speedup;
+Every step's states reach the caller as a scene. SITL paces itself to the instance's speedup;
 the kinematic layer and a Gazebo world stepped by the runner would run as fast as the CPU
 allows, so the driver holds them to the speedup on the wall clock, and the workbench shows
 the run as it happens.
@@ -40,12 +40,12 @@ SceneObserver = Callable[[float, ConcreteScene], None]  # (scenario time in s, t
 
 
 def uses_lockstep_driver(simulation: SimulationInstanceConfig) -> bool:
-    """Whether the worker runs the instance with a lockstep runner: every vessel is simulated."""
+    """Whether the instance runs with a lockstep runner: every vessel is simulated."""
     return bool(simulation.vessels) and all(vessel.is_simulated for vessel in simulation.vessels.values())
 
 
 class RunStopped(Exception):
-    """Raised from a step observer to end a run that the worker was asked to stop."""
+    """Raised from a step observer to end a run that was asked to stop."""
 
 
 class LockstepSimulationDriver:
@@ -151,7 +151,7 @@ class LockstepSimulationDriver:
         return run_kinematic_instance(self.trajectories, self.simulation, dt=dt, steps=steps, hosting=self._hosting(), resolver=self.resolver, attended=True, on_step=on_step)
 
     def _hosting(self) -> StackHosting:
-        """A hosting for one run: the session stack's containers, unless the driver was given another."""
+        """A hosting for one run: the containers of the job's stack, unless the driver was given another."""
         return (self._hosting_factory or stack_hosting.in_stack_hosting)()
 
     def _scene_of(self, states: Mapping[int, ActorState]) -> ConcreteScene:

@@ -1,4 +1,4 @@
-"""Partial campaigns on Postgres with a fake fleet: each first step and its input, the scene and trajectory monitors, a last trajectory step, item classes, wake, and runs recorded from live sessions."""
+"""Partial campaigns on Postgres with a fake fleet: each first step and its input, the scene and trajectory monitors, a last trajectory step, item classes, wake, and the entries of recorded live sessions that earlier releases left."""
 
 import asyncio
 import json
@@ -7,7 +7,6 @@ from collections import Counter
 import pytest
 
 from scenegems_tool.assurance.campaign import ClassCatalog, campaign_config_from_dict, validate_campaign_config
-from scenegems_tool.assurance.pipeline.case_machine import ExternalRun
 from scenegems_tool.persistence.schema import (
     ArtifactHolderKind,
     CampaignActualState,
@@ -17,7 +16,6 @@ from scenegems_tool.persistence.schema import (
     CampaignKind,
     CampaignOrigin,
     CaseState,
-    MonitorImplementation,
     PipelineStage,
     RunSource,
     StepKind,
@@ -312,88 +310,19 @@ def test_wake_runs_a_tick_at_once(harness):
     assert all(len(_cases(harness, campaign)) >= 1 for campaign in (first, second))
 
 
-# Runs recorded from live sessions
+# Entries of recorded live sessions
 
 
-def _live_entry(harness, monitor: str = "post_hoc"):
+def test_the_engine_starts_no_case_of_a_live_session_entry_and_stops_it_when_asked(harness):
+    """Earlier releases recorded the workbench's live sessions as entries of origin live_session. Nothing records them any more:
+    an entry that is still open runs nothing, and a Stop (the operator's, or migration 0017's) ends it."""
     item = {"name": "loaded trajectories", "ref": _store(harness, trajectories_data(), "trajectories"), "source": {"file": "live_session"}}
-    config = format2_dict(["simulation"], runs=[{"monitor": monitor}], input={"items": [item]}, policy={"seed": 11, "keep_frames": True})
-    return _create(harness, config, CampaignKind.WORKBENCH, CampaignOrigin.LIVE_SESSION), item
-
-
-def _state_log(harness) -> dict:
-    data = json.dumps(trajectories_data(), sort_keys=True).encode("utf-8")
-    ref = input_ref(data, "trajectories")
-    harness.executor.artifacts.documents[ref["sha256"]] = data
-    return ref
-
-
-def _external_run(harness, **fields) -> ExternalRun:
-    return ExternalRun(
-        state_log=_state_log(harness),
-        stack={"vessels": {"0": {"stack": "mission_planner"}, "1": {"stack": "kinematic"}}},
-        environment={"wind_vector": [1.0, 0.0, 0.0]},
-        dt=0.5,
-        steps=20,
-        repeatability_tier="bounded",
-        durations_s={"running_s": 10.0},
-        **fields,
-    )
-
-
-def test_a_live_session_run_is_recorded_and_judged_post_hoc(make_harness):
-    harness = make_harness(references=True)
-    campaign, item = _live_entry(harness)
+    config = format2_dict(["simulation"], runs=[{"monitor": "post_hoc"}], input={"items": [item]}, policy={"seed": 11})
+    campaign = _create(harness, config, CampaignKind.WORKBENCH, CampaignOrigin.LIVE_SESSION)
     harness.settle()
     assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.RUNNING
-    assert _cases(harness, campaign) == []  # the engine starts no case of a live session entry
-    run = _external_run(harness)
-    recorded = harness.run(harness.engine.record_external_run(campaign.campaign_id, run))
-    (case,) = _cases(harness, campaign)
-    assert (recorded.case_id, case.class_id, case.stage, case.input_artifact, case.input_source) == (case.case_id, "item/0", MONITOR, item["ref"]["sha256"], {"file": "live_session"})
-    assert recorded.monitor_key == f"campaign:{campaign.campaign_id}:case:{case.case_id}:monitor:0"
-    (record,) = harness.stores.results.list_run_records(campaign.campaign_id)
-    assert (record.run_record_id, record.source, record.job_id, record.trajectory_generator) == (recorded.run_record_id, RunSource.LIVE_SESSION, None, None)
-    assert (record.dt, record.steps, record.repeatability_tier, record.environment) == (0.5, 20, "bounded", {"wind_vector": [1.0, 0.0, 0.0]})
-    assert record.artifacts == {"trajectories": item["ref"]["sha256"], "state_log": run.state_log["sha256"]}
-    assert record.stack["config"] == run.stack and record.durations_s == {"running_s": 10.0}
-    (monitor_job,) = [job for pipeline_job, job in _jobs_of(harness, case)]
-    assert monitor_job.idempotency_key == recorded.monitor_key and monitor_job.payload["trajectories"]["sha256"] == run.state_log["sha256"]
-    assert monitor_job.payload["include_frames"] is True
-    assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
-    (verdict,) = _verdicts(harness, campaign)
-    assert (verdict.step, verdict.state, verdict.monitor, verdict.run_record_id) == (StepKind.SIMULATION, VerdictState.PASSED, MonitorImplementation.POST_HOC, record.run_record_id)
-    assert _references(harness, ArtifactHolderKind.RUN, record.run_record_id) == ["frames", "state_log"]
-    assert any(event.kind == CampaignEventKind.NOTE and "recorded_run" in event.detail for event in harness.stores.campaigns.list_events(campaign.campaign_id, limit=None))
-    with pytest.raises(ValueError, match="not running"):
-        harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness)))
-
-
-def test_an_unmonitored_recorded_run_completes_without_a_job(harness):
-    campaign, _ = _live_entry(harness, monitor="empty")
+    assert _cases(harness, campaign) == [], "no simulation job is submitted for it"
+    assert not hasattr(harness.engine, "record_external_run"), "and no run from outside the cluster is taken"
+    harness.stores.campaigns.set_desired_state(campaign.campaign_id, CampaignDesiredState.STOPPED)
     harness.settle()
-    recorded = harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness, seed=99)))
-    assert recorded.monitor_key is None
-    harness.settle()
-    assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
-    (case,) = _cases(harness, campaign)
-    assert case.state == CaseState.COMPLETE and _jobs_of(harness, case) == []
-    (verdict,) = _verdicts(harness, campaign)
-    assert verdict.state == VerdictState.UNMONITORED and harness.stores.results.list_run_records(campaign.campaign_id)[0].seed == 99
-
-
-def test_a_recorded_run_is_refused_where_it_does_not_fit(harness):
-    campaign, _ = _live_entry(harness)
-    recorded = harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness)))  # before the engine started it
-    assert recorded.monitor_key is not None and harness.campaign(campaign.campaign_id).pinned_fingerprints  # pinned for the monitor job
-    with pytest.raises(ValueError, match="has its case already"):
-        harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness)))
-    with pytest.raises(ValueError, match="no open FEC item/5"):
-        harness.run(harness.engine.record_external_run(campaign.campaign_id, _external_run(harness), class_id="item/5"))
-    inline = ExternalRun(state_log=trajectories_data(), stack={})
-    with pytest.raises(ValueError, match="stored as an artifact"):
-        harness.run(harness.engine.record_external_run(campaign.campaign_id, inline, class_id="item/0"))
-    scenes = _create(harness, format2_dict(["scene_generation"], quota=1))
-    with pytest.raises(ValueError, match="simulation step only"):
-        harness.run(harness.engine.record_external_run(scenes.campaign_id, _external_run(harness)))
-    assert _cases(harness, scenes) == []  # nothing written
+    assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.STOPPED

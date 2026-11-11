@@ -87,7 +87,6 @@ def build_vessel_job_stack(
     broker at all, so only its runner gets the connection.
     """
     from scenegems_tool.messaging.mqtt_client import SERVICE_NAME_VARIABLE, mqtt_container_environment
-    from scenegems_tool.vessel_stack.agent_topic_scope import instance_has_real_vessel
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
     from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
     from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
@@ -98,13 +97,11 @@ def build_vessel_job_stack(
         raise JobFailed(f"Simulation stack rejected: {error}", retryable=False) from error
     scope = worker_node.job_scope(job)
     gen_folder = f"{scope.folder}/gen"
-    pending_writes, stack_compose = build_simulation_docker_stack_artifacts(
-        instance, trajectories, mqtt_connection or worker_node.mqtt_connection, geofence, headless=True, embedded_in_subsystem=True, gen_folder=gen_folder
-    )
+    pending_writes, stack_compose = build_simulation_docker_stack_artifacts(instance, trajectories, mqtt_connection or worker_node.mqtt_connection, geofence, headless=True, gen_folder=gen_folder)
     write_simulation_gen_files(pending_writes, gen_folder)
     stack_services = list(stack_compose["services"])
     networks = dict(stack_compose["networks"])
-    on_broker = instance_has_real_vessel(instance)
+    on_broker = instance.has_real_vessel
     environment = None
     if on_broker:
         environment = {"PYTHONUNBUFFERED": "1", **mqtt_container_environment(mqtt_connection or worker_node.mqtt_connection)}

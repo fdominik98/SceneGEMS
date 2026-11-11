@@ -1,7 +1,7 @@
 """Thin wrappers around the Docker CLI that every launcher uses.
 
-The launchers call the CLI rather than the Docker SDK because the workbench backend and
-the worker node daemon both run it next to the compose CLI, against the host's Docker socket.
+The launchers call the CLI rather than the Docker SDK because the worker node daemon runs it
+next to the compose CLI, against the host's Docker socket.
 """
 
 import subprocess
@@ -20,48 +20,6 @@ def container_ids_for_compose_project(project: str) -> List[str]:
         check=False,
     )
     return [container_id for container_id in result.stdout.split() if container_id]
-
-
-def container_ids_for_compose_project_prefix(prefix: str) -> List[str]:
-    """Containers of every compose project whose name starts with prefix."""
-    result = subprocess.run(
-        ["docker", "ps", "-a", "--format", f'{{{{.ID}}}}\t{{{{.Label "{COMPOSE_PROJECT_LABEL}"}}}}'],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    container_ids: List[str] = []
-    for line in result.stdout.splitlines():
-        container_id, _, project = line.partition("\t")
-        if container_id and project.startswith(prefix):
-            container_ids.append(container_id)
-    return container_ids
-
-
-def compose_projects_with_prefix(prefix: str) -> List[str]:
-    """Names of the compose projects with a container whose project name starts with prefix."""
-    result = subprocess.run(
-        ["docker", "ps", "-a", "--format", f'{{{{.Label "{COMPOSE_PROJECT_LABEL}"}}}}'],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return sorted({project for project in result.stdout.split() if project.startswith(prefix)})
-
-
-def container_names_and_ids() -> List[tuple]:
-    result = subprocess.run(
-        ["docker", "ps", "-a", "--format", "{{.ID}}\t{{.Names}}"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    pairs = []
-    for line in result.stdout.splitlines():
-        container_id, _, name = line.partition("\t")
-        if container_id:
-            pairs.append((container_id, name))
-    return pairs
 
 
 def is_container_running(container_name: str) -> bool:

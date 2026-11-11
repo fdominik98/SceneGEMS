@@ -65,11 +65,10 @@ DEFAULT_ARTIFACT_MAX_BYTES = str(256 * 1024 * 1024)
 DEFAULT_ARTIFACT_SWEEP_INTERVAL_S = "600"
 DEFAULT_ARTIFACT_SWEEP_GRACE_S = "3600"
 DEFAULT_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES = str(2 * 1024 * 1024 * 1024)
-# The control node's stack: its compose file and the overlay that gives control-node-api the Docker socket for the
-# workbench's live sessions (cluster/release/bundle.py STACK_COMPOSE_FILES). Compose reads COMPOSE_FILE from .env.
+# The control node's stack is one compose file (cluster/release/bundle.py STACK_COMPOSE_FILES). The role sets COMPOSE_FILE
+# to it, so a .env that still names the former live sessions overlay is overwritten on a redeploy: the control node
+# starts no containers and has no Docker socket.
 CONTROL_NODE_COMPOSE_FILE = "docker-compose.yml"
-LIVE_SESSIONS_COMPOSE_FILE = "docker-compose.live-sessions.yml"
-DEFAULT_CONTROL_NODE_COMPOSE_FILES = f"{CONTROL_NODE_COMPOSE_FILE}:{LIVE_SESSIONS_COMPOSE_FILE}"
 
 
 def release_image_tag(revision: str, dirty: bool) -> str:
@@ -102,7 +101,7 @@ def control_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "images": [tagged(CONTROL_NODE_API_REPOSITORY, image_tag), tagged(BROKER_REPOSITORY, image_tag), POSTGRES_IMAGE],
         "env": {
             "COMPOSE_PROJECT_NAME": "scenegems-{cluster}",
-            "COMPOSE_PATH_SEPARATOR": ":",
+            "COMPOSE_FILE": CONTROL_NODE_COMPOSE_FILE,
             "SCENEGEMS_CONTROL_NODE_ID": "{cluster}",
             IMAGE_TAG_VARIABLE: image_tag,
             "POSTGRES_DB": "scenegems",
@@ -122,13 +121,6 @@ def control_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
             "SCENEGEMS_ARTIFACT_MAX_BYTES": {"default": DEFAULT_ARTIFACT_MAX_BYTES, "description": "largest artifact a worker node may upload, uncompressed, in bytes"},
             "SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S": {"default": DEFAULT_ARTIFACT_SWEEP_INTERVAL_S, "description": "seconds between sweeps of unreferenced artifacts; 0 turns the sweep off"},
             "SCENEGEMS_ARTIFACT_SWEEP_GRACE_S": {"default": DEFAULT_ARTIFACT_SWEEP_GRACE_S, "description": "seconds an unreferenced artifact is kept after its last use"},
-            "COMPOSE_FILE": {
-                "default": DEFAULT_CONTROL_NODE_COMPOSE_FILES,
-                "description": (
-                    f"compose files of the control node, separated by ':'; without {LIVE_SESSIONS_COMPOSE_FILE} control-node-api gets no Docker socket "
-                    "and the workbench's live sessions are off on this control node"
-                ),
-            },
         },
         "secrets": ["POSTGRES_PASSWORD"],
         "setup": [],

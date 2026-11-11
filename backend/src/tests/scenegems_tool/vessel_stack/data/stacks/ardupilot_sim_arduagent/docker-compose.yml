@@ -56,8 +56,6 @@ services:
     - MODEL=motorboat
     - VEHICLE_PARAMS=motorboat
     - MAVPROXY=tcpin:agent_0_mavproxy:14551
-    - LOCAL_BRIDGE=udp:host.docker.internal:14550
-    - GCS_1=udp:host.docker.internal:14550
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position
     networks:
     - maritime_net
@@ -66,7 +64,7 @@ services:
     command:
     - sh
     - -c
-    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_0:5760 --out=tcpin:agent_0_mavproxy:14551 --out=udp:host.docker.internal:14550 --out=tcpin:0.0.0.0:5770; sleep 2; done
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_0:5760 --out=tcpin:agent_0_mavproxy:14551 --out=tcpin:0.0.0.0:5770; sleep 2; done
   agent_0_arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
@@ -136,8 +134,6 @@ services:
     - MODEL=motorboat
     - VEHICLE_PARAMS=motorboat
     - MAVPROXY=tcpin:agent_1_mavproxy:14551
-    - LOCAL_BRIDGE=udp:host.docker.internal:14550
-    - GCS_1=udp:host.docker.internal:14560
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position
     networks:
     - maritime_net
@@ -146,7 +142,7 @@ services:
     command:
     - sh
     - -c
-    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_1:5770 --out=tcpin:agent_1_mavproxy:14551 --out=udp:host.docker.internal:14560 --out=tcpin:0.0.0.0:5770; sleep 2; done
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_1:5770 --out=tcpin:agent_1_mavproxy:14551 --out=tcpin:0.0.0.0:5770; sleep 2; done
   agent_1_arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
@@ -161,7 +157,6 @@ services:
     - while true; do python -B -u /app/main.py; sleep 2; done
 networks:
   maritime_net:
-    name: asv_maritime_net
     driver: bridge
 volumes:
   scenegems_runtime_assets:

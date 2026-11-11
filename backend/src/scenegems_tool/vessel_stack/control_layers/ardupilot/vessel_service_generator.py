@@ -28,7 +28,6 @@ def _retried(command: str, retry_s: int) -> list:
 
 def generate_vessel_service(
     mqtt_client: MqttAgentClient,
-    port: int,
     params_file: str,
     speed_factor: int,
     is_ardupilot_sim: bool,
@@ -40,7 +39,8 @@ def generate_vessel_service(
     topics, come from the client's topic when it is a simulated unit's in the WARA-PS layout (messaging/topic_layout.py);
     any other topic leaves the agent the client's name under waraps, as before. other_position_topics are the base
     topics of the instance's other vessels: the agent takes positions from those only, not from every unit on the broker.
-    MAVProxy also listens on GCS_CONTAINER_PORT for a ground control station, published where the stack says so.
+    MAVProxy listens on GCS_CONTAINER_PORT for a ground control station; the stack that runs the vessel says whether
+    that port is published (a job keeps it for a Mission Planner vessel, on a host port Docker assigns).
     """
     mqtt_connection = mqtt_client.mqtt_connection
     mavproxy = f"{mqtt_client.name}_mavproxy"
@@ -84,16 +84,11 @@ def generate_vessel_service(
         "VEHICLE_PARAMS": "motorboat",
         # Bind tcpin on all interfaces inside the mavproxy container; arduagent uses the service hostname.
         "MAVPROXY": f"tcpin:{mavproxy}:{arduagent_port}",
-        "LOCAL_BRIDGE": "udp:host.docker.internal:14550",
-        "GCS_1": f"udp:host.docker.internal:{str(port)}",
     }
     if unit is not None and unit.root != WARAPS_TOPIC_ROOT:
         agent_env["MQTT_TOPIC_ROOT"] = unit.root
     if other_position_topics:
         agent_env["OTHER_POSITIONS_TOPICS"] = ",".join(f"{topic}{POSITION_CHANNEL}" for topic in other_position_topics)
-    if mqtt_connection.topic_prefix:
-        # A scoped ArduAgent publishes and subscribes under the live session's prefix (agent_topics.py in its image).
-        agent_env["MQTT_TOPIC_PREFIX"] = mqtt_connection.topic_prefix
     env_list = [f"{name}={value}" for name, value in agent_env.items()]
     sitl_env = [
         "SITL_SIMULATOR=ardupilot" if is_ardupilot_sim else "SITL_SIMULATOR=gazebo",
@@ -123,7 +118,6 @@ def generate_vessel_service(
         f"--default-modules={_MAVPROXY_DEFAULT_MODULES}",
         f"--master=tcp:{ardupilot}:{sim_port}",
         f"--out={agent_env['MAVPROXY']}",
-        f"--out={agent_env['GCS_1']}",
         f"--out=tcpin:0.0.0.0:{GCS_CONTAINER_PORT}",
     ]
     docker_services = {
@@ -173,10 +167,10 @@ def generate_gcs_mavproxy_service(agent_name: str, vessel_id: int) -> dict:
     SERIAL0 stays free for the lockstep runner, which watches the vessel there and whose
     connection is what lets SITL boot. The endpoint's container port is published on a host
     port Docker assigns (no fixed host port, so stacks and vessels never collide); the
-    session reads it back and reports it in the simulation status. MAVProxy exits while SITL
+    job reads it back and reports it in its status. MAVProxy exits while SITL
     does not listen on SERIAL1 yet (until it has booted), and Docker gives a restarted container
     a new host port, so a shell loop restarts MAVProxy inside the container instead: the port
-    the session reported stays the vessel's for the whole run.
+    the job reported stays the vessel's for the whole run.
     """
     mavproxy = [
         "python3",

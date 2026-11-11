@@ -14,9 +14,9 @@ class WebSocketSessionManager:
     def __init__(self) -> None:
         self._sessions_by_connection: Dict[str, Tuple[SocketSession, SocketMessageProcessor]] = {}
 
-    def create_session(self, websocket: WebSocket, live_sessions: bool = True) -> Tuple[SocketSession, SocketMessageProcessor]:
+    def create_session(self, websocket: WebSocket) -> Tuple[SocketSession, SocketMessageProcessor]:
         session = SocketSession(websocket=websocket)
-        message_processor = SocketMessageProcessor(session=session, live_sessions=live_sessions)
+        message_processor = SocketMessageProcessor(session=session)
         self._sessions_by_connection[str(id(websocket))] = (session, message_processor)
         return session, message_processor
 

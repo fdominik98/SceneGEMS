@@ -3,8 +3,6 @@ from typing import List
 
 import pytest
 
-from scenegems_tool.subsystems.simulation import empty_simulation_session
-
 
 class FakeWebSocket:
     """The part of a Starlette WebSocket that SocketSession uses."""
@@ -19,13 +17,6 @@ class FakeWebSocket:
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
-
-
-@pytest.fixture(autouse=True)
-def no_docker_teardown(monkeypatch):
-    """An empty simulation session schedules a Docker teardown of its session's stack or of leftover stacks; keep both off the engine."""
-    monkeypatch.setattr(empty_simulation_session, "schedule_force_destroy_session_stack", lambda *_, **__: None)
-    monkeypatch.setattr(empty_simulation_session, "schedule_leftover_sweep", lambda *_, **__: None)
 
 
 @pytest.fixture

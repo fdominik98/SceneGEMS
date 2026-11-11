@@ -3,6 +3,6 @@
 pooled_service.py              the shared lifecycle and compose layout
 scene_generation_pool.py       scene generation service
 trajectory_generation_pool.py  trajectory generation service
-monitor_service.py             live COLREGS monitor
+monitor_service.py             COLREGS monitoring service
 service_pools.py               a worker node's pools, started on first use
 """

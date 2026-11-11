@@ -190,7 +190,7 @@ def mavlink_instance(
         vessels[str(vessel.id)] = VesselConfig(
             agent_id=str(vessel.id),
             stack=VesselStackConfig(asv_system=software, control_layer=ControlLayerId.ARDUPILOT, simulation_layer=simulation_layer),
-            connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic="", port=None),
+            connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic=""),
             adapter_ids=(MAVLINK_LOCKSTEP_ADAPTERS[software],),
         )
     return SimulationInstanceConfig(simulation_layer=simulation_layer, environment=environment or EnvironmentConfig.calm(), speedup=speedup, vessels=vessels)

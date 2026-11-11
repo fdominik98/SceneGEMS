@@ -44,7 +44,7 @@ def _instance(case: str) -> SimulationInstanceConfig:
         instance.vessels["1"] = VesselConfig(
             agent_id="1",
             stack=VesselStackConfig(AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, layer),
-            connection=AgentConnection(agent_name="agent_1", topic="waraps/unit/surface/agent_1", port=14560),
+            connection=AgentConnection(agent_name="agent_1", topic="waraps/unit/surface/agent_1"),
             adapter_ids=("mission_planner_mavlink_port",),
         )
         return instance

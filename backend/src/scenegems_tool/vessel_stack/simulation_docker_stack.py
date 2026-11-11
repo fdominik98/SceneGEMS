@@ -4,21 +4,20 @@ The instance is resolved first, so an unavailable stack or an unsupported enviro
 rejected before anything is generated. Then every layer brings its own containers: the
 simulation layer one simulator for the scenario, and per vessel the control layer its
 controller and the ASV system adapter its ASV system (contracts/docker_stack.py).
+
+The stack is always part of something that runs it and names its containers: a simulation job
+(cluster/worker_node/jobs/simulation_runners/vessel_job_stack.py) or a calibration run. Its
+network is the caller's to name, so the compose document declares it without one.
 """
 
 import json
 import logging
 import os
-import subprocess
-import threading
 from typing import List, Optional, Tuple
-
-import yaml
 
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.vessel_stack.agent_topic_scope import agent_mqtt_connection
 from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSystem, DockerControlLayer, DockerSimulationLayer, DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.roles import LayerRef
@@ -29,9 +28,7 @@ from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from utils.file_system_utils import GAZEBO_GEN_MOUNT, SIMULATION_GEN_FOLDER, docker_volume_path, merge_compose_volumes
 
-SIMULATION_COMPOSE_PROJECT = "asv_maritime_net"
 _logger = logging.getLogger(__name__)
-_STANDALONE_COMPOSE_FILENAME = f"{SIMULATION_GEN_FOLDER}/docker-compose.yml"
 
 
 def _contributor(registry: AdapterRegistry, spec_id: str, kind: type) -> Optional[object]:
@@ -51,7 +48,6 @@ def build_simulation_docker_stack_artifacts(
     reference_geofence: Geofence,
     *,
     headless: bool = True,
-    embedded_in_subsystem: bool = False,
     gen_folder: str = SIMULATION_GEN_FOLDER,
 ) -> Tuple[List[Tuple[str, str]], dict]:
     """The files to write and the compose services of one instance. gen_folder must lie on the runtime assets volume."""
@@ -63,8 +59,7 @@ def build_simulation_docker_stack_artifacts(
     request = DockerStackRequest(
         simulation=simulation_config,
         trajectories=trajectories,
-        # ArduAgent containers publish under the session's prefix only when every vessel is simulated.
-        mqtt_connection=agent_mqtt_connection(mqtt_connection, simulation_config),
+        mqtt_connection=mqtt_connection,
         reference_geofence=reference_geofence,
         headless=headless,
         gen_folder=gen_folder,
@@ -93,15 +88,10 @@ def build_simulation_docker_stack_artifacts(
             if contributor is not None:
                 contributor.add_vessel(artifacts, request, vessel_config, vessel, state)
     simulation_layer.finish(artifacts, request)
-    # The simulation worker reads the trajectories from the shared gen folder.
+    # The trajectories go with the generated files.
     artifacts.pending_writes.append((f"{gen_folder}/trajectories.json", json.dumps(trajectories.to_dict())))
 
-    if embedded_in_subsystem:
-        maritime_network = {STACK_NETWORK: {"driver": "bridge"}}
-    else:
-        maritime_network = {STACK_NETWORK: {"name": SIMULATION_COMPOSE_PROJECT, "driver": "bridge"}}
-
-    docker_compose = {"services": artifacts.services, "networks": maritime_network}
+    docker_compose = {"services": artifacts.services, "networks": {STACK_NETWORK: {"driver": "bridge"}}}
     if any(service.get("volumes") for service in artifacts.services.values()):
         # Only a stack with a simulator that reads generated files needs the runtime assets volume where it runs;
         # a kinematic stack declares none, so a worker node without that volume runs it.
@@ -117,47 +107,3 @@ def write_simulation_gen_files(pending_writes: List[Tuple[str, str]], gen_folder
             os.makedirs(parent, exist_ok=True)
         with open(path, "w", encoding="utf-8") as file:
             file.write(content)
-
-
-def destroy_simulation_docker_stack() -> None:
-    """Remove legacy standalone Gazebo/SITL stacks from older two-stack startups."""
-    ids = subprocess.check_output(
-        ["docker", "ps", "-aq", "--filter", f"label=com.docker.compose.project={SIMULATION_COMPOSE_PROJECT}"],
-        text=True,
-    ).split()
-    if ids:
-        subprocess.run(["docker", "rm", "-f", *ids], check=False)
-
-
-def run_simulation_docker_stack_startup(
-    pending_writes: List[Tuple[str, str]],
-    docker_compose: dict,
-    compose_filename: str,
-    shutdown_event: Optional[threading.Event] = None,
-) -> None:
-    try:
-        if shutdown_event is not None and shutdown_event.is_set():
-            return
-        destroy_simulation_docker_stack()
-        write_simulation_gen_files(pending_writes)
-        if shutdown_event is not None and shutdown_event.is_set():
-            return
-        with open(compose_filename, "w", encoding="utf-8") as file:
-            yaml.dump(docker_compose, file, default_flow_style=False, sort_keys=False, width=10000)
-        if shutdown_event is not None and shutdown_event.is_set():
-            return
-        subprocess.run(
-            [
-                "docker-compose",
-                "-f",
-                compose_filename,
-                "--project-name",
-                SIMULATION_COMPOSE_PROJECT,
-                "up",
-                "-d",
-                "--no-build",
-            ],
-            check=False,
-        )
-    except BaseException:
-        _logger.exception("Simulation docker stack startup failed")

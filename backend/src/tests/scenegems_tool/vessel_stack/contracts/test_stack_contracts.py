@@ -133,7 +133,7 @@ class TestVesselConfig:
     def test_connection_is_required_when_asked_for(self):
         with pytest.raises(ValueError, match="Vessel 1 has no agent connection"):
             VesselConfig(agent_id="1", stack=self.stack()).require_connection()
-        connection = AgentConnection(agent_name="a", topic="t", port=None)
+        connection = AgentConnection(agent_name="a", topic="t")
         assert VesselConfig(agent_id="1", stack=self.stack(), connection=connection).require_connection() is connection
 
     def test_instance_lists_only_simulated_vessels(self):

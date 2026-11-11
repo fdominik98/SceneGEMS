@@ -58,7 +58,7 @@ class ArduPilotControlLayer:
         other_topics = [
             other.connection.topic for other_id, other in request.simulation.vessels.items() if other_id != vessel_config.agent_id and other.connection is not None and other.connection.topic
         ]
-        services = generate_vessel_service(agent_stub, connection.port, params_file, request.simulation.speedup, sitl_internal_physics, other_topics)
+        services = generate_vessel_service(agent_stub, params_file, request.simulation.speedup, sitl_internal_physics, other_topics)
         if not arduagent:
             # The ASV system talks MAVLink to SITL's SERIAL0 itself (mavlink_link.py), so the
             # vessel gets SITL only: no MAVProxy and no ArduAgent. A Mission Planner vessel adds

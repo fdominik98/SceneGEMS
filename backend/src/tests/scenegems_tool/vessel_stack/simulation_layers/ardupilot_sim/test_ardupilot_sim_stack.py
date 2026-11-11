@@ -81,10 +81,12 @@ def test_an_arduagent_takes_the_positions_of_its_instances_other_vessels_only(ar
     assert "NAME=agent_0" in services["agent_0_arduagent"]["environment"], "a topic outside the unit layout leaves the agent its name"
 
 
-def test_the_ground_control_port_of_each_vessel_is_forwarded(arduagent_stack):
-    services = arduagent_stack.compose["services"]
-    assert "GCS_1=udp:host.docker.internal:14550" in services["agent_0_mavproxy"]["environment"]
-    assert "GCS_1=udp:host.docker.internal:14560" in services["agent_1_mavproxy"]["environment"]
+def test_mavproxy_sends_nothing_to_the_docker_host(arduagent_stack):
+    """A ground control station connects to the TCP endpoint; the UDP stream to a typed port on the Docker host is gone."""
+    for name in ("agent_0_mavproxy", "agent_1_mavproxy"):
+        service = arduagent_stack.compose["services"][name]
+        assert "host.docker.internal" not in service["command"][-1]
+        assert not [item for item in service["environment"] if item.startswith(("GCS_1=", "LOCAL_BRIDGE="))]
 
 
 def test_agent_environment_carries_the_broker_and_credentials(arduagent_stack):

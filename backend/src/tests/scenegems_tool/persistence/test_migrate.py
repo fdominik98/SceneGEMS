@@ -61,10 +61,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0016"]
+    assert scripts.get_heads() == ["0017"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0017", "0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -145,7 +145,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0016"
+            assert MigrationContext.configure(connection).get_current_revision() == "0017"
     finally:
         engine.dispose()
 
@@ -776,6 +776,7 @@ def test_revision_0014_renames_the_stored_asv_system_names_and_back(empty_databa
         engine.dispose()
 
 
+@pytest.mark.postgres
 def test_revision_0015_renames_the_simulation_subsystem_image_in_stored_fingerprints_and_back(empty_database_url):
     config = alembic_config(empty_database_url)
     command.upgrade(config, "0014")
@@ -843,6 +844,7 @@ def test_revision_0015_renames_the_simulation_subsystem_image_in_stored_fingerpr
         engine.dispose()
 
 
+@pytest.mark.postgres
 def test_revision_0016_numbers_the_stored_worker_nodes_in_the_order_they_registered(empty_database_url):
     config = alembic_config(empty_database_url)
     command.upgrade(config, "0015")
@@ -866,5 +868,68 @@ def test_revision_0016_numbers_the_stored_worker_nodes_in_the_order_they_registe
         command.upgrade(config, "head")
         with engine.connect() as connection:
             assert dict(connection.execute(text("SELECT id, instance_number FROM worker_node")).all()) == numbers
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0017_stops_the_open_live_session_entries_that_have_no_run(empty_database_url):
+    """Nothing records a live session any more, so an entry that still waits for its run is asked to stop; every other entry is left as it is."""
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0016")
+    at = datetime(2026, 11, 11, 9, 30, tzinfo=timezone.utc)
+    engine = create_engine(empty_database_url)
+    campaign = text(
+        "INSERT INTO campaign (id, name, kind, origin, desired_state, actual_state, config_version, pinned_fingerprints, created_at, updated_at, finished_at)"
+        " VALUES (:id, :id, 'workbench', :origin, :desired, :actual, 1, '{}', :at, :at, :finished)"
+    )
+    entries = {
+        # id: origin, desired state, actual state
+        "waiting": ("live_session", "running", "running"),
+        "created": ("live_session", "running", "created"),
+        "recorded": ("live_session", "running", "running"),  # its run is recorded: it has a case, and the engine finishes it
+        "stopping": ("live_session", "stopped", "running"),
+        "finished": ("live_session", "running", "completed"),
+        "simulation": ("simulation", "running", "running"),  # a workbench run as a job: not a live session
+    }
+
+    def states(connection):
+        return {row.id: (row.desired_state, row.actual_state) for row in connection.execute(text("SELECT id, desired_state, actual_state FROM campaign")).all()}
+
+    try:
+        with engine.begin() as connection:
+            for campaign_id, (origin, desired, actual) in entries.items():
+                connection.execute(campaign, {"id": campaign_id, "origin": origin, "desired": desired, "actual": actual, "at": at, "finished": at if actual == "completed" else None})
+            connection.execute(
+                text(
+                    "INSERT INTO campaign_class (campaign_id, class_id, content_hash, vessel_count, obstacle_count, quota, failure_budget, complete_count, dropped_count,"
+                    " in_flight_count, state, created_at, updated_at) VALUES ('recorded', 'item/0', :sha, 2, 0, 1, 0, 0, 0, 1, 'open', :at, :at)"
+                ),
+                {"at": at, "sha": "a" * 64},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO scenario_case (campaign_id, class_id, case_index, seed, config_version, stage, state, version, progress, created_at, updated_at)"
+                    " VALUES ('recorded', 'item/0', 0, 7, 1, 'monitor', 'active', 1, '{}', :at, :at)"
+                ),
+                {"at": at},
+            )
+        command.upgrade(config, "0017")
+        with engine.connect() as connection:
+            after = states(connection)
+            touched = connection.execute(text("SELECT id FROM campaign WHERE updated_at > :at ORDER BY id"), {"at": at}).scalars().all()
+        assert after == {
+            "waiting": ("stopped", "running"),
+            "created": ("stopped", "created"),
+            "recorded": ("running", "running"),
+            "stopping": ("stopped", "running"),
+            "finished": ("running", "completed"),
+            "simulation": ("running", "running"),
+        }, "the engine moves a stopped entry to its final state on its next tick"
+        assert touched == ["created", "waiting"], "only the entries the revision stopped were written"
+        command.downgrade(config, "0016")
+        with engine.connect() as connection:
+            assert states(connection) == after, "a stopped entry stays stopped"
+        command.upgrade(config, "head")
     finally:
         engine.dispose()

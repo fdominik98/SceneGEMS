@@ -246,7 +246,7 @@ def _triple(stack: "VesselStackConfig") -> StackTriple:
 
 
 def runner_of_stack(stack: "VesselStackConfig") -> Optional[SimulationRunner]:
-    """The simulation runner that runs this stack; None when it runs on the workbench only."""
+    """The unattended simulation runner that runs this stack; None when only the attended runner does (a workbench run)."""
     return next((runner for runner, stacks in RUNNER_STACKS.items() if _triple(stack) in stacks), None)
 
 

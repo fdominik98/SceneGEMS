@@ -32,7 +32,7 @@ TRAJECTORIES = encounter_trajectories("head_on", 20)
 
 
 def services_of(instance) -> dict:
-    _, compose = build_simulation_docker_stack_artifacts(instance, TRAJECTORIES, mqtt_connection(), GEOFENCE, headless=True, embedded_in_subsystem=True)
+    _, compose = build_simulation_docker_stack_artifacts(instance, TRAJECTORIES, mqtt_connection(), GEOFENCE, headless=True)
     return compose["services"]
 
 
