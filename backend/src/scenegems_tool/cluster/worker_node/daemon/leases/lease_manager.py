@@ -36,6 +36,7 @@ from scenegems_tool.cluster.protocol.messages import (
     LeaseRenewed,
     ObservationFrames,
     Observe,
+    StartJob,
 )
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
 from scenegems_tool.cluster.protocol.worker_node_description import SlotUsage
@@ -109,6 +110,8 @@ class LeaseManager:
             self.on_drain(message)
         elif isinstance(message, Observe):
             self.on_observe(message)
+        elif isinstance(message, StartJob):
+            self.on_start(message)
         else:
             return False
         return True
@@ -169,6 +172,17 @@ class LeaseManager:
         if observation.request(message.active, message.speed):
             what = f"observed at {message.speed:g} times real time" if message.active else "no longer observed"
             _logger.info("Job %s (lease %s): %s", lease.job_id, lease.lease_id, what)
+
+    def on_start(self, message: StartJob) -> None:
+        """The operator's Start reaches the job through its observation, as the request to observe does."""
+        with self._lock:
+            lease = next((lease for lease in self._leases.values() if lease.job_id == message.job_id and lease.job.attempt == message.attempt), None)
+        observation = self.worker_node.observations.get(message.job_id, message.attempt) if lease is not None and lease.phase == LeasePhase.RUNNING else None
+        if observation is None:
+            _logger.debug("Start for job %s attempt %d, which this worker node does not run", message.job_id, message.attempt)
+            return
+        if observation.start():
+            _logger.info("Job %s (lease %s): started by the operator", lease.job_id, lease.lease_id)
 
     def on_drain(self, message: Drain) -> None:
         with self._lock:

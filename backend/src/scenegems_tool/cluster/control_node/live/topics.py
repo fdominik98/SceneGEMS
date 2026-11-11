@@ -184,7 +184,7 @@ class JobTopics:
     def job_status(self, job_id: str, progress: JobProgress) -> None:
         topic = job_topic(job_id)
         if self._channel.has_subscribers(topic):
-            self._channel.publish(topic, JobStatusChanged(status=JobProgressView(progress=progress.progress, message=progress.message, at=progress.at)).model_dump())
+            self._channel.publish(topic, JobStatusChanged(status=JobProgressView(progress=progress.progress, message=progress.message, at=progress.at, detail=progress.detail)).model_dump())
         if self._hub is not None:
             self._hub.job_progress(job_id, progress)
 

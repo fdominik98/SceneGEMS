@@ -174,6 +174,7 @@ class JobProgressView(LiveModel):
     progress: Optional[float] = None  # 0 to 1, when the job reports it
     message: str = ""
     at: datetime
+    detail: Optional[Dict[str, Any]] = None  # an attended simulation's phase and the ports of its ground control stations
 
 
 class JobStatusChanged(LiveModel):
@@ -261,6 +262,7 @@ class InstanceStatus(LiveModel):
     message: str = ""
     progress: Optional[float] = None
     observed_speed: Optional[float] = None  # set for a job instance; a change of speed sends a status of its own
+    detail: Optional[Dict[str, Any]] = None  # the job's latest status detail: an attended simulation's phase and ground control ports
 
 
 # Updates that may be rate limited and coalesced: previews and frames. A final sample or result is not a preview.

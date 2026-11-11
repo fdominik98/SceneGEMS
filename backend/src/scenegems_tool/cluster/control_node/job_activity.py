@@ -11,7 +11,7 @@ It is called on the event loop and must return at once.
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Deque, List, Optional, Protocol
+from typing import Any, Deque, Dict, List, Optional, Protocol
 
 from scenegems_tool.cluster.protocol.messages import JobStatus, LogLine, LogLines
 from scenegems_tool.persistence.clock import Clock, utc_now
@@ -26,6 +26,7 @@ class JobProgress:
     progress: Optional[float]
     message: str
     at: datetime
+    detail: Optional[Dict[str, Any]] = None  # what the job said beyond its message (JobStatus.detail)
 
 
 class ActivityListener(Protocol):
@@ -49,7 +50,7 @@ class JobActivity:
         self.listener: Optional[ActivityListener] = None
 
     def status(self, status: JobStatus) -> None:
-        progress = JobProgress(lease_id=status.lease_id, progress=status.progress, message=status.message, at=self._clock())
+        progress = JobProgress(lease_id=status.lease_id, progress=status.progress, message=status.message, at=self._clock(), detail=status.detail)
         self._entry(status.job_id).status = progress
         if self.listener is not None:
             self.listener.job_status(status.job_id, progress)

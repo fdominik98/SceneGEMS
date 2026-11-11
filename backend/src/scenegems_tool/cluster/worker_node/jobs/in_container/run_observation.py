@@ -174,6 +174,20 @@ class ContainerObservation:
         self._clock = clock
         self._sleep = sleep
 
+    def wait_for_start(self, timeout_s: float, while_waiting: Optional[Callable[[], None]] = None, poll_s: float = CHECK_INTERVAL_S) -> bool:
+        """Waits for the operator's Start of an attended run; False when it does not come within timeout_s.
+
+        while_waiting runs between two looks at the request, for what the run shows before it starts.
+        """
+        deadline = self._clock() + timeout_s
+        while not self.control().started:
+            if self._clock() >= deadline:
+                return False
+            if while_waiting is not None:
+                while_waiting()
+            self._sleep(poll_s)
+        return True
+
     def write_frame(self, frame: dict) -> None:
         out = self._out or sys.stdout
         out.write(format_frame_line(json.dumps(json_safe(frame), separators=(",", ":"), allow_nan=False)) + "\n")

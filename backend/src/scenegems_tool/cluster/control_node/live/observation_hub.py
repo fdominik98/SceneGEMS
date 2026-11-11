@@ -354,7 +354,7 @@ class ObservationHub:
         """A job's progress report (JobActivity, through JobTopics): a status for its observed instance."""
         if job_id not in self._jobs:
             return
-        self._publish_status(job_id, self._job_states.get(job_id, "running"), progress.message, progress.progress)
+        self._publish_status(job_id, self._job_states.get(job_id, "running"), progress.message, progress.progress, progress.detail)
 
     def job_state(self, job: JobRecord) -> None:
         """A job's state as last read (JobTopics): a status for its observed instances when it changed."""
@@ -364,7 +364,7 @@ class ObservationHub:
         self._job_states[job.job_id] = job.state.value
         self._publish_status(job.job_id, job.state.value, job.error or "", None)
 
-    def _publish_status(self, job_id: str, state: str, message: str, progress: Optional[float]) -> None:
+    def _publish_status(self, job_id: str, state: str, message: str, progress: Optional[float], detail: Optional[Dict[str, Any]] = None) -> None:
         self._job_status[job_id] = (state, message, progress)
         current = self._job_attempts.get(job_id)
         speed = self.observed_speed(job_id)
@@ -373,11 +373,11 @@ class ObservationHub:
             if observed is None:
                 continue
             instance_state = state if current is None or observed.name.attempt == current else SUPERSEDED
-            status = (instance_state, message, progress, speed)
+            status = (instance_state, message, progress, speed, json.dumps(detail, sort_keys=True) if detail else None)
             if self._sent_status.get(topic) == status:
                 continue
             self._sent_status[topic] = status
-            update = InstanceStatus(state=instance_state, message=message, progress=progress, observed_speed=speed)
+            update = InstanceStatus(state=instance_state, message=message, progress=progress, observed_speed=speed, detail=detail)
             self.publish_instance_update(observed.worker_node_id, observed.instance, update)
 
     # The broker

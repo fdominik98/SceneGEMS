@@ -163,7 +163,7 @@ async def test_a_job_instance_gets_status_and_simulation_frames(channel, plane, 
     hub.publish_simulation_frames(WORKER_NODE, "another-job", 1, [{"timestamp": 0}])
     await settle()
     status, frames = browser.socket.take()  # both batches waited unsent together, so they were joined
-    assert status["data"] == {"kind": "status", "state": "leased", "message": "step 25", "progress": 0.25, "observed_speed": 10.0}
+    assert status["data"] == {"kind": "status", "state": "leased", "message": "step 25", "progress": 0.25, "observed_speed": 10.0, "detail": None}
     assert frames["data"] == {"kind": "simulation_frames", "job_id": job.job_id, "frames": [{"timestamp": 0}, {"timestamp": 1}, {"timestamp": 2}]}
     hub.publish_simulation_frames(WORKER_NODE, job.job_id, 1, [{"timestamp": 3}])
     await settle()
@@ -214,7 +214,7 @@ async def test_an_observed_job_instance_hears_state_changes(channel, plane):
     await channel.producers.idle()
     await settle()
     (update,) = browser.socket.take()
-    assert update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0}
+    assert update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0, "detail": None}
     await browser.leave()
 
 

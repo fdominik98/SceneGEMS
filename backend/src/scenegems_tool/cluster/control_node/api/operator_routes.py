@@ -11,6 +11,7 @@ workbench gateway.
     GET  JOBS_PATH?state=&limit=         jobs in submission order
     GET  JOBS_PATH/<job id>              one job with its payload, events, progress and recent log lines
     POST JOBS_PATH/<job id>/cancel       cancels the job; its worker node is told to stop
+    POST JOBS_PATH/<job id>/start        starts the run of an attended simulation that waits for it; 409 while the job is not ready to start
     GET  WORKER_NODES_PATH                      worker nodes with status, connection and fingerprint state
     GET  WORKER_NODES_PATH/<worker node id>
     POST WORKER_NODES_PATH/<worker node id>/drain      no new jobs; running ones finish
@@ -19,7 +20,8 @@ workbench gateway.
     GET  STATUS_PATH                     control node id, expected fingerprints (by image repository), connected
                                          worker nodes, and live_sessions: whether the workbench gateway starts live sessions
 
-The worker node view carries the machine the worker node runs on (null until a worker node that reports it says hello).
+The worker node view carries the machine the worker node runs on (null until a worker node that reports it says hello) and, while it is
+connected, the address its control link comes from: where a ground control station reaches the ports its jobs publish.
 
 The catalog routes (catalog_routes.py) and the setting routes (setting_routes.py: the domain configuration and the campaign presets,
 read-only without the campaign stores) are always there; the campaign routes (campaign_routes.py) join them when the control node has the campaign stores.
@@ -50,6 +52,7 @@ def operator_router(plane: ControlPlane, assurance: Optional[AssuranceStores] = 
     router.include_router(setting_router(assurance))
     router.include_router(unavailable_router() if assurance is None else campaign_router(assurance, plane))
     router.include_router(_job_routes(plane))
+    router.include_router(_job_start_routes(plane))
     router.include_router(_worker_node_routes(plane, live_sessions))
     return router
 
@@ -92,6 +95,23 @@ def _job_routes(plane: ControlPlane) -> APIRouter:
         except UnknownJob:
             raise HTTPException(status_code=404, detail=f"no job {job_id}")
         return {"cancelled": outcome.cancelled, "job": job_view(outcome.job)}
+
+    return router
+
+
+def _job_start_routes(plane: ControlPlane) -> APIRouter:
+    """The operator's Start of an attended simulation, which waits for it once its stack is up."""
+    router = APIRouter()
+
+    @router.post(JOBS_PATH + "/{job_id}/start")
+    async def start_job(job_id: str) -> dict:
+        try:
+            outcome = await plane.start_job(job_id)
+        except UnknownJob:
+            raise HTTPException(status_code=404, detail=f"no job {job_id}")
+        if not outcome.started:
+            raise HTTPException(status_code=409, detail=outcome.reason)
+        return {"started": True, "job": job_view(outcome.job, plane.activity.progress(job_id))}
 
     return router
 

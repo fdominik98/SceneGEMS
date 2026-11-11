@@ -9,7 +9,7 @@ from scenegems_tool.cluster.control_node.control_plane import ControlPlane
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
 from scenegems_tool.cluster.fingerprints.components import SCENE_GENERATION_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream
+from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream, StartJob
 from scenegems_tool.cluster.protocol.routes import JOBS_PATH
 from tests.scenegems_tool.cluster.control_node.conftest import EXPECTED, EXPECTED_BY_REPOSITORY, KINEMATIC, SCENE
 from tests.scenegems_tool.cluster.payloads import valid_payload
@@ -198,3 +198,34 @@ def test_the_operator_app_answers_health_without_a_gateway(plane):
     with TestClient(create_operator_app(plane)) as client:
         response = client.get("/health")
     assert response.status_code == 200 and response.json() == {"status": "ok"}
+
+
+def test_start_reaches_the_worker_node_of_an_attended_job_once_it_is_ready(client, make_worker_node, schedule):
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    worker_node.connect()
+    job = _submit(client).json()
+    start_path = f"{JOBS_PATH}/{job['job_id']}/start"
+    assert client.post(start_path).status_code == 409, "a queued job waits for a worker node, not for a start"
+    schedule()
+    offer = worker_node.expect(LeaseOffer)
+    worker_node.accept(offer)
+    worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], message="bringing the stack up", detail={"phase": "preparing"}))
+    refused = client.post(start_path)
+    assert refused.status_code == 409 and "preparing" in refused.json()["detail"]
+
+    ready = {"phase": "ready_to_start", "ground_control": {"0": 49153}}
+    worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], message="ready to start", detail=ready))
+    assert client.get(f"{JOBS_PATH}/{job['job_id']}").json()["progress"]["detail"] == ready, "what the console reads when it opens the job late"
+    response = client.post(start_path)
+    assert response.status_code == 200 and response.json()["started"] and response.json()["job"]["state"] == "running"
+    start = worker_node.expect(StartJob)
+    assert (start.job_id, start.attempt) == (job["job_id"], 1)
+    assert client.post(f"{JOBS_PATH}/no-such-job/start").status_code == 404
+
+
+def test_a_connected_worker_node_shows_the_address_its_control_link_comes_from(client, make_worker_node):
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    assert "address" not in worker_node.__dict__  # the view's, not the fake's
+    worker_node.connect()
+    (view,) = client.get(WORKER_NODES_PATH).json()
+    assert view["connected"] and "address" in view, "where a ground control station reaches the ports its jobs publish"

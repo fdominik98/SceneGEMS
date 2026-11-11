@@ -20,6 +20,7 @@ loaded only then, for the same reason. wake_pipeline runs its next tick at once.
 
 import asyncio
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, List, Optional
 
@@ -36,8 +37,10 @@ from scenegems_tool.cluster.control_node.scheduling.reject_backoff import Reject
 from scenegems_tool.cluster.control_node.scheduling.scheduler import Scheduler
 from scenegems_tool.cluster.control_node.scheduling.worker_node_eligibility import ResourceGuard
 from scenegems_tool.cluster.control_node.timing import ControlTiming
-from scenegems_tool.cluster.protocol.jobs import JobSubmission, JobType
+from scenegems_tool.cluster.protocol.jobs import JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import (
+    PHASE_READY_TO_START,
+    STATUS_PHASE,
     Cancel,
     Heartbeat,
     Hello,
@@ -51,11 +54,12 @@ from scenegems_tool.cluster.protocol.messages import (
     ObservationFrames,
     ProtocolError,
     ProtocolErrorCode,
+    StartJob,
     Welcome,
     WorkerNodeMessage,
 )
 from scenegems_tool.persistence.clock import Clock, utc_now
-from scenegems_tool.persistence.stores import CancelOutcome, JobStore, SubmitOutcome, WorkerNodeRecord, WorkerNodeStore
+from scenegems_tool.persistence.stores import CancelOutcome, JobRecord, JobStore, SubmitOutcome, UnknownJob, WorkerNodeRecord, WorkerNodeStore
 
 if TYPE_CHECKING:
     from scenegems_tool.assurance.pipeline.pipeline_engine import PipelineEngine, WorkerNodeAvailability
@@ -90,6 +94,15 @@ def validate_submission_payload(submission: JobSubmission) -> JobSubmission:
     except ValidationError as error:
         raise InvalidPayload(submission.job_type, error) from error
     return submission.model_copy(update={"requirements": submission.requirements.model_copy(update={"components": list(components)})})
+
+
+@dataclass(frozen=True)
+class StartOutcome:
+    """What became of an operator's Start: sent to the job's worker node, or why not."""
+
+    started: bool
+    reason: str
+    job: JobRecord
 
 
 class ControlPlane:
@@ -246,6 +259,25 @@ class ControlPlane:
                 await session.send(Cancel(lease_id=outcome.lease_id, job_id=job_id, reason=reason))
             self.scheduler.wake()
         return outcome
+
+    async def start_job(self, job_id: str) -> "StartOutcome":
+        """The operator's Start of an attended simulation that reported it is ready: passed on to the worker node that runs it.
+
+        Raises UnknownJob. A job that is not waiting for a Start, or whose worker node is not connected, is not started.
+        """
+        job = await anyio.to_thread.run_sync(self.jobs.get, job_id)
+        if job is None:
+            raise UnknownJob(job_id)
+        progress = self.activity.progress(job_id)
+        phase = (progress.detail or {}).get(STATUS_PHASE) if progress is not None else None
+        if job.state != JobState.RUNNING or phase != PHASE_READY_TO_START:
+            waiting = f"it is {phase}" if phase else "it does not wait for a start"
+            return StartOutcome(False, f"job {job_id} is {job.state.value} and {waiting}", job)
+        session = self.registry.session(job.lease_owner) if job.lease_owner else None
+        if session is None:
+            return StartOutcome(False, f"the worker node of job {job_id} is not connected", job)
+        await session.send(StartJob(job_id=job_id, attempt=job.attempt))
+        return StartOutcome(True, "", job)
 
     # Campaigns
 

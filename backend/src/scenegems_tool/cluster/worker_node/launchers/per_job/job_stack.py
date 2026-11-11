@@ -39,7 +39,7 @@ from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io impor
     RESULT_DOCUMENT,
     ObservationControl,
     parse_frame_line,
-    parse_status_line,
+    parse_status,
 )
 
 if TYPE_CHECKING:
@@ -280,9 +280,13 @@ def forward_runner_line(line: str, stream: LogStream, container: str, report: Jo
     """One line of the runner's output: a status line as status, a frame line to the observation (never as a log line), the rest as a log line."""
     line = line.rstrip("\r\n")
     if stream == LogStream.STDOUT:
-        status = parse_status_line(line)
+        status = parse_status(line)
         if status is not None:
-            report.status(*status)
+            message, progress, detail = status
+            if detail is None:
+                report.status(message, progress)
+            else:
+                report.status(message, progress, detail)
             return
         frame = parse_frame_line(line)
         if frame is not None:

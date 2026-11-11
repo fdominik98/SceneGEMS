@@ -101,7 +101,7 @@ async def test_the_first_observer_turns_observation_on_at_its_speed_and_the_last
     assert (await observes(socket, plane))[-1] == (job.job_id, 1, True, 50.0)
     for browser in (first, second):  # every observer hears the new speed in a status of the job instance
         (update,) = await browser.messages(1)
-        assert update["type"] == "update" and update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 50.0}
+        assert update["type"] == "update" and update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 50.0, "detail": None}
     configure(first, topic, 50)  # the same speed again changes nothing
     await settle()
     assert len(await observes(socket, plane)) == 2 and first.socket.take() == [] and second.socket.take() == []

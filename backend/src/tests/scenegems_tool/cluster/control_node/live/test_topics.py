@@ -181,9 +181,12 @@ def test_a_job_instance_shows_the_jobs_state_and_progress(client, browser, make_
 
     worker_node.accept(offer)
     idle()
-    assert browser.expect_update(topic) == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0}
+    assert browser.expect_update(topic) == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0, "detail": None}
     worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], progress=0.5, message="half way"))
-    assert browser.expect_update(topic) == {"kind": "status", "state": "running", "message": "half way", "progress": 0.5, "observed_speed": 10.0}
+    assert browser.expect_update(topic) == {"kind": "status", "state": "running", "message": "half way", "progress": 0.5, "observed_speed": 10.0, "detail": None}
+    ready = {"phase": "ready_to_start", "ground_control": {"0": 49153}}
+    worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], message="ready to start", detail=ready))
+    assert browser.expect_update(topic) == {"kind": "status", "state": "running", "message": "ready to start", "progress": None, "observed_speed": 10.0, "detail": ready}
 
     browser.send({"type": "unsubscribe", "topic": topic})
     assert browser.receive()["type"] == "unsubscribed"

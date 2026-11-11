@@ -8,7 +8,7 @@ job (a simulation) also gets the job folder's observation (run_observation.py).
 import json
 import sys
 import traceback
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.worker_node.job_observation import OBSERVABLE_JOB_TYPES
@@ -19,8 +19,8 @@ from scenegems_tool.cluster.worker_node.jobs.job_types import job_type_module
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import JOB_DOCUMENT, JOB_FOLDER, RESULT_DOCUMENT, format_status_line
 
 
-def status(message: str, progress: Optional[float] = None) -> None:
-    print(format_status_line(message, progress), flush=True)
+def status(message: str, progress: Optional[float] = None, detail: Optional[Dict[str, Any]] = None) -> None:
+    print(format_status_line(message, progress, detail), flush=True)
 
 
 def _write_outcome(outcome: dict) -> None:

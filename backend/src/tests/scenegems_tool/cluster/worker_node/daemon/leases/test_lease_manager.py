@@ -19,6 +19,7 @@ from scenegems_tool.cluster.protocol.messages import (
     LogLines,
     ObservationFrames,
     Observe,
+    StartJob,
     Welcome,
 )
 from scenegems_tool.cluster.worker_node.daemon.leases.lease import LeasePhase
@@ -295,3 +296,14 @@ def test_a_cancelled_job_closes_its_observation_without_sending(manager, sender,
     manager.handle(Cancel(lease_id="a", job_id="job-a", reason="operator"))
     wait_for(lambda: not manager.busy)
     assert sender.of(ObservationFrames) == [] and len(manager.worker_node.observations) == 0
+
+
+def test_the_operators_start_reaches_the_jobs_observation(manager, sender, jobs):
+    accept(manager, sender, jobs, "a")
+    observation = manager.worker_node.observations.get("job-a", 1)
+    assert manager.handle(StartJob(job_id="job-a", attempt=2)) and not observation.started, "another attempt"
+    manager.on_start(StartJob(job_id="job-x", attempt=1))
+    assert not observation.started
+    assert manager.handle(StartJob(job_id="job-a", attempt=1))
+    assert observation.started and observation.control.revision == 1
+    jobs.finish("job-a")

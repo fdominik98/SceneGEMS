@@ -104,3 +104,17 @@ def test_long_lines_are_cut():
     report = batcher(Clock())
     report.log("runner", "x" * (MAX_LINE_CHARACTERS + 10))
     assert len(lines(report.take_frames())[0].text) == MAX_LINE_CHARACTERS
+
+
+def test_the_latest_status_goes_out_with_its_detail():
+    from scenegems_tool.cluster.protocol.messages import JobStatus
+    from scenegems_tool.cluster.worker_node.daemon.leases.report_batcher import ReportBatcher
+
+    batcher = ReportBatcher("lease-1", "job-1")
+    batcher.status("preparing", None, {"phase": "preparing"})
+    batcher.status("ready to start", None, {"phase": "ready_to_start", "ground_control": {"0": 49153}})
+    (status,) = [frame for frame in batcher.take_frames(force=True) if isinstance(frame, JobStatus)]
+    assert (status.message, status.detail) == ("ready to start", {"phase": "ready_to_start", "ground_control": {"0": 49153}})
+    batcher.status("running")
+    (status,) = [frame for frame in batcher.take_frames(force=True) if isinstance(frame, JobStatus)]
+    assert status.detail is None

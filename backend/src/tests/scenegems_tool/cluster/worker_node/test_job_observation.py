@@ -103,3 +103,24 @@ def test_only_simulations_are_observable(clock):
     assert observations.get("j1", 2) is None
     assert observations.close(job()) is opened and opened.closed and len(observations) == 0
     assert observations.close(job()) is None
+
+
+def test_the_operators_start_is_a_change_of_the_request_the_runner_reads():
+    observation = JobObservation("j", 1)
+    assert not observation.started and observation.control.revision == 0
+    assert observation.start() and observation.started
+    assert observation.control.revision == 1, "so the launcher copies the request into the runner"
+    assert not observation.start(), "once"
+    assert observation.wait_for_change(0, 0.0).started
+
+
+def test_observing_keeps_the_start_and_a_closed_observation_takes_none():
+    observation = JobObservation("j", 1)
+    observation.start()
+    observation.request(True, 5.0)
+    assert observation.control.started and observation.control.active and observation.control.revision == 2
+    observation.request(False, 5.0)
+    assert observation.control.started
+    closed = JobObservation("k", 1)
+    closed.close()
+    assert not closed.start()

@@ -20,6 +20,7 @@ counted (observed_seconds): an observed run is paced, so the job's timeout leave
 import threading
 import time
 from collections import deque
+from dataclasses import replace
 from typing import Callable, Deque, Dict, Iterable, List, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
@@ -76,9 +77,22 @@ class JobObservation:
                 self._observed_s += now - self._observed_since
                 self._observed_since = None
                 self._frames.clear()
-            self._control = ObservationControl(active=active, speed=speed if active else self._control.speed, revision=self._control.revision + 1)
+            self._control = replace(self._control, active=active, speed=speed if active else self._control.speed, revision=self._control.revision + 1)
             self._changed.notify_all()
             return True
+
+    def start(self) -> bool:
+        """The operator's Start of an attended simulation; True the first time. The runner reads it with its next look at the request."""
+        with self._changed:
+            if self.closed or self._control.started:
+                return False
+            self._control = replace(self._control, started=True, revision=self._control.revision + 1)
+            self._changed.notify_all()
+            return True
+
+    @property
+    def started(self) -> bool:
+        return self.control.started
 
     @property
     def control(self) -> ObservationControl:

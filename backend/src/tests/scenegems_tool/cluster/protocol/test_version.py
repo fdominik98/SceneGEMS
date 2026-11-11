@@ -22,10 +22,11 @@ def test_mismatch_message_names_both_versions_and_the_fix():
     assert "same SceneGEMS revision" in message
 
 
-def test_the_worker_nodes_instance_number_is_version_10():
+def test_attended_simulations_are_version_11():
     # Version 6: slots and components in the Hello, components in the requirements, one simulation job type.
     # Version 7: the design_space_exploration job type, and list result fields stored as one artifact per item; an older worker node is refused by its version
     # Version 8: control node and worker node in the field names, the control socket path and the artifact header
     # Version 9: asv_system as the key of a vessel's stack and in the component ids
     # Version 10: the worker node's instance number in the Welcome, which names its pooled services on the broker
-    assert PROTOCOL_VERSION == 10
+    # Version 11: StartJob for an attended simulation, and a detail on JobStatus (its phase, the ports of its ground control stations)
+    assert PROTOCOL_VERSION == 11
