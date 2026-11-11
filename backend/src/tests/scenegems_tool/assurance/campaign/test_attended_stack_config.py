@@ -57,7 +57,9 @@ def test_a_stack_that_says_attended_is_the_workbenchs_setup():
 @pytest.mark.parametrize(
     "stack, reason",
     [
-        (attended(setup(agent_1={"context": "real", "port": None})), "real vessel"),
+        (attended(setup("ArduPilot Sim", agent_1={"context": "real", "controlLayer": "real_vessel", "port": None})), "needs the topic of its agent"),
+        (attended(setup("ArduPilot Sim"), broker={"host": "broker.waraps.org", "port": 8883}), "only to a setup with a real vessel"),
+        (attended(setup("ArduPilot Sim"), broker={"host": "", "port": 8883}), "broker"),
         (attended({"simulatorType": "Kinematic"}), "incomplete"),
         ({"attended": True}, "simulation"),
         (attended(setup(), mode="replay"), "mode"),
@@ -100,3 +102,34 @@ def test_the_engine_builds_the_attended_runners_payload_from_the_setup():
     assert payload["monitor"] == "live" and payload["colregs_constraints_content"] == config.domain.colregs_constants
     assert payload["geofence"] == config.execution.runs[0].stack.geofence.model_dump(mode="json")
     validate_payload(JobType.SIMULATION, payload)
+
+
+REAL = setup("ArduPilot Sim", agent_1={"context": "real", "asvSystem": "on_board", "controlLayer": "real_vessel", "port": None, "topic": "waraps/unit/surface/real/piraya"})
+BROKER = {"host": "broker.waraps.org", "port": 8883, "tls": True, "allow_certificates": False, "user": "lab", "password": "secret"}
+
+
+def test_a_real_vessel_is_part_of_an_attended_stack():
+    (run,) = _config(attended(REAL)).execution.runs
+    stacks = {agent_id: str(stack) for agent_id, stack in vessel_stacks(run.stack).items()}
+    assert stacks == {"0": "replay, ardupilot, ardupilot_sim", "1": "on_board, real_vessel, real_vessel"}
+    assert run_stack_components(run.stack) == (
+        "asv_system/replay",
+        "asv_system/on_board",
+        "control_layer/ardupilot",
+        "control_layer/real_vessel",
+        "simulation_layer/ardupilot_sim",
+        "simulation_layer/real_vessel",
+    )
+    assert run.stack.broker is None and run.stack.instance().vessels["0"].connection.topic == "scenegems/unit/surface/simulation/os", "the cluster's broker"
+    validated = validate_campaign_config(_config(attended(REAL)), attended=True)
+    assert str(validated.runs[0].vessels["1"]) == "on_board, real_vessel, real_vessel", "the resolver takes a real vessel in an attended run"
+
+
+def test_the_broker_of_a_real_vessel_reaches_the_runners_payload():
+    config = _config(attended(REAL, broker=BROKER))
+    stack = config.execution.runs[0].stack
+    assert stack.instance().vessels["0"].connection.topic == "waraps/unit/surface/simulation/os", "an external broker's first level"
+    payload = PayloadBuilder(config)._simulation(7, 0, trajectories_data())
+    assert payload["broker"] == BROKER and payload["simulation"] == REAL
+    validate_payload(JobType.SIMULATION, payload)
+    assert "broker" not in PayloadBuilder(_config(attended(REAL)))._simulation(7, 0, trajectories_data())

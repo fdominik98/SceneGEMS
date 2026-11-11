@@ -45,7 +45,7 @@ Options:
   --all                   Build every image (same as no arguments)
 
   --release <folder>      Build the images a cluster runs (broker, control-node-api and
-                          subsystems, simulation, worker node daemon) as :latest, pull
+                          subsystems, simulation, ArduAgent, worker node daemon) as :latest, pull
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
@@ -189,12 +189,13 @@ parse_build_args "$@"
 
 # A release builds what a cluster runs. MAVProxy is part of it: an attended simulation on a worker node
 # needs it for a vessel steered from Mission Planner (the component asv_system/mission_planner).
-# ArduAgent is only used by live sessions with a real vessel, which run the :latest images of the
-# control node's machine (deploy/control_node/docker-compose.live-sessions.yml).
+# ArduAgent is part of it too: beside a real vessel every simulated vessel of an attended simulation runs
+# through one (the component control_layer/real_vessel).
 if [ -n "$RELEASE_DIR" ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1
     BUILD_SIMULATION=1
+    BUILD_ARDUAGENT=1
     BUILD_WORKER_NODE=1
 fi
 

@@ -9,7 +9,7 @@ from haversine import Unit
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
-from scenegems_tool.messaging.mqtt_client import MqttClient, MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_client import WARAPS_TOPIC_ROOT, MqttClient, MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence, from_true_north
 
 
@@ -116,7 +116,7 @@ class MqttAgentClient(MqttClient):
 
     @property
     def trajectory_topic(self) -> str:
-        return f"waraps/general/generic/real/c2/target/positions/{self.trajectory_name}"
+        return f"{WARAPS_TOPIC_ROOT}/general/generic/real/c2/target/positions/{self.trajectory_name}"
 
     @property
     def trajectory_name(self) -> str:
@@ -181,6 +181,9 @@ class MqttAgentClient(MqttClient):
         self.client.publish(self.exec_command_topic, str_command, qos=1)
 
     def publish_trajectory(self, waypoints: List[list[float]]):
+        """Draws the planned path on the WARA-PS map. A control node's own broker has no map, so nothing is published there."""
+        if self.mqtt_connection.topic_root != WARAPS_TOPIC_ROOT:
+            return
         command = {"name": self.trajectory_name, "type": "polyline", "line": waypoints, "color": "#FFFFFF"}
         str_command = json.dumps(command)
         self.client.publish(self.trajectory_topic, str_command, qos=1)

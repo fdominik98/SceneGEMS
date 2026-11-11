@@ -262,12 +262,12 @@ class Agent:
 
     def callbacks_mqtt_positions(self) -> None:
         """Callbacks for other agent positions."""
-        topic = f"{AgentConfig.OTHER_POSITIONS_TOPIC}"
-
-        print(
-            f"Registering other agents positions mqtt callback on {topic} ..."
-        )
-        self.mqtt.mqtt_connection.client.subscribe(topic, qos=0)
+        # Every unit under the root, or only the agents named in OTHER_POSITIONS_TOPICS (agent_topics.py).
+        for topic in AgentConfig.TOPICS.other_position_filters:
+            print(
+                f"Registering other agents positions mqtt callback on {topic} ..."
+            )
+            self.mqtt.mqtt_connection.client.subscribe(topic, qos=0)
 
     def callbacks_obstacle_distances(self) -> None:
         """Callbacks for obstacle distances."""
@@ -1100,9 +1100,7 @@ class Agent:
 
         # Check if there is positions from other agents
         # Can be obstacle, own position or leader
-        elif msg_topic_str.startswith(
-            self.pos_front_topic
-        ) and msg_topic_str.endswith(self.pos_end_topic):
+        elif AgentConfig.TOPICS.is_position(msg_topic_str):
             # Test payload for position object
             if not msg.payload:
                 print(
@@ -1168,8 +1166,9 @@ class Agent:
                 # Test for collision avoidance
                 if (
                     self.use_collision_avoidance
-                    and msg_topic_str.startswith(self.ca_front_topic)
-                    and msg_topic_str.endswith(self.ca_end_topic)
+                    and AgentConfig.TOPICS.is_collision_avoidance(
+                        msg_topic_str
+                    )
                 ):
                     executing_ca_manouver = False
                     data = self.obstacle_in_front(

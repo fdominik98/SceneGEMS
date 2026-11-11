@@ -33,9 +33,20 @@ def job_view(job: JobRecord, progress: Optional[JobProgress] = None) -> Dict[str
     }
 
 
+MASKED = "***"
+
+
+def payload_without_secrets(payload: Any) -> Any:
+    """A job's payload as an operator may read it: the password of an attended run's broker is not shown."""
+    broker = payload.get("broker") if isinstance(payload, dict) else None
+    if isinstance(broker, dict) and broker.get("password"):
+        return {**payload, "broker": {**broker, "password": MASKED}}
+    return payload
+
+
 def job_detail_view(job: JobRecord, progress: Optional[JobProgress], events: List[JobEventRecord], log_lines: List[Any]) -> Dict[str, Any]:
     view = job_view(job, progress)
-    view["payload"] = job.payload
+    view["payload"] = payload_without_secrets(job.payload)
     view["events"] = [
         {
             "at": event.at,

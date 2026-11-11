@@ -30,7 +30,7 @@ def arduagent_modules(monkeypatch):
         monkeypatch.delitem(sys.modules, name, raising=False)
 
     def load(name: str, **environment: str):
-        for key in ("BASE_TOPIC", "OTHER_POSITIONS_TOPIC", "MQTT_TOPIC_PREFIX", "UUID"):
+        for key in ("BASE_TOPIC", "OTHER_POSITIONS_TOPIC", "OTHER_POSITIONS_TOPICS", "MQTT_TOPIC_ROOT", "MQTT_TOPIC_PREFIX", "UUID"):
             monkeypatch.delenv(key, raising=False)
         for key, value in {**AGENT_ENVIRONMENT, **environment}.items():
             monkeypatch.setenv(key, value)
@@ -106,3 +106,49 @@ def test_the_prefix_rule_matches_the_backend_topic_scope(arduagent_modules):
     agent_topics = arduagent_modules("agent_topics")
     prefix = "scenegems/m1/workbench/live-ab12cd34/"
     assert agent_topics.AgentTopics.derive("surface", "simulation", "OS_0_SIM", prefix=prefix).base == TopicScope(prefix).apply("waraps/unit/surface/simulation/OS_0_SIM")
+
+
+def test_the_topic_root_moves_every_topic_to_the_brokers_first_level(arduagent_modules):
+    """On a control node's own broker the first level is scenegems; the layout below it is the WARA-PS one."""
+    config = arduagent_modules("config", MQTT_TOPIC_ROOT="scenegems", NAME="os-265ca868").AgentConfig
+    assert config.BASE_TOPIC == "scenegems/unit/surface/simulation/os-265ca868"
+    assert config.COMMAND_TOPIC == "scenegems/unit/surface/simulation/os-265ca868/exec/command"
+    assert config.OTHER_POSITIONS_TOPIC == "scenegems/unit/+/+/+/sensor/position"
+    assert config.TOPICS.positions_root == "scenegems/unit/" and config.TOPICS.collision_avoidance_root == "scenegems/unit/surface/simulation/"
+    assert not config.TOPICS.is_position("waraps/unit/surface/simulation/ts1/sensor/position"), "another root's units are not seen"
+
+
+def test_named_agents_are_the_only_ones_whose_positions_are_taken(arduagent_modules):
+    """The vessels of the agent's own run: two runs on one broker never see each other."""
+    simulated = "scenegems/unit/surface/simulation/ts1-265ca868/sensor/position"
+    real = "waraps/unit/surface/real/piraya/sensor/position"
+    topics = arduagent_modules("config", MQTT_TOPIC_ROOT="scenegems", NAME="os-265ca868", OTHER_POSITIONS_TOPICS=f"{simulated}, {real}").AgentConfig.TOPICS
+    assert topics.other_position_filters == (simulated, real) and topics.other_positions == simulated and topics.listed_positions
+    assert topics.is_position(simulated) and topics.is_position(real)
+    assert not topics.is_position("scenegems/unit/surface/simulation/ts1-99999999/sensor/position"), "another job's vessel of the same name"
+    assert topics.is_collision_avoidance(simulated), "a simulated vessel of the run is avoided"
+    assert not topics.is_collision_avoidance(real), "as before, only agents of the same domain and context are"
+
+
+def test_without_named_agents_every_unit_under_the_root_is_taken_as_before(arduagent_modules):
+    topics = arduagent_modules("agent_topics").AgentTopics.derive("surface", "simulation", "OS_0_SIM")
+    assert topics.other_position_filters == ("waraps/unit/+/+/+/sensor/position",) and not topics.listed_positions
+    assert topics.is_position("waraps/unit/air/real/drone/sensor/position") and not topics.is_collision_avoidance("waraps/unit/air/real/drone/sensor/position")
+    assert topics.is_collision_avoidance("waraps/unit/surface/simulation/TS_1_SIM/sensor/position")
+
+
+@pytest.mark.parametrize("root", ["a/b", "+", "scene#gems"])
+def test_a_root_that_is_no_plain_level_is_refused(arduagent_modules, root):
+    with pytest.raises(ValueError, match="MQTT_TOPIC_ROOT"):
+        arduagent_modules("agent_topics").AgentTopics.derive("surface", "simulation", "os", root=root)
+
+
+@pytest.mark.parametrize("topics", ["waraps/unit/+/+/+/sensor/position", "waraps/unit/surface/real/piraya"])
+def test_named_agents_are_named_by_their_position_topics(arduagent_modules, topics):
+    with pytest.raises(ValueError, match="OTHER_POSITIONS_TOPICS"):
+        arduagent_modules("agent_topics").AgentTopics.derive("surface", "simulation", "os", other_positions_topics=topics)
+
+
+def test_the_named_agents_are_scoped_by_the_prefix_too(arduagent_modules):
+    topics = arduagent_modules("agent_topics").AgentTopics.derive("surface", "simulation", "os", prefix="p/", other_positions_topics="waraps/unit/surface/simulation/ts1/sensor/position")
+    assert topics.other_position_filters == ("p/waraps/unit/surface/simulation/ts1/sensor/position",)

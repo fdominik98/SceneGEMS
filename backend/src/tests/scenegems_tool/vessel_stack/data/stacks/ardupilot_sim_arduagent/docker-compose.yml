@@ -58,16 +58,15 @@ services:
     - MAVPROXY=tcpin:agent_0_mavproxy:14551
     - LOCAL_BRIDGE=udp:host.docker.internal:14550
     - GCS_1=udp:host.docker.internal:14550
+    - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position
     networks:
     - maritime_net
+    ports:
+    - '5770'
     command:
-    - python3
-    - -m
-    - MAVProxy.mavproxy
-    - --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout
-    - --master=tcp:agent_0:5760
-    - --out=tcpin:agent_0_mavproxy:14551
-    - --out=udp:host.docker.internal:14550
+    - sh
+    - -c
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_0:5760 --out=tcpin:agent_0_mavproxy:14551 --out=udp:host.docker.internal:14550 --out=tcpin:0.0.0.0:5770; sleep 2; done
   agent_0_arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
@@ -76,7 +75,10 @@ services:
     environment: *id001
     networks:
     - maritime_net
-    command: python -B -u /app/main.py
+    command:
+    - sh
+    - -c
+    - while true; do python -B -u /app/main.py; sleep 2; done
   agent_1:
     image: ${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}
     restart: unless-stopped
@@ -136,16 +138,15 @@ services:
     - MAVPROXY=tcpin:agent_1_mavproxy:14551
     - LOCAL_BRIDGE=udp:host.docker.internal:14550
     - GCS_1=udp:host.docker.internal:14560
+    - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position
     networks:
     - maritime_net
+    ports:
+    - '5770'
     command:
-    - python3
-    - -m
-    - MAVProxy.mavproxy
-    - --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout
-    - --master=tcp:agent_1:5770
-    - --out=tcpin:agent_1_mavproxy:14551
-    - --out=udp:host.docker.internal:14560
+    - sh
+    - -c
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_1:5770 --out=tcpin:agent_1_mavproxy:14551 --out=udp:host.docker.internal:14560 --out=tcpin:0.0.0.0:5770; sleep 2; done
   agent_1_arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
@@ -154,7 +155,10 @@ services:
     environment: *id002
     networks:
     - maritime_net
-    command: python -B -u /app/main.py
+    command:
+    - sh
+    - -c
+    - while true; do python -B -u /app/main.py; sleep 2; done
 networks:
   maritime_net:
     name: asv_maritime_net

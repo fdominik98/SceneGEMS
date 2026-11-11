@@ -36,6 +36,8 @@ PHASE_PREPARING = "preparing"  # its stack is coming up
 PHASE_READY_TO_START = "ready_to_start"  # it waits for the operator's Start (StartJob)
 PHASE_RUNNING = "running"
 STATUS_GROUND_CONTROL = "ground_control"  # agent id to the port on the worker node's host a ground control station connects to
+# With a real vessel, before the Start: agent id to what its agent reports (connected, position, armable, at_start); the run is ready when all are true
+STATUS_VESSELS = "vessels"
 
 # Worker node to control node
 

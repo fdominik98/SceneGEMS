@@ -13,7 +13,9 @@ it is given per worker node, and the control node judges a worker node out of da
 
 A stack layer's images are the containers its spec adds to a per-job stack (ContainerSpec.default_image):
 every layer runs in a container of its own. An ASV system adds those of the adapters that run it on the
-runners' stacks, and a simulation layer adds the simulation subsystem image the simulation runner runs in. The
+runners' stacks, and a simulation layer adds the simulation subsystem image the simulation runner runs in. A real
+vessel has no container of its own: its control layer's images are the MAVProxy and the ArduAgent the simulated
+vessels beside it run through, since a real vessel is reached only over its ArduAgent. The
 simulation job's runners and the vessel stacks each runs are declared here too (RUNNER_STACKS), so
 the Capabilities page can name the runner of a stack without loading the job modules. The registry
 is read on first use, so importing this module (the control node does at start) loads neither it nor numpy.
@@ -40,18 +42,21 @@ MONITORING_IMAGE = tagged("scenegems-monitoring-subsystem")
 ComponentId = str
 StackTriple = Tuple[AsvSystemId, ControlLayerId, SimulationLayerId]
 
-# The layers of the vessel stacks jobs run, in catalog order. Campaigns run all but Mission Planner, which needs its operator
-# (an attended job of the workbench).
+# The layers of the vessel stacks jobs run, in catalog order. Campaigns run all but Mission Planner and the layers of a real
+# vessel (on_board, real_vessel), which need their operator (an attended job of the workbench).
 STACK_LAYERS: Tuple[LayerImplementationId, ...] = (
     AsvSystemId.REPLAY,
     AsvSystemId.USV_NAVIGATION,
     AsvSystemId.MISSION_PLANNER,
+    AsvSystemId.ON_BOARD,
     ControlLayerId.NONE,
     ControlLayerId.ARDUPILOT,
     ControlLayerId.CUSTOM,
+    ControlLayerId.REAL_VESSEL,
     SimulationLayerId.KINEMATIC,
     SimulationLayerId.ARDUPILOT_SIM,
     SimulationLayerId.GAZEBO,
+    SimulationLayerId.REAL_VESSEL,
 )
 DESIGN_SPACE_EXPLORATION = "design_space_exploration"
 SCENE_GENERATION = "scene_generation"
@@ -98,8 +103,7 @@ class SimulationRunner(str, Enum):
 
 
 # The vessel stacks each unattended runner may run. Each must be a campaign stack of the matrix: available and
-# not workbench only. The attended runner runs these and the stacks of ATTENDED_STACKS; a stack with a real
-# vessel still runs as a live session of the workbench.
+# not workbench only. The attended runner runs these and the stacks of ATTENDED_STACKS.
 RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
     SimulationRunner.KINEMATIC: (
         (AsvSystemId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
@@ -118,10 +122,14 @@ RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
 }
 
 
-# The stacks only the attended runner runs: the operator steers the vessel from Mission Planner through MAVProxy
+# The stacks only the attended runner runs: the operator steers the vessel from Mission Planner through MAVProxy,
+# or the vessel is a real one, reached through the ArduAgent on board
 ATTENDED_STACKS: Tuple[StackTriple, ...] = (
     (AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
     (AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+    (AsvSystemId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL),
+    (AsvSystemId.MISSION_PLANNER, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL),
+    (AsvSystemId.ON_BOARD, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL),
 )
 
 
@@ -171,7 +179,17 @@ def _layer_images(layer: LayerImplementationId) -> Tuple[str, ...]:
         images.add(SIMULATION_IMAGE)  # the simulation runner
     elif role == Role.ASV_SYSTEM:
         images.update(_asv_adapter_images(layer))
+    if layer is ControlLayerId.REAL_VESSEL:  # by identity: the real vessel's simulation layer has the same value
+        images.update(_arduagent_images())
     return tuple(sorted(images))
+
+
+def _arduagent_images() -> Set[str]:
+    """The images of the adapters that run a simulated vessel through ArduAgent, which only an instance with a real vessel selects."""
+    from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_MAVLINK_PORT
+    from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER
+
+    return {container.default_image for adapter in (REPLAY_ARDUAGENT_FOLLOWER, MISSION_PLANNER_MAVLINK_PORT) for container in adapter.containers}
 
 
 def _asv_adapter_images(asv_system: LayerImplementationId) -> Set[str]:

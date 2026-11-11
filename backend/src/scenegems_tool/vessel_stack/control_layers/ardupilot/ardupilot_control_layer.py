@@ -54,7 +54,11 @@ class ArduPilotControlLayer:
 
         # sitl_internal_physics homes SITL at the start pose; ardupilot_gazebo_plugin runs SITL's JSON backend against Gazebo.
         sitl_internal_physics = vessel_config.stack.simulation_layer == SimulationLayerId.ARDUPILOT_SIM
-        services = generate_vessel_service(agent_stub, connection.port, params_file, request.simulation.speedup, sitl_internal_physics)
+        # An ArduAgent takes the positions of the instance's other vessels only, a real vessel's included
+        other_topics = [
+            other.connection.topic for other_id, other in request.simulation.vessels.items() if other_id != vessel_config.agent_id and other.connection is not None and other.connection.topic
+        ]
+        services = generate_vessel_service(agent_stub, connection.port, params_file, request.simulation.speedup, sitl_internal_physics, other_topics)
         if not arduagent:
             # The ASV system talks MAVLink to SITL's SERIAL0 itself (mavlink_link.py), so the
             # vessel gets SITL only: no MAVProxy and no ArduAgent. A Mission Planner vessel adds

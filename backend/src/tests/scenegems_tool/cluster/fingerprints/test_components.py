@@ -52,12 +52,15 @@ def test_the_catalog_lists_the_campaign_layers_and_the_subsystems():
         "asv_system/replay",
         "asv_system/usv_navigation",
         "asv_system/mission_planner",
+        "asv_system/on_board",
         "control_layer/none",
         "control_layer/ardupilot",
         "control_layer/custom",
+        "control_layer/real_vessel",
         "simulation_layer/kinematic",
         "simulation_layer/ardupilot_sim",
         "simulation_layer/gazebo",
+        "simulation_layer/real_vessel",
         "design_space_exploration",
         "scene_generation",
         "trajectory_generation",
@@ -88,9 +91,18 @@ def test_the_layer_images_come_from_the_container_specs():
     assert images["asv_system/usv_navigation"] == (USV_NAVIGATION_IMAGE,), "USV Navigation has an image of its own"
     assert images["control_layer/none"] == (), "no controller, no container"
     assert images["asv_system/mission_planner"] == (MAVPROXY_IMAGE,), "the ground control station reaches the vessel through MAVProxy"
-    unattended = [component for component in COMPONENTS if component != "asv_system/mission_planner"]
+    attended_only = {"asv_system/mission_planner", "asv_system/on_board", "control_layer/real_vessel", "simulation_layer/real_vessel"}
+    unattended = [component for component in COMPONENTS if component not in attended_only]
     assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(unattended), "the lockstep replay on ArduPilot needs neither"
-    assert ARDUAGENT_IMAGE not in images_of(COMPONENTS), "ArduAgent drives real vessels, which no job runs yet"
+
+
+def test_a_real_vessels_components_bring_the_arduagent_images():
+    """A real vessel has no container, but the simulated vessels beside it run through MAVProxy and ArduAgent, and the runner drives them all."""
+    images = component_images()
+    assert images["control_layer/real_vessel"] == tuple(sorted((ARDUAGENT_IMAGE, MAVPROXY_IMAGE)))
+    assert images["simulation_layer/real_vessel"] == (SIMULATION_IMAGE,), "the runner"
+    assert images["asv_system/on_board"] == (), "the vessel's own software runs on the vessel"
+    assert ARDUAGENT_IMAGE not in images_of([component for component in COMPONENTS if component != "control_layer/real_vessel"])
 
 
 def test_the_subsystem_components_and_their_job_types():

@@ -57,8 +57,28 @@ def test_workbench_stack_has_sitl_mavproxy_and_arduagent_per_autonomous_vessel(a
 def test_arduagent_depends_on_its_mavproxy_and_mavproxy_reaches_its_sitl(arduagent_stack):
     services = arduagent_stack.compose["services"]
     assert services["agent_0_arduagent"]["depends_on"] == ["agent_0_mavproxy"]
-    assert "--master=tcp:agent_0:5760" in services["agent_0_mavproxy"]["command"]
-    assert "--master=tcp:agent_1:5770" in services["agent_1_mavproxy"]["command"], "the SITL port is 5760 + 10 * vessel id"
+    assert "--master=tcp:agent_0:5760" in services["agent_0_mavproxy"]["command"][-1]
+    assert "--master=tcp:agent_1:5770" in services["agent_1_mavproxy"]["command"][-1], "the SITL port is 5760 + 10 * vessel id"
+
+
+def test_mavproxy_and_arduagent_start_again_inside_their_containers(arduagent_stack):
+    """A job's containers have no restart policy, so what exits while SITL or MAVProxy comes up is started again by a shell loop."""
+    services = arduagent_stack.compose["services"]
+    for name, program in (("agent_0_mavproxy", "MAVProxy.mavproxy"), ("agent_0_arduagent", "/app/main.py")):
+        shell, flag, loop = services[name]["command"]
+        assert (shell, flag) == ("sh", "-c") and loop.startswith("while true; do ") and loop.endswith("; sleep 2; done") and program in loop
+
+
+def test_mavproxy_has_a_tcp_endpoint_for_a_ground_control_station(arduagent_stack):
+    mavproxy = arduagent_stack.compose["services"]["agent_0_mavproxy"]
+    assert "--out=tcpin:0.0.0.0:5770" in mavproxy["command"][-1] and mavproxy["ports"] == ["5770"], "on a host port Docker assigns"
+
+
+def test_an_arduagent_takes_the_positions_of_its_instances_other_vessels_only(arduagent_stack):
+    services = arduagent_stack.compose["services"]
+    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position" in services["agent_0_arduagent"]["environment"]
+    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position" in services["agent_1_arduagent"]["environment"]
+    assert "NAME=agent_0" in services["agent_0_arduagent"]["environment"], "a topic outside the unit layout leaves the agent its name"
 
 
 def test_the_ground_control_port_of_each_vessel_is_forwarded(arduagent_stack):

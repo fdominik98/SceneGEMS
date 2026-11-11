@@ -252,6 +252,8 @@ class PayloadBuilder:
             payload["start_timeout_s"] = stack.start_timeout_s
         if stack.timeout_s is not None:
             payload["timeout_s"] = stack.timeout_s
+        if stack.broker is not None:
+            payload["broker"] = stack.broker.model_dump(mode="json")
         if run.monitor == MonitorImplementation.LIVE:
             payload.update(monitor="live", colregs_constraints_content=self.config.domain.colregs_constants)
         return payload
