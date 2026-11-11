@@ -36,6 +36,8 @@ const CLUSTER_STATUS: Record<ClusterRunStatus, StepStatus> = {
   stopped: { label: "Stopped", tone: "idle" },
 };
 
+const READY_TO_START: StepStatus = { label: "Ready to start", tone: "ok" };
+
 const SESSION_STATUS: Record<string, StepStatus> = {
   running: { label: "Running", tone: "live" },
   starting: { label: "Starting", tone: "busy" },
@@ -48,8 +50,8 @@ const SESSION_STATUS: Record<string, StepStatus> = {
 
 /**
  * The simulation page's panel. The setup decides where the run happens: on the cluster as one
- * job (Run on the cluster), or as a live session on the control node over the MQTT broker
- * (Initialize, then Start). Playback is in the bar under the canvas; the frames export from
+ * job (Run on the cluster; an attended job then waits for Start once its vessels are up), or,
+ * with a real vessel, as a live session on the control node over the MQTT broker (Initialize, then Start). Playback is in the bar under the canvas; the frames export from
  * the monitoring panel and every run is kept as an entry of Campaign History.
  */
 export function SimulationRunPanel({ streamControls, colregsConstraintsContent }: Props) {
@@ -78,8 +80,13 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const resources = plan?.where === "cluster" ? streamControls.clusterResources(plan.jobType, plan.components) : streamControls.clusterResources(KINEMATIC_SIMULATION_JOB);
   const clusterActive = isClusterRunActive(run.status);
   const sessionStatus = SESSION_STATUS[simulationStatus] ?? { label: simulationStatus, tone: "idle" as const };
-  const status = onCluster ? CLUSTER_STATUS[run.status] : sessionStatus;
-  const endpoints = groundControlEndpointLabels(groundControlPorts);
+  // An attended job brings the vessels up and waits: its Start is the operator's
+  const attendedPlan = plan?.where === "cluster" && plan.runner === "attended";
+  const awaitsStart = attendedPlan && run.status === "running" && run.phase === "ready_to_start";
+  const status = onCluster ? (awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status]) : sessionStatus;
+  const endpoints = onCluster
+    ? groundControlEndpointLabels(clusterActive ? run.groundControlPorts : {}, run.workerNodeAddress ?? (run.workerNodeId ? `worker node ${run.workerNodeId}` : "the worker node"))
+    : groundControlEndpointLabels(groundControlPorts);
   const latestTimestamp = getLatestSimulationTimestamp(simulationFrames);
   const firstTimestamp = simulationFrames[0]?.timestamp ?? null;
 
@@ -135,7 +142,20 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const actions = onCluster ? (
     clusterActive ? (
       <>
-        {plan?.where === "cluster" ? (
+        {attendedPlan ? (
+          <button
+            type="button"
+            className="primary-btn accent"
+            disabled={!awaitsStart}
+            title={awaitsStart ? "Start the run on the vessels the job brought up" : "The job is bringing the vessels up"}
+            onClick={() => {
+              streamControls.startSimulationOnCluster();
+              activateLiveMode({ followSimulationLive });
+            }}
+          >
+            Start
+          </button>
+        ) : plan?.where === "cluster" ? (
           <label className="step-setting" title={pacedOnWorkerNode ? "The pace the worker node runs the simulation at while you watch" : "SITL runs free at the job's speedup, so this is the speed the arriving run plays at here, as the playback bar's"}>
             <span className="step-setting-label">Watch at</span>
             <select
@@ -214,7 +234,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
         ref={simInitRef}
         streamControls={streamControls}
         onSetupChange={onSetupChange}
-        liveSession={plan !== null && !onCluster}
+        liveSession={plan !== null && (!onCluster || attendedPlan)}
         paceApplies={!(plan?.where === "cluster" && isPacedByWatchSpeed(plan))}
         extraSettings={onCluster ? <EntrySeedField disabled={locked} /> : null}
         disabled={locked}

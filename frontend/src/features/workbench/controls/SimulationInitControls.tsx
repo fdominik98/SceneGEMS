@@ -270,8 +270,15 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
       windVector: [round2(windEast), round2(windNorth), round2(windUp)],
       waveAmplitude: round2(wave.amplitude),
       speedup: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
+      body: {
+        simulatorType,
+        simulationSpeed: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
+        windVector: [round2(windEast), round2(windNorth), round2(windUp)],
+        wave: waveToWire(wave),
+        connectionsByAgentId: buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
+      },
     });
-  }, [onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave.amplitude, windEast, windNorth, windUp]);
+  }, [onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave, windEast, windNorth, windUp]);
 
   useEffect(() => {
     const mergeWithExistingDrafts = (vessels: { id: string; isOwnShip: boolean }[]) => {

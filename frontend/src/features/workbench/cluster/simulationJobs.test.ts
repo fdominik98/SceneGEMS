@@ -194,3 +194,42 @@ function clusterPlan(plan: SimulationRunPlan): ClusterRunPlan {
   }
   return plan;
 }
+
+describe("an attended run", () => {
+  const body = { simulatorType: "ArduPilot Sim", windVector: [0, 0, 0], simulationSpeed: 1, connectionsByAgentId: { "0": { asvSystem: "mission_planner", controlLayer: "ardupilot" }, "1": { asvSystem: "replay", controlLayer: "ardupilot" } } };
+  const missionPlanner = setup([vessel("0", { asvSystem: "mission_planner", controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot" })], { simulatorType: "ArduPilot Sim", body });
+
+  it("is the plan of a setup no unattended runner takes, once the setup's body is known", () => {
+    const plan = planSimulationRun(missionPlanner);
+    expect(plan).toMatchObject({
+      where: "cluster",
+      jobType: "simulation",
+      runner: "attended",
+      simulation: body,
+      components: ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"],
+    });
+    expect(describeClusterPlan(plan as ClusterRunPlan)).toContain("waits for your Start");
+    expect(isPacedByWatchSpeed(plan as ClusterRunPlan)).toBe(false);
+  });
+
+  it("takes the weather and the mixed setups the unattended jobs refuse", () => {
+    const windy = setup([vessel("0"), vessel("1")], { windVector: [3, 0, 0], body: { simulatorType: "Kinematic", connectionsByAgentId: {} } });
+    expect(planSimulationRun(windy)).toMatchObject({ runner: "attended", reason: expect.stringContaining("wind") });
+    const twoNavigators = setup([vessel("0", { asvSystem: "usv_navigation" }), vessel("1", { asvSystem: "usv_navigation" })], { body: { simulatorType: "Kinematic", connectionsByAgentId: {} } });
+    expect(planSimulationRun(twoNavigators)).toMatchObject({ runner: "attended" });
+  });
+
+  it("leaves a setup a runner takes to that runner, and a real vessel to a live session", () => {
+    expect(planSimulationRun(setup([vessel("0"), vessel("1")], { body }))).toMatchObject({ runner: "kinematic" });
+    const real = setup([vessel("0", { context: "real" }), vessel("1")], { body });
+    expect(planSimulationRun(real)).toMatchObject({ where: "session", reason: expect.stringContaining("real vessel") });
+    expect(planSimulationRun(setup([], { body }))).toMatchObject({ where: "session" });
+  });
+
+  it("submits the setup as it is, with the live monitor", () => {
+    const plan = planSimulationRun(missionPlanner) as ClusterRunPlan;
+    const submission = simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+    expect(submission).toMatchObject({ job_type: "simulation", max_attempts: 1 });
+    expect(submission.payload).toMatchObject({ runner: "attended", simulation: body, geofence: GEOFENCE, monitor: "live", colregs_constraints_content: "rules: []" });
+  });
+});

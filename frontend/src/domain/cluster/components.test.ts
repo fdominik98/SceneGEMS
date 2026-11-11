@@ -9,6 +9,7 @@ import {
   listsJob,
   offersJob,
   orderedComponents,
+  attendedSetupComponents,
   runStackComponents,
   simulationPayloadComponents,
   staleComponents,
@@ -29,7 +30,8 @@ function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots:
 
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
-    expect(COMPONENTS).toHaveLength(13);
+    expect(COMPONENTS).toHaveLength(14);
+    expect(componentLabel("asv_system/mission_planner")).toBe("Mission Planner");
     expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_system/replay", "monitoring", "gpu"])).toEqual(["asv_system/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
     expect(componentLabel("simulation_layer/ardupilot_sim")).toBe("ArduPilot SITL");
     expect(componentLabel("gpu")).toBe("gpu");
@@ -93,5 +95,23 @@ describe("a worker node's components", () => {
   it("is wholly out of date once every component is", () => {
     expect(isWhollyOutOfDate(workerNodeWith([["monitoring", "out_of_date"]]))).toBe(true);
     expect(isWhollyOutOfDate(workerNodeWith([]))).toBe(false);
+  });
+});
+
+describe("the components of an attended run", () => {
+  const connection = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot", agentName: "typed", topic: "", port: 14570, gazeboVesselModel: null };
+  const setup = { simulatorType: "ArduPilot Sim", windVector: [0, 0, 0], simulationSpeed: 1, connectionsByAgentId: { "0": { ...connection, asvSystem: "mission_planner" }, "1": connection } };
+  const expected = ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+
+  it("come from the setup, vessel by vessel", () => {
+    expect(attendedSetupComponents(setup)).toEqual(expected);
+    expect(simulationPayloadComponents({ runner: "attended", simulation: setup })).toEqual(expected);
+    expect(runStackComponents({ attended: true, simulation: setup })).toEqual(expected);
+  });
+
+  it("take the layer's own control layer for a vessel that names none", () => {
+    const kinematic = { simulatorType: "Kinematic", connectionsByAgentId: { "0": { asvSystem: "usv_navigation" } } };
+    expect(attendedSetupComponents(kinematic)).toEqual(["asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(attendedSetupComponents(undefined)).toEqual(["simulation_layer/kinematic"]);
   });
 });

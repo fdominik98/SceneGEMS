@@ -8,7 +8,7 @@ import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGenerati
 import { sampleCampaignDetail, sampleCampaignSummary, sampleCase } from "../../../test/fixtures/clusterViews";
 import { useScenePageStore, useTrajectoryPageStore } from "../pages/pageStore";
 import { useClusterRunStore } from "./clusterRunStore";
-import { WorkbenchJobDriver, type ClusterAccess } from "./workbenchJobDriver";
+import { attendedRunDetail, WorkbenchJobDriver, type ClusterAccess } from "./workbenchJobDriver";
 
 const SCENE_SHA = "a".repeat(64);
 const UPLOAD_SHA = "9".repeat(64);
@@ -308,5 +308,18 @@ describe("workbench job driver", () => {
     useScenePageStore.getState().setLoaded(target, null);
     await new WorkbenchJobDriver(() => access(client)).loadTarget(target, { quiet: true });
     expect(useScenePageStore.getState().loaded).toMatchObject({ campaignId: "wb9" });
+  });
+});
+
+describe("an attended run's status detail", () => {
+  it("gives the run's phase and where Mission Planner connects", () => {
+    expect(attendedRunDetail({ phase: "ready_to_start", ground_control: { "0": 49153, "1": "not a port" } })).toEqual({ phase: "ready_to_start", groundControlPorts: { "0": 49153 } });
+    expect(attendedRunDetail({ phase: "running" })).toEqual({ phase: "running" });
+  });
+
+  it("changes nothing for a status without a detail, so the latest phase stays", () => {
+    expect(attendedRunDetail(null)).toEqual({});
+    expect(attendedRunDetail(undefined)).toEqual({});
+    expect(attendedRunDetail({ phase: 3 })).toEqual({});
   });
 });

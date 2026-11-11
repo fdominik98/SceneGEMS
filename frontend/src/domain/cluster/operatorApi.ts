@@ -5,6 +5,7 @@ import {
   campaignEventSchema,
   campaignSummarySchema,
   cancelJobResultSchema,
+  startJobResultSchema,
   caseDetailSchema,
   caseViewSchema,
   classViewSchema,
@@ -356,6 +357,11 @@ export class OperatorClient {
   async cancelJob(jobId: string, reason?: string) {
     const body = reason === undefined ? undefined : { reason };
     return (await this.request("POST", `/cluster/jobs/${encodeURIComponent(jobId)}/cancel`, cancelJobResultSchema, { body })).data;
+  }
+
+  /** The operator's Start of an attended simulation that reported it is ready; the control node answers 409 while it is not. */
+  async startJob(jobId: string) {
+    return (await this.request("POST", `/cluster/jobs/${encodeURIComponent(jobId)}/start`, startJobResultSchema)).data;
   }
 
   // Campaigns

@@ -267,3 +267,10 @@ describe("real vessel choices", () => {
     expect(normalizeDraftStack({ ...onBoard, context: "simulation" }, "Kinematic", REAL_OPTIONS)).toMatchObject({ asvSystem: "replay", controlLayer: "none" });
   });
 });
+
+describe("the Mission Planner endpoints of an attended job", () => {
+  it("name the worker node that runs the vessels", () => {
+    expect(groundControlEndpointLabels({ "0": 49153 }, "10.88.0.7")).toEqual(["vessel 0: TCP 10.88.0.7:49153"]);
+    expect(groundControlEndpointLabels({}, "10.88.0.7")).toEqual([]);
+  });
+});

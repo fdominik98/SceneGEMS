@@ -632,6 +632,7 @@ export function useSimulationWorkflow() {
       return driver.loadTarget(target, { quiet: true });
     },
     stopSimulationOnCluster: () => driver.stopSimulation(true),
+    startSimulationOnCluster: () => void driver.startSimulation(),
     setClusterRunSpeed: (speed: number) => driver.setSimulationSpeed(speed),
   };
 }

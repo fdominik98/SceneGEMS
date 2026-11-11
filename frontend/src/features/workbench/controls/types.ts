@@ -25,5 +25,7 @@ export interface SimulationStreamControls {
   setSimulationInput: (input: PageInput, content: string, options?: LoadScenarioOptions) => Promise<void>;
   runSimulationOnCluster: (plan: ClusterRunPlan, colregsConstraintsContent: string) => void;
   stopSimulationOnCluster: () => void;
+  /** The operator's Start of an attended run that waits for it. */
+  startSimulationOnCluster: () => void;
   setClusterRunSpeed: (speed: number) => void;
 }

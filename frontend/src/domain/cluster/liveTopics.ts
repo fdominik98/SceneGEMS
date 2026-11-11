@@ -191,6 +191,7 @@ export const liveJobStatusSchema = z.object({
   progress: z.number().nullable(),
   message: z.string(),
   at: z.string(),
+  detail: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export const jobSnapshotSchema = jobViewSchema.extend({
@@ -284,6 +285,8 @@ export const instanceStatusSchema = z.object({
   progress: z.number().nullable().optional(),
   /** Optional: a changed pace of an observed run. */
   observed_speed: z.number().nullable().optional(),
+  /** The job's latest status detail (an attended simulation's phase and ground control ports). */
+  detail: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export const instanceUpdateSchema = z.discriminatedUnion("kind", [

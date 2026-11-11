@@ -225,7 +225,7 @@ async def _request_config(request: Request, name: Optional[str], start: Optional
     return _json_body(text, name, start, kind, origin)
 
 
-def _validated_config(text: str, artifacts: Any = None, stores: Optional[AssuranceStores] = None) -> Any:
+def _validated_config(text: str, artifacts: Any = None, stores: Optional[AssuranceStores] = None, attended: bool = False) -> Any:
     """The config text checked against the catalog, the resolver and, for the artifacts its input names, the control node's artifact store
     (a RecordedArtifacts, None without one); a ValidatedCampaign, or 422 with every reason when it does not pass. Domain contents the
     config leaves out come from the cluster's domain configuration in stores, or the default presets while none is saved."""
@@ -237,7 +237,8 @@ def _validated_config(text: str, artifacts: Any = None, stores: Optional[Assuran
         callables = {"artifact_exists": lambda sha256: artifacts.record(sha256) is not None, "read_artifact": artifacts.store.read}
     saved = stores.domain.current() if stores is not None else None
     try:
-        return validate_campaign_config(parse_campaign_config(text, None if saved is None else saved.contents()), **callables)
+        # attended: a workbench entry, whose operator is there to start a run that waits for one
+        return validate_campaign_config(parse_campaign_config(text, None if saved is None else saved.contents()), attended=attended, **callables)
     except CampaignConfigError as error:
         raise _config_problem(error.reasons)
 
@@ -304,7 +305,7 @@ def _create_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
     router = APIRouter()
 
     def create(request: CreateRequest, artifacts: Any) -> tuple:
-        validated = _validated_config(request.text, artifacts, stores)
+        validated = _validated_config(request.text, artifacts, stores, attended=request.kind == CampaignKind.WORKBENCH)
         # Pin what this control node expects now. Without a listing yet the campaign has none and the engine pins it at start
         pinned = plane.expected.current() or {}
         campaign = stores.campaigns.create_campaign(
@@ -330,8 +331,8 @@ def _create_routes(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:
 
     @router.post(CAMPAIGNS_PATH + "/validate")
     async def validate_campaign(request: Request, name: Optional[str] = None, start: Optional[bool] = None, kind: Optional[str] = None, origin: Optional[str] = None) -> dict:
-        text = (await _request_config(request, name, start, kind, origin)).text
-        return validated_campaign_view(await _run(_validated_config, text, _artifact_store(request), stores))
+        wanted = await _request_config(request, name, start, kind, origin)
+        return validated_campaign_view(await _run(_validated_config, wanted.text, _artifact_store(request), stores, wanted.kind == CampaignKind.WORKBENCH))
 
     @router.post(CAMPAIGNS_PATH)
     async def create_campaign(request: Request, response: Response, name: Optional[str] = None, start: Optional[bool] = None, kind: Optional[str] = None, origin: Optional[str] = None) -> dict:

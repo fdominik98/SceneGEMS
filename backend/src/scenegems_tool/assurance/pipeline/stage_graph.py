@@ -262,7 +262,7 @@ class StageGraph:
 
     def run_tier(self, run_index: int) -> Optional[str]:
         """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (the lockstep MAVLink adapters) and on the custom controller (gz_transport_actuator), unknown on the kinematic layer."""
-        return "bounded" if isinstance(self.runs[run_index].stack, (ArdupilotStackConfig, CustomStackConfig)) else None
+        return "bounded" if isinstance(self.runs[run_index].stack, (ArdupilotStackConfig, CustomStackConfig)) else None  # an attended run names its tier in its result or has none
 
     def simulate_steps(self) -> List[Step]:
         return [Step(PipelineStage.SIMULATE, run_index, repeat) for run_index, run in enumerate(self.runs) for repeat in range(run.repeats)]

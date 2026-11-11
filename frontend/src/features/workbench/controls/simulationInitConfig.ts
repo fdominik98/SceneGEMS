@@ -305,9 +305,9 @@ export function normalizeDraftStack(
   return working === undefined ? draft : { ...draft, controlLayer: working };
 }
 
-/** "vessel 1: TCP localhost:49153" per Mission Planner vessel, ordered by vessel id: where Mission Planner connects. */
-export function groundControlEndpointLabels(portsByAgentId: Record<string, number>): string[] {
+/** "vessel 1: TCP localhost:49153" per Mission Planner vessel, ordered by vessel id: where Mission Planner connects. The host is the machine that runs the vessels: the worker node of an attended job. */
+export function groundControlEndpointLabels(portsByAgentId: Record<string, number>, host = "localhost"): string[] {
   return Object.entries(portsByAgentId)
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-    .map(([agentId, port]) => `vessel ${agentId}: TCP localhost:${port}`);
+    .map(([agentId, port]) => `vessel ${agentId}: TCP ${host}:${port}`);
 }
