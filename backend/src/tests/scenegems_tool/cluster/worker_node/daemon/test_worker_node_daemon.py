@@ -286,6 +286,26 @@ def test_the_welcome_gives_the_worker_node_its_instance_number(fake_control_node
     assert worker_node.pools.service_name(Subsystem.SCENE_GENERATION) == "scene-generation-subsystem-3", "the name its pool answers to on the cluster broker"
 
 
+def test_the_pools_of_the_worker_nodes_subsystems_start_with_the_welcome_not_with_the_first_job(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):
+    """A subsystem is long lived: its container is up before any job asks for it, under the number the control node gave the worker node."""
+    fake_control_node.instance_number = 3
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    wait_for(lambda: ("start", "scene-generation-subsystem-3") in pools_without_docker)
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION], "its components name scene generation, not trajectory generation"
+    assert [name for event, name in pools_without_docker if event == "start"] == ["scene-generation-subsystem-3"]
+
+
+def test_the_daemon_looks_after_its_pools_from_the_welcome_on(fake_control_node, worker_node_configuration, start_daemon, monkeypatch):
+    from scenegems_tool.cluster.worker_node.daemon import worker_node_daemon
+
+    monkeypatch.setattr(worker_node_daemon, "POOL_CHECK_S", 0.0)
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    checks = []
+    monkeypatch.setattr(daemon.daemon.manager.worker_node, "check_pools", lambda: checks.append(1))
+    wait_for(lambda: len(checks) >= 2)
+
+
 def test_a_welcome_from_another_control_node_stops_the_daemon(fake_control_node, worker_node_configuration, start_daemon):
     fake_control_node.hello_reply = lambda _hello: Welcome(control_node_id="other-control-node", instance_number=1, heartbeat_interval_s=1.0, lease_timeout_s=3.0)
     error = start_daemon(worker_node_configuration()).wait_exit()

@@ -14,10 +14,24 @@ from scenegems_tool.cluster.worker_node.daemon.control.reconnect_backoff import 
 from scenegems_tool.cluster.worker_node.daemon.resource_probe import ResourceProbe
 from scenegems_tool.cluster.worker_node.daemon.worker_node_daemon import WorkerNodeDaemon
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
 
 TIMEOUT_S = 10.0
 FINGERPRINTS = {"scenegems-simulation-subsystem:latest": "f" * 64}
+
+
+@pytest.fixture(autouse=True)
+def pools_without_docker(monkeypatch):
+    """The daemon starts its worker node's pools after the Welcome; here a pool is only built, and starting, checking and removing it touch no container.
+
+    Yields what happened to the pools: ("start" or "destroy", the pool's name on the broker).
+    """
+    events: List[tuple] = []
+    monkeypatch.setattr(PooledService, "_run_container_lifecycle_startup", lambda self, compose: events.append(("start", self.service_name)))
+    monkeypatch.setattr(PooledService, "is_running", lambda self: True)
+    monkeypatch.setattr(PooledService, "destroy", lambda self: events.append(("destroy", self.service_name)))
+    return events
 
 
 def make_job(job_id: str = "job-1", job_type: JobType = JobType.SIMULATION, attempt: int = 1, payload: Optional[dict] = None) -> JobSpec:

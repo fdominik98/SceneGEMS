@@ -7,6 +7,7 @@ The worker node daemon builds one WorkerNodeContext from its configuration
 from dataclasses import dataclass, field
 from typing import Dict, FrozenSet, List, Optional
 
+from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.worker_node.artifacts.worker_node_artifacts import ArtifactTransport
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
@@ -62,12 +63,24 @@ class WorkerNodeContext:
     def pool_workers(self, subsystem: Subsystem) -> int:
         return max(1, self.slots.get(_POOL_JOB_TYPES[subsystem], 1))
 
+    def pool_subsystems(self) -> List[Subsystem]:
+        """The pooled subsystems this worker node offers by its components; none for a worker node that names no components."""
+        return [subsystem for subsystem, job_type in _POOL_JOB_TYPES.items() if JOB_TYPE_COMPONENTS[job_type] in self.components]
+
+    def start_pools(self) -> None:
+        """Start the pools of the subsystems the worker node offers, so they are up before the first job (the daemon, once it has its number)."""
+        self.pools.start(self.pool_subsystems())
+
+    def check_pools(self) -> List[Subsystem]:
+        """Start again the pools whose container is gone; returns the subsystems that were restarted."""
+        return self.pools.ensure_running()
+
     def job_scope(self, job: JobSpec) -> InstanceScope:
         """The scope of a job's per-job stack, named after the job's subsystem; each attempt gets its own, so a retry never meets a leftover."""
         return InstanceScope.per_job(self.control_node_id, self.worker_node_id, _JOB_SUBSYSTEMS[job.job_type].value, job.job_id, job.attempt)
 
     def set_instance_number(self, instance_number: int) -> None:
-        """The number from the control node's Welcome. Pools named after another number are removed; the next job starts them under the new one."""
+        """The number from the control node's Welcome. Pools named after another number are removed; start_pools starts them under the new one."""
         if instance_number == self.instance_number:
             return
         self.pools.shutdown()

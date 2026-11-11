@@ -1,9 +1,14 @@
 """Compose content of a worker node's pooled services: each is named by its scope and found by its label in the worker node's project."""
 
+import pytest
+
 from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
+from scenegems_tool.cluster.worker_node.launchers.pooled import pooled_service
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitor_service import MonitorService
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
+from scenegems_tool.cluster.worker_node.launchers.pooled.service_pools import ServicePools
 from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_pool import TrajectoryGenerationPool
+from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 
 
 def test_scoped_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqtt_connection, geofence):
@@ -66,3 +71,55 @@ def test_scoped_monitor_is_named_by_scope(no_docker, mqtt_connection, geofence):
 def test_a_monitor_is_a_worker_nodes_alone():
     """The control node starts none: the workbench has its previews and runs judged by jobs on a worker node."""
     assert not hasattr(MonitorService, "for_workbench")
+
+
+# The pools of a worker node: started together, looked after, removed together
+
+
+@pytest.fixture
+def pools(no_docker, monkeypatch, mqtt_connection, geofence):
+    """A worker node's pools without containers; pools.running says which containers are there, pools.destroyed which were removed."""
+    made = ServicePools("m1", "n1", mqtt_connection, geofence, workers=lambda subsystem: 2, instance_number=lambda: 4)
+    made.running = set()
+    made.destroyed = []
+    monkeypatch.setattr(pooled_service, "is_container_running", lambda name: name in made.running)
+    monkeypatch.setattr(pooled_service.PooledService, "destroy", lambda self: made.destroyed.append(self.service_name))
+    return made
+
+
+def container_of(pool) -> str:
+    return pool.names.container_name
+
+
+def test_the_pools_of_the_subsystems_start_together_each_once(pools):
+    pools.start([Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION, Subsystem.SIMULATION])
+    scene = pools.get(Subsystem.SCENE_GENERATION)
+    assert scene.service_name == "scene-generation-subsystem-4" and scene.workers == 2
+    assert pools.get(Subsystem.TRAJECTORY_GENERATION).service_name == "trajectory-generation-subsystem-4"
+    pools.start([Subsystem.SCENE_GENERATION])
+    assert pools.get(Subsystem.SCENE_GENERATION) is scene, "a pool that is there is left alone; a subsystem without a pool yet is skipped"
+
+
+def test_a_pool_whose_container_is_gone_is_started_again(pools):
+    pools.start([Subsystem.SCENE_GENERATION, Subsystem.TRAJECTORY_GENERATION])
+    scene, trajectory = pools.get(Subsystem.SCENE_GENERATION), pools.get(Subsystem.TRAJECTORY_GENERATION)
+    pools.running = {container_of(scene)}
+    assert pools.ensure_running() == [Subsystem.TRAJECTORY_GENERATION]
+    assert pools.destroyed == ["trajectory-generation-subsystem-4"], "what is left of it is removed first"
+    assert pools.get(Subsystem.SCENE_GENERATION) is scene and pools.get(Subsystem.TRAJECTORY_GENERATION) is not trajectory
+    pools.running.add(container_of(trajectory))
+    assert pools.ensure_running() == []
+
+
+def test_a_pool_that_is_still_starting_counts_as_running(no_docker, monkeypatch, mqtt_connection, geofence):
+    pool = SceneGenerationPool.for_scope(InstanceScope.pooled("m1", "n1", "scene_generation"), mqtt_connection, geofence, workers=1)
+    monkeypatch.setattr(pooled_service, "is_container_running", lambda name: False)
+    pool._lifecycle_thread.join(5.0)
+    assert not pool.is_running(), "its start is over and no container is there"
+
+    class Starting:
+        def is_alive(self) -> bool:
+            return True
+
+    pool._lifecycle_thread = Starting()
+    assert pool.is_running()

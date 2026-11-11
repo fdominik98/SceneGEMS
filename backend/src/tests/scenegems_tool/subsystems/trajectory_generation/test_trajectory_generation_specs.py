@@ -23,11 +23,15 @@ def test_the_search_shows_its_defaults_from_the_code_and_the_straight_generator_
     assert {fact.key: fact.value for fact in nodes["trajectory_generation/straight"].facts}["randomness"] == "none"
 
 
-def test_both_entry_points_reach_both_generators_and_the_search_uses_the_monitor():
-    edges = {edge.id for edge in trajectory_generation_document().edges}
-    for entry in ("cluster_job", "workbench_service"):
-        for generator in ("monitor_driven_rrt", "straight"):
-            assert f"trajectory_generation/{entry}__{generator}" in edges
+def test_the_request_reaches_both_generators_and_the_search_uses_the_monitor():
+    document = trajectory_generation_document()
+    edges = {edge.id for edge in document.edges}
+    for generator in ("monitor_driven_rrt", "straight"):
+        assert f"trajectory_generation/request__{generator}" in edges
+    [request] = [node for node in document.nodes if node.lane == "entry"]
+    facts = {fact.key: fact.value for fact in request.facts}
+    assert (facts["request"], facts["tasks"]) == ("generate-trajectories", "one per request: one plan for the scene")
+    assert "slots" in facts["pool"] and "sensor/planned_trajectory" in facts["publishes"]
     assert "trajectory_generation/monitor_driven_rrt__colregs_monitor" in edges
     assert "trajectory_generation/straight__colregs_monitor" not in edges
 

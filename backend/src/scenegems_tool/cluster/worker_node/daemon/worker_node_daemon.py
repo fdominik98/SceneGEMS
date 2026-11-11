@@ -43,6 +43,7 @@ _logger = logging.getLogger(__name__)
 WELCOME_TIMEOUT_S = 30.0
 RECEIVE_POLL_S = 0.5  # how often the connection thread looks at the stop event
 TICK_S = 0.25
+POOL_CHECK_S = 30.0  # how often the daemon looks whether its subsystems' containers still run
 RELAY_S = 0.1  # how often observed jobs' frames are relayed to the control node
 SHUTDOWN_TIMEOUT_S = 30.0  # time for running jobs to stop and remove their containers
 
@@ -95,6 +96,7 @@ class WorkerNodeDaemon:
         self._current = _CurrentLink()
         self._heartbeat_interval_s: Optional[float] = None
         self._next_heartbeat = 0.0
+        self._next_pool_check: Optional[float] = None  # None until the pools were started, after the Welcome
         self.manager: Optional[LeaseManager] = None
         self.status: Optional[StatusFrames] = None
         self.connected = threading.Event()  # set while a connection is past its Welcome; for tests and health checks
@@ -202,6 +204,9 @@ class WorkerNodeDaemon:
                 f"The control node at {self.configuration.control_node_url} is {welcome.control_node_id!r}, but this worker node is configured for {configured_control_node!r}: check SCENEGEMS_CONTROL_NODE_URL and SCENEGEMS_CONTROL_NODE_ID"
             )
         self.manager.worker_node.set_instance_number(welcome.instance_number)
+        # The subsystems the worker node offers are long lived: they start now, under the worker node's number, not with the first job
+        self.manager.worker_node.start_pools()
+        self._next_pool_check = time.monotonic() + POOL_CHECK_S
         self.manager.set_lease_timeout(welcome.lease_timeout_s)
         self._heartbeat_interval_s = welcome.heartbeat_interval_s
         self._next_heartbeat = time.monotonic() + welcome.heartbeat_interval_s
@@ -238,6 +243,7 @@ class WorkerNodeDaemon:
             try:
                 self.manager.tick()
                 self._heartbeat()
+                self._check_pools()
             except Exception:
                 _logger.exception("Worker node ticker failed; continuing")
 
@@ -247,6 +253,13 @@ class WorkerNodeDaemon:
                 self.manager.relay_observations()
             except Exception:
                 _logger.exception("Observation relay failed; continuing")
+
+    def _check_pools(self) -> None:
+        """Every POOL_CHECK_S: a subsystem whose container is gone is started again."""
+        if self._next_pool_check is None or time.monotonic() < self._next_pool_check:
+            return
+        self._next_pool_check = time.monotonic() + POOL_CHECK_S
+        self.manager.worker_node.check_pools()
 
     def _heartbeat(self) -> None:
         if self._heartbeat_interval_s is None or not self._current.connected:

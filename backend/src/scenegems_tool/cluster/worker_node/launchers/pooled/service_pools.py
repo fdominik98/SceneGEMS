@@ -1,11 +1,16 @@
-"""The pooled services of one worker node: started on first use, sized by the worker node's slots, removed together.
+"""The pooled services of one worker node: one long-lived container per subsystem, sized by the worker node's slots, removed together.
+
+The daemon starts the pools of the subsystems its worker node offers once it knows its number (start), and looks
+after them from then on: a pool whose container is gone is started again (ensure_running). A pool that was
+never started is started when a job first asks for it (get), as on a worker node that names no components.
 
 On MQTT a pool is named after its subsystem and the number the control node gave the worker node
 (instance_scope.pooled_service_name), so the pools of a cluster never share a topic.
 """
 
+import logging
 import threading
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Iterable, List, Optional
 
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope, pooled_service_name
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
@@ -14,6 +19,8 @@ from scenegems_tool.cluster.worker_node.launchers.pooled.trajectory_generation_p
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+
+_logger = logging.getLogger(__name__)
 
 _POOL_CLASSES = {
     Subsystem.SCENE_GENERATION: SceneGenerationPool,
@@ -40,7 +47,7 @@ class ServicePools:
         self.broker_network = broker_network
         self.instance_number = instance_number  # read when a pool starts, after the control node's Welcome
         self._pools: Dict[Subsystem, PooledService] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
     def scope(self, subsystem: Subsystem) -> InstanceScope:
         return InstanceScope.pooled(self.control_node_id, self.worker_node_id, subsystem.value)
@@ -58,6 +65,26 @@ class ServicePools:
                 )
                 self._pools[subsystem] = pool
             return pool
+
+    def start(self, subsystems: Iterable[Subsystem]) -> None:
+        """Start the pools of these subsystems now, without waiting for a first job; one that already runs is left alone."""
+        for subsystem in subsystems:
+            if subsystem in _POOL_CLASSES:
+                self.get(subsystem)
+
+    def ensure_running(self) -> List[Subsystem]:
+        """Start again every pool whose container is gone; returns the subsystems it restarted."""
+        restarted = []
+        with self._lock:
+            for subsystem, pool in list(self._pools.items()):
+                if pool.is_running():
+                    continue
+                _logger.warning("The %s pool is gone; starting it again", subsystem.value)
+                del self._pools[subsystem]
+                pool.destroy()
+                self.get(subsystem)
+                restarted.append(subsystem)
+        return restarted
 
     def shutdown(self) -> None:
         with self._lock:

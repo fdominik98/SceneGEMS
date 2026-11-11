@@ -20,7 +20,7 @@ from typing import Any, Dict, Iterable, Mapping, Optional, Tuple, Type
 
 import yaml
 
-from scenegems_tool.architecture.architecture_model import GROUP_CAPABILITY, STATUS_AVAILABLE, ArchitectureEdge, ArchitectureNode, Fact, facts_of
+from scenegems_tool.architecture.architecture_model import GROUP_CAPABILITY, GROUP_PROPERTY, STATUS_AVAILABLE, ArchitectureEdge, ArchitectureNode, Fact, facts_of
 
 SUBSYSTEM_MEASUREMENTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "measured_capabilities.yaml")
 _FACT_FIELDS = {"key", "label", "value", "unit", "note"}
@@ -58,6 +58,22 @@ def default_measured_facts() -> Mapping[str, MeasuredFacts]:
 
 def measured_for(spec_id: str, measurements: Optional[Mapping[str, MeasuredFacts]] = None) -> MeasuredFacts:
     return (default_measured_facts() if measurements is None else measurements).get(spec_id, MeasuredFacts())
+
+
+POOL_SIZE = "at most as many tasks run at once as the worker node has slots for this kind of work; the others wait in arrival order"
+TASK_STATES = "received, queued, running, then finished, failed or aborted"
+
+
+def pool_facts(request: str, tasks: str, seed: str, publishes: str) -> Tuple[Fact, ...]:
+    """What a subsystem's request entry says about its pool: the request's name, the tasks it becomes, the pool, the seed and what is published."""
+    return (
+        Fact("request", "Request", request, GROUP_PROPERTY),
+        Fact("tasks", "Tasks", tasks, GROUP_CAPABILITY),
+        Fact("pool", "Pool", POOL_SIZE, GROUP_CAPABILITY),
+        Fact("seed", "Seed", seed, GROUP_CAPABILITY),
+        Fact("task_states", "Task states", TASK_STATES, GROUP_PROPERTY),
+        Fact("publishes", "Publishes", publishes, GROUP_PROPERTY),
+    )
 
 
 def spec_node(

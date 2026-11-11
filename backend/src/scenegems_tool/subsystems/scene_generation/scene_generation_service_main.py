@@ -1,30 +1,14 @@
-import multiprocessing
-import time
+"""The container of the scene generation subsystem: its pool on the broker (messaging/mqtt_scene_generation_service.py)."""
 
-from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment, worker_count_from_environment
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, service_name_from_environment
+import multiprocessing
+
 from scenegems_tool.messaging.mqtt_scene_generation_service import MqttSceneGenerationService
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import MAX_SCENE_GENERATION_WORKERS, SCENE_GENERATION_SERVICE_NAME
-from utils.file_system_utils import ensure_directories
+from scenegems_tool.subsystems.pool.pool_service_main import serve, service_from_environment
+from scenegems_tool.subsystems.scene_generation.scene_generation_types import SCENE_GENERATION_SERVICE_NAME
 
 
 def main() -> None:
-    ensure_directories()
-    mqtt_connection = MQttConnectionInfo.from_environment()
-    reference_geofence = geofence_from_environment()
-    name = service_name_from_environment(SCENE_GENERATION_SERVICE_NAME)
-    service = MqttSceneGenerationService(mqtt_connection, reference_geofence, worker_count_from_environment(MAX_SCENE_GENERATION_WORKERS), name)
-    service.connect()
-    service.start_runtime()
-    tick_interval_sec = 1.0 / service.info_update_rate
-    try:
-        while True:
-            time.sleep(tick_interval_sec)
-            if service.is_connected:
-                service.publish_heartbeat_and_sensor_info()
-    except KeyboardInterrupt:
-        service.stop_runtime()
-        service.disconnect()
+    serve(service_from_environment(MqttSceneGenerationService, SCENE_GENERATION_SERVICE_NAME))
 
 
 if __name__ == "__main__":

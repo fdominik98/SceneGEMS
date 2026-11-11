@@ -103,30 +103,6 @@ class PreviewTrajectoryChunkMessage(TypedDict):
     frames: List[Dict[str, Any]]
 
 
-class GeneratedSceneMessage(TypedDict):
-    type: Literal["generated_scene"]
-    requestId: str
-    scene: Dict[str, Any]
-    evaluationData: Dict[str, Any]
-    valid: bool
-
-
-class TrajectoryGenerationPreviewMessage(TypedDict):
-    type: Literal["trajectory_generation_preview"]
-    requestId: str
-    trajectoryData: Dict[str, Any]
-
-
-class TrajectoryGenerationResultMessage(TypedDict, total=False):
-    type: Literal["trajectory_generation_result"]
-    requestId: str
-    trajectoryData: Optional[Dict[str, Any]]
-    valid: bool
-    # Present when the subsystem sent it: false for the best partial path of a search that ended without a complete one.
-    complete: bool
-    errorMessage: Optional[str]
-
-
 class ErrorMessage(TypedDict):
     type: Literal["error"]
     message: str
@@ -142,9 +118,6 @@ ServerMessage = Union[
     ErrorMessage,
     Dict[str, Any],
     StackOptionsMessage,
-    GeneratedSceneMessage,
-    TrajectoryGenerationPreviewMessage,
-    TrajectoryGenerationResultMessage,
     SimulationModelsMessage,
 ]
 
@@ -169,37 +142,6 @@ def make_error_message(message: str) -> ErrorMessage:
         # Windows consoles often use cp1252; long diagnostics may contain Unicode (e.g. U+2192).
         print(line.encode("ascii", errors="replace").decode("ascii"))
     return {"type": "error", "message": message}
-
-
-def make_generated_scene_message(request_id: str, scene: Dict[str, Any], evaluation_data: Dict[str, Any], valid: bool) -> GeneratedSceneMessage:
-    return GeneratedSceneMessage(type="generated_scene", requestId=request_id, scene=scene, evaluationData=evaluation_data, valid=valid)
-
-
-def make_trajectory_generation_preview_message(request_id: str, trajectory_data: Dict[str, Any]) -> TrajectoryGenerationPreviewMessage:
-    return TrajectoryGenerationPreviewMessage(
-        type="trajectory_generation_preview",
-        requestId=request_id,
-        trajectoryData=trajectory_data,
-    )
-
-
-def make_trajectory_generation_result_message(
-    request_id: str,
-    trajectory_data: Optional[Dict[str, Any]],
-    valid: bool,
-    error_message: Optional[str],
-    complete: Optional[bool] = None,
-) -> TrajectoryGenerationResultMessage:
-    message = TrajectoryGenerationResultMessage(
-        type="trajectory_generation_result",
-        requestId=request_id,
-        trajectoryData=trajectory_data,
-        valid=bool(valid),
-        errorMessage=error_message,
-    )
-    if complete is not None:
-        message["complete"] = bool(complete)
-    return message
 
 
 def _parse_agent_context(connection: SimulationConnectionInfo) -> AgentContext:

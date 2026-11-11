@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
-# Deliberately one worker in the workbench: planning trajectories is a single long run
-# and the subsystem is scoped to one request at a time (see project spec). A node sizes
-# its pool by its slots. Kept apart from the service module, which imports the search.
-MAX_TRAJECTORY_GENERATION_WORKERS = 1
-# The service's name and base topic on its own; a worker node's instance takes the cluster's (scene_generation_types.py).
+from scenegems_tool.subsystems.pool.pool_task import PoolTask
+
+# Kept apart from the service module, which imports the search. The service's name on its own; a worker node's
+# instance takes the cluster's (scene_generation_types.py).
 TRAJECTORY_GENERATION_SERVICE_NAME = "trajectory-generation-subsystem"
-TRAJECTORY_GENERATION_SERVICE_TOPIC = f"waraps/service/virtual/real/{TRAJECTORY_GENERATION_SERVICE_NAME}"
+GENERATE_TRAJECTORIES_TASK = "generate-trajectories"  # the start-task name of a request
+TRAJECTORY_PREVIEW_STREAM = "planned_trajectory_preview"  # sensor/planned_trajectory_preview: the plan as it stands
+TRAJECTORY_RESULT_STREAM = "planned_trajectory"  # sensor/planned_trajectory: the result
 
 
 class TrajectoryGeneratorId(str, Enum):
@@ -107,11 +108,9 @@ class TrajectoryGenerationParams:
 
 
 @dataclass(frozen=True)
-class MqttTrajectoryGenerationTask:
-    sender: str
-    task_uuid: str
-    request_id: str
+class MqttTrajectoryGenerationTask(PoolTask):
+    """One plan for a scene. Its seed (PoolTask.seed) seeds random and numpy at the start, so it fixes the search."""
+
     scenario_content: str
     colregs_constraints_content: str
     params: TrajectoryGenerationParams
-    seed: Optional[int] = None  # seeds random and numpy at task start; the fixed default seed when None

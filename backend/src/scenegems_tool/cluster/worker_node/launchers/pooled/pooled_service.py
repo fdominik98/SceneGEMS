@@ -1,7 +1,7 @@
 """A pooled service: one long-lived subsystem container that serves many requests over MQTT.
 
 The container runs the subsystem's MQTT service with a pool of worker processes, sized by
-the worker node's slots (WORKER_COUNT) or by the subsystem's own default in the workbench. The
+the worker node's slots for the kind of work (WORKER_COUNT). The
 launcher starts it on a background thread, so the caller never blocks on Docker, and
 callers talk to it on `service_topic` under its `service_name`, which tells it from the
 same service of every other worker node on the broker.
@@ -20,6 +20,7 @@ from typing import Dict, Optional
 from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.compose_project import ComposeProject
 from scenegems_tool.cluster.worker_node.launchers.container_environment import subsystem_environment
+from scenegems_tool.cluster.worker_node.launchers.docker_cli import is_container_running
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.messaging.mqtt_client import SERVICE_NAME_VARIABLE, MQttConnectionInfo, service_topic
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
@@ -150,6 +151,13 @@ class PooledService:
             self.project.up()
         except BaseException:
             _logger.exception("%s container lifecycle startup failed", type(self).__name__)
+
+    def is_running(self) -> bool:
+        """Whether the pool is there: its container runs, or its start is still under way."""
+        thread = self._lifecycle_thread
+        if thread is not None and thread.is_alive():
+            return True
+        return is_container_running(self.names.container_name)
 
     def destroy(self) -> None:
         self._shutdown.set()

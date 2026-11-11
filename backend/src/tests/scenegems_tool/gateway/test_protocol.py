@@ -8,13 +8,10 @@ import pytest
 from scenegems_tool.gateway import protocol
 from scenegems_tool.gateway.protocol import (
     make_error_message,
-    make_generated_scene_message,
     make_initial_state_message,
     make_preview_chunk_message,
     make_simulation_models_body,
     make_simulation_models_message,
-    make_trajectory_generation_preview_message,
-    make_trajectory_generation_result_message,
     simulation_config_from_body,
 )
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
@@ -70,20 +67,6 @@ class TestMessageBuilders:
 
     def test_initial_state_message_always_carries_the_scenario_id(self):
         assert make_initial_state_message("s1", 2, 100) == {"type": "initial_state", "scenarioId": "s1", "timeStep": 2, "trajectoryLength": 100}
-
-    def test_generated_scene_message(self):
-        assert make_generated_scene_message("r1", {"a": 1}, {"b": 2}, True) == {"type": "generated_scene", "requestId": "r1", "scene": {"a": 1}, "evaluationData": {"b": 2}, "valid": True}
-
-    def test_trajectory_generation_messages(self):
-        assert make_trajectory_generation_preview_message("r1", {"t": 1}) == {"type": "trajectory_generation_preview", "requestId": "r1", "trajectoryData": {"t": 1}}
-        result = make_trajectory_generation_result_message("r1", None, 0, "failed")
-        assert result == {"type": "trajectory_generation_result", "requestId": "r1", "trajectoryData": None, "valid": False, "errorMessage": "failed"}
-
-    def test_trajectory_generation_result_carries_complete_only_when_given(self):
-        partial = make_trajectory_generation_result_message("r1", {"t": 1}, True, None, complete=False)
-        assert partial == {"type": "trajectory_generation_result", "requestId": "r1", "trajectoryData": {"t": 1}, "valid": True, "complete": False, "errorMessage": None}
-        assert make_trajectory_generation_result_message("r1", {"t": 1}, True, None, complete=True)["complete"] is True
-        assert "complete" not in make_trajectory_generation_result_message("r1", {"t": 1}, True, None)
 
     def test_the_preview_chunk_message(self):
         assert make_preview_chunk_message("s", 0, 9, [{"f": 1}]) == {"type": "preview_trajectory_chunk", "scenarioId": "s", "fromTimestamp": 0, "toTimestamp": 9, "frames": [{"f": 1}]}

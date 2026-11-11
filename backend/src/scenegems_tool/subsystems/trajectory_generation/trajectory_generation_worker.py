@@ -2,8 +2,7 @@ import json
 import random
 import time
 from datetime import datetime
-from multiprocessing.synchronize import Event
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 
@@ -16,12 +15,17 @@ from concrete_level.trajectory_generation.trajectory_data import MONITOR_FRAMES_
 from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP as DEFAULT_TIME_STEP
 from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
 from scenegems_tool.gateway.serialization import serialize_monitored_trajectory
+from scenegems_tool.subsystems.pool.pool_task import TaskChannel
 from scenegems_tool.subsystems.trajectory_generation.straight_trajectory_generator import straight_trajectory_data
-from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import MqttTrajectoryGenerationTask, TrajectoryGeneratorId
+from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import (
+    TRAJECTORY_PREVIEW_STREAM,
+    TRAJECTORY_RESULT_STREAM,
+    MqttTrajectoryGenerationTask,
+    TrajectoryGeneratorId,
+)
 from utils.colregs_approximations import COLREGSConstraints
 from utils.global_constants import ONE_HOUR_IN_SEC
 
-_SEED = 1234  # every task's seed unless the task names one
 _MIN_PREVIEW_INTERVAL_SEC = 1.0
 
 TrajectoryDataFactory = Callable[[Trajectories, int], TrajectoryData]
@@ -123,8 +127,13 @@ def _current_monitored_trajectory(planner: MonitorGuidedPlanner, include_monitor
         return None
 
 
+def _result(channel: TaskChannel, trajectory_data: Optional[Dict[str, Any]], valid: bool, complete: bool, error_message: Optional[str]) -> None:
+    """The task's result on its stream: the trajectories, whether a plan was found (valid), whether it is a whole one (complete), and why not."""
+    channel.emit(TRAJECTORY_RESULT_STREAM, {"trajectory-data": trajectory_data, "valid": bool(valid), "complete": bool(complete), "error-message": error_message}, final=True)
+
+
 def _emit_result(
-    result_queue,
+    channel: TaskChannel,
     task: MqttTrajectoryGenerationTask,
     planner: MonitorGuidedPlanner,
     factory: TrajectoryDataFactory,
@@ -137,7 +146,7 @@ def _emit_result(
         # failure. That path is the best one found, like a partial one: valid, not complete.
         complete = valid and planner.first_failed_step is None
         payload = _trajectory_payload(factory(trajectories, iter_number), _current_monitored_trajectory(planner, include_monitor_results))
-        result_queue.put((task, payload, valid, complete, None))
+        _result(channel, payload, valid, complete, None)
         return
     except Exception as exc:
         error = str(exc)
@@ -150,18 +159,18 @@ def _emit_result(
         partial = None
     if partial is not None and len(partial) > 1:
         payload = _trajectory_payload(factory(partial, planner.iteration_count), _current_monitored_trajectory(planner, include_monitor_results))
-        result_queue.put((task, payload, True, False, None))
+        _result(channel, payload, True, False, None)
     else:
-        result_queue.put((task, None, False, False, f"No trajectory could be planned: {error}"))
+        _result(channel, None, False, False, f"No trajectory could be planned: {error}")
 
 
-def run_trajectory_generation_worker(
-    task: MqttTrajectoryGenerationTask,
-    preview_queue,
-    result_queue,
-    terminate_event: Event,
-) -> None:
-    seed = task.seed if task.seed is not None else _SEED
+def run_trajectory_generation_worker(task: MqttTrajectoryGenerationTask, channel: TaskChannel) -> None:
+    """One task of the trajectory generation pool, in a process of its own: one plan for the task's scene.
+
+    Previews go out on the preview stream while it searches, the result on the result stream. A search
+    that plans nothing still has a result (valid false, with the reason); a cancelled one returns its best partial plan.
+    """
+    seed = task.seed
     random.seed(seed)
     np.random.seed(seed)
 
@@ -175,12 +184,12 @@ def run_trajectory_generation_worker(
         initial_scene = _parse_initial_scene(task.scenario_content)
         colregs_constants = COLREGSConstraints.from_file_content(task.colregs_constraints_content)
     except Exception as exc:
-        result_queue.put((task, None, False, False, f"Failed to load scenario: {exc}"))
+        _result(channel, None, False, False, f"Failed to load scenario: {exc}")
         return
 
     if params.generator_id == TrajectoryGeneratorId.STRAIGHT:
         trajectory_data = straight_trajectory_data(initial_scene, time_step, params.timespan, _scenario_name(task.scenario_content), seed)
-        result_queue.put((task, trajectory_data.to_dict(), True, True, None))
+        _result(channel, trajectory_data.to_dict(), True, True, None)
         return
 
     # The search plans one vessel against the others going straight on; that is part of the search.
@@ -189,7 +198,7 @@ def run_trajectory_generation_worker(
     last_preview_mono = 0.0
 
     def _termination_signal() -> bool:
-        return terminate_event.is_set() or (deadline is not None and time.monotonic() >= deadline)
+        return channel.cancelled or (deadline is not None and time.monotonic() >= deadline)
 
     include_monitor_results = params.monitor_results_enabled
 
@@ -199,11 +208,11 @@ def run_trajectory_generation_worker(
         now = time.monotonic()
         if now - last_preview_mono < _MIN_PREVIEW_INTERVAL_SEC:
             return False
-        preview_queue.put((task, _trajectory_payload(factory(trajectories, iteration), monitored if include_monitor_results else None)))
+        channel.emit(TRAJECTORY_PREVIEW_STREAM, _trajectory_payload(factory(trajectories, iteration), monitored if include_monitor_results else None))
         # Timed from the end of the preview: building one for a long path can take longer than
         # the interval, and timed from its start every seed step then published a preview.
         last_preview_mono = time.monotonic()
         return True
 
     planner = _build_planner(task, initial_scene, other_trajectories, colregs_constants, _observer, _termination_signal)
-    _emit_result(result_queue, task, planner, factory)
+    _emit_result(channel, task, planner, factory)

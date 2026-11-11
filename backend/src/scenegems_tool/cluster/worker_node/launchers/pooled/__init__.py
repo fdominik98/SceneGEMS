@@ -4,5 +4,5 @@ pooled_service.py              the shared lifecycle and compose layout
 scene_generation_pool.py       scene generation service
 trajectory_generation_pool.py  trajectory generation service
 monitor_service.py             COLREGS monitoring service
-service_pools.py               a worker node's pools, started on first use
+service_pools.py               a worker node's pools, started with the daemon and started again when one is gone
 """
