@@ -41,6 +41,7 @@ from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepP
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.stack_services import vessel_stack_name
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import GUIDED_TARGET_TIMEOUT_S, MavlinkLink, MavlinkLinkError, StampedState, sitl_mavlink_endpoint
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
@@ -189,7 +190,7 @@ def mavlink_instance(
         vessels[str(vessel.id)] = VesselConfig(
             agent_id=str(vessel.id),
             stack=VesselStackConfig(asv_system=software, control_layer=ControlLayerId.ARDUPILOT, simulation_layer=simulation_layer),
-            connection=AgentConnection(agent_name=f"vessel_{vessel.id}", topic="", port=None),
+            connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic="", port=None),
             adapter_ids=(MAVLINK_LOCKSTEP_ADAPTERS[software],),
         )
     return SimulationInstanceConfig(simulation_layer=simulation_layer, environment=environment or EnvironmentConfig.calm(), speedup=speedup, vessels=vessels)

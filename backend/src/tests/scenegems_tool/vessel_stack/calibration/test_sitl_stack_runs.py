@@ -57,7 +57,7 @@ class TestStackPreparation:
     def test_generated_files_land_under_the_mounted_assets_folder(self, prepared):
         folder, _, _, _ = prepared
         generated = os.path.join(folder, "runtime_assets", "simulation", "gen_tmp")
-        assert {"ocean_world.sdf", "vessel_0_model.sdf", "params-vessel_0.params", "trajectories.json"} <= set(os.listdir(generated))
+        assert {"ocean_world.sdf", "os_model.sdf", "params-os.params", "trajectories.json"} <= set(os.listdir(generated))
 
     def test_no_host_path_is_left_in_the_files(self, prepared):
         folder, compose_file, _, _ = prepared
@@ -66,7 +66,7 @@ class TestStackPreparation:
         texts += [open(os.path.join(generated, name), encoding="utf-8").read() for name in os.listdir(generated) if name != "trajectories.json"]
         for text in texts:
             assert RUNTIME_ASSETS_FOLDER not in text and RUNTIME_ASSETS_FOLDER.replace("\\", "/") not in text
-        assert f"{CONTAINER_ASSETS}/simulation/gen_tmp/vessel_0_model.sdf" in open(os.path.join(generated, "ocean_world.sdf"), encoding="utf-8").read()
+        assert f"{CONTAINER_ASSETS}/simulation/gen_tmp/os_model.sdf" in open(os.path.join(generated, "ocean_world.sdf"), encoding="utf-8").read()
 
     def test_the_shared_volume_becomes_a_bind_mount_of_the_run_folder(self, prepared):
         folder, compose_file, _, _ = prepared
@@ -80,7 +80,7 @@ class TestStackPreparation:
     def test_each_sitl_serial_port_is_published_on_a_host_port(self, prepared):
         _, compose_file, endpoints, _ = prepared
         compose = yaml.safe_load(open(compose_file, encoding="utf-8"))
-        assert compose["services"]["vessel_0"]["ports"] == ["127.0.0.1:16000:5760"]
+        assert compose["services"]["os"]["ports"] == ["127.0.0.1:16000:5760"]
         assert endpoints == {"0": "tcp:127.0.0.1:16000"}
 
     def test_fixed_names_and_the_gazebo_host_port_are_dropped_so_repeats_can_coexist(self, prepared):
@@ -101,14 +101,14 @@ class TestStackPreparation:
             prepare_run_folder(spec, straight_run("5m", 20), str(tmp_path), 16100)
         generated = tmp_path / "runtime_assets" / "simulation" / "gen_tmp"
         assert "<linear_velocity>0.0 5.0 0.0</linear_velocity>" in (generated / "ocean_world.sdf").read_text(encoding="utf-8")
-        assert "SIM_WIND_SPD\t5.0" in (generated / "params-vessel_0.params").read_text(encoding="utf-8")
+        assert "SIM_WIND_SPD\t5.0" in (generated / "params-os.params").read_text(encoding="utf-8")
 
     def test_repo_entrypoints_are_mounted_over_the_image_copies_on_request(self, tmp_path):
         spec = StackRunSpec(GAZEBO, "straight", "5m", 20, 1, 1)
         with uncapped_generation():
             compose_file, _, _ = prepare_run_folder(spec, straight_run("5m", 20), str(tmp_path), 16200, repo_entrypoints=True)
         services = yaml.safe_load(open(compose_file, encoding="utf-8"))["services"]
-        assert any(volume.endswith("sitl_entrypoint.sh:/scripts/sitl_entrypoint.sh:ro") for volume in services["vessel_0"]["volumes"])
+        assert any(volume.endswith("sitl_entrypoint.sh:/scripts/sitl_entrypoint.sh:ro") for volume in services["os"]["volumes"])
         assert any("gazebo_entrypoint_prod.sh" in volume for volume in services["gazebo"]["volumes"])
 
     def test_replacements_cover_the_spellings_of_the_assets_folder(self):

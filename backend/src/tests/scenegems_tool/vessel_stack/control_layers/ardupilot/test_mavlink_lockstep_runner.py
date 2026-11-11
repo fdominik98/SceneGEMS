@@ -242,7 +242,7 @@ class TestMavlinkReplayInstance:
         for vessel in instance.vessels.values():
             assert vessel.adapter_ids == ("replay_mavlink_lockstep",)
             assert str(vessel.stack) == "replay, ardupilot, ardupilot_sim"
-        assert instance.vessels["0"].connection.agent_name == "vessel_0"
+        assert instance.vessels["0"].connection.agent_name == "os"
 
 
 class TestMavlinkInstance:
@@ -325,7 +325,7 @@ class TestRunMavlinkReplay:
         resolver.registry.bind_runtime("replay_mavlink_lockstep", lambda: Recording)
         FakeLink.start_positions = {0: (0.0, 0.0)}
         run_mavlink_stack(straight, mavlink_replay_instance(straight, SimulationLayerId.ARDUPILOT_SIM), GEOFENCE, resolver=resolver, steps=3)
-        assert endpoints_seen == ["tcp:vessel_0:5760"]
+        assert endpoints_seen == ["tcp:os:5760"]
         endpoints_seen.clear()
         run_mavlink_stack(straight, mavlink_replay_instance(straight, SimulationLayerId.ARDUPILOT_SIM), GEOFENCE, resolver=resolver, steps=3, endpoints={"0": "tcp:localhost:5760"})
         assert endpoints_seen == ["tcp:localhost:5760"]

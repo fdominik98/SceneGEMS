@@ -35,7 +35,7 @@ def straight_run():
 def setup_run(trajectories, vessel, late_steps=()):
     dynamics = hull_dynamics(vessel, CALM)
     initial = trajectories.initial_scene[vessel]
-    link = FakeHullLink({"vessel_0": (HullSurgeYawModel(dynamics), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))}, late_steps)
+    link = FakeHullLink({"os": (HullSurgeYawModel(dynamics), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))}, late_steps)
     participants = {0: LosWaypointFollower(vessel, trajectories.state_list(vessel), trajectories.time_step)}
     autopilots = {0: TwinThrustAutopilot(AutopilotGains.from_dynamics(dynamics, vessel, 0.1))}
     return link, participants, autopilots, {0: thruster_constants(dynamics)}
@@ -43,7 +43,7 @@ def setup_run(trajectories, vessel, late_steps=()):
 
 def run(trajectories, vessel, late_steps=(), **kwargs):
     link, participants, autopilots, thrusters = setup_run(trajectories, vessel, late_steps)
-    result = run_gz_lockstep(link, {0: "vessel_0"}, participants, autopilots, {0: vessel}, thrusters, 1.0, 30, 7, **kwargs)
+    result = run_gz_lockstep(link, {0: "os"}, participants, autopilots, {0: vessel}, thrusters, 1.0, 30, 7, **kwargs)
     return link, result
 
 
@@ -90,7 +90,7 @@ class TestRunGzLockstep:
         trajectories, vessel = straight_run()
         link, participants, autopilots, thrusters = setup_run(trajectories, vessel)
         with pytest.raises(ValueError, match="whole number of control steps"):
-            run_gz_lockstep(link, {0: "vessel_0"}, participants, autopilots, {0: vessel}, thrusters, 0.25, 4, 7)
+            run_gz_lockstep(link, {0: "os"}, participants, autopilots, {0: vessel}, thrusters, 0.25, 4, 7)
 
 
 class TestHull:
@@ -111,7 +111,7 @@ class TestGzCustom:
         instance = gz_custom_instance(trajectories, {0: AsvSystemId.USV_NAVIGATION}, speedup=2)
         vessel = instance.vessels["0"]
         assert (vessel.stack.asv_system, vessel.stack.control_layer, vessel.stack.simulation_layer) == (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
-        assert vessel.connection.agent_name == "vessel_0"
+        assert vessel.connection.agent_name == "os"
         assert gz_custom_instance(trajectories).vessels["0"].stack.asv_system == AsvSystemId.REPLAY
 
     def test_run_gz_custom_drives_the_registry_participants_and_records_the_run(self, monkeypatch):

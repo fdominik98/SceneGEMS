@@ -56,5 +56,5 @@ def hull_link(trajectories, environment) -> FakeHullLink:
     hulls = {}
     for vessel in scene.vessels:
         initial = scene[vessel]
-        hulls[f"vessel_{vessel.id}"] = (HullSurgeYawModel(hull_dynamics(vessel, environment)), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))
+        hulls[vessel.name] = (HullSurgeYawModel(hull_dynamics(vessel, environment)), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))
     return FakeHullLink(hulls)

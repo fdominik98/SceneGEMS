@@ -37,7 +37,7 @@ def stack_for(worker_node, make_job, head_on_trajectories, job_id="sim-1", **fie
 def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="usv_navigation")
     services = stack.compose["services"]
-    own_ship, target = services["vessel_0_asv_system"], services["vessel_1_asv_system"]
+    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
     assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server"
     assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
@@ -47,12 +47,12 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = {f"vessel_{vessel}_{layer}" for vessel in (0, 1) for layer in ("controller", "asv_system")}
+    vessel_services = {f"{vessel}_{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv_system")}
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
         assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
-    assert services["vessel_0_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
-    assert services["vessel_0_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
+    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
+    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)
@@ -69,9 +69,9 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
 def test_the_world_and_the_models_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     gen_folder = f"{worker_node.job_scope(job).folder}/gen"
-    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "trajectories.json", "vessel_0_model.sdf", "vessel_1_model.sdf"]
+    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_model.sdf", "trajectories.json", "ts1_model.sdf"]
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
-    model = open(f"{gen_folder}/vessel_0_model.sdf", encoding="utf-8").read()
+    model = open(f"{gen_folder}/os_model.sdf", encoding="utf-8").read()
     assert "ArduPilotPlugin" not in model
 
 

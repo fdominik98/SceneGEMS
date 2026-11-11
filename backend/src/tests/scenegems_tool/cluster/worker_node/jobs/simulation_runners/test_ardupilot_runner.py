@@ -30,8 +30,8 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
     job, stack = stack_for(layer, worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = [key for key in services if key.startswith("vessel_")]
-    assert sorted(vessel_services) == ["vessel_0", "vessel_0_asv_system", "vessel_1", "vessel_1_asv_system"], "SITL and a replay container per vessel"
+    vessel_services = [key for key in services if key.startswith(("os", "ts"))]
+    assert sorted(vessel_services) == ["os", "os_asv_system", "ts1", "ts1_asv_system"], "SITL and a replay container per vessel"
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
@@ -52,9 +52,9 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
 def test_generated_files_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):
     job, stack = stack_for("gazebo", worker_node, make_job, head_on_trajectories)
     gen_folder = f"{worker_node.job_scope(job).folder}/gen"
-    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "params-vessel_0.params", "params-vessel_1.params", "trajectories.json", "vessel_0_model.sdf", "vessel_1_model.sdf"]
-    sitl_environment = stack.compose["services"]["vessel_0"]["environment"]
-    assert any(entry.startswith("SITL_PARAM_FILE=") and entry.endswith(f"{gen_folder}/params-vessel_0.params") for entry in sitl_environment)
+    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_model.sdf", "params-os.params", "params-ts1.params", "trajectories.json", "ts1_model.sdf"]
+    sitl_environment = stack.compose["services"]["os"]["environment"]
+    assert any(entry.startswith("SITL_PARAM_FILE=") and entry.endswith(f"{gen_folder}/params-os.params") for entry in sitl_environment)
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
 
 
@@ -82,11 +82,11 @@ def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_fold
     """Every vessel has a SITL service and its ASV system container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"vessel_0", "vessel_1", "vessel_0_asv_system", "vessel_1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"os", "ts1", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
-    assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
-    assert "scenegems-usv-navigation" in services["vessel_0_asv_system"]["image"]
-    assert "scenegems-simulation-subsystem" in services["vessel_1_asv_system"]["image"]
+    assert services["os"]["image"] == services["ts1"]["image"]
+    assert "scenegems-usv-navigation" in services["os_asv_system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):

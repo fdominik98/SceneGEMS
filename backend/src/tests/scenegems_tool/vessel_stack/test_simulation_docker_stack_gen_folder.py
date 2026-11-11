@@ -49,7 +49,7 @@ def test_default_gen_folder_is_the_workbench_folder(trajectories):
     pending_writes, compose = build(trajectories)
     assert {path.rsplit("/", 1)[0] for path, _ in pending_writes} == {SIMULATION_GEN_FOLDER}
     world = next(content for path, content in pending_writes if path.endswith("ocean_world.sdf"))
-    assert f"{GAZEBO_GEN_MOUNT}/vessel_0_model.sdf" in world
+    assert f"{GAZEBO_GEN_MOUNT}/os_model.sdf" in world
 
 
 def test_custom_gen_folder_receives_every_file(trajectories):
@@ -57,5 +57,5 @@ def test_custom_gen_folder_receives_every_file(trajectories):
     pending_writes, compose = build(trajectories, gen_folder=gen_folder)
     assert {path.rsplit("/", 1)[0] for path, _ in pending_writes} == {gen_folder}
     world = next(content for path, content in pending_writes if path.endswith("ocean_world.sdf"))
-    assert f"{docker_volume_path(gen_folder)}/vessel_0_model.sdf" in world
+    assert f"{docker_volume_path(gen_folder)}/os_model.sdf" in world
     assert compose["services"]["gazebo"]["environment"]["WORLD_SDF"] == docker_volume_path(f"{gen_folder}/ocean_world.sdf")
