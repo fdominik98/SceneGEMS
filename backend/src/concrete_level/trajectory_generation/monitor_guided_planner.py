@@ -6,14 +6,15 @@ from concrete_level.colregs_monitoring.monitored_trajectory import MonitoredTraj
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.trajectories import Trajectories
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape
 from concrete_level.trajectory_generation.seed_trajectory import (
-    build_seed_nodes,
     clone_as_root,
     detach_node,
     extend_seed_nodes,
     first_failure_index,
     original_headings_from_root,
     repair_window,
+    search_seed_corridors,
     window_rejoins,
 )
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
@@ -24,8 +25,10 @@ from utils.colregs_approximations import COLREGSConstraints
 class MonitorGuidedPlanner:
     """Plans the vessels' trajectories over the whole horizon at once, offline.
 
-    The seed follows each give-way vessel's maneuvering corridor step by step. Where the
-    COLREGS monitor fails a seed step, a best-first tree search over a short window
+    The seed follows each give-way vessel's maneuvering corridor step by step. While the
+    COLREGS monitor fails the seed, the corridors of the vessels it names are reshaped
+    (a steeper outbound leg, a wider offset) until it passes or no shape helps
+    (`search_seed_corridors`). Where a seed step still fails, a best-first tree search over a short window
     around it expands the cheapest leaves with sampled heading changes, keeps only the
     children the monitor accepts and splices the stretch back in once it rejoins the
     seed. It samples no random states and does no rewiring, so it is not an RRT.
@@ -83,6 +86,10 @@ class MonitorGuidedPlanner:
         # Index of the first scene of the planned path that still fails a COLREGS rule, None
         # for a clean plan (and before planning). A path is returned either way.
         self.first_failed_step: Optional[int] = None
+        # The corridor shapes the seed search settled on, by give-way ship (none before
+        # planning, and none for a ship whose corridor kept its default shape). The repair
+        # and its costs use the same shapes, so they work on the corridor the seed follows.
+        self.corridor_shapes: Dict[ConcreteActor, CorridorShape] = {}
 
         # other_trajectories is the constant-course baseline for the whole scene, so its
         # timespan is the horizon the planner is expected to cover, and that is what
@@ -123,7 +130,7 @@ class MonitorGuidedPlanner:
 
     def do_plan(self) -> Optional[Trajectories]:
         horizon = float(self.other_trajectories.timespan)
-        nodes = build_seed_nodes(
+        nodes, self.corridor_shapes = search_seed_corridors(
             self.monitor,
             self.time_step,
             horizon,
@@ -132,7 +139,12 @@ class MonitorGuidedPlanner:
         )
         original_headings = original_headings_from_root(nodes[0])
         if self.VERBOSE:
-            print(f"Seed path has {len(nodes)} scenes")
+            print(f"Seed path has {len(nodes)} scenes, reshaped corridors: {({actor.name: shape for actor, shape in self.corridor_shapes.items()})}")
+        if self.corridor_shapes:
+            # The seed steps counted and shown so far were those of the first seed, which
+            # the search replaced: the count and the observer follow the seed now in use.
+            self._iteration_count = len(nodes) - 1
+            self._preview(nodes)
         if not self._should_stop():
             nodes = self._repair_until_clean(nodes, original_headings, horizon)
         self._install_path(nodes)
@@ -199,14 +211,14 @@ class MonitorGuidedPlanner:
         original_headings: Dict[ConcreteActor, float],
         horizon: float,
     ) -> List[SceneNode]:
-        spec = repair_window(nodes, failure_index, False, self.DIRECTION_THRESHOLD)
+        spec = repair_window(nodes, failure_index, False, self.DIRECTION_THRESHOLD, self.corridor_shapes)
         if spec is None:
             return nodes
         path = self._search_window(spec)
         rejoined = self._splice_if_rejoined(nodes, spec, path, original_headings, horizon)
         if rejoined is not None:
             return rejoined
-        wide = repair_window(nodes, failure_index, True, self.DIRECTION_THRESHOLD)
+        wide = repair_window(nodes, failure_index, True, self.DIRECTION_THRESHOLD, self.corridor_shapes)
         return self._repair_widened(nodes, spec, path, wide, original_headings, horizon)
 
     def _repair_widened(
@@ -267,7 +279,7 @@ class MonitorGuidedPlanner:
     ) -> List[SceneNode]:
         spliced = [detach_node(node) for node in nodes[: spec.start + 1]]
         spliced.extend(detach_node(node) for node in window_path[1:])
-        return extend_seed_nodes(spliced, self.monitor, original_headings, self.time_step, horizon, should_stop=self._should_stop)
+        return extend_seed_nodes(spliced, self.monitor, original_headings, self.time_step, horizon, should_stop=self._should_stop, shapes=self.corridor_shapes)
 
     def _search_window(self, spec: WindowRepairSpec) -> Optional[List[SceneNode]]:
         tree = TrajectoryTreeBuilder(self.start_scene, self.time_step, self.monitor, root_node=clone_as_root(spec.seed_nodes[spec.start]))
@@ -276,6 +288,7 @@ class MonitorGuidedPlanner:
             self.time_step,
             False,
             goal_horizon=float(self.other_trajectories.timespan),
+            corridor_shapes=self.corridor_shapes,
         )
         objectives.window_spec = spec
         best_leaf = tree.root
@@ -317,6 +330,7 @@ class MonitorGuidedPlanner:
             self.time_step,
             self.VERBOSE,
             goal_horizon=float(self.other_trajectories.timespan),
+            corridor_shapes=self.corridor_shapes,
         )
         current = tree.root
         for node in nodes[1:]:

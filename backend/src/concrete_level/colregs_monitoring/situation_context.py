@@ -286,13 +286,18 @@ class SituationContext(ABC):
     def _bounding_violation_window(self, state1: ActorState, state2: ActorState) -> Optional[Tuple[float, float]]:
         """Times within which a violation is possible at all, from the bounding circles.
 
-        Bounded ahead by the safe temporal distance: a conflict further off than that is
-        not one the vessels have to resolve now, and it is the same horizon the risk of
-        collision itself is judged over.
+        A pair in an encounter is not bounded ahead. The encounter is classified without
+        asking for a low TCPA, so its give-way vessel has to act from the start however
+        far off the conflict is, and the domain it has to go around must exist from then
+        on: with the window cut at the safe temporal distance, a crossing that came into
+        sight 1800 s before its closest approach had a give-way vessel with no domain and
+        no corridor. A pair in no encounter keeps that bound, since a conflict further
+        off is not one it has to resolve now.
         """
         domain1, domain2 = self.safety_domains_for_states(state1, state2)
         reach = max(self._domain_reach(domain1, state1), self._domain_reach(domain2, state2))
         horizon = float(self.colregs_constants.SAFE_TEMPORAL_DISTANCE)
+        in_encounter = self.situation_type is not COLREGSType.OTHER
 
         relative_position = state2.p - state1.p
         relative_velocity = state2.v - state1.v
@@ -310,7 +315,9 @@ class SituationContext(ABC):
 
         root = float(np.sqrt(discriminant))
         lower = max((-b - root) / (2.0 * closing_speed_squared), 0.0)
-        upper = min((-b + root) / (2.0 * closing_speed_squared), horizon)
+        upper = (-b + root) / (2.0 * closing_speed_squared)
+        if not in_encounter:
+            upper = min(upper, horizon)
         if upper < lower:
             return None
         return lower, upper

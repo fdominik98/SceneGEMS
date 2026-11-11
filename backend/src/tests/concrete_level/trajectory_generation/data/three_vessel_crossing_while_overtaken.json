@@ -1,0 +1,107 @@
+{
+  "scenario_name": "3vessel_0obstacle",
+  "best_scene": {
+    "_data": [
+      [
+        {
+          "id": 0,
+          "type": "OSPassengerShip",
+          "length": 30.000000000080284,
+          "breadth": 12.000000000032115,
+          "height": 4.500000000012043,
+          "draft": 1.8000000000048173,
+          "mass": 397722.96000319324,
+          "safety_radius": 120.00000000032114,
+          "_is_os": true,
+          "_max_speed": 20.57778,
+          "_max_angular_speed": 0.05,
+          "_max_acceleration": 0.4,
+          "_rudder_mass": 0,
+          "_rudder_length": 0.6000000000016057,
+          "_rudder_width": 0.1,
+          "_rudder_height": 3.6000000000096346,
+          "_propeller_diameter": 1.0800000000028904,
+          "_thruster_mass": 398.52000000319964,
+          "_motor_length": 1.6200000000043357,
+          "is_vessel": true
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "speed": 4.796360538921273,
+          "heading": 1.5707963267948966
+        }
+      ],
+      [
+        {
+          "id": 1,
+          "type": "UnspecifiedVesselType",
+          "length": 158.66965269837908,
+          "breadth": 63.467861079351636,
+          "height": 23.80044790475686,
+          "draft": 9.520179161902744,
+          "mass": 58843502.11660169,
+          "safety_radius": 634.6786107935163,
+          "_is_os": false,
+          "_max_speed": 25.722235,
+          "_max_angular_speed": 0.03,
+          "_max_acceleration": 0.3,
+          "_rudder_mass": 0,
+          "_rudder_length": 3.173393053967582,
+          "_rudder_width": 0.1,
+          "_rudder_height": 19.04035832380549,
+          "_propeller_diameter": 5.712107497141647,
+          "_thruster_mass": 58961.42496653477,
+          "_motor_length": 8.56816124571247,
+          "is_vessel": true
+        },
+        {
+          "x": -6544.067243791891,
+          "y": -8917.554663591593,
+          "speed": 21.511048438715132,
+          "heading": 1.1039580096584836
+        }
+      ],
+      [
+        {
+          "id": 2,
+          "type": "UnspecifiedVesselType",
+          "length": 180.77616152371067,
+          "breadth": 72.31046460948427,
+          "height": 27.1164242285566,
+          "draft": 10.84656969142264,
+          "mass": 87024268.35751092,
+          "safety_radius": 723.1046460948427,
+          "_is_os": false,
+          "_max_speed": 25.722235,
+          "_max_angular_speed": 0.03,
+          "_max_acceleration": 0.3,
+          "_rudder_mass": 0,
+          "_rudder_length": 3.6155232304742135,
+          "_rudder_width": 0.1,
+          "_rudder_height": 21.69313938284528,
+          "_propeller_diameter": 6.507941814853584,
+          "_thruster_mass": 87198.6656888887,
+          "_motor_length": 9.761912722280377,
+          "is_vessel": true
+        },
+        {
+          "x": 10551.212563811134,
+          "y": -3014.3931058728413,
+          "speed": 8.563550867801355,
+          "heading": 2.335365942283202
+        }
+      ]
+    ],
+    "dcpa": null,
+    "tcpa": null,
+    "danger_sector": null,
+    "proximity_index": null,
+    "first_level_hash": null,
+    "second_level_hash": null,
+    "is_relevant_by_fec": null,
+    "is_relevant_by_fsm": null,
+    "is_ambiguous_by_fec": null,
+    "is_ambiguous_by_fsm": null
+  }
+}

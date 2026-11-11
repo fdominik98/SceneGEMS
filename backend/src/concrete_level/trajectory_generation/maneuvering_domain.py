@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -9,6 +10,39 @@ from utils.colregs_approximations import COLREGSConstraints
 from utils.global_constants import EPSILON
 from utils.math_utils import Direction
 from utils.safety_domains import DomainCollection
+
+
+@dataclass(frozen=True)
+class CorridorShape:
+    """How a give-way ship's corridor departs from the one its frozen domains give.
+
+    ``outbound_angle`` is the heading change of the outbound leg A-B (and of the inbound
+    leg C-D) in radians; the corridor never gets a shallower slant than it has, so 0.0
+    keeps it. ``width_factor`` multiplies the clearance offset of the leg B-C. The default
+    shape is the corridor as `ManeuveringDomain.for_give_way_ship` sizes it.
+
+    The frozen domains say where the ship's own course runs into the conflict. They do not
+    say how far the ship has to go to resolve it: a sideways shift barely changes the miss
+    distance of a crossing, whose relative motion runs across the track, and it cannot
+    know that the other vessel is leaving its course as well. The seed therefore tries
+    other shapes when the monitor fails the default one (`search_seed_corridors`).
+    """
+
+    outbound_angle: float = 0.0
+    width_factor: float = 1.0
+
+    def lost_progress(self, slant_angle: float) -> float:
+        """Progress along the track the two slanted legs cost, per unit of corridor width.
+
+        Orders the shapes from the mildest manoeuvre to the largest. ``slant_angle`` is the
+        angle a corridor has anyway (the readily apparent heading change), which is what an
+        ``outbound_angle`` below it means.
+        """
+        angle = max(self.outbound_angle, slant_angle)
+        return self.width_factor * (2.0 * float(np.tan(angle / 2.0)) + CorridorShape.WIDTH_WEIGHT)
+
+    # Two shapes that lose the same progress are told apart by their width.
+    WIDTH_WEIGHT = 0.1
 
 
 class ManeuveringDomain:
@@ -50,6 +84,22 @@ class ManeuveringDomain:
         self.vertex_b = self._world(along_b, outer_across)
         self.vertex_c = self._world(along_c, outer_across)
         self.vertex_d = self._world(along_d, inner_across)
+
+    def reshaped(self, shape: Optional[CorridorShape]) -> "ManeuveringDomain":
+        """This corridor with the outbound angle and the width of ``shape``.
+
+        A stays where it is, so the first turn keeps its place inside the window Rule 16
+        leaves for it. B and D follow from the slant and the width. C stays where the
+        frozen domains end, unless the outbound leg now reaches further along than that.
+        """
+        if shape is None or shape == CorridorShape():
+            return self
+        outer_across = self.outer_across * shape.width_factor
+        slant = max(float(np.tan(shape.outbound_angle)), self.outer_across / max(self.along_b - self.t0, EPSILON))
+        run = outer_across / max(slant, EPSILON)
+        along_b = self.t0 + run
+        along_c = max(self.along_c, along_b)
+        return ManeuveringDomain(self.origin, self.forward, self.across, self.t0, along_b, along_c, along_c + run, self.inner_across, outer_across)
 
     @property
     def far_along(self) -> float:
@@ -155,7 +205,7 @@ class ManeuveringDomain:
         return ManeuveringDomain(origin, forward, across, t0, along_b, along_c, along_d, inner_across, outer_across)
 
     @staticmethod
-    def for_give_way_ship(actor: ConcreteActor, situation_contexts: Sequence[SituationContext]) -> Optional["ManeuveringDomain"]:
+    def for_give_way_ship(actor: ConcreteActor, situation_contexts: Sequence[SituationContext], shape: Optional[CorridorShape] = None) -> Optional["ManeuveringDomain"]:
         give_way = _give_way_contexts(actor, situation_contexts)
         if not give_way:
             return None
@@ -175,7 +225,7 @@ class ManeuveringDomain:
             projected = _project_pcd_corners(origin, forward, across, context.start_potential_collision_domains[actor])
             alongs.extend(projected[0])
             acrosses.extend(projected[1])
-        return ManeuveringDomain.from_projected_corners(
+        domain = ManeuveringDomain.from_projected_corners(
             origin,
             forward,
             across,
@@ -185,6 +235,7 @@ class ManeuveringDomain:
             first.colregs_constants.READILY_APPARENT_HEADING_CHANGE,
             start.speed * outbound_start_delay(first.colregs_constants),
         )
+        return None if domain is None else domain.reshaped(shape)
 
     def to_monitor_payload(self) -> Dict[str, Any]:
         """Vertices and hold polyline in world metres for the web console overlay."""

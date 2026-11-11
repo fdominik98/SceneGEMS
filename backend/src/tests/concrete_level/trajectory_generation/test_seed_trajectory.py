@@ -5,6 +5,7 @@ import math
 import os
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from concrete_level.colregs_monitoring.colregs_monitor import COLREGSMonitor
@@ -12,7 +13,10 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
 from concrete_level.trajectory_generation import seed_trajectory
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape
 from concrete_level.trajectory_generation.seed_trajectory import (
+    CORRIDOR_OUTBOUND_ANGLES_DEG,
+    CORRIDOR_WIDTH_FACTORS,
     MAX_WINDOW_STEPS,
     PHASE_AFTER,
     PHASE_BEFORE,
@@ -22,6 +26,7 @@ from concrete_level.trajectory_generation.seed_trajectory import (
     LatchedGiveWayStore,
     build_seed_nodes,
     clone_as_root,
+    corridor_shape_ladder,
     detach_node,
     failure_give_way_actors,
     first_failure_index,
@@ -32,6 +37,7 @@ from concrete_level.trajectory_generation.seed_trajectory import (
     phase_of_actor,
     phase_of_pose,
     repair_window,
+    search_seed_corridors,
     seed_desired_heading,
     seed_maneuver_finished,
     stand_on_bound_actors,
@@ -285,3 +291,139 @@ class TestWindowRejoin:
         target = failing_nodes[2].scene[OWN_SHIP]
         turned = SimpleNamespace(window_depth=2, scene={OWN_SHIP: ActorState(target.x, target.y, 8.0, 1.5)})
         assert not window_rejoins(turned, self._spec(failing_nodes), 1)
+
+
+def _three_vessel_scene(without=()):
+    with open(os.path.join(os.path.dirname(__file__), "data", "three_vessel_crossing_while_overtaken.json"), encoding="utf-8") as file:
+        whole_scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
+    return ConcreteScene({actor: state for actor, state in whole_scene.items() if actor.name not in without})
+
+
+class TestCorridorShapeLadder:
+    def test_it_holds_every_angle_with_every_width_and_starts_with_the_default_shape(self):
+        ladder = corridor_shape_ladder(math.radians(30.0))
+        assert len(ladder) == len(set(ladder)) == len(CORRIDOR_OUTBOUND_ANGLES_DEG) * len(CORRIDOR_WIDTH_FACTORS)
+        assert ladder[0] == CorridorShape()
+
+    def test_the_shapes_come_in_the_order_of_the_progress_they_lose(self):
+        ladder = corridor_shape_ladder(math.radians(30.0))
+        lost = [shape.lost_progress(math.radians(30.0)) for shape in ladder]
+        assert lost == sorted(lost)
+        assert ladder[-1] == CorridorShape(math.radians(80.0), 6.0)
+
+
+class TestCorridorSearch:
+    """A generated scene: the own ship (4.8 m/s) gives way to TS2 (8.6 m/s), which crosses from 16 degrees abaft
+    its starboard beam and would pass 537 m off against 723 m, 1800 s on. TS1, which overtakes the own ship
+    in the whole scene, is left out here; test_monitor_guided_planner plans the three vessels.
+
+    The corridor its frozen domains give the own ship is 843 m to starboard at 30 degrees. It does not resolve
+    the crossing: the relative motion runs across the own ship's track, so the shift gains about 190 m of miss
+    distance and the progress lost on the outbound leg costs as much. Passing astern of TS2 does.
+    """
+
+    TIME_STEP = 15
+    HORIZON = 3600.0
+
+    @pytest.fixture(scope="class")
+    def monitor(self):
+        return COLREGSMonitor(_three_vessel_scene(without=("ts1",)), constants(), judge_initial_scene=False)
+
+    @pytest.fixture(scope="class")
+    def searched(self, monitor):
+        reported = []
+        nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON, on_progress=lambda nodes: reported.append(len(nodes)))
+        vessels = {vessel.name: vessel for vessel in nodes[0].scene.vessels}
+        return nodes, shapes, vessels, reported
+
+    @staticmethod
+    def _poses(node):
+        return sorted((vessel.name, float(state.x), float(state.y), float(state.heading)) for vessel, state in node.scene.items())
+
+    @staticmethod
+    def _closest_approach(nodes, vessels):
+        return min(float(np.linalg.norm(node.scene[vessels["os"]].p - node.scene[vessels["ts2"]].p)) for node in nodes)
+
+    def test_the_default_corridor_fails_the_safe_distance(self, monitor):
+        nodes = build_seed_nodes(monitor, self.TIME_STEP, self.HORIZON)
+        vessels = {vessel.name: vessel for vessel in nodes[0].scene.vessels}
+        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
+        failed = nodes[106].monitor_result_map_set.get_failed_rules()
+        assert [rule.rule_number for rules in failed.values() for rule in rules] == ["8(d)"]
+        assert self._closest_approach(nodes, vessels) < vessels["ts2"].safety_radius
+
+    def test_a_seed_cut_at_its_first_failure_ends_there(self, monitor):
+        nodes = build_seed_nodes(monitor, self.TIME_STEP, self.HORIZON, stop_at_first_failure=True)
+        assert len(nodes) == 107 and first_failure_index(nodes) == 106
+
+    def test_the_search_gives_a_seed_that_fails_no_rule(self, searched):
+        nodes, _, _, _ = searched
+        assert first_failure_index(nodes) is None
+        assert len(nodes) == 198
+
+    def test_the_own_ship_takes_a_steep_wide_corridor_and_passes_astern(self, searched):
+        nodes, shapes, vessels, _ = searched
+        assert shapes == {vessels["os"]: CorridorShape(math.radians(80.0), 3.0)}
+        assert self._closest_approach(nodes, vessels) > vessels["ts2"].safety_radius
+        # At the closest approach the own ship is abaft of TS2: TS2 has crossed ahead of it.
+        closest = min(nodes, key=lambda node: float(np.linalg.norm(node.scene[vessels["os"]].p - node.scene[vessels["ts2"]].p)))
+        own_ship, target = closest.scene[vessels["os"]], closest.scene[vessels["ts2"]]
+        assert float(np.dot(own_ship.p - target.p, target.v)) < 0.0
+
+    def test_the_seed_follows_the_corridor_in_the_shape_the_search_chose(self, searched):
+        nodes, shapes, vessels, _ = searched
+        domain = latched_domains_from_nodes(nodes, shapes)[vessels["os"]]
+        assert math.degrees(domain.hold_heading_change) == pytest.approx(-80.0)
+        headings = [math.degrees(node.scene[vessels["os"]].heading) for node in nodes]
+        assert min(headings[:10]) == pytest.approx(90.0 - 80.0)
+        assert headings[-1] == pytest.approx(90.0), "back on its course at the end"
+        assert latched_domains_from_nodes(nodes)[vessels["os"]].outer_across == pytest.approx(domain.outer_across / 3.0)
+
+    def test_only_the_first_seed_reports_its_steps(self, searched):
+        _, _, _, reported = searched
+        assert reported == list(range(2, 166)), "the 164 steps of the default seed, none of the trials"
+
+    def test_a_clean_seed_is_not_searched(self):
+        """Without TS2 the own ship is only overtaken: the default corridors pass."""
+        monitor = COLREGSMonitor(_three_vessel_scene(without=("ts2",)), constants(), judge_initial_scene=False)
+        nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON)
+        assert shapes == {}
+        assert first_failure_index(nodes) is None
+        default = build_seed_nodes(monitor, self.TIME_STEP, self.HORIZON)
+        assert [self._poses(node) for node in nodes] == [self._poses(node) for node in default]
+
+    def test_without_a_build_left_the_failing_seed_is_returned_whole(self, monitor, monkeypatch):
+        monkeypatch.setattr(seed_trajectory, "SEARCH_MAX_BUILDS", 0)
+        nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON)
+        assert shapes == {}
+        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
+
+    def test_a_shape_that_gains_too_little_is_not_taken(self, monitor, monkeypatch):
+        """No shape moves the failure a thousand steps on, so every shape is tried and none is kept."""
+        monkeypatch.setattr(seed_trajectory, "SEARCH_MIN_GAIN_STEPS", 1000)
+        monkeypatch.setattr(seed_trajectory, "CORRIDOR_OUTBOUND_ANGLES_DEG", (0.0, 45.0))
+        monkeypatch.setattr(seed_trajectory, "CORRIDOR_WIDTH_FACTORS", (1.0, 1.5))
+        nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON)
+        assert shapes == {}
+        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
+
+    def test_a_stop_signal_ends_the_search_at_once(self, monitor):
+        nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON, should_stop=lambda: True)
+        assert (len(nodes), shapes) == (1, {})
+
+
+class TestShapedHelpers:
+    def test_the_store_shapes_the_corridor_of_the_ship_named(self, failing_nodes):
+        shape = CorridorShape(math.radians(60.0), 2.0)
+        default = latched_domains_from_nodes(failing_nodes)[OWN_SHIP]
+        shaped = latched_domains_from_nodes(failing_nodes, {OWN_SHIP: shape})[OWN_SHIP]
+        assert shaped.outer_across == pytest.approx(2.0 * default.outer_across)
+        assert latched_domains_from_nodes(failing_nodes, {TARGET: shape})[OWN_SHIP].outer_across == default.outer_across
+
+    def test_the_repair_window_is_laid_on_the_shaped_corridors(self, failing_nodes, monkeypatch):
+        shapes = {OWN_SHIP: CorridorShape(width_factor=6.0)}
+        asked = []
+        monkeypatch.setattr(seed_trajectory, "latched_domains_from_nodes", lambda nodes, shapes=None: asked.append(shapes) or {})
+        assert repair_window(failing_nodes, 31, False, 1.0, shapes) is not None
+        assert repair_window(failing_nodes, 31, False, 1.0) is not None
+        assert asked == [shapes, None]

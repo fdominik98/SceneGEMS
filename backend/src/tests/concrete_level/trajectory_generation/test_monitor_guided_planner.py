@@ -1,6 +1,7 @@
-"""Monitor-guided planner: the seed as the plan, previews while it repairs, and what it says about a plan that still fails."""
+"""Monitor-guided planner: the seed as the plan, the corridor shapes its search chose, previews while it repairs, and what it says about a plan that still fails."""
 
 import json
+import math
 import os
 import random
 
@@ -8,11 +9,12 @@ import pytest
 
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.trajectory_generation import monitor_guided_planner
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape
 from concrete_level.trajectory_generation.monitor_guided_planner import MonitorGuidedPlanner
 from concrete_level.trajectory_generation.seed_trajectory import repair_window
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from concrete_level.trajectory_generation.trajectory_tree_builder import SceneNode
-from tests.concrete_level.colregs_monitoring.monitor_runs import constants, monitored_run
+from tests.concrete_level.colregs_monitoring.monitor_runs import OWN_SHIP, TARGET, constants, monitored_run
 from tests.scenegems_tool.vessel_stack.scenarios import encounter_trajectories
 from utils.global_constants import ONE_HOUR_IN_SEC
 
@@ -37,6 +39,15 @@ def _run_nodes(steps=RUN_STEPS, **turn):
     return [SceneNode(result) for result in monitored_run(CROSSING, steps, **turn)]
 
 
+def _data_scene(name):
+    with open(os.path.join(os.path.dirname(__file__), "data", name), encoding="utf-8") as file:
+        return ConcreteScene.from_dict(json.load(file)["best_scene"])
+
+
+def _shapes_by_name(planner):
+    return {actor.name: (round(math.degrees(shape.outbound_angle)), shape.width_factor) for actor, shape in planner.corridor_shapes.items()}
+
+
 class TestSeedAsThePlan:
     @pytest.mark.parametrize("encounter", ["crossing_from_starboard", "head_on", "overtaking"])
     def test_a_two_vessel_encounter_needs_no_repair(self, encounter):
@@ -45,6 +56,7 @@ class TestSeedAsThePlan:
         assert planner.first_failed_step is None  # nothing planned yet
         trajectories, iterations = planner.plan_trajectory()
         assert planner.first_failed_step is None
+        assert planner.corridor_shapes == {}, "the corridors keep the shape their frozen domains give them"
         assert len(trajectories) == iterations + 1 == planner.iteration_count + 1
         assert len(planner.current_best_trajectories()) == len(trajectories)
 
@@ -74,7 +86,7 @@ class TestRepair:
     @pytest.fixture
     def planner(self, previews, monkeypatch):
         failing = _run_nodes(turn_at=30, turn_s=30)
-        monkeypatch.setattr(monitor_guided_planner, "build_seed_nodes", lambda *args, **kwargs: failing)
+        monkeypatch.setattr(monitor_guided_planner, "search_seed_corridors", lambda *args, **kwargs: (failing, {}))
         return _planner(failing[0].scene, time_step=1, timespan=RUN_STEPS - 1, observer=previews)
 
     def test_a_failure_the_repair_cannot_replace_is_reported_with_the_path(self, planner, previews):
@@ -118,24 +130,83 @@ class TestRepair:
         assert previews == []
 
 
-@pytest.mark.slow
-def test_a_scene_with_a_second_encounter_is_repaired_to_a_clean_plan():
-    """Own ship head-on with TS3 while TS1 overtakes it, and overtaking TS2 itself.
+class TestSearchedSeed:
+    """The seed search of these planners returns a recorded clean run and a reshaped corridor for the own ship."""
 
-    The own ship and TS2 stay in sight, so their encounter would start again as soon as the
-    own ship is back on its heading (135 s), while the head-on with TS3 is still running. A
-    plan that lets it restart fails there: the seed has no corridor for it (Rule 16), and it
-    is a new situation for a vessel that altered course in a running encounter (Rule 8(c)).
-    The window repair gives a plan in which the encounter with TS2 does not start again, so
-    the plan is over at 1050 s.
+    SHAPE = CorridorShape(math.radians(60.0), 2.0)
+
+    @pytest.fixture
+    def previews(self):
+        return _Previews()
+
+    @pytest.fixture
+    def planner(self, previews, monkeypatch):
+        clean = _run_nodes(60)
+        monkeypatch.setattr(monitor_guided_planner, "search_seed_corridors", lambda *args, **kwargs: (clean, {OWN_SHIP: self.SHAPE}))
+        return _planner(clean[0].scene, time_step=1, timespan=RUN_STEPS - 1, observer=previews)
+
+    def test_the_step_count_and_the_preview_follow_the_searched_seed(self, planner, previews):
+        trajectories, iterations = planner.plan_trajectory()
+        assert (len(trajectories), iterations) == (60, 59)
+        assert previews == [(60, 59), (60, 59)]  # the searched seed, then the installed plan
+
+    def test_the_planner_keeps_the_shapes_and_costs_the_plan_on_them(self, planner):
+        planner.plan_trajectory()
+        assert planner.corridor_shapes == {OWN_SHIP: self.SHAPE}
+        assert planner.trajectory_objective_set[OWN_SHIP].corridor_shape == self.SHAPE
+        assert planner.trajectory_objective_set[TARGET].corridor_shape is None
+
+    def test_a_repair_works_on_the_shaped_corridors(self, planner, monkeypatch):
+        failing = _run_nodes(turn_at=30, turn_s=30)
+        monkeypatch.setattr(monitor_guided_planner, "search_seed_corridors", lambda *args, **kwargs: (failing, {OWN_SHIP: self.SHAPE}))
+        asked = []
+        monkeypatch.setattr(monitor_guided_planner, "repair_window", lambda nodes, failure, extra_phase, tolerance, shapes=None: asked.append((failure, shapes)))
+        planner.plan_trajectory()
+        assert asked == [(31, {OWN_SHIP: self.SHAPE})]
+        assert planner.first_failed_step == 31
+
+
+@pytest.mark.slow
+def test_a_scene_with_a_far_second_encounter_gets_a_clean_seed():
+    """Own ship head-on with TS3 while TS1 overtakes it, and overtaking TS2 itself, 5566 s on.
+
+    The far overtaking has a domain 126 km ahead, so the corridor of the own ship does not return
+    inside the hour. At its default width the own ship is back on its heading at 180 s and on
+    collision course with TS2 again, while the head-on with TS3 is still running (Rule 8(c)).
+    The seed search widens the corridor until the pair stays apart, and steepens the corridor
+    of TS2 for the crossing with TS1 that starts at 765 s. The window repair is not needed.
     """
-    with open(os.path.join(os.path.dirname(__file__), "data", "four_vessel_head_on_overtaken.json"), encoding="utf-8") as file:
-        scene = ConcreteScene.from_dict(json.load(file)["best_scene"])
-    random.seed(0)  # the window search samples heading changes
+    scene = _data_scene("four_vessel_head_on_overtaken.json")
+    random.seed(0)  # the window search samples heading changes; it does not run here
     previews = _Previews()
     planner = _planner(scene, observer=previews)
     trajectories, iterations = planner.plan_trajectory()
     assert planner.first_failed_step is None
-    assert iterations == 240, "the seed runs the whole hour"
-    assert len(trajectories) == 71, "the repaired plan ends once every give-way ship is back on its track"
-    assert len(previews) > iterations  # the repair kept reporting after the last seed step
+    assert _shapes_by_name(planner) == {"os": (0, 3.0), "ts2": (60, 1.0)}
+    assert len(trajectories) == iterations + 1 == 241, "the own ship holds its corridor for the whole hour"
+    assert previews[-2:] == [(241, 240), (241, 240)]  # the searched seed, then the installed plan
+
+
+@pytest.mark.slow
+def test_a_crossing_from_abaft_the_beam_while_overtaken_gets_a_clean_seed():
+    """Own ship gives way to TS2, crossing from 16 degrees abaft its starboard beam 1800 s on, while TS1 overtakes it.
+
+    The default corridors fail twice: the own ship moves to starboard into the corridor TS1 overtakes it in
+    (94 m apart at 660 s), and its sideways shift does not open the crossing with TS2 (517 m against 723 m).
+    The seed search gives the own ship an 80 degree leg three times as wide, on which it passes astern of TS2
+    and well clear of TS1, whose corridor keeps its shape.
+    """
+    scene = _data_scene("three_vessel_crossing_while_overtaken.json")
+    random.seed(0)
+    planner = _planner(scene)
+    trajectories, iterations = planner.plan_trajectory()
+    assert planner.first_failed_step is None
+    assert _shapes_by_name(planner) == {"os": (80, 3.0)}
+    assert len(trajectories) == iterations + 1 == 198
+    vessels = {vessel.name: vessel for vessel in scene.vessels}
+
+    def closest(first, second):
+        return min(float(scene_at.get_geo_props(vessels[first], vessels[second]).o_distance) for scene_at in trajectories)
+
+    assert closest("os", "ts2") > vessels["ts2"].safety_radius
+    assert closest("os", "ts1") > 2 * vessels["ts1"].safety_radius

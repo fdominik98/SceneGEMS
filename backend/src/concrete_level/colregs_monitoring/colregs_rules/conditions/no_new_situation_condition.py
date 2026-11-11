@@ -100,8 +100,9 @@ class NoNewSituationCondition(RuleCondition):
     def new_situation_relations(self, current_monitored_scene: MonitoredScene, next_monitored_scene: MonitoredScene) -> List[Relation]:
         """The pairs of this vessel that were in no situation when the step began and are in one when it ends.
 
-        An encounter that is relabelled (a crossing that develops into an overtaking) is
-        the same encounter, not a new one, so only a pair coming out of OTHER counts.
+        Only a pair coming out of OTHER counts. The monitor keeps a running encounter's
+        type until it ends, and a pair whose type did change between two scenes would
+        still be the same encounter, not a new one.
         """
         new_relations: List[Relation] = []
         for relation, next_context in next_monitored_scene.situation_context_set.items():

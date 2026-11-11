@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import early_action_start_deadline
-from concrete_level.trajectory_generation.maneuvering_domain import ManeuveringDomain, outbound_start_delay
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape, ManeuveringDomain, outbound_start_delay
 from concrete_level.trajectory_generation.seed_trajectory import latched_domains_from_nodes
 from concrete_level.trajectory_generation.trajectory_tree_builder import SceneNode
 from tests.concrete_level.colregs_monitoring.monitor_runs import OWN_SHIP, SPEED, TARGET, constants, monitored_run
@@ -101,6 +101,60 @@ class TestPoints:
         assert domain.near_track(14.0) and not domain.near_track(20.0)
         assert domain.reached_b(domain.along_b, 150.0) and not domain.reached_b(domain.along_b - 50.0, 150.0)
         assert domain.reached_d(domain.along_c, 0.0) and not domain.reached_d(domain.along_c, 100.0)
+
+
+class TestReshaping:
+    """The corridor of the fixture: A at 200 m, 150 m wide at the readily apparent slant, C at 1300 m."""
+
+    def test_the_default_shape_is_the_corridor_itself(self, domain):
+        assert domain.reshaped(None) is domain
+        assert domain.reshaped(CorridorShape()) is domain
+
+    def test_a_width_factor_widens_the_corridor_at_the_slant_it_has(self, domain):
+        wide = domain.reshaped(CorridorShape(width_factor=2.0))
+        run = 300.0 / math.tan(SLANT)
+        assert (wide.t0, wide.inner_across, wide.outer_across) == (200.0, 0.0, 300.0)
+        assert (wide.along_b, wide.along_c, wide.along_d) == pytest.approx((200.0 + run, 1300.0, 1300.0 + run))
+        assert math.degrees(wide.hold_heading_change) == pytest.approx(-30.0)
+
+    def test_an_outbound_angle_steepens_both_slanted_legs(self, domain):
+        steep = domain.reshaped(CorridorShape(outbound_angle=math.radians(60.0)))
+        run = 150.0 / math.tan(math.radians(60.0))
+        assert (steep.t0, steep.outer_across) == (200.0, 150.0)
+        assert (steep.along_b, steep.along_c, steep.along_d) == pytest.approx((200.0 + run, 1300.0, 1300.0 + run))
+        assert math.degrees(steep.hold_heading_change) == pytest.approx(-60.0)
+        assert math.degrees(steep.inbound_heading_change) == pytest.approx(60.0)
+
+    def test_an_angle_below_the_slant_of_the_corridor_keeps_that_slant(self, domain):
+        assert math.degrees(domain.reshaped(CorridorShape(math.radians(10.0), 2.0)).hold_heading_change) == pytest.approx(-30.0)
+        steep = _domain([100.0], [0.0])  # too close for the readily apparent angle: 45 degrees
+        assert math.degrees(steep.reshaped(CorridorShape(math.radians(30.0), 2.0)).hold_heading_change) == pytest.approx(-45.0)
+
+    def test_the_parallel_leg_never_ends_before_it_begins(self, domain):
+        """Wide enough, the outbound leg reaches past the frozen domains: C moves out to B."""
+        huge = domain.reshaped(CorridorShape(width_factor=6.0))
+        assert huge.along_b > 1300.0
+        assert huge.along_c == huge.along_b and huge.along_d == pytest.approx(huge.along_c + (huge.along_b - huge.t0))
+
+    def test_the_frame_of_the_corridor_is_kept(self, domain):
+        other = domain.reshaped(CorridorShape(math.radians(80.0), 3.0))
+        assert other.origin.tolist() == domain.origin.tolist() and other.forward.tolist() == domain.forward.tolist() and other.across.tolist() == domain.across.tolist()
+        assert other.vertex_a.tolist() == domain.vertex_a.tolist()
+
+    def test_a_give_way_ship_gets_its_corridor_in_the_shape_asked_for(self):
+        contexts = list(monitored_run((3600.0, -3600.0), 2)[0].situation_context_set.values())
+        default = ManeuveringDomain.for_give_way_ship(OWN_SHIP, contexts)
+        shaped = ManeuveringDomain.for_give_way_ship(OWN_SHIP, contexts, CorridorShape(math.radians(60.0), 2.0))
+        assert shaped.outer_across == pytest.approx(2.0 * default.outer_across)
+        assert math.degrees(abs(shaped.hold_heading_change)) == pytest.approx(60.0)
+        assert ManeuveringDomain.for_give_way_ship(TARGET, contexts, CorridorShape(math.radians(60.0), 2.0)) is None
+
+    def test_lost_progress_orders_the_shapes_from_the_mildest(self):
+        """Per unit of width: twice the tangent of half the angle for the two slanted legs, and a tenth for the width."""
+        assert CorridorShape().lost_progress(SLANT) == pytest.approx(2.0 * math.tan(SLANT / 2.0) + 0.1)
+        assert CorridorShape(width_factor=3.0).lost_progress(SLANT) == pytest.approx(3.0 * CorridorShape().lost_progress(SLANT))
+        assert CorridorShape(math.radians(10.0)).lost_progress(SLANT) == CorridorShape().lost_progress(SLANT)
+        assert CorridorShape(math.radians(45.0), 2.0).lost_progress(SLANT) > CorridorShape(math.radians(80.0)).lost_progress(SLANT) > CorridorShape(width_factor=2.0).lost_progress(SLANT)
 
 
 def test_the_monitor_payload_carries_the_vertices_and_the_hold_turn(domain):

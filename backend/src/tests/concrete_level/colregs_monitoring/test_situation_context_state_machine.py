@@ -1,6 +1,7 @@
-"""SituationContextStateMachine: a pair inside the safety domain of its encounter is always in OTHER, and a pair that has been in sight stays in sight."""
+"""SituationContextStateMachine: a pair inside the safety domain of its encounter is always in OTHER, a pair that has been in sight stays in sight, and a running encounter keeps its type."""
 
 import math
+from typing import List
 
 from concrete_level.colregs_monitoring.situation_context import COLREGSType, OtherSituationContext, SituationContext
 from concrete_level.colregs_monitoring.situation_context_state_machine import SituationContextStateMachine, StepSamples
@@ -104,3 +105,62 @@ def test_having_been_in_sight_does_not_make_an_encounter_without_a_collision_cou
     start = ConcreteScene({OWN_SHIP: ActorState(0.0, 0.0, SPEED, 0.0), TARGET: ActorState(0.0, BEYOND_VISIBILITY, SPEED, 0.0)})
     following = ConcreteScene({OWN_SHIP: ActorState(SPEED, 0.0, SPEED, 0.0), TARGET: ActorState(SPEED, BEYOND_VISIBILITY, SPEED, 0.0)})
     assert step(initial(start), start, following, 1, already_in_sight=True).situation_type is COLREGSType.OTHER
+
+
+# A crossing in which the bearing drifts into the stern sector: the own ship heads north,
+# the faster target comes up from 16 degrees abaft its starboard beam and would pass
+# 110 m off, inside the 120 m safety distance. From 255 s the target bears more than
+# 22.5 degrees abaft the beam, which on its own is an overtaking by the target. At 360 s
+# the pair is inside the domain of the crossing.
+DRIFT_OWN_SPEED, DRIFT_TARGET_SPEED, DRIFT_TARGET_HEADING = 4.8, 8.56, 2.3354
+DRIFT_TARGET_START = (2110.0, -603.0)
+DRIFT_STEP, DRIFT_INTO_STERN_SECTOR, DRIFT_INSIDE_DOMAIN = 15, 255, 360
+
+
+def drifting_crossing(time: int) -> ConcreteScene:
+    target_x = DRIFT_TARGET_START[0] + DRIFT_TARGET_SPEED * math.cos(DRIFT_TARGET_HEADING) * time
+    target_y = DRIFT_TARGET_START[1] + DRIFT_TARGET_SPEED * math.sin(DRIFT_TARGET_HEADING) * time
+    return ConcreteScene(
+        {
+            OWN_SHIP: ActorState(0.0, DRIFT_OWN_SPEED * time, DRIFT_OWN_SPEED, math.pi / 2),
+            TARGET: ActorState(target_x, target_y, DRIFT_TARGET_SPEED, DRIFT_TARGET_HEADING),
+        }
+    )
+
+
+def classified_alone(scene: ConcreteScene) -> SituationContext:
+    """What the scene classifies as on its own, with no encounter running."""
+    return SituationContextStateMachine.get_situation_context(scene, OWN_SHIP, TARGET, 0, constants(), already_in_sight=True)
+
+
+def drifting_crossing_contexts(until: int) -> List[SituationContext]:
+    """The pair's context at every step of the drifting crossing, from 0 s up to and including ``until``."""
+    contexts = [initial(drifting_crossing(0))]
+    for time in range(DRIFT_STEP, until + 1, DRIFT_STEP):
+        samples = StepSamples(drifting_crossing(time - DRIFT_STEP), time - DRIFT_STEP, drifting_crossing(time), time)
+        contexts.append(SituationContextStateMachine.step(contexts[-1], samples, drifting_crossing(time), time, constants(), already_in_sight=True))
+    return contexts
+
+
+def test_the_drifting_crossing_alone_would_classify_as_an_overtaking_by_the_target():
+    before = classified_alone(drifting_crossing(DRIFT_INTO_STERN_SECTOR - DRIFT_STEP))
+    after = classified_alone(drifting_crossing(DRIFT_INTO_STERN_SECTOR))
+    assert before.situation_type is COLREGSType.CROSSING_FROM_PORT and before.is_give_way_actor(OWN_SHIP)
+    assert after.situation_type is COLREGSType.OVERTAKING_TO_PORT and after.is_give_way_actor(TARGET)
+
+
+def test_a_running_crossing_is_not_relabelled_when_the_bearing_drifts_into_the_stern_sector():
+    contexts = drifting_crossing_contexts(DRIFT_INSIDE_DOMAIN - DRIFT_STEP)
+    start = contexts[0]
+    assert start.situation_type is COLREGSType.CROSSING_FROM_PORT
+    assert start.is_give_way_actor(OWN_SHIP) and start.is_stand_on_actor(TARGET)
+    # The same context object all the way: type, roles, start scene and frozen domains.
+    assert all(context is start for context in contexts)
+
+
+def test_the_running_crossing_ends_only_when_its_domain_is_entered():
+    last_scene = drifting_crossing(DRIFT_INSIDE_DOMAIN - DRIFT_STEP)
+    assert last_scene.get_tcpa(TARGET, OWN_SHIP) > 0, "the risk of collision is not resolved yet"
+    ended = drifting_crossing_contexts(DRIFT_INSIDE_DOMAIN)[-1]
+    assert ended.situation_type is COLREGSType.OTHER
+    assert ended.start_timestamp == DRIFT_INSIDE_DOMAIN

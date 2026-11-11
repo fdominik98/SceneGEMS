@@ -1,4 +1,5 @@
 import random
+import weakref
 from dataclasses import dataclass
 from itertools import product
 from typing import Dict, List, Optional, Set, Tuple
@@ -21,7 +22,7 @@ from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
 from concrete_level.models.trajectories import Trajectories
-from concrete_level.trajectory_generation.maneuvering_domain import ManeuveringDomain
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape, ManeuveringDomain
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from utils.colregs_approximations import COLREGSConstraints
@@ -121,8 +122,10 @@ class TrajectoryObjective:
     LINE_MAGNET_WEIGHT: float = 6.0
     GOAL_WEIGHT: float = 1.0
 
-    def __init__(self, actor: ConcreteActor, root: SceneNode, time_step: int, verbose: bool = False, goal_horizon: float = 0.0):
+    def __init__(self, actor: ConcreteActor, root: SceneNode, time_step: int, verbose: bool = False, goal_horizon: float = 0.0, corridor_shape: Optional[CorridorShape] = None):
         self.actor = actor
+        # The shape the seed chose for the corridor of this ship, so the costs pull onto the corridor the seed follows.
+        self.corridor_shape = corridor_shape
         self.relation = Relation(actor, actor)
         self.time_step = time_step
         self.start_state = root.scene[self.actor]
@@ -130,7 +133,7 @@ class TrajectoryObjective:
         self.forward = np.array([np.cos(self.start_state.heading), np.sin(self.start_state.heading)])
         self.across = np.array([-np.sin(self.start_state.heading), np.cos(self.start_state.heading)])
         self.horizon_distance = self.actor.distance_made(self.start_state, (self.start_state.heading, self.start_state.speed), max(goal_horizon, time_step))
-        self._domain_cache: Dict[int, Optional[ManeuveringDomain]] = {}
+        self._domain_cache: Dict[int, Tuple[weakref.ReferenceType, Optional[ManeuveringDomain]]] = {}
         self.start_goal_distance = self.estimate_goal_distance(root)
         self.goal_position = self.start_state.p + self.forward * self.start_goal_distance
 
@@ -217,11 +220,16 @@ class TrajectoryObjective:
         return 0.0 if domain is None else domain.far_along
 
     def _union_domain(self, node: SceneNode) -> Optional[ManeuveringDomain]:
-        key = id(node.monitored_scene_with_results.situation_context_set)
-        if key not in self._domain_cache:
-            contexts = list(node.monitored_scene_with_results.situation_context_set.values())
-            self._domain_cache[key] = ManeuveringDomain.for_give_way_ship(self.actor, contexts)
-        return self._domain_cache[key]
+        context_set = node.monitored_scene_with_results.situation_context_set
+        key = id(context_set)
+        entry = self._domain_cache.get(key)
+        # id() is unique only while the object lives. The context sets of pruned nodes are
+        # freed during a search and a new set can get the same address, so an entry counts
+        # only for the set it was computed for.
+        if entry is None or entry[0]() is not context_set:
+            entry = (weakref.ref(context_set), ManeuveringDomain.for_give_way_ship(self.actor, list(context_set.values()), self.corridor_shape))
+            self._domain_cache[key] = entry
+        return entry[1]
 
 
 class TrajectoryObjectiveSet(Dict[ConcreteActor, TrajectoryObjective]):
@@ -238,8 +246,10 @@ class TrajectoryObjectiveSet(Dict[ConcreteActor, TrajectoryObjective]):
         samples_per_interval: Optional[int] = None,
         max_children_per_expansion: Optional[int] = None,
         goal_horizon: float = 0.0,
+        corridor_shapes: Optional[Dict[ConcreteActor, CorridorShape]] = None,
     ):
-        super().__init__({actor: TrajectoryObjective(actor, root, time_step, verbose, goal_horizon) for actor in root.scene.vessels})
+        shapes = corridor_shapes or {}
+        super().__init__({actor: TrajectoryObjective(actor, root, time_step, verbose, goal_horizon, shapes.get(actor)) for actor in root.scene.vessels})
         for actor, trajectory_objective in self.items():
             root.goal_distances[actor] = trajectory_objective.start_goal_distance
         self.time_step = time_step

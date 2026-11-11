@@ -10,7 +10,7 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.models.relation import Relation
-from concrete_level.trajectory_generation.maneuvering_domain import ManeuveringDomain
+from concrete_level.trajectory_generation.maneuvering_domain import CorridorShape, ManeuveringDomain
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
 from concrete_level.trajectory_generation.trajectory_tree_builder import SceneNode, WindowRepairSpec, kinematic_heading_change_interval
 from utils.colregs_approximations import COLREGSConstraints
@@ -27,11 +27,22 @@ PHASE_PAD_STEPS = 1
 SEED_SETTLE_STEPS = 3
 MAX_WINDOW_STEPS = 8
 
+CorridorShapes = Dict[ConcreteActor, CorridorShape]
+# The shapes a give-way ship's corridor may take: every outbound angle with every width
+# factor. An angle of 0 keeps the slant the corridor has (the readily apparent change).
+CORRIDOR_OUTBOUND_ANGLES_DEG = (0.0, 45.0, 60.0, 80.0)
+CORRIDOR_WIDTH_FACTORS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
+# A shape is taken when it moves the first failure of the seed at least this many steps on.
+SEARCH_MIN_GAIN_STEPS = 4
+SEARCH_MAX_ROUNDS = 12
+SEARCH_MAX_BUILDS = 200
+
 
 class LatchedGiveWayStore:
     """First give-way context per relation, kept after the pair reverts to OTHER."""
 
-    def __init__(self) -> None:
+    def __init__(self, shapes: Optional[CorridorShapes] = None) -> None:
+        self._shapes: CorridorShapes = dict(shapes or {})
         self._contexts: Dict[ConcreteActor, Dict[Relation, SituationContext]] = {}
         self._cached_domains: Optional[Dict[ConcreteActor, ManeuveringDomain]] = None
 
@@ -55,14 +66,14 @@ class LatchedGiveWayStore:
     def _compute_domains(self) -> Dict[ConcreteActor, ManeuveringDomain]:
         domains: Dict[ConcreteActor, ManeuveringDomain] = {}
         for actor, by_relation in self._contexts.items():
-            domain = ManeuveringDomain.for_give_way_ship(actor, list(by_relation.values()))
+            domain = ManeuveringDomain.for_give_way_ship(actor, list(by_relation.values()), self._shapes.get(actor))
             if domain is not None:
                 domains[actor] = domain
         return domains
 
 
-def latched_domains_from_nodes(nodes: Sequence[SceneNode]) -> Dict[ConcreteActor, ManeuveringDomain]:
-    store = LatchedGiveWayStore()
+def latched_domains_from_nodes(nodes: Sequence[SceneNode], shapes: Optional[CorridorShapes] = None) -> Dict[ConcreteActor, ManeuveringDomain]:
+    store = LatchedGiveWayStore(shapes)
     for node in nodes:
         store.update(node.monitored_scene_with_results)
     return store.domains()
@@ -159,12 +170,19 @@ def build_seed_nodes(
     horizon: float,
     should_stop: Optional[Callable[[], bool]] = None,
     on_progress: Optional[Callable[[List[SceneNode]], None]] = None,
+    shapes: Optional[CorridorShapes] = None,
+    stop_at_first_failure: bool = False,
 ) -> List[SceneNode]:
+    """The seed: every give-way ship follows its corridor, shaped by ``shapes`` where given.
+
+    With ``stop_at_first_failure`` the seed ends at the first node the monitor fails, which
+    is all the corridor search needs to know of a shape it is trying.
+    """
     root = SceneNode(monitored_scene_with_results=monitor.initial_monitored_scene_with_results)
     root.heading_steps = {actor: 0.0 for actor in root.scene.vessels}
     original_headings = original_headings_from_root(root)
     nodes = [root]
-    latched = LatchedGiveWayStore()
+    latched = LatchedGiveWayStore(shapes)
     current = root
     while current.monitored_scene_with_results.timestamp < horizon:
         if should_stop is not None and should_stop():
@@ -172,9 +190,97 @@ def build_seed_nodes(
         current = _append_seed_step(nodes, current, monitor, original_headings, time_step, latched)
         if on_progress is not None:
             on_progress(nodes)
+        if stop_at_first_failure and current.monitor_result_map_set.is_failed():
+            break
         if seed_maneuver_finished(nodes, latched):
             break
     return nodes
+
+
+def corridor_shape_ladder(readily_apparent_angle: float) -> List[CorridorShape]:
+    """Every shape a corridor may take, the one that loses the least progress first."""
+    shapes = [CorridorShape(float(np.radians(angle)), factor) for angle in CORRIDOR_OUTBOUND_ANGLES_DEG for factor in CORRIDOR_WIDTH_FACTORS]
+    return sorted(shapes, key=lambda shape: (shape.lost_progress(readily_apparent_angle), shape.width_factor))
+
+
+def search_seed_corridors(
+    monitor: COLREGSMonitor,
+    time_step: int,
+    horizon: float,
+    should_stop: Optional[Callable[[], bool]] = None,
+    on_progress: Optional[Callable[[List[SceneNode]], None]] = None,
+) -> Tuple[List[SceneNode], CorridorShapes]:
+    """The seed, with the corridors reshaped until the monitor passes it or no shape helps.
+
+    The first seed has every corridor as its frozen domains size it, and is reported step
+    by step through ``on_progress``. While the seed fails, the ships named by the failed
+    rules try the other shapes of the ladder, mildest first, and the first shape that moves
+    the first failure `SEARCH_MIN_GAIN_STEPS` on (or removes it) is kept. The monitor judges
+    every trial, so a shape is taken for what it does to the whole scene: the manoeuvres
+    of the other vessels, the vessels the ship has no encounter with, and every rule.
+    Trials end at their first failure and report nothing. There are no random numbers.
+
+    Returns the seed and the shapes it was built with (ships on the default shape are left
+    out). A seed that still fails is returned whole, for the window repair.
+    """
+    shapes: CorridorShapes = {}
+    nodes = build_seed_nodes(monitor, time_step, horizon, should_stop=should_stop, on_progress=on_progress)
+    ladder = corridor_shape_ladder(monitor.colregs_constants.READILY_APPARENT_HEADING_CHANGE)
+    builds = 0
+    cut_short = False
+    for _ in range(SEARCH_MAX_ROUNDS):
+        failure = first_failure_index(nodes)
+        if failure is None or (should_stop is not None and should_stop()):
+            break
+        spent, improved = _first_improving_shape(nodes, failure, shapes, ladder, monitor, time_step, horizon, should_stop, SEARCH_MAX_BUILDS - builds)
+        builds += spent
+        if improved is None:
+            break
+        actor, shape, nodes = improved
+        shapes[actor] = shape
+        cut_short = True
+    if cut_short and first_failure_index(nodes) is not None:
+        # A trial ends at its first failure; the window repair needs the whole seed.
+        nodes = build_seed_nodes(monitor, time_step, horizon, should_stop=should_stop, shapes=shapes)
+    return nodes, {actor: shape for actor, shape in shapes.items() if shape != CorridorShape()}
+
+
+def _first_improving_shape(
+    nodes: List[SceneNode],
+    failure: int,
+    shapes: CorridorShapes,
+    ladder: Sequence[CorridorShape],
+    monitor: COLREGSMonitor,
+    time_step: int,
+    horizon: float,
+    should_stop: Optional[Callable[[], bool]],
+    build_budget: int,
+) -> Tuple[int, Optional[Tuple[ConcreteActor, CorridorShape, List[SceneNode]]]]:
+    """The seed builds spent, and the first ship and shape that move the failure on (None when none does)."""
+    builds = 0
+    for actor in _reshapable_actors(nodes, failure, shapes):
+        current = shapes.get(actor, CorridorShape())
+        for shape in ladder:
+            if shape == current:
+                continue
+            if builds >= build_budget or (should_stop is not None and should_stop()):
+                return builds, None
+            trial = build_seed_nodes(monitor, time_step, horizon, should_stop=should_stop, shapes={**shapes, actor: shape}, stop_at_first_failure=True)
+            builds += 1
+            trial_failure = first_failure_index(trial)
+            if trial_failure is None or trial_failure >= failure + SEARCH_MIN_GAIN_STEPS:
+                return builds, (actor, shape, trial)
+    return builds, None
+
+
+def _reshapable_actors(nodes: Sequence[SceneNode], failure: int, shapes: CorridorShapes) -> List[ConcreteActor]:
+    """The ships with a corridor that the failed rules name; every ship with a corridor when they name none."""
+    corridors = latched_domains_from_nodes(nodes[: failure + 1], shapes)
+    named: Set[ConcreteActor] = set()
+    for relation, rules in nodes[failure].monitor_result_map_set.get_failed_rules().items():
+        if rules:
+            named.update(actor for actor in (relation.actor1, relation.actor2) if actor in corridors)
+    return sorted(named or corridors, key=lambda actor: actor.id)
 
 
 def extend_seed_nodes(
@@ -184,8 +290,9 @@ def extend_seed_nodes(
     time_step: int,
     horizon: float,
     should_stop: Optional[Callable[[], bool]] = None,
+    shapes: Optional[CorridorShapes] = None,
 ) -> List[SceneNode]:
-    latched = LatchedGiveWayStore()
+    latched = LatchedGiveWayStore(shapes)
     for node in nodes:
         latched.update(node.monitored_scene_with_results)
     current = nodes[-1]
@@ -286,13 +393,14 @@ def repair_window(
     failure_index: int,
     extra_phase: bool,
     rejoin_tolerance: float,
+    shapes: Optional[CorridorShapes] = None,
 ) -> Optional[WindowRepairSpec]:
     if failure_index <= 0 or failure_index >= len(nodes):
         return None
     free_actors = failure_give_way_actors(nodes[failure_index])
     if not free_actors:
         return None
-    start, end = _repair_span(nodes, failure_index, free_actors, extra_phase)
+    start, end = _repair_span(nodes, failure_index, free_actors, extra_phase, shapes)
     return WindowRepairSpec(
         seed_nodes=nodes,
         start=start,
@@ -308,9 +416,10 @@ def _repair_span(
     failure_index: int,
     free_actors: Set[ConcreteActor],
     extra_phase: bool,
+    shapes: Optional[CorridorShapes] = None,
 ) -> Tuple[int, int]:
     parent = nodes[failure_index - 1]
-    domains = latched_domains_from_nodes(nodes[:failure_index])
+    domains = latched_domains_from_nodes(nodes[:failure_index], shapes)
     starts: List[int] = []
     ends: List[int] = []
     for actor in free_actors:

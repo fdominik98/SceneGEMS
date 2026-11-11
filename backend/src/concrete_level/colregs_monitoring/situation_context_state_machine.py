@@ -128,7 +128,13 @@ class SituationContextStateMachine:
         colregs_constants: COLREGSConstraints,
         already_in_sight: bool = False,
     ) -> SituationContext:
-        """The next context from the encounter's own logic, before the safety domain guard."""
+        """The next context from the encounter's own logic, before the safety domain guard.
+
+        A pair in no encounter starts one as soon as it classifies as one. A running
+        encounter ends only when the pair is finally past and clear
+        (``get_actors_passed_each_other``, which needs the closest point of approach
+        behind it); until then it is returned unchanged.
+        """
         if current_situation_context.get_actors_passed_each_other(next_scene):
             return OtherSituationContext(current_situation_context.actor1, current_situation_context.actor2, next_scene, next_timestamp, colregs_constants)
         candidate = SituationContextStateMachine.get_situation_context(
@@ -154,12 +160,12 @@ class SituationContextStateMachine:
                 return onset
         if current_situation_context.situation_type == COLREGSType.OTHER and candidate.situation_type != COLREGSType.OTHER:
             return candidate
-        # An established encounter keeps its roles (they must not flip mid-manoeuvre),
-        # but the geometry can still develop into a situation that takes precedence:
-        # Rule 13 overrides 14 and 15, so an encounter that becomes an overtaking is
-        # relabelled. Without this a latched type could never be corrected.
-        if SituationContextStateMachine._takes_precedence(candidate.situation_type, current_situation_context.situation_type):
-            return candidate
+        # An established encounter keeps its type, its roles and its start scene until it
+        # is over. The situation is decided when the risk of collision begins, and a later
+        # change of the relative bearing does not turn it into another one (Rule 13(d)
+        # says so for an overtaking, and the same holds the other way round). Relabelling
+        # a crossing whose bearing drifted into the stern sector as an overtaking handed
+        # the give-way duty to the other vessel with the risk of collision unresolved.
         return current_situation_context
 
     @staticmethod
@@ -183,22 +189,6 @@ class SituationContextStateMachine:
             if candidate.situation_type is not COLREGSType.OTHER:
                 return candidate
         return None
-
-    # Lower index wins. Rule 13 (overtaking) overrides Rules 14 and 15.
-    _PRECEDENCE: List[COLREGSType] = [
-        COLREGSType.OVERTAKING_TO_PORT,
-        COLREGSType.OVERTAKING_TO_STARBOARD,
-        COLREGSType.HEAD_ON,
-        COLREGSType.CROSSING_FROM_PORT,
-        COLREGSType.TWO_WAY_CROSSING_FROM_PORT,
-        COLREGSType.TWO_WAY_CROSSING_FROM_STARBOARD,
-        COLREGSType.OTHER,
-    ]
-
-    @staticmethod
-    def _takes_precedence(candidate_type: COLREGSType, current_type: COLREGSType) -> bool:
-        precedence = SituationContextStateMachine._PRECEDENCE
-        return precedence.index(candidate_type) < precedence.index(current_type)
 
     @staticmethod
     def get_situation_context(
