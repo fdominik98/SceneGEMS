@@ -5,7 +5,7 @@ The worker node daemon builds one WorkerNodeContext from its configuration
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, FrozenSet, List, Optional
+from typing import Dict, FrozenSet, List, Optional, Tuple
 
 from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, SIMULATION_LAYER_PREFIX
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
@@ -24,15 +24,15 @@ _JOB_SUBSYSTEMS = {
     JobType.TRAJECTORY_GENERATION: Subsystem.TRAJECTORY_GENERATION,
     JobType.SIMULATION: Subsystem.SIMULATION,
     JobType.MONITORING_POST_HOC: Subsystem.MONITORING,
-    JobType.CALIBRATION_DEVIATION: Subsystem.SIMULATION,  # repeats of a simulation, in the simulation subsystem's image
+    JobType.CALIBRATION_DEVIATION: Subsystem.SIMULATION,  # the comparison of a simulation's repeats, a task of the simulation subsystem
 }
-# The job type whose slots size each pooled subsystem's worker pool.
-_POOL_JOB_TYPES = {
-    Subsystem.DESIGN_SPACE_EXPLORATION: JobType.DESIGN_SPACE_EXPLORATION,
-    Subsystem.SCENE_GENERATION: JobType.SCENE_GENERATION,
-    Subsystem.TRAJECTORY_GENERATION: JobType.TRAJECTORY_GENERATION,
-    Subsystem.MONITORING: JobType.MONITORING_POST_HOC,
-    Subsystem.SIMULATION: JobType.SIMULATION,
+# The job types each pooled subsystem runs: their slots together size its worker pool, so no kind of work takes another's place.
+_POOL_JOB_TYPES: Dict[Subsystem, Tuple[JobType, ...]] = {
+    Subsystem.DESIGN_SPACE_EXPLORATION: (JobType.DESIGN_SPACE_EXPLORATION,),
+    Subsystem.SCENE_GENERATION: (JobType.SCENE_GENERATION,),
+    Subsystem.TRAJECTORY_GENERATION: (JobType.TRAJECTORY_GENERATION,),
+    Subsystem.MONITORING: (JobType.MONITORING_POST_HOC,),
+    Subsystem.SIMULATION: (JobType.SIMULATION, JobType.CALIBRATION_DEVIATION),
 }
 
 
@@ -64,20 +64,22 @@ class WorkerNodeContext:
         return [component for component in job.requirements.components if component not in self.components]
 
     def pool_workers(self, subsystem: Subsystem) -> int:
-        return max(1, self.slots.get(_POOL_JOB_TYPES[subsystem], 1))
+        """The size of the subsystem's pool: the worker node's slots for every kind of job the subsystem runs, at least one."""
+        return max(1, sum(self.slots.get(job_type, 0) for job_type in _POOL_JOB_TYPES[subsystem]))
 
     def pool_subsystems(self) -> List[Subsystem]:
         """The pooled subsystems this worker node offers by its components; none for a worker node that names no components.
 
         A simulation has no component of its own: its components are the layers of the vessel stacks it runs. A worker
-        node that has a simulation layer runs simulations, so it runs the simulation subsystem.
+        node that has a simulation layer runs simulations, so it runs the simulation subsystem; so does one that
+        compares the repeats of runs (the calibration component).
         """
-        return [subsystem for subsystem, job_type in _POOL_JOB_TYPES.items() if self._offers(job_type)]
+        return [subsystem for subsystem, job_types in _POOL_JOB_TYPES.items() if any(self._offers(job_type) for job_type in job_types)]
 
     def _offers(self, job_type: JobType) -> bool:
         if job_type == JobType.SIMULATION:
             return any(component.startswith(SIMULATION_LAYER_PREFIX) for component in self.components)
-        return JOB_TYPE_COMPONENTS[job_type] in self.components
+        return JOB_TYPE_COMPONENTS[job_type] in self.components  # calibration.deviation: the calibration component
 
     def start_pools(self) -> None:
         """Start the pools of the subsystems the worker node offers, so they are up before the first job (the daemon, once it has its number)."""

@@ -18,13 +18,12 @@ def test_every_job_type_has_a_module_with_a_runner():
 
 
 def test_runner_container_job_types_have_an_in_container_part():
-    for job_type in (JobType.SIMULATION, JobType.CALIBRATION_DEVIATION):
-        assert callable(JOB_TYPE_MODULES[job_type].execute)
+    assert callable(JOB_TYPE_MODULES[JobType.SIMULATION].execute), "a run's runner container: the one container a job still has"
 
 
 def test_the_job_types_of_a_pool_have_no_in_container_part():
     """They are requests to a long-lived subsystem: no container is started for them."""
-    for job_type in (JobType.DESIGN_SPACE_EXPLORATION, JobType.SCENE_GENERATION, JobType.TRAJECTORY_GENERATION, JobType.MONITORING_POST_HOC):
+    for job_type in (JobType.DESIGN_SPACE_EXPLORATION, JobType.SCENE_GENERATION, JobType.TRAJECTORY_GENERATION, JobType.MONITORING_POST_HOC, JobType.CALIBRATION_DEVIATION):
         assert not hasattr(JOB_TYPE_MODULES[job_type], "execute")
 
 

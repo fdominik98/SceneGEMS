@@ -20,7 +20,7 @@ from functional_level.models.model_parser import ModelParser
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import LogStream
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
-from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import execute as execute_calibration
+from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import CalibrationDeviationPayload, compare
 from scenegems_tool.cluster.worker_node.jobs.job_runner import run_job
 from scenegems_tool.cluster.worker_node.launchers.docker_cli import container_ids_for_instance, is_container_running
 from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem, subsystem_image
@@ -204,12 +204,16 @@ def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, contr
     assert not result["monitor"]["passed"] and result["monitor"]["stopped_early_at"] is None
 
 
-def test_calibration_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):
-    """Needs the simulation subsystem image built from Phase 4 (P4.2) code."""
+def test_calibration_runs_on_the_simulation_pool(broker, control_node_id, make_job, head_on_trajectories):
+    """Needs the simulation subsystem image built from the pooled subsystems code."""
     worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.CALIBRATION_DEVIATION: 1})
-    job = make_job(JobType.CALIBRATION_DEVIATION, {"trajectories": [head_on_trajectories.to_dict()] * 2, "reference": "head_on"})
-    result = run_job(job, worker_node, RecordingReport())
-    assert result == json.loads(json.dumps(execute_calibration(job, lambda message, progress=None: None)))
+    payload = {"trajectories": [head_on_trajectories.to_dict()] * 2, "reference": "head_on"}
+    try:
+        result = run_job(make_job(JobType.CALIBRATION_DEVIATION, payload), worker_node, RecordingReport())
+        assert is_container_running(worker_node.pools.get(Subsystem.SIMULATION).names.container_name)
+    finally:
+        worker_node.shutdown()
+    assert result == json.loads(json.dumps(compare(CalibrationDeviationPayload.model_validate(payload), lambda message, progress=None: None)))
     assert result["exact"] and result["deviation_bound_m"] == 0.0
 
 

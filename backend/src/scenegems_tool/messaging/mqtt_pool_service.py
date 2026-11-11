@@ -11,6 +11,8 @@ Every subsystem is one PoolService. Below its base topic (<root>/service/virtual
 
 A subclass names its task, its streams and its worker, turns a request into tasks (make_tasks) and
 gives a stream message its form (stream_message). The queue and the pool are subsystems/pool/task_pool.py.
+A subsystem with more than one kind of request names them all (task_names) and is told which one a
+request is (make_tasks_of); its one pool runs the tasks of all of them, and its worker tells them apart.
 
 A request that names no seed gets one drawn here, so every task has a seed and every response says
 which. A request the subsystem cannot run is answered as failed, with the reason, and never queued.
@@ -35,6 +37,7 @@ CANCEL_SIGNAL = "cancel"
 class PoolService(MqttClient):
     description = "Subsystem"  # the agent description in the heartbeat
     task_name = ""  # the start-task name of the subsystem's request
+    task_names: Tuple[str, ...] = ()  # every start-task name, for a subsystem with more than one kind of request; (task_name,) unless given
     signals: Tuple[str, ...] = ()  # the signals its tasks take besides cancel
     streams: Tuple[str, ...] = ()  # the sensor/<stream> topics its tasks publish on
     worker: Callable[[PoolTask, Any], None]  # runs one task in a process of its own; a module-level function
@@ -51,6 +54,19 @@ class PoolService(MqttClient):
     def make_tasks(self, task_uuid: str, request_id: str, seed: int, params: Mapping[str, Any]) -> List[PoolTask]:
         """The tasks of a request; KeyError, TypeError or ValueError for a request the subsystem cannot run."""
         raise NotImplementedError
+
+    def make_tasks_of(self, name: str, task_uuid: str, request_id: str, seed: int, params: Mapping[str, Any]) -> List[PoolTask]:
+        """The tasks of a request with this start-task name; make_tasks unless the subsystem has more than one kind of request."""
+        return self.make_tasks(task_uuid, request_id, seed, params)
+
+    def task_name_of(self, task: PoolTask) -> str:
+        """The start-task name a task came from, as the heartbeat lists it."""
+        return self.task_name
+
+    @property
+    def requests(self) -> Tuple[str, ...]:
+        """Every start-task name the subsystem takes."""
+        return self.task_names or (self.task_name,)
 
     def stream_message(self, task: PoolTask, stream: str, payload: Any, final: bool) -> Dict[str, Any]:
         """The fields of a stream message besides the task's identity, which every message carries."""
@@ -79,7 +95,7 @@ class PoolService(MqttClient):
         if not isinstance(payload, dict) or payload.get("execution-unit") != self.name:
             return
         command = payload.get("command")
-        if command == "start-task" and (payload.get("task") or {}).get("name") == self.task_name:
+        if command == "start-task" and (payload.get("task") or {}).get("name") in self.requests:
             self._take_request(payload)
         elif command == "signal-task":
             self._take_signal(payload.get("signal") or {})
@@ -92,7 +108,7 @@ class PoolService(MqttClient):
             if not task_uuid or not request_id:
                 raise ValueError("a request names its task-uuid and, in its params, its request-id")
             seed = draw_seed() if params.get("seed") is None else int(params["seed"])
-            tasks = self.make_tasks(task_uuid, request_id, seed, params)
+            tasks = self.make_tasks_of(payload["task"]["name"], task_uuid, request_id, seed, params)
         except (KeyError, TypeError, ValueError) as error:
             reason = f"missing {error}" if isinstance(error, KeyError) else str(error)
             _logger.warning("Refused request %s: %s", request_id or task_uuid, reason)
@@ -166,9 +182,9 @@ class PoolService(MqttClient):
             "rate": self.info_update_rate,
             "type": "DirectExecutionInfo",
             "stamp": stamp,
-            "tasks-available": [{"name": self.task_name, "signals": [CANCEL_SIGNAL, *self.signals]}],
-            "tasks-executing": [{"name": self.task_name, "uuid": task.task_uuid} for task in self.pool.tasks(TaskState.RUNNING)],
-            "tasks-queued": [{"name": self.task_name, "uuid": task.task_uuid} for task in self.pool.tasks(TaskState.QUEUED)],
+            "tasks-available": [{"name": name, "signals": [CANCEL_SIGNAL, *self.signals]} for name in self.requests],
+            "tasks-executing": [{"name": self.task_name_of(task), "uuid": task.task_uuid} for task in self.pool.tasks(TaskState.RUNNING)],
+            "tasks-queued": [{"name": self.task_name_of(task), "uuid": task.task_uuid} for task in self.pool.tasks(TaskState.QUEUED)],
             "pool-size": self.max_workers,
         }
         self.client.publish(self.direct_execution_topic, json.dumps(direct_execution), qos=1)

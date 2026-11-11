@@ -175,3 +175,38 @@ def test_a_stream_the_subsystem_does_not_name_is_not_published(service):
     service.processes["r1"].work()
     service.pool.step()
     assert not [topic for topic, _ in service.client.published if "somewhere" in topic]
+
+
+# A subsystem with more than one kind of request
+
+
+class TwoRequestService(EchoService):
+    """Takes echo and shout; a shout's tasks are marked, so the worker and the heartbeat can tell them from an echo's."""
+
+    task_names = ("echo", "shout")
+
+    def make_tasks_of(self, name: str, task_uuid: str, request_id: str, seed: int, params: Mapping[str, Any]) -> List[PoolTask]:
+        tasks = self.make_tasks(task_uuid, request_id, seed, params)
+        return [PoolTask(sender=f"{task.sender}!", task_uuid=task.task_uuid, request_id=task.request_id, seed=task.seed) for task in tasks] if name == "shout" else tasks
+
+    def task_name_of(self, task: PoolTask) -> str:
+        return "shout" if task.sender.endswith("!") else "echo"
+
+
+def test_a_subsystem_with_two_kinds_of_request_takes_both_and_is_told_which_one_it_is():
+    processes: Dict[str, Any] = {}
+    service = offline(TwoRequestService(CONNECTION, GEOFENCE, 2, NAME, pool_factory=manual_pool_factory(processes)))
+    assert service.requests == ("echo", "shout")
+    deliver(service, service.exec_command_topic, request("r1", "u1", task="echo"))
+    deliver(service, service.exec_command_topic, request("r2", "u2", task="shout"))
+    deliver(service, service.exec_command_topic, request("r3", "u3", task="whisper"))
+    assert [(task.request_id, service.task_name_of(task)) for task in service.current_tasks] == [("r1", "echo"), ("r2", "shout")], "a name it does not take is not its request"
+    service.pool.step()
+    service.publish_heartbeat_and_sensor_info()
+    info = [message for topic, message in service.client.published if topic == service.direct_execution_topic][-1]
+    assert info["tasks-available"] == [{"name": "echo", "signals": ["cancel", "start"]}, {"name": "shout", "signals": ["cancel", "start"]}]
+    assert info["tasks-executing"] == [{"name": "echo", "uuid": "u1"}, {"name": "shout", "uuid": "u2"}]
+
+
+def test_a_subsystem_with_one_kind_of_request_names_it_alone(service):
+    assert service.requests == ("echo",) and service.task_name_of(service.make_tasks("u", "r", 1, {})[0]) == "echo"

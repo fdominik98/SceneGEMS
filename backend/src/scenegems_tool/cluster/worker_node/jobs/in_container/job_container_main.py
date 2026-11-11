@@ -1,8 +1,9 @@
-"""Entry point of a per-job runner container: run the job's in-container part and write its result.
+"""Entry point of a run's runner container: run the simulation job's in-container part and write its result.
 
 The launcher has copied the job document into JOB_FOLDER before the start, and copies the
-result document out after the stop (launchers/per_job/job_container_io.py). An observable
-job (a simulation) also gets the job folder's observation (run_observation.py).
+result document out after the stop (launchers/per_job/job_container_io.py). The run gets the
+job folder's observation (run_observation.py). Only a simulation has a runner container: every
+other job is a request to its subsystem's pool.
 """
 
 import json
@@ -10,8 +11,7 @@ import sys
 import traceback
 from typing import Any, Dict, Optional
 
-from scenegems_tool.cluster.protocol.jobs import JobSpec
-from scenegems_tool.cluster.worker_node.job_observation import OBSERVABLE_JOB_TYPES
+from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from scenegems_tool.cluster.worker_node.jobs.in_container.json_values import json_safe
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
@@ -33,10 +33,9 @@ def main() -> int:
         job = JobSpec.model_validate(json.load(file)["job"])
     status(f"{job.job_type.value} job {job.job_id} attempt {job.attempt} started")
     try:
-        if job.job_type in OBSERVABLE_JOB_TYPES:
-            result = job_type_module(job.job_type).execute(job, status, observation=ContainerObservation(JOB_FOLDER))
-        else:
-            result = job_type_module(job.job_type).execute(job, status)
+        if job.job_type != JobType.SIMULATION:
+            raise JobFailed(f"a {job.job_type.value} job has no runner container: it is a request to its subsystem", retryable=False)
+        result = job_type_module(job.job_type).execute(job, status, observation=ContainerObservation(JOB_FOLDER))
     except JobFailed as error:
         _write_outcome({"error": str(error), "retryable": error.retryable})
         return 1

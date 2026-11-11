@@ -19,6 +19,8 @@ def test_pool_workers_come_from_the_slots(worker_node):
     worker_node.slots[JobType.MONITORING_POST_HOC] = 4
     assert worker_node.pool_workers(Subsystem.MONITORING) == 4, "as many series at once as the worker node has monitoring slots"
     assert worker_node.pool_workers(Subsystem.SIMULATION) == 2, "as many runs at once as the worker node has simulation slots"
+    worker_node.slots[JobType.CALIBRATION_DEVIATION] = 1
+    assert worker_node.pool_workers(Subsystem.SIMULATION) == 3, "and a place for every comparison of repeats, so a comparison never takes a run's"
 
 
 def test_a_worker_node_offers_the_pools_of_its_components(worker_node):
@@ -30,6 +32,8 @@ def test_a_worker_node_offers_the_pools_of_its_components(worker_node):
     assert worker_node.pool_subsystems() == [Subsystem.MONITORING, Subsystem.SIMULATION]
     worker_node.components = frozenset({"simulation_layer/real_vessel"})
     assert worker_node.pool_subsystems() == [Subsystem.SIMULATION], "a run with only real vessels is a run of the subsystem too"
+    worker_node.components = frozenset({"calibration"})
+    assert worker_node.pool_subsystems() == [Subsystem.SIMULATION], "the comparison of repeats is a task of the simulation subsystem"
     worker_node.components = frozenset({"design_space_exploration"})
     worker_node.slots[JobType.DESIGN_SPACE_EXPLORATION] = 2
     assert worker_node.pool_subsystems() == [Subsystem.DESIGN_SPACE_EXPLORATION] and worker_node.pool_workers(Subsystem.DESIGN_SPACE_EXPLORATION) == 2

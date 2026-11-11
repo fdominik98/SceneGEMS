@@ -143,4 +143,35 @@ def test_the_heartbeat_names_the_task_its_signals_and_its_streams():
     assert by_topic[service.heartbeat_topic]["agent-description"] == "Simulation Subsystem"
     assert by_topic[service.sensor_info_topic]["sensor-data-provided"] == ["simulation_frames", "simulation_log", "simulation_result"]
     info = by_topic[service.direct_execution_topic]
-    assert info["tasks-available"] == [{"name": "run-simulation", "signals": ["cancel", "observe", "start"]}] and info["pool-size"] == 2
+    signals = ["cancel", "observe", "start"]
+    assert info["tasks-available"] == [{"name": "run-simulation", "signals": signals}, {"name": "compare-repeats", "signals": signals}] and info["pool-size"] == 2
+
+
+# The subsystem's second request: the comparison of a run's repeats
+
+
+def compare(service, request_id: str, payload) -> None:
+    command = {"command": "start-task", "execution-unit": service.name, "task-uuid": f"u-{request_id}", "task": {"name": "compare-repeats", "params": {"payload": payload, "request-id": request_id}}}
+    deliver(service, service.exec_command_topic, command)
+
+
+def test_a_compare_repeats_request_is_one_task_of_the_same_pool_next_to_the_runs():
+    service = service_of(max_workers=2)
+    start(service, "r1")
+    compare(service, "r2", {"trajectories": [{}, {}], "reference": "head_on"})
+    run, comparison = service.current_tasks
+    assert (type(run).__name__, type(comparison).__name__) == ("RunSimulationTask", "CompareRepeatsTask")
+    assert (comparison.request_id, comparison.payload) == ("r2", {"trajectories": [{}, {}], "reference": "head_on"})
+    service.pool.step()
+    assert states(service) == {"r1": "running", "r2": "running"}
+    service.publish_heartbeat_and_sensor_info()
+    info = [message for topic, message in service.client.published if topic == service.direct_execution_topic][-1]
+    assert info["tasks-executing"] == [{"name": "run-simulation", "uuid": "u-r1"}, {"name": "compare-repeats", "uuid": "u-r2"}]
+
+
+@pytest.mark.parametrize("payload", [None, "text", {"reference": "head_on"}, {"trajectories": {}}])
+def test_a_comparison_without_its_repeats_is_refused(payload):
+    service = service_of()
+    compare(service, "r1", payload)
+    [response] = published(service, "exec/response")
+    assert response["response"] == "failed" and "lists the repeats' trajectories" in response["fail-reason"] and service.current_tasks == []

@@ -3,7 +3,7 @@
 Before it serves, it removes the vessel stacks earlier tasks of this worker node left behind: a subsystem that
 was stopped or died took its workers with it, and their stacks stayed. Nothing of them is needed any more, since
 their tasks failed with the subsystem. A stack is found by the start of its containers' names, which every task's
-containers share and nothing else on the worker node has but a calibration job's container.
+containers share and nothing else on the worker node has.
 """
 
 import logging

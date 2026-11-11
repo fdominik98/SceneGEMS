@@ -91,10 +91,9 @@ def test_an_observed_simulation_writes_frame_lines_and_the_same_result(job_folde
     assert [frame["timestamp"] for frame in frames] == [0, 50, 100, 120]  # 1000 steps a second, 20 frames a second at most, and the last step
 
 
-def test_jobs_that_are_not_simulations_get_no_observation(job_folder, make_job, head_on_trajectories, monkeypatch):
-    def refuse(folder):
-        raise AssertionError("a calibration job is not observable")
-
-    monkeypatch.setattr(job_container_main, "ContainerObservation", refuse)
+def test_a_job_that_is_no_simulation_has_no_runner_container(job_folder, make_job, head_on_trajectories):
+    """Every other job is a request to its subsystem; a runner container that is handed one says so and fails for good."""
     write_job(job_folder, make_job(JobType.CALIBRATION_DEVIATION, {"trajectories": [head_on_trajectories.to_dict()] * 2, "reference": "head_on"}))
-    assert job_container_main.main() == 0 and "result" in read_outcome(job_folder)
+    assert job_container_main.main() == 1
+    outcome = read_outcome(job_folder)
+    assert "has no runner container" in outcome["error"] and outcome["retryable"] is False and "result" not in outcome

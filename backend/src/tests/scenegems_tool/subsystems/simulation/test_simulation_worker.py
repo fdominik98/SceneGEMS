@@ -184,3 +184,44 @@ def test_a_task_and_its_worker_cross_the_process_boundary_of_the_pool():
     copy = pickle.loads(pickle.dumps(task))
     assert copy == task and copy.payload == PAYLOAD
     assert pickle.loads(pickle.dumps(simulation_worker.run_simulation_worker)) is simulation_worker.run_simulation_worker
+
+
+# The subsystem's other kind of task: the comparison of a run's repeats
+
+
+def comparison(payload):
+    from scenegems_tool.subsystems.simulation.simulation_types import CompareRepeatsTask
+
+    return CompareRepeatsTask(sender="simulation-subsystem", task_uuid="u-c1", request_id="c1", seed=1, payload=payload)
+
+
+def test_a_comparison_runs_in_the_worker_itself_and_its_result_is_the_tasks(monkeypatch):
+    from scenegems_tool.cluster.worker_node.jobs import calibration_deviation_job
+    from tests.scenegems_tool.cluster.payloads import valid_payload
+
+    channel = SignalChannel()
+    monkeypatch.setattr(simulation_worker, "context_from_environment", lambda: pytest.fail("a comparison starts no stack and needs no worker node"))
+    simulation_worker.run_simulation_worker(comparison(valid_payload(JobType.CALIBRATION_DEVIATION)), channel)
+    [(message, final)] = channel.of(SIMULATION_RESULT_STREAM)
+    assert final and (message["error"], message["frame-batches"], message["log-batches"]) == (None, 0, 0)
+    assert message["result"]["exact"] and message["result"]["repeats"] == 2 and message["result"]["reference"] == "head_on"
+    assert channel.progressed == [("comparing 2 repeats of head_on", None), ("comparison finished", 1.0)]
+    assert message["result"] == calibration_deviation_job.compare(
+        calibration_deviation_job.CalibrationDeviationPayload.model_validate(valid_payload(JobType.CALIBRATION_DEVIATION)), lambda *status: None
+    )
+
+
+def test_a_comparison_that_cannot_be_made_is_a_result_that_is_not_retried():
+    channel = SignalChannel()
+    simulation_worker.compare_repeats(comparison({"trajectories": [{}], "reference": "head_on"}), channel)
+    [(message, final)] = channel.of(SIMULATION_RESULT_STREAM)
+    assert final and message["result"] is None and message["error"].startswith("Invalid calibration.deviation payload") and not message["retryable"]
+
+
+def test_a_cancelled_comparison_emits_nothing():
+    from tests.scenegems_tool.cluster.payloads import valid_payload
+
+    channel = SignalChannel()
+    channel.cancelled = True
+    simulation_worker.compare_repeats(comparison(valid_payload(JobType.CALIBRATION_DEVIATION)), channel)
+    assert channel.emitted == []

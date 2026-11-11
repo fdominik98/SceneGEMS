@@ -15,6 +15,10 @@ at that many times real time, or stopped watching) and start (the operator's Sta
                                for a run that failed with a reason, and how many frame and log batches went before it
 
 The run itself is subsystems/simulation/simulation_worker.py.
+
+The subsystem takes a second request, compare-repeats: how far the finished repeats of one run on one stack
+drift apart (cluster/worker_node/jobs/calibration_deviation_job.py). It is one task that starts no container,
+takes no signal but cancel, reports its progress and publishes its result on sensor/simulation_result too.
 """
 
 from typing import Any, Dict, List, Mapping
@@ -23,6 +27,7 @@ from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.messaging.mqtt_pool_service import PoolService
 from scenegems_tool.subsystems.pool.pool_task import PoolTask
 from scenegems_tool.subsystems.simulation.simulation_types import (
+    COMPARE_REPEATS_TASK,
     OBSERVE_SIGNAL,
     RUN_SIMULATION_TASK,
     SIMULATION_FRAMES_STREAM,
@@ -30,6 +35,7 @@ from scenegems_tool.subsystems.simulation.simulation_types import (
     SIMULATION_RESULT_STREAM,
     SIMULATION_SERVICE_NAME,
     START_SIGNAL,
+    CompareRepeatsTask,
     RunSimulationTask,
 )
 from scenegems_tool.subsystems.simulation.simulation_worker import run_simulation_worker
@@ -39,6 +45,7 @@ from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 class MqttSimulationService(PoolService):
     description = "Simulation Subsystem"
     task_name = RUN_SIMULATION_TASK
+    task_names = (RUN_SIMULATION_TASK, COMPARE_REPEATS_TASK)
     signals = (OBSERVE_SIGNAL, START_SIGNAL)
     streams = (SIMULATION_FRAMES_STREAM, SIMULATION_LOG_STREAM, SIMULATION_RESULT_STREAM)
     worker = staticmethod(run_simulation_worker)
@@ -57,6 +64,17 @@ class MqttSimulationService(PoolService):
         if not isinstance(payload, Mapping) or not payload.get("runner"):
             raise ValueError("the payload names its runner")
         return [RunSimulationTask(sender=self.name, task_uuid=task_uuid, request_id=request_id, seed=seed, job_id=job_id, attempt=attempt, payload=dict(payload))]
+
+    def make_tasks_of(self, name: str, task_uuid: str, request_id: str, seed: int, params: Mapping[str, Any]) -> List[PoolTask]:
+        if name != COMPARE_REPEATS_TASK:
+            return self.make_tasks(task_uuid, request_id, seed, params)
+        payload = params["payload"]
+        if not isinstance(payload, Mapping) or not isinstance(payload.get("trajectories"), list):
+            raise ValueError("the payload lists the repeats' trajectories")
+        return [CompareRepeatsTask(sender=self.name, task_uuid=task_uuid, request_id=request_id, seed=seed, payload=dict(payload))]
+
+    def task_name_of(self, task: PoolTask) -> str:
+        return COMPARE_REPEATS_TASK if isinstance(task, CompareRepeatsTask) else RUN_SIMULATION_TASK
 
     def stream_message(self, task: PoolTask, stream: str, payload: Mapping[str, Any], final: bool) -> Dict[str, Any]:
         return {**payload, "final": bool(final)}

@@ -16,6 +16,9 @@ are the task's channel:
     observe, start   the task's signals set the observation, which the stack passes into the runner container
     cancel           ends the wait for the runner; the stack is removed
 
+A compare-repeats task is the subsystem's other kind of work: it starts no container and compares the
+trajectories of finished repeats in the worker itself (compare_repeats).
+
 At the end the worker emits the run's result on sensor/simulation_result. A run that fails with a reason (a stack
 the worker node cannot run, a runner that reported an error, nobody started it in time) is a result too, with
 whether another attempt can succeed: the requester has to hear the reason and the retry rule. A worker that
@@ -42,6 +45,7 @@ from scenegems_tool.subsystems.simulation.simulation_types import (
     SIMULATION_RESULT_STREAM,
     START_SIGNAL,
     WORKER_NODE_VARIABLE,
+    CompareRepeatsTask,
     RunSimulationTask,
 )
 
@@ -182,6 +186,25 @@ def run_task(task: RunSimulationTask, channel: Any, context: WorkerNodeContext, 
     channel.emit(SIMULATION_RESULT_STREAM, {**outcome, "frame-batches": relay.frame_batches, "log-batches": relay.log_batches}, final=True)
 
 
-def run_simulation_worker(task: RunSimulationTask, channel: Any) -> None:
-    """What a worker process of the simulation pool runs for a task."""
-    run_task(task, channel, context_from_environment())
+def compare_repeats(task: CompareRepeatsTask, channel: Any) -> None:
+    """Compare the repeats of the task's payload and emit the result; a comparison that fails with a reason is a result too, as a run's is."""
+    from pydantic import ValidationError
+
+    from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import CalibrationDeviationPayload, compare
+
+    try:
+        outcome: Dict[str, Any] = {"result": compare(CalibrationDeviationPayload.model_validate(dict(task.payload)), channel.progress), "error": None, "retryable": False}
+    except JobFailed as failure:
+        outcome = {"result": None, "error": str(failure), "retryable": bool(failure.retryable)}
+    except ValidationError as error:
+        outcome = {"result": None, "error": f"Invalid calibration.deviation payload: {error}", "retryable": False}
+    if not channel.cancelled:
+        channel.emit(SIMULATION_RESULT_STREAM, {**outcome, "frame-batches": 0, "log-batches": 0}, final=True)
+
+
+def run_simulation_worker(task: Any, channel: Any) -> None:
+    """What a worker process of the simulation pool runs for a task: a run, or a comparison of repeats."""
+    if isinstance(task, CompareRepeatsTask):
+        compare_repeats(task, channel)
+    else:
+        run_task(task, channel, context_from_environment())

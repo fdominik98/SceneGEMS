@@ -70,7 +70,7 @@ SUBSYSTEM_IMAGES: Dict[ComponentId, Tuple[str, ...]] = {
     SCENE_GENERATION: (SCENE_GENERATION_IMAGE,),
     TRAJECTORY_GENERATION: (TRAJECTORY_GENERATION_IMAGE,),
     MONITORING: (MONITORING_IMAGE,),
-    CALIBRATION: (SIMULATION_IMAGE,),  # the deviation between repeats runs in a simulation subsystem container
+    CALIBRATION: (SIMULATION_IMAGE,),  # the comparison of repeats is a task of the simulation subsystem
 }
 # The subsystem component of each job type other than the simulation, whose components come from its vessels' stacks
 JOB_TYPE_COMPONENTS: Dict[JobType, ComponentId] = {
