@@ -174,6 +174,10 @@ class ContainerObservation:
         self._clock = clock
         self._sleep = sleep
 
+    def now(self) -> float:
+        """The observation's clock, for what a waiting run does from time to time."""
+        return self._clock()
+
     def wait_for_start(self, timeout_s: float, while_waiting: Optional[Callable[[], None]] = None, poll_s: float = CHECK_INTERVAL_S) -> bool:
         """Waits for the operator's Start of an attended run; False when it does not come within timeout_s.
 

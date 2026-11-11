@@ -187,8 +187,10 @@ build_worker_node_image() {
 
 parse_build_args "$@"
 
-# A release builds what a cluster runs. ArduAgent and MAVProxy are only used by live sessions,
-# which run the :latest images of the control node's machine (deploy/control_node/docker-compose.live-sessions.yml).
+# A release builds what a cluster runs. MAVProxy is part of it: an attended simulation on a worker node
+# needs it for a vessel steered from Mission Planner (the component asv_system/mission_planner).
+# ArduAgent is only used by live sessions with a real vessel, which run the :latest images of the
+# control node's machine (deploy/control_node/docker-compose.live-sessions.yml).
 if [ -n "$RELEASE_DIR" ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1

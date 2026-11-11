@@ -40,10 +40,12 @@ MONITORING_IMAGE = tagged("scenegems-monitoring-subsystem")
 ComponentId = str
 StackTriple = Tuple[AsvSystemId, ControlLayerId, SimulationLayerId]
 
-# The layers of the vessel stacks campaigns run, in catalog order
+# The layers of the vessel stacks jobs run, in catalog order. Campaigns run all but Mission Planner, which needs its operator
+# (an attended job of the workbench).
 STACK_LAYERS: Tuple[LayerImplementationId, ...] = (
     AsvSystemId.REPLAY,
     AsvSystemId.USV_NAVIGATION,
+    AsvSystemId.MISSION_PLANNER,
     ControlLayerId.NONE,
     ControlLayerId.ARDUPILOT,
     ControlLayerId.CUSTOM,
@@ -92,10 +94,12 @@ class SimulationRunner(str, Enum):
     KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, the runner stepping the kinematic simulator's container
     ARDUPILOT = "ardupilot"  # replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
     GAZEBO_CUSTOM = "gazebo_custom"  # replay or USV Navigation on the custom controller, the runner stepping a Gazebo world per job (no SITL)
+    ATTENDED = "attended"  # the workbench's setup vessel by vessel, with an operator beside it: it waits for a Start, and Mission Planner may steer a vessel
 
 
-# The vessel stacks each runner may run. Each must be a campaign stack of the matrix: available and
-# not workbench only. A stack no runner names runs on the workbench only, as a live session.
+# The vessel stacks each unattended runner may run. Each must be a campaign stack of the matrix: available and
+# not workbench only. The attended runner runs these and the stacks of ATTENDED_STACKS; a stack with a real
+# vessel still runs as a live session of the workbench.
 RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
     SimulationRunner.KINEMATIC: (
         (AsvSystemId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
@@ -112,6 +116,13 @@ RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
         (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
     ),
 }
+
+
+# The stacks only the attended runner runs: the operator steers the vessel from Mission Planner through MAVProxy
+ATTENDED_STACKS: Tuple[StackTriple, ...] = (
+    (AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+    (AsvSystemId.MISSION_PLANNER, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+)
 
 
 class UnknownComponent(ValueError):
@@ -170,7 +181,7 @@ def _asv_adapter_images(asv_system: LayerImplementationId) -> Set[str]:
 
     resolver = default_resolver()
     images: Set[str] = set()
-    for stacks in RUNNER_STACKS.values():
+    for stacks in (*RUNNER_STACKS.values(), ATTENDED_STACKS):
         for software, control_layer, simulation_layer in stacks:
             if software != asv_system:
                 continue

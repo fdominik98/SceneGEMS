@@ -225,3 +225,120 @@ def _wait_until(condition, timeout_s: float = 5.0) -> None:
     while not condition():
         assert time.monotonic() < deadline, "timed out"
         time.sleep(0.01)
+
+
+# Published ports and the wait for the operator's Start (attended jobs)
+
+
+def test_only_the_named_services_keep_their_published_ports():
+    services = scope_services(SCOPE, {"os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}, "os": {"image": "sitl", "ports": ["5760:5760"]}}, published=["os_mavproxy"])
+    assert services["os_mavproxy"]["ports"] == ["5770"] and "ports" not in services["os"]
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os_mavproxy"])
+    assert stack.compose["services"]["os_mavproxy"]["ports"] == ["5770"]
+
+
+def test_the_ports_docker_assigned_go_into_every_status_detail(monkeypatch):
+    from scenegems_tool.cluster.worker_node.job_report import StatusDetailReport
+
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os_mavproxy"])
+    asked = []
+    answers = iter([None, 49153])  # not assigned yet, then assigned
+
+    def published_port(service, container_port):
+        asked.append((service, container_port))
+        return next(answers)
+
+    monkeypatch.setattr(stack.project, "published_port", published_port)
+    monkeypatch.setattr(job_stack, "_PUBLISHED_PORT_POLL_S", 0.0)
+    inner = RecordingDetailReport()
+    report = StatusDetailReport(inner)
+    report.status("ready to start", None, {"phase": "ready_to_start"})
+    stack._report_published_ports({"0": ("os_mavproxy", 5770)}, report, threading.Event())
+    assert asked == [("simulation-subsystem-j7-os-mavproxy", 5770)] * 2, "asked by the service's key in the worker node's project, until Docker assigned the port"
+    assert inner.statuses[-1] == ("ready to start", None, {"phase": "ready_to_start", "ground_control": {"0": 49153}}), "the latest status again, with the ports"
+    report.status("running", 0.0, {"phase": "running"})
+    assert inner.statuses[-1] == ("running", 0.0, {"phase": "running", "ground_control": {"0": 49153}}), "and every status after it"
+    report.log("runner", "a line")
+    assert inner.lines == [("runner", "a line", LogStream.STDOUT)]
+
+
+def test_a_status_without_anything_to_add_goes_out_as_it_came():
+    from scenegems_tool.cluster.worker_node.job_report import StatusDetailReport
+
+    inner = RecordingDetailReport()
+    report = StatusDetailReport(inner)
+    report.status("creating the job stack")
+    assert inner.statuses == [("creating the job stack", None, None)]
+    report.add_detail({"ground_control": {"0": 49153}})
+    assert inner.statuses[-1] == ("creating the job stack", None, {"ground_control": {"0": 49153}})
+
+
+class RecordingDetailReport:
+    def __init__(self) -> None:
+        self.statuses = []
+        self.lines = []
+
+    def status(self, message, progress=None, detail=None) -> None:
+        self.statuses.append((message, progress, detail))
+
+    def log(self, source, text, stream=LogStream.STDOUT) -> None:
+        self.lines.append((source, text, stream))
+
+
+class WaitingRunner:
+    """Stands in for `docker wait` on a clock of its own: every poll takes the poll's time, and the runner stops after stop_after polls."""
+
+    def __init__(self, stop_after=None, on_poll=None):
+        self.now = 0.0
+        self.polls = 0
+        self.stop_after = stop_after
+        self.on_poll = on_poll
+        self.killed = False
+
+    def communicate(self, timeout=None):
+        self.polls += 1
+        self.now += timeout
+        if self.on_poll is not None:
+            self.on_poll(self.polls)
+        if self.stop_after is not None and self.polls >= self.stop_after:
+            return "0\n", None
+        raise subprocess.TimeoutExpired("docker wait", timeout)
+
+    def kill(self):
+        self.killed = True
+
+
+@pytest.fixture
+def waiting_runner(monkeypatch):
+    """A runner whose wait is polled once a second of its own clock, which is also the launcher's."""
+    runner = WaitingRunner()
+    monkeypatch.setattr(job_stack.subprocess, "Popen", lambda *args, **kwargs: runner)
+    monkeypatch.setattr(job_stack, "time", SimpleNamespace(monotonic=lambda: runner.now))
+    monkeypatch.setattr(job_stack, "_WAIT_POLL_S", 1.0)
+    monkeypatch.setattr(job_stack, "_START_MARGIN_S", 0.0)
+    return runner
+
+
+def test_the_wait_for_the_start_does_not_count_against_the_jobs_timeout(waiting_runner):
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image")})
+    observation = JobObservation("j7", 1)
+    waiting_runner.on_poll = lambda polls: observation.start() if polls == 20 else None  # the operator, 20 s in
+    waiting_runner.stop_after = 23
+    assert stack._wait(5.0, None, start=(observation, 60.0)) == 0, "20 s of waiting are four times the job's timeout"
+    assert not waiting_runner.killed
+
+
+def test_a_run_nobody_starts_is_ended_by_the_launcher_at_the_latest(waiting_runner):
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image")})
+    with pytest.raises(job_stack.JobFailed, match="nobody started the run within 3 s") as failure:
+        stack._wait(600.0, None, start=(JobObservation("j7", 1), 3.0))
+    assert waiting_runner.killed and not failure.value.retryable and waiting_runner.polls == 4
+
+
+def test_after_the_start_the_jobs_timeout_counts(waiting_runner):
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image")})
+    observation = JobObservation("j7", 1)
+    waiting_runner.on_poll = lambda polls: observation.start() if polls == 10 else None
+    with pytest.raises(job_stack.JobFailed, match="timed out after 5 s"):
+        stack._wait(5.0, None, start=(observation, 60.0))
+    assert waiting_runner.polls == 16, "the Start at 10 s, then the job's 5 s"

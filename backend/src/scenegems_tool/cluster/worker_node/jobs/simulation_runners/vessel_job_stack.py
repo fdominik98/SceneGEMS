@@ -11,7 +11,7 @@ runtime assets volume, so such a job must run where that volume is mounted at
 RUNTIME_ASSETS_FOLDER: the worker node daemon's container or the workbench backend's.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
@@ -26,14 +26,35 @@ if TYPE_CHECKING:
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 
 
-def build_vessel_job_stack(job: JobSpec, worker_node: WorkerNodeContext, instance: "SimulationInstanceConfig", trajectories: "Trajectories", geofence: "Geofence") -> JobStack:
-    """Resolve the instance, write its generated files into the job's folder and assemble the stack: its containers and the runner."""
+def ground_control_ports(instance: "SimulationInstanceConfig") -> Dict[str, Tuple[str, int]]:
+    """By agent id, the MAVProxy service of every Mission Planner vessel and the container port its ground control station connects to."""
+    from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT
+    from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import gcs_mavproxy_service_name
+    from scenegems_tool.vessel_stack.registry.catalog import default_resolver
+
+    resolver = default_resolver()
+    ports: Dict[str, Tuple[str, int]] = {}
+    for agent_id, vessel in instance.simulated_vessels.items():
+        adapter = resolver.resolve(vessel.stack, vessel.adapter_ids).asv_adapter
+        if adapter is not None and adapter.id == MISSION_PLANNER_GCS_PORT.id:
+            ports[agent_id] = (gcs_mavproxy_service_name(vessel.require_connection().agent_name), GCS_CONTAINER_PORT)
+    return ports
+
+
+def build_vessel_job_stack(
+    job: JobSpec, worker_node: WorkerNodeContext, instance: "SimulationInstanceConfig", trajectories: "Trajectories", geofence: "Geofence", *, attended: bool = False
+) -> JobStack:
+    """Resolve the instance, write its generated files into the job's folder and assemble the stack: its containers and the runner.
+
+    attended: an operator is beside the run, so the stacks that need one are allowed (Mission Planner), and the ground
+    control station port of each such vessel's MAVProxy stays published.
+    """
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
     from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
     from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
 
     try:
-        default_resolver().require_instance(instance, attended=False)
+        default_resolver().require_instance(instance, attended=attended)
     except StackUnavailableError as error:
         raise JobFailed(f"Simulation stack rejected: {error}", retryable=False) from error
     scope = worker_node.job_scope(job)
@@ -47,4 +68,5 @@ def build_vessel_job_stack(job: JobSpec, worker_node: WorkerNodeContext, instanc
         **stack_compose["services"],
         RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SIMULATION), networks=[STACK_NETWORK], depends_on=stack_services),
     }
-    return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"))
+    published = [service for service, _ in ground_control_ports(instance).values()] if attended else []
+    return JobStack(scope, services, networks=stack_compose["networks"], volumes=stack_compose.get("volumes"), published=published)

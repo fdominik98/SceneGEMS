@@ -33,7 +33,7 @@ from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.worker_node.job_report import JobReport, JobResultData
 from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback
-from scenegems_tool.cluster.worker_node.jobs.simulation_runners import ardupilot_runner, gazebo_custom_runner, kinematic_runner
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners import ardupilot_runner, attended_runner, gazebo_custom_runner, kinematic_runner
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 
 if TYPE_CHECKING:
@@ -46,6 +46,7 @@ RUNNER_MODULES: Dict[SimulationRunner, "ModuleType"] = {
     SimulationRunner.KINEMATIC: kinematic_runner,
     SimulationRunner.ARDUPILOT: ardupilot_runner,
     SimulationRunner.GAZEBO_CUSTOM: gazebo_custom_runner,
+    SimulationRunner.ATTENDED: attended_runner,
 }
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
@@ -55,7 +56,13 @@ ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (
 )
 
 RunnerPayload = Annotated[
-    Union[kinematic_runner.KinematicSimulationPayload, ardupilot_runner.ArduPilotSimulationPayload, gazebo_custom_runner.GazeboCustomSimulationPayload], Field(discriminator="runner")
+    Union[
+        kinematic_runner.KinematicSimulationPayload,
+        ardupilot_runner.ArduPilotSimulationPayload,
+        gazebo_custom_runner.GazeboCustomSimulationPayload,
+        attended_runner.AttendedSimulationPayload,
+    ],
+    Field(discriminator="runner"),
 ]
 
 

@@ -15,9 +15,12 @@ KINEMATIC = ("asv_system/replay", "control_layer/none", "simulation_layer/kinema
 
 
 def test_every_runner_has_a_module_and_the_catalog_names_its_stacks():
-    assert set(RUNNER_MODULES) == set(SimulationRunner) == set(RUNNER_STACKS)
-    for module in RUNNER_MODULES.values():
-        assert callable(module.run) and callable(module.execute) and callable(module.vessel_stacks)
+    assert set(RUNNER_MODULES) == set(SimulationRunner)
+    assert set(RUNNER_STACKS) == set(SimulationRunner) - {SimulationRunner.ATTENDED}, "the attended runner runs whatever its payload's setup names"
+    for runner, module in RUNNER_MODULES.items():
+        assert callable(module.run) and callable(module.execute)
+        assert runner == SimulationRunner.ATTENDED or callable(module.vessel_stacks)
+        assert callable(module.PAYLOAD_MODEL.vessel_stacks), "every payload names its vessel stacks"
 
 
 def test_the_runner_picks_the_payload_model():

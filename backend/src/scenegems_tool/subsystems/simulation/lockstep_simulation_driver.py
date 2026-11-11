@@ -22,7 +22,7 @@ the run as it happens.
 
 import threading
 import time
-from typing import Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
@@ -90,8 +90,11 @@ class LockstepSimulationDriver:
         with self._lock:
             return self._scene
 
-    def run(self, on_scene: SceneObserver, stop: threading.Event) -> None:
-        """Run the instance until its trajectories' timespan, or until stop is set. Blocks."""
+    def run(self, on_scene: SceneObserver, stop: threading.Event) -> Optional[Any]:
+        """Run the instance until its trajectories' timespan, or until stop is set. Blocks.
+
+        Returns the lockstep runner's result (its run record, steps and state digest), or None for a run that was stopped.
+        """
         dt = float(self.trajectories.time_step)
         steps = int(round(self.trajectories.timespan / dt))
         paced = self.kind != "mavlink"
@@ -112,15 +115,15 @@ class LockstepSimulationDriver:
 
         try:
             if self.kind == "kinematic":
-                self._run_kinematic(dt, steps, observe)
+                return self._run_kinematic(dt, steps, observe)
             elif self.kind == "gz_custom":
                 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import run_gz_custom
 
-                run_gz_custom(self.trajectories, self.simulation, dt=dt, steps=steps, resolver=self.resolver, on_step=observe, hosting=self._hosting())
+                return run_gz_custom(self.trajectories, self.simulation, dt=dt, steps=steps, resolver=self.resolver, on_step=observe, hosting=self._hosting())
             else:
                 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import run_mavlink_stack
 
-                run_mavlink_stack(
+                return run_mavlink_stack(
                     self.trajectories,
                     self.simulation,
                     self.reference_geofence,
@@ -132,11 +135,11 @@ class LockstepSimulationDriver:
                     hosting=self._hosting(),
                 )
         except RunStopped:
-            pass
+            return None
         finally:
             self._running = False
 
-    def _run_kinematic(self, dt: float, steps: int, observe: Callable[[int, Mapping[int, ActorState]], None]) -> None:
+    def _run_kinematic(self, dt: float, steps: int, observe: Callable[[int, Mapping[int, ActorState]], None]) -> Any:
         from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_instance
 
         actors = tuple(self.trajectories.initial_scene.actors)
@@ -145,7 +148,7 @@ class LockstepSimulationDriver:
             observe(index, {actor.id: state for actor, state in zip(actors, snapshot) if isinstance(actor, ConcreteVessel)})
             return False
 
-        run_kinematic_instance(self.trajectories, self.simulation, dt=dt, steps=steps, hosting=self._hosting(), resolver=self.resolver, attended=True, on_step=on_step)
+        return run_kinematic_instance(self.trajectories, self.simulation, dt=dt, steps=steps, hosting=self._hosting(), resolver=self.resolver, attended=True, on_step=on_step)
 
     def _hosting(self) -> StackHosting:
         """A hosting for one run: the session stack's containers, unless the driver was given another."""

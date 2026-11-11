@@ -51,6 +51,7 @@ def test_the_catalog_lists_the_campaign_layers_and_the_subsystems():
     assert COMPONENTS == (
         "asv_system/replay",
         "asv_system/usv_navigation",
+        "asv_system/mission_planner",
         "control_layer/none",
         "control_layer/ardupilot",
         "control_layer/custom",
@@ -86,7 +87,10 @@ def test_the_layer_images_come_from_the_container_specs():
     assert images["asv_system/replay"] == images["control_layer/custom"] == (SIMULATION_IMAGE,), "the replay and custom controller containers start from the simulation subsystem image"
     assert images["asv_system/usv_navigation"] == (USV_NAVIGATION_IMAGE,), "USV Navigation has an image of its own"
     assert images["control_layer/none"] == (), "no controller, no container"
-    assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(COMPONENTS), "the lockstep replay on ArduPilot needs neither"
+    assert images["asv_system/mission_planner"] == (MAVPROXY_IMAGE,), "the ground control station reaches the vessel through MAVProxy"
+    unattended = [component for component in COMPONENTS if component != "asv_system/mission_planner"]
+    assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(unattended), "the lockstep replay on ArduPilot needs neither"
+    assert ARDUAGENT_IMAGE not in images_of(COMPONENTS), "ArduAgent drives real vessels, which no job runs yet"
 
 
 def test_the_subsystem_components_and_their_job_types():
