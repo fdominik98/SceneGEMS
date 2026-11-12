@@ -1,4 +1,4 @@
-import { attendedSetupComponents, SIMULATION_JOB, simulationPayloadComponents } from "../../../domain/cluster/components";
+import { SIMULATION_JOB, simulationPayloadComponents } from "../../../domain/cluster/components";
 import type { JobSubmission } from "../../../domain/cluster/operatorApi";
 import type { AttendedBroker } from "../connection/connectionLibrary";
 import type { ReferenceGeofence } from "../connection/referenceGeofence";
@@ -139,6 +139,9 @@ const SUMMARIES: Record<ControlLayerOfPlan, Record<RunMode, string>> = {
 
 const MODE_ONLY = "Unattended, only the own ship may run USV Navigation.";
 
+/** Every run of the workbench is judged while it runs, so its job needs the monitoring subsystem beside the layers of its stack. */
+const LIVE_MONITOR = "live";
+
 /** The setup as an attended job, for the reason no unattended runner takes it. */
 function attended(setup: SimulationSetup, reason: string): AttendedRunPlan {
   const realVessel = setup.vessels.some((vessel) => vessel.context === "real");
@@ -150,7 +153,7 @@ function attended(setup: SimulationSetup, reason: string): AttendedRunPlan {
     simulation: setup.body,
     reason,
     ...(realVessel && setup.broker ? { broker: setup.broker } : {}),
-    components: attendedSetupComponents(setup.body),
+    components: simulationPayloadComponents({ runner: "attended", simulation: setup.body, monitor: LIVE_MONITOR }),
     summary: realVessel ? "a real vessel takes part through its agent on the MQTT broker" : missionPlanner ? "you steer a vessel from Mission Planner" : "the setup as it is, vessel by vessel",
   };
 }
@@ -181,7 +184,7 @@ function planUnattendedRun(setup: SimulationSetup): UnattendedRunPlan | NeedsAnO
   if (mode === null) {
     return { where: "attended", reason: MODE_ONLY };
   }
-  return { where: "cluster", jobType: SIMULATION_JOB, runner: "kinematic", ...mode, components: simulationPayloadComponents({ runner: "kinematic", mode: mode.mode }), summary: SUMMARIES.none[mode.mode] };
+  return { where: "cluster", jobType: SIMULATION_JOB, runner: "kinematic", ...mode, components: simulationPayloadComponents({ runner: "kinematic", mode: mode.mode, monitor: LIVE_MONITOR }), summary: SUMMARIES.none[mode.mode] };
 }
 
 /**
@@ -214,7 +217,7 @@ function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimu
     runner: "ardupilot",
     simulationLayer,
     ...mode,
-    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer, mode: mode.mode }),
+    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer, mode: mode.mode, monitor: LIVE_MONITOR }),
     speedup: Math.max(1, Math.round(setup.speedup)),
     summary: SUMMARIES.ardupilot[mode.mode],
   };
@@ -235,14 +238,14 @@ function planGazeboCustomRun(setup: SimulationSetup): UnattendedRunPlan | NeedsA
     runner: "gazebo_custom",
     ...mode,
     windVector: [...setup.windVector],
-    components: simulationPayloadComponents({ runner: "gazebo_custom", mode: mode.mode }),
+    components: simulationPayloadComponents({ runner: "gazebo_custom", mode: mode.mode, monitor: LIVE_MONITOR }),
     summary: SUMMARIES.custom[mode.mode],
   };
 }
 
 function liveMonitorFields(colregsConstraintsContent: string): Record<string, unknown> {
   return {
-    monitor: "live",
+    monitor: LIVE_MONITOR,
     colregs_constraints_content: colregsConstraintsContent.trim().length > 0 ? colregsConstraintsContent : null,
     // The run's trajectories, monitored after the run when it ended before anyone watched it.
     include_trajectories: true,

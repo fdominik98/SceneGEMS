@@ -34,14 +34,14 @@ describe("the job a simulation runs as", () => {
       runner: "kinematic",
       mode: "replay",
       ownShipId: null,
-      components: ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"],
+      components: ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "monitoring"],
     });
   });
 
   it("runs USV Navigation on the own ship on the cluster", () => {
     const plan = planSimulationRun(setup([vessel("0", { asvSystem: "usv_navigation" }), vessel("1")]));
     expect(plan).toMatchObject({ where: "cluster", mode: "usv_navigation", ownShipId: 0 });
-    expect(clusterPlan(plan).components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(clusterPlan(plan).components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "monitoring"]);
   });
 
   it("runs real vessels and Mission Planner as an attended job", () => {
@@ -57,7 +57,7 @@ describe("the job a simulation runs as", () => {
       runner: "ardupilot",
       simulationLayer: "ardupilot_sim",
       speedup: 5,
-      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"],
+      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "monitoring"],
     });
     expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({
       where: "cluster",
@@ -65,7 +65,7 @@ describe("the job a simulation runs as", () => {
       runner: "ardupilot",
       simulationLayer: "gazebo",
       speedup: 1,
-      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"],
+      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo", "monitoring"],
     });
   });
 
@@ -89,7 +89,7 @@ describe("the job a simulation runs as", () => {
     const vessels = [vessel("0", { controlLayer: "ardupilot", asvSystem: "usv_navigation" }), vessel("1", { controlLayer: "ardupilot" })];
     const plan = clusterPlan(planSimulationRun(setup(vessels, { simulatorType: "Gazebo", speedup: 4 })));
     expect(plan).toMatchObject({ runner: "ardupilot", simulationLayer: "gazebo", mode: "usv_navigation", ownShipId: 0, speedup: 4 });
-    expect(plan.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/gazebo"]);
+    expect(plan.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/gazebo", "monitoring"]);
     expect(simulationSubmission(plan, { trajectories: {}, colregsConstraintsContent: "", geofence: GEOFENCE }).payload).toMatchObject({
       runner: "ardupilot",
       simulation_layer: "gazebo",
@@ -102,7 +102,7 @@ describe("the job a simulation runs as", () => {
     const onCustom = [vessel("0", { controlLayer: "custom" }), vessel("1", { controlLayer: "custom" })];
     const plan = clusterPlan(planSimulationRun(setup(onCustom, { simulatorType: "Gazebo", windVector: [0, 3, 0], speedup: 7 })));
     expect(plan).toMatchObject({ where: "cluster", jobType: "simulation", runner: "gazebo_custom", mode: "replay", ownShipId: null, windVector: [0, 3, 0] });
-    expect(plan.components).toEqual(["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo"]);
+    expect(plan.components).toEqual(["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo", "monitoring"]);
     if (plan.runner !== "gazebo_custom") {
       throw new Error("expected a custom controller plan");
     }
@@ -214,7 +214,7 @@ describe("an attended run", () => {
       jobType: "simulation",
       runner: "attended",
       simulation: body,
-      components: ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"],
+      components: ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "monitoring"],
     });
     expect(describeClusterPlan(plan as ClusterRunPlan)).toContain("waits for your Start");
     expect(isPacedByWatchSpeed(plan as ClusterRunPlan)).toBe(false);
@@ -246,7 +246,7 @@ describe("an attended run", () => {
         simulation: realBody,
         reason: expect.stringContaining("real vessel"),
         summary: expect.stringContaining("real vessel"),
-        components: ["asv_system/replay", "asv_system/on_board", "control_layer/ardupilot", "control_layer/real_vessel", "simulation_layer/ardupilot_sim", "simulation_layer/real_vessel"],
+        components: ["asv_system/replay", "asv_system/on_board", "control_layer/ardupilot", "control_layer/real_vessel", "simulation_layer/ardupilot_sim", "simulation_layer/real_vessel", "monitoring"],
       });
       expect(plan).not.toHaveProperty("broker");
       const submission = simulationSubmission(plan as ClusterRunPlan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
