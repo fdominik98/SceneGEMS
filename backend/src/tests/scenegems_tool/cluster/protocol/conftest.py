@@ -17,7 +17,7 @@ def job_spec() -> JobSpec:
         job_id="job-1",
         job_type=JobType.SIMULATION,
         payload={"steps": 300, "dt": 1.0},
-        requirements=JobRequirements(labels={"site": "lab"}, components=["asv_system/replay", "simulation_layer/kinematic"], fingerprints={"scenegems-scenario-execution": "abc123"}),
+        requirements=JobRequirements(labels={"site": "lab"}, components=["asv_system/replay", "simulation_layer/kinematic"], fingerprints={"scenegems-simulation": "abc123"}),
         attempt=1,
         idempotency_key="job-1/1",
     )

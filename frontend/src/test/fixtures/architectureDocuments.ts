@@ -38,7 +38,7 @@ export function sampleStackDocument(): ArchitectureDocument {
     ...extra,
   });
   const exact = [fact("repeatability_tier", "exact"), fact("max_speedup", "unbounded", { unit: "x" }), fact("wind", "unsupported"), fact("waves", "supported", { measured: true })];
-  // An available combination names the cluster job that runs it, or none (a workbench live session)
+  // An available combination names the cluster job that runs it, or none
   const clusterJob = (jobType: string | null) =>
     fact("cluster_job", jobType, { label: "Cluster job", group: "property", note: jobType === null ? "no job type runs it yet" : "runs as this job on a worker node" });
   const combination = (path: string[], status: string, reasons: string[] = [], jobType: string | null = null) => ({

@@ -1,79 +1,31 @@
 """
-The workbench gateway: the web console's WebSocket. The control node mounts `app` on its operator
-listener (cluster/control_node/server.py); it does not run on its own.
+The workbench gateway: the web console's WebSocket for its in-process helpers (reading a scenario
+file, generating vessel models, listing the stack options). The control node mounts `app` on its
+operator listener (cluster/control_node/server.py); it does not run on its own. It starts no
+container and connects to no broker: what computes is a job on a worker node.
 """
 
-import atexit
 import json
 import logging
-import signal
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-from scenegems_tool.cluster.worker_node.docker_subsystem_shutdown import shutdown_all_docker_subsystems
-from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder
 from scenegems_tool.gateway.web_socket_session_manager import WebSocketSessionManager
 from utils.file_system_utils import ensure_directories
 
 logger = logging.getLogger(__name__)
 websocket_session_manager = WebSocketSessionManager()
-_shutdown_handlers_registered = False
-
-
-def _register_process_shutdown_handlers() -> None:
-    global _shutdown_handlers_registered
-    if _shutdown_handlers_registered:
-        return
-    _shutdown_handlers_registered = True
-    atexit.register(shutdown_all_docker_subsystems)
-
-    def _handle_signal(signum, frame) -> None:  # noqa: ARG001
-        shutdown_all_docker_subsystems()
-        raise SystemExit(0)
-
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_directories()
-    _register_process_shutdown_handlers()
-    recorder = run_recorder(_app)
-    if recorder is not None:
-        # No connection exists yet, so a live session entry still running without a run lost its session with the last process
-        try:
-            await recorder.stop_stranded_entries()
-        except Exception:
-            logger.exception("Cannot stop the live session entries the last control node process left running")
     yield
     websocket_session_manager.shutdown_all()
-    shutdown_all_docker_subsystems()
 
 
 app = FastAPI(title="SceneGEMS Tool Backend", lifespan=lifespan)
-app.state.run_recorder = None  # the control node sets its LiveRunRecorder (set_run_recorder); on its own the gateway records nothing
-app.state.live_sessions = True  # the control node turns them off without the Docker socket (set_live_sessions)
-
-
-def set_run_recorder(recorder: Optional[LiveRunRecorder], gateway: FastAPI = app) -> None:
-    """Live sessions of this gateway's connections are recorded through the recorder from now on (the control node's, cluster/control_node/server.py)."""
-    gateway.state.run_recorder = recorder
-
-
-def run_recorder(gateway: FastAPI = app) -> Optional[LiveRunRecorder]:
-    return getattr(gateway.state, "run_recorder", None)
-
-
-def set_live_sessions(enabled: bool, gateway: FastAPI = app) -> None:
-    """Whether this gateway's new connections may start live sessions (the control node's SCENEGEMS_LIVE_SESSIONS); when off they are refused."""
-    gateway.state.live_sessions = enabled
-
-
-def live_sessions(gateway: FastAPI = app) -> bool:
-    return bool(getattr(gateway.state, "live_sessions", True))
 
 
 @app.get("/health")
@@ -82,15 +34,9 @@ def health() -> dict[str, str]:
 
 
 @app.websocket("/ws/scenegems_backend_service")
-async def backend_service_socket(websocket: WebSocket) -> None:  # noqa: C901
+async def backend_service_socket(websocket: WebSocket) -> None:
     await websocket.accept()
-    session, message_processor = websocket_session_manager.create_session(websocket=websocket, live_sessions=live_sessions())
-    session.run_recorder = run_recorder()
-    try:
-        session.send_payload(session.mqtt_broker_status_message(status="disconnected"))
-    except WebSocketDisconnect:
-        websocket_session_manager.remove_session(websocket=websocket)
-        return
+    session, message_processor = websocket_session_manager.create_session(websocket=websocket)
 
     try:
         while True:

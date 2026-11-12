@@ -35,6 +35,7 @@ class WebSocketControlSocket:
     """A starlette WebSocket as the control plane's ControlSocket: one frame at a time, errors as False."""
 
     def __init__(self, websocket: WebSocket):
+        self.address = websocket.client.host if websocket.client else None  # the worker node's address as the control node sees it
         self._websocket = websocket
         self._send_lock = asyncio.Lock()
 

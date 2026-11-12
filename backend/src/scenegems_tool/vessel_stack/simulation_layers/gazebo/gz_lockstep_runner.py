@@ -39,6 +39,7 @@ from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parame
 from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepParticipant, StepAck, derive_seed
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
+from scenegems_tool.vessel_stack.contracts.stack_services import vessel_stack_name
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConnection, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, TwinThrustAutopilot
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
@@ -212,7 +213,7 @@ def gz_custom_instance(
             str(vessel.id): VesselConfig(
                 agent_id=str(vessel.id),
                 stack=VesselStackConfig(asv_system.get(vessel.id, AsvSystemId.REPLAY), ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
-                connection=AgentConnection(agent_name=f"vessel_{vessel.id}", topic="", port=None),
+                connection=AgentConnection(agent_name=vessel_stack_name(vessel.id), topic=""),
             )
             for vessel in trajectories.initial_scene.vessels
         },

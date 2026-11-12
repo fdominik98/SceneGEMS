@@ -9,7 +9,7 @@ def generate_gazebo_service(world_file: str, vessel_services: list[str], headles
     (custom control layer), instead of the world running on its own.
 
     No container name and no host port: SITL and the lockstep runners reach it as `gazebo` on the
-    stack's network, and the stack that runs it names its containers (one per live session or job).
+    stack's network, and the stack that runs it names its containers (one per job).
     """
     gazebo = {
         "image": GAZEBO_CONTAINER.image,

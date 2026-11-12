@@ -118,7 +118,7 @@ def test_update_data_shapes():
     assert CampaignRowChanged(campaign={"campaign_id": "c1", "totals": {}}).model_dump() == {"campaign": {"campaign_id": "c1", "totals": {}}}
     assert CampaignDeleted(deleted="c1").model_dump() == {"deleted": "c1"}
     status = JobStatusChanged(status=JobProgressView(progress=0.5, message="half", at=at)).model_dump(mode="json")
-    assert status == {"status": {"progress": 0.5, "message": "half", "at": "2026-10-26T12:00:00Z"}}
+    assert status == {"status": {"progress": 0.5, "message": "half", "at": "2026-10-26T12:00:00Z", "detail": None}}
     assert JobLogsAdded(logs=[{"text": "x"}]).model_dump() == {"logs": [{"text": "x"}]}
     assert JobChanged(job={"state": "running"}).model_dump() == {"job": {"state": "running"}}
 

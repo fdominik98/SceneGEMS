@@ -1,4 +1,4 @@
-import { describeComponents, isWhollyOutOfDate, JOB_TYPE_COMPONENTS, offersJob, runStackComponents, SIMULATION_JOB } from "../../domain/cluster/components";
+import { describeComponents, isWhollyOutOfDate, JOB_TYPE_COMPONENTS, offersJob, runComponents, SIMULATION_JOB } from "../../domain/cluster/components";
 import type { WorkerNodeView } from "../../domain/cluster/schemas";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
 
@@ -25,7 +25,7 @@ export const STAGE_JOB_TYPES: Record<string, string> = {
   calibrate: "calibration.deviation",
 };
 
-/** The job type that simulates a run of this stack section: the simulation, whatever the stack (`runStackComponents` tells the stacks apart). */
+/** The job type that simulates a run of this stack section: the simulation, whatever the stack (`runComponents` tells the stacks apart). */
 export function simulationJobType(stack: unknown): string {
   void stack;
   return SIMULATION_JOB;
@@ -37,12 +37,13 @@ const LAYER_WHERE: Record<string, string> = {
   "simulation_layer/gazebo": "on Gazebo",
 };
 
-/** Where runs with these components are simulated ("on Gazebo", "on the custom controller with Gazebo", "on the kinematic layer with USV Navigation"). */
+/** Where runs with these components are simulated ("on Gazebo", "on the custom controller with Gazebo", "on the kinematic layer with USV Navigation"), and that the monitoring subsystem judges them as they run when they need it. */
 function simulatedWhere(components: readonly string[]): string {
   const layer = components.find((component) => component.startsWith("simulation_layer/"));
   const layerWhere = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
   const where = components.includes("control_layer/custom") ? `on the custom controller with ${layerWhere.replace(/^on /, "")}` : layerWhere;
-  return components.includes("asv_system/usv_navigation") ? `${where} with USV Navigation` : where;
+  const stack = components.includes("asv_system/usv_navigation") ? `${where} with USV Navigation` : where;
+  return components.includes("monitoring") ? `${stack}, judged by the monitoring subsystem as it runs` : stack;
 }
 
 const CAPABILITY_LABELS: Record<string, string> = {
@@ -135,11 +136,11 @@ export function requiredCapabilities(config: Record<string, unknown>): RequiredC
       subsystemNeed("generate_trajectories", typeof generator === "string" ? `Every case plans its trajectories (${generatorName(generator)}).` : "Every case plans its trajectories.")
     );
   }
-  const runComponents = runs.map((run) => runStackComponents(run.stack));
-  const sets = [...new Map(runComponents.map((components) => [components.join(","), components])).values()];
+  const componentsOfRuns = runs.map((run) => runComponents(run));
+  const sets = [...new Map(componentsOfRuns.map((components) => [components.join(","), components])).values()];
   for (const components of sets) {
     const key = components.join(",");
-    const names = runs.map((run, index) => (runComponents[index].join(",") === key ? runName(run, index) : null)).filter((name): name is string => name !== null);
+    const names = runs.map((run, index) => (componentsOfRuns[index].join(",") === key ? runName(run, index) : null)).filter((name): name is string => name !== null);
     const where = simulatedWhere(components);
     required.push({
       jobType: SIMULATION_JOB,

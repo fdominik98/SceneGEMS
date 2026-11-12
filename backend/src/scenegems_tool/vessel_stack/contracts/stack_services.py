@@ -4,8 +4,9 @@ One place decides how the runner finds a component on the stack's network, so th
 component's service and the runner's link to it cannot disagree.
 """
 
-from typing import List
+from typing import List, Union
 
+from functional_level.models.object_generator import OS_ID, vessel_name
 from scenegems_tool.vessel_stack.contracts.adapter_spec import ContainerSpec, image_reference
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig
@@ -20,18 +21,27 @@ _CONTROLLER_SUFFIX = "_controller"
 
 
 def backend_component_container(server_module: str) -> ContainerSpec:
-    """The container of a component that is part of the SceneGEMS backend: the scenario execution image, started at the component's server module."""
+    """The container of a component that is part of the SceneGEMS backend: the simulation subsystem image, started at the component's server module."""
     return ContainerSpec(
-        image=image_reference("SCENARIO_EXECUTION_IMAGE", "scenegems-scenario-execution-subsystem"),
-        build_fingerprint_source="deploy/images/scenario_execution",
+        image=image_reference("SIMULATION_IMAGE", "scenegems-simulation-subsystem"),
+        build_fingerprint_source="deploy/images/simulation",
         entrypoint=f"python -m {server_module}",
         extra_fingerprint_sources=("backend/src",),
     )
 
 
+def vessel_stack_name(agent_id: Union[int, str]) -> str:
+    """A vessel's name in a stack, as every screen names it: os for the own ship and ts<n> for a target; an id that is no number names itself."""
+    try:
+        actor_id = int(agent_id)
+    except ValueError:
+        return str(agent_id)
+    return vessel_name(actor_id, actor_id == OS_ID)
+
+
 def stack_agent_name(vessel_config: VesselConfig) -> str:
-    """The name a vessel's services carry: its agent's name, or vessel_<id> for a vessel without an agent connection."""
-    return vessel_config.connection.agent_name if vessel_config.connection is not None else f"vessel_{vessel_config.agent_id}"
+    """The name a vessel's services carry: its agent's name, or the vessel's own (os, ts1) without an agent connection."""
+    return vessel_config.connection.agent_name if vessel_config.connection is not None else vessel_stack_name(vessel_config.agent_id)
 
 
 def asv_system_service_name(agent_name: str) -> str:

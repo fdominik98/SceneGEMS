@@ -45,6 +45,7 @@ from pydantic import ValidationError
 
 from scenegems_tool.assurance.campaign.campaign_config import (
     ArdupilotStackConfig,
+    AttendedStackConfig,
     CampaignConfig,
     CustomStackConfig,
     FunctionalScenarioInput,
@@ -223,6 +224,8 @@ class PayloadBuilder:
             return self._ardupilot_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         if isinstance(run.stack, CustomStackConfig):
             return self._custom_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
+        if isinstance(run.stack, AttendedStackConfig):
+            return self._attended_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         stack = run.stack
         payload: Dict[str, Any] = {"runner": SimulationRunner.KINEMATIC.value, "mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
         if stack.usv_navigation is not None:
@@ -233,6 +236,26 @@ class PayloadBuilder:
             payload["steps"] = stack.steps
         if run.monitor == MonitorImplementation.LIVE:
             payload.update(monitor="live", early_stop=run.early_stop, colregs_constraints_content=self.config.domain.colregs_constants)
+        return payload
+
+    def _attended_simulation(self, run: RunConfig, stack: AttendedStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:
+        """The attended runner's payload of a run: the workbench's setup as it was given, and the observed run comes back as trajectories."""
+        payload: Dict[str, Any] = {
+            "runner": SimulationRunner.ATTENDED.value,
+            "simulation": dict(stack.simulation),
+            "trajectories": trajectories,
+            "geofence": stack.geofence.model_dump(mode="json"),
+            "seed": seed,
+            "include_trajectories": True,
+        }
+        if stack.start_timeout_s is not None:
+            payload["start_timeout_s"] = stack.start_timeout_s
+        if stack.timeout_s is not None:
+            payload["timeout_s"] = stack.timeout_s
+        if stack.broker is not None:
+            payload["broker"] = stack.broker.model_dump(mode="json")
+        if run.monitor == MonitorImplementation.LIVE:
+            payload.update(monitor="live", colregs_constraints_content=self.config.domain.colregs_constants)
         return payload
 
     def _ardupilot_simulation(self, run: RunConfig, stack: ArdupilotStackConfig, seed: int, trajectories: Any) -> Dict[str, Any]:

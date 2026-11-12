@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
+from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.database import DATABASE_URL_ENV, DatabaseNotConfigured
 from scenegems_tool.persistence.migrate import MIGRATIONS_FOLDER, alembic_config, main, upgrade_database
 from scenegems_tool.persistence.schema import (
@@ -60,10 +61,10 @@ def test_migrations_live_in_the_package():
 
 def test_revisions_form_one_line():
     scripts = _scripts()
-    assert scripts.get_heads() == ["0014"]
+    assert scripts.get_heads() == ["0017"]
     revisions = list(scripts.walk_revisions())
-    assert [revision.revision for revision in revisions] == ["0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
-    assert [revision.down_revision for revision in revisions] == ["0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
+    assert [revision.revision for revision in revisions] == ["0017", "0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001"]
+    assert [revision.down_revision for revision in revisions] == ["0016", "0015", "0014", "0013", "0012", "0011", "0010", "0009", "0008", "0007", "0006", "0005", "0004", "0003", "0002", "0001", None]
     assert all(len(revision.revision) == 4 and revision.revision.isdigit() for revision in revisions)
 
 
@@ -144,7 +145,7 @@ def test_upgrade_on_an_empty_database(empty_database_url):
     try:
         assert set(inspect(engine).get_table_names()) == ALL_TABLES | {"alembic_version"}
         with engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0014"
+            assert MigrationContext.configure(connection).get_current_revision() == "0017"
     finally:
         engine.dispose()
 
@@ -703,7 +704,6 @@ def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(
             )
         command.upgrade(config, "0013")
         with engine.connect() as connection:
-            assert compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True}), Base.metadata) == []
             assert connection.execute(text("SELECT name FROM worker_node WHERE id = 'node-1'")).scalar_one() == "worker-1"
             assert connection.execute(text("SELECT slots FROM worker_node_capability WHERE worker_node_id = 'node-1'")).scalar_one() == 2
             assert connection.execute(text("SELECT component FROM worker_node_component WHERE worker_node_id = 'node-1'")).scalar_one() == "simulation_layer/kinematic"
@@ -721,6 +721,10 @@ def test_revision_0013_renames_the_node_tables_columns_and_stored_keys_and_back(
             assert connection.execute(text("SELECT allowed_nodes FROM job WHERE id = 'job-1'")).scalar_one() == ["node-1"]
             assert connection.execute(text("SELECT config FROM campaign_preset WHERE id = 'p1'")).scalar_one() == {"resources": {"nodes": ["node-1"], "priority": 2}}
         command.upgrade(config, "head")
+        with engine.connect() as connection:
+            # The renamed tables are the code's tables once the later revisions are in too (0016 adds a column to worker_node)
+            assert compare_metadata(MigrationContext.configure(connection, opts={"compare_type": True}), Base.metadata) == []
+            assert connection.execute(text("SELECT instance_number FROM worker_node WHERE id = 'node-1'")).scalar_one() == 1
     finally:
         engine.dispose()
 
@@ -767,6 +771,165 @@ def test_revision_0014_renames_the_stored_asv_system_names_and_back(empty_databa
             assert components == ["asv_software/replay", "asv_software/usv_navigation", "control_layer/none"]
             assert connection.execute(text("SELECT required_components FROM job WHERE id = 'job-1'")).scalar_one() == ["asv_software/replay", "control_layer/none"]
             assert connection.execute(text("SELECT payload FROM job WHERE id = 'job-1'")).scalar_one() == payload
+        command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0015_renames_the_simulation_subsystem_image_in_stored_fingerprints_and_back(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0014")
+    at = datetime(2026, 11, 11, 9, 30, tzinfo=timezone.utc)
+    old = {"scenegems-scenario-execution-subsystem": "f1", "scenegems-gazebo-harmonic": "g1"}
+    new = {"scenegems-simulation-subsystem": "f1", "scenegems-gazebo-harmonic": "g1"}
+    tagged_old = {"scenegems-scenario-execution-subsystem:latest": "f1"}
+    engine = create_engine(empty_database_url)
+
+    def stored(connection):
+        return {
+            "images": connection.execute(text("SELECT image FROM worker_node_fingerprint ORDER BY image")).scalars().all(),
+            "job": connection.execute(text("SELECT required_fingerprints FROM job WHERE id = 'job-1'")).scalar_one(),
+            "tagged": connection.execute(text("SELECT required_fingerprints FROM job WHERE id = 'job-2'")).scalar_one(),
+            "calibration": connection.execute(text("SELECT fingerprints, fingerprints_hash FROM calibration_result")).one(),
+        }
+
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO worker_node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+                    " VALUES ('worker-1', 'worker-1', 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+                ),
+                {"at": at},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO worker_node_fingerprint (worker_node_id, image, fingerprint) VALUES"
+                    " ('worker-1', 'scenegems-scenario-execution-subsystem', 'f1'), ('worker-1', 'scenegems-scenario-execution-subsystem:latest', 'f1'), ('worker-1', 'scenegems-gazebo-harmonic', 'g1')"
+                )
+            )
+            for job_id, fingerprints in (("job-1", old), ("job-2", tagged_old)):
+                connection.execute(
+                    text(
+                        "INSERT INTO job (id, job_type, payload, required_labels, required_fingerprints, min_memory_mb, min_cpus, priority, max_attempts,"
+                        " idempotency_key, state, attempt, failed_attempts, submitted_at, available_at, updated_at, required_components)"
+                        " VALUES (:id, 'simulation', '{}', '{}', CAST(:fingerprints AS jsonb), 0, 0, 0, 3, :id, 'queued', 0, 0, :at, :at, :at, '[]')"
+                    ),
+                    {"at": at, "id": job_id, "fingerprints": json.dumps(fingerprints)},
+                )
+            connection.execute(
+                text(
+                    "INSERT INTO calibration_result (stack, stack_hash, fingerprints, fingerprints_hash, environment, environment_hash, reference_scenario,"
+                    " repeats, exact, envelope, created_at, updated_at)"
+                    " VALUES ('{}', :stack_hash, CAST(:fingerprints AS jsonb), :fingerprints_hash, '{}', :stack_hash, 'reference', 3, true, '{}', :at, :at)"
+                ),
+                {"at": at, "stack_hash": canonical_json_sha256({}), "fingerprints": json.dumps(old), "fingerprints_hash": canonical_json_sha256(old)},
+            )
+        command.upgrade(config, "0015")
+        with engine.connect() as connection:
+            after = stored(connection)
+        assert after["images"] == ["scenegems-gazebo-harmonic", "scenegems-simulation-subsystem", "scenegems-simulation-subsystem:latest"]
+        assert after["job"] == new
+        assert after["tagged"] == {"scenegems-simulation-subsystem:latest": "f1"}
+        assert tuple(after["calibration"]) == (new, canonical_json_sha256(new)), "a calibration result is found by the hash of its renamed fingerprints"
+        command.downgrade(config, "0014")
+        with engine.connect() as connection:
+            before = stored(connection)
+        assert before["images"] == ["scenegems-gazebo-harmonic", "scenegems-scenario-execution-subsystem", "scenegems-scenario-execution-subsystem:latest"]
+        assert before["job"] == old and before["tagged"] == tagged_old
+        assert tuple(before["calibration"]) == (old, canonical_json_sha256(old))
+        command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0016_numbers_the_stored_worker_nodes_in_the_order_they_registered(empty_database_url):
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0015")
+    engine = create_engine(empty_database_url)
+    insert = text(
+        "INSERT INTO worker_node (id, name, status, labels, software_revision, cpus, memory_mb, free_memory_mb, free_disk_mb, load_average, registered_at, last_seen_at)"
+        " VALUES (:id, :id, 'online', '{}', 'abc', 4, 1000, 500, 5000, 0.1, :at, :at)"
+    )
+    try:
+        with engine.begin() as connection:
+            for worker_node_id, day in (("worker-late", 12), ("worker-early", 10), ("worker-middle", 11)):
+                connection.execute(insert, {"id": worker_node_id, "at": datetime(2026, 11, day, 9, 30, tzinfo=timezone.utc)})
+        command.upgrade(config, "0016")
+        with engine.connect() as connection:
+            numbers = dict(connection.execute(text("SELECT id, instance_number FROM worker_node")).all())
+        assert numbers == {"worker-early": 1, "worker-middle": 2, "worker-late": 3}
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(text("UPDATE worker_node SET instance_number = 1 WHERE id = 'worker-late'"))  # a number belongs to one worker node
+        command.downgrade(config, "0015")
+        assert "instance_number" not in {column["name"] for column in inspect(engine).get_columns("worker_node")}
+        command.upgrade(config, "head")
+        with engine.connect() as connection:
+            assert dict(connection.execute(text("SELECT id, instance_number FROM worker_node")).all()) == numbers
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.postgres
+def test_revision_0017_stops_the_open_live_session_entries_that_have_no_run(empty_database_url):
+    """Nothing records a live session any more, so an entry that still waits for its run is asked to stop; every other entry is left as it is."""
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0016")
+    at = datetime(2026, 11, 11, 9, 30, tzinfo=timezone.utc)
+    engine = create_engine(empty_database_url)
+    campaign = text(
+        "INSERT INTO campaign (id, name, kind, origin, desired_state, actual_state, config_version, pinned_fingerprints, created_at, updated_at, finished_at)"
+        " VALUES (:id, :id, 'workbench', :origin, :desired, :actual, 1, '{}', :at, :at, :finished)"
+    )
+    entries = {
+        # id: origin, desired state, actual state
+        "waiting": ("live_session", "running", "running"),
+        "created": ("live_session", "running", "created"),
+        "recorded": ("live_session", "running", "running"),  # its run is recorded: it has a case, and the engine finishes it
+        "stopping": ("live_session", "stopped", "running"),
+        "finished": ("live_session", "running", "completed"),
+        "simulation": ("simulation", "running", "running"),  # a workbench run as a job: not a live session
+    }
+
+    def states(connection):
+        return {row.id: (row.desired_state, row.actual_state) for row in connection.execute(text("SELECT id, desired_state, actual_state FROM campaign")).all()}
+
+    try:
+        with engine.begin() as connection:
+            for campaign_id, (origin, desired, actual) in entries.items():
+                connection.execute(campaign, {"id": campaign_id, "origin": origin, "desired": desired, "actual": actual, "at": at, "finished": at if actual == "completed" else None})
+            connection.execute(
+                text(
+                    "INSERT INTO campaign_class (campaign_id, class_id, content_hash, vessel_count, obstacle_count, quota, failure_budget, complete_count, dropped_count,"
+                    " in_flight_count, state, created_at, updated_at) VALUES ('recorded', 'item/0', :sha, 2, 0, 1, 0, 0, 0, 1, 'open', :at, :at)"
+                ),
+                {"at": at, "sha": "a" * 64},
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO scenario_case (campaign_id, class_id, case_index, seed, config_version, stage, state, version, progress, created_at, updated_at)"
+                    " VALUES ('recorded', 'item/0', 0, 7, 1, 'monitor', 'active', 1, '{}', :at, :at)"
+                ),
+                {"at": at},
+            )
+        command.upgrade(config, "0017")
+        with engine.connect() as connection:
+            after = states(connection)
+            touched = connection.execute(text("SELECT id FROM campaign WHERE updated_at > :at ORDER BY id"), {"at": at}).scalars().all()
+        assert after == {
+            "waiting": ("stopped", "running"),
+            "created": ("stopped", "created"),
+            "recorded": ("running", "running"),
+            "stopping": ("stopped", "running"),
+            "finished": ("running", "completed"),
+            "simulation": ("running", "running"),
+        }, "the engine moves a stopped entry to its final state on its next tick"
+        assert touched == ["created", "waiting"], "only the entries the revision stopped were written"
+        command.downgrade(config, "0016")
+        with engine.connect() as connection:
+            assert states(connection) == after, "a stopped entry stays stopped"
         command.upgrade(config, "head")
     finally:
         engine.dispose()

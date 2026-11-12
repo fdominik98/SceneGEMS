@@ -19,7 +19,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Callable, Collection, Dict, List, Mapping, Optional, Tuple
 
-from scenegems_tool.cluster.fingerprints.components import DESIGN_SPACE_EXPLORATION_IMAGE, MONITORING_IMAGE, SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import DESIGN_SPACE_EXPLORATION_IMAGE, MONITORING_IMAGE, SCENE_GENERATION_IMAGE, SIMULATION_IMAGE, TRAJECTORY_GENERATION_IMAGE
 from scenegems_tool.cluster.protocol.artifacts import ArtifactRef, is_reference, json_pointer, resolve_references, store_results
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
@@ -34,7 +34,7 @@ EXPECTED = {
     DESIGN_SPACE_EXPLORATION_IMAGE: "fp-exploration",
     SCENE_GENERATION_IMAGE: "fp-scene",
     TRAJECTORY_GENERATION_IMAGE: "fp-trajectory",
-    SCENARIO_EXECUTION_IMAGE: "fp-execution",
+    SIMULATION_IMAGE: "fp-execution",
     MONITORING_IMAGE: "fp-monitoring",
     SITL_IMAGE: "fp-sitl",
     GAZEBO_IMAGE: "fp-gazebo",

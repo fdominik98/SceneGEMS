@@ -1,4 +1,4 @@
-"""The scope's syntax, the default specification, and the counts and object names of a generated model."""
+"""The scope's syntax, the default specification, the counts and object names of a generated model, and the result made of the generator's."""
 
 from pathlib import Path
 
@@ -13,8 +13,10 @@ from scenegems_tool.subsystems.design_space_exploration.design_space import (
     count_instances,
     default_specification,
     exploration_hash,
+    explored_fecs,
     parse_scope,
 )
+from tests.scenegems_tool.subsystems.design_space_exploration.generator_fakes import MODEL, NAMED_MODEL, generated
 
 DATA = Path(__file__).parent / "data"
 
@@ -132,3 +134,34 @@ def test_the_counts_agree_with_the_catalog_for_every_family():
         seen.add(scenario_class.folder)
         assert count_instances(scenario_class.read_content()) == (scenario_class.vessel_count, scenario_class.obstacle_count)
     assert seen
+
+
+# The result of an exploration
+
+
+def test_the_result_lists_the_models_as_functional_scenarios_with_the_catalogs_object_names_and_their_counts():
+    result = explored_fecs(generated([MODEL, MODEL.replace("\n", "\r\n")], stop_reason="cap_reached", complete=False, max_models=2))
+    assert "declare tS1, staticObstacle1, tS2." in MODEL and "declare ts1, obst1, ts2." in NAMED_MODEL
+    assert result["functional_scenarios"] == [NAMED_MODEL, NAMED_MODEL]
+    assert result["fecs"] == [{"index": 0, "vessel_count": 3, "obstacle_count": 1}, {"index": 1, "vessel_count": 3, "obstacle_count": 1}]
+    assert {key: result[key] for key in ("stop_reason", "complete", "models_found", "max_models", "random_seed", "elapsed_s", "message")} == {
+        "stop_reason": "cap_reached",
+        "complete": False,
+        "models_found": 2,
+        "max_models": 2,
+        "random_seed": 1,
+        "elapsed_s": 1.5,
+        "message": None,
+    }
+    assert "models" not in result
+
+
+def test_a_specification_without_a_model_gives_an_empty_list():
+    result = explored_fecs(generated([], stop_reason="unsatisfiable", message="the partial model is inconsistent"))
+    assert (result["functional_scenarios"], result["fecs"], result["stop_reason"], result["message"]) == ([], [], "unsatisfiable", "the partial model is inconsistent")
+
+
+@pytest.mark.parametrize("result", [{"stop_reason": "exhausted"}, {"models": [{"index": 0, "file": "models/model_00000.problem", "source": None}]}, {"models": ["text"]}])
+def test_a_generator_result_without_sources_is_refused(result):
+    with pytest.raises(ValueError, match="the model generator returned"):
+        explored_fecs(result)

@@ -9,6 +9,8 @@ import {
   listsJob,
   offersJob,
   orderedComponents,
+  attendedSetupComponents,
+  runComponents,
   runStackComponents,
   simulationPayloadComponents,
   staleComponents,
@@ -29,7 +31,9 @@ function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots:
 
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
-    expect(COMPONENTS).toHaveLength(13);
+    expect(COMPONENTS).toHaveLength(17);
+    expect(componentLabel("control_layer/real_vessel")).toBe("Real vessel autopilot");
+    expect(componentLabel("asv_system/mission_planner")).toBe("Mission Planner");
     expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_system/replay", "monitoring", "gpu"])).toEqual(["asv_system/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
     expect(componentLabel("simulation_layer/ardupilot_sim")).toBe("ArduPilot SITL");
     expect(componentLabel("gpu")).toBe("gpu");
@@ -69,6 +73,13 @@ describe("the component catalog", () => {
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", mode: "usv_navigation" }));
     expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
     expect(jobComponents("monitoring.post_hoc")).toEqual(["monitoring"]);
+    // A run that is judged while it runs is judged by the worker node's monitoring subsystem, so it needs that too
+    expect(simulationPayloadComponents({ runner: "kinematic", mode: "replay", monitor: "live" })).toEqual([...runStackComponents({}), "monitoring"]);
+    expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", monitor: "live" })).toEqual([...GAZEBO, "monitoring"]);
+    expect(simulationPayloadComponents({ runner: "kinematic", monitor: "none" })).toEqual(runStackComponents({}));
+    expect(runComponents({ stack: { simulation_layer: "gazebo" }, monitor: "live" })).toEqual([...GAZEBO, "monitoring"]);
+    expect(runComponents({ stack: { simulation_layer: "gazebo" }, monitor: "post_hoc" })).toEqual(GAZEBO);
+    expect(runComponents({})).toEqual(runStackComponents({}));
     expect(jobComponents("calibration.deviation")).toEqual(["calibration"]);
     expect(jobComponents("future.kind")).toEqual([]);
   });
@@ -93,5 +104,39 @@ describe("a worker node's components", () => {
   it("is wholly out of date once every component is", () => {
     expect(isWhollyOutOfDate(workerNodeWith([["monitoring", "out_of_date"]]))).toBe(true);
     expect(isWhollyOutOfDate(workerNodeWith([]))).toBe(false);
+  });
+});
+
+describe("the components of an attended run", () => {
+  const connection = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot", agentName: "typed", topic: "", gazeboVesselModel: null };
+  const setup = { simulatorType: "ArduPilot Sim", windVector: [0, 0, 0], simulationSpeed: 1, connectionsByAgentId: { "0": { ...connection, asvSystem: "mission_planner" }, "1": connection } };
+  const expected = ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"];
+
+  it("come from the setup, vessel by vessel", () => {
+    expect(attendedSetupComponents(setup)).toEqual(expected);
+    expect(simulationPayloadComponents({ runner: "attended", simulation: setup })).toEqual(expected);
+    expect(runStackComponents({ attended: true, simulation: setup })).toEqual(expected);
+  });
+
+  it("take the layer's own control layer for a vessel that names none", () => {
+    const kinematic = { simulatorType: "Kinematic", connectionsByAgentId: { "0": { asvSystem: "usv_navigation" } } };
+    expect(attendedSetupComponents(kinematic)).toEqual(["asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(attendedSetupComponents(undefined)).toEqual(["simulation_layer/kinematic"]);
+  });
+});
+
+describe("the components of an attended run with a real vessel", () => {
+  it("are the real vessel's own layers beside the simulated vessels'", () => {
+    const simulated = { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot" };
+    const real = { context: "real", asvSystem: "on_board", controlLayer: "real_vessel" };
+    const setup = { simulatorType: "ArduPilot Sim", connectionsByAgentId: { "0": simulated, "1": real } };
+    expect(attendedSetupComponents(setup)).toEqual([
+      "asv_system/replay",
+      "asv_system/on_board",
+      "control_layer/ardupilot",
+      "control_layer/real_vessel",
+      "simulation_layer/ardupilot_sim",
+      "simulation_layer/real_vessel",
+    ]);
   });
 });

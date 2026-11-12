@@ -1,6 +1,6 @@
 """ArduAgent's control mode for the ASV system that drives an ArduPilot vessel.
 
-MqttAgentClient and the scenario execution worker speak these modes: autonomous uploads
+MqttAgentClient and the ArduAgent driver of an attended simulation speak these modes: autonomous uploads
 the trajectory as a mission to follow, external sends the vessel toward its last waypoint
 and leaves the rest to whoever is on the MAVLink port, and on_board sends nothing: the
 vessel's own software steers and ArduAgent only reports where it is.
@@ -17,7 +17,7 @@ from scenegems_tool.vessel_stack.control_layers.real_vessel.real_vessel_specs im
     REPLAY_ARDUAGENT_REAL_VESSEL,
 )
 
-# Adapters whose vessels ArduAgent drives, served by the scenario execution worker over MQTT:
+# Adapters whose vessels ArduAgent drives, commanded over MQTT (subsystems/simulation/arduagent_simulation_driver.py):
 # a simulated vessel gets SITL, MAVProxy and ArduAgent, a real vessel brings its own ArduAgent.
 # Any other adapter into ardupilot talks MAVLink to SITL itself (replay_mavlink_lockstep,
 # usv_navigation_mavlink_lockstep), so its vessel gets SITL only.

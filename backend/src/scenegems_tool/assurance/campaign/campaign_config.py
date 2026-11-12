@@ -491,14 +491,67 @@ class CustomStackConfig(ConfigModel):
         return self
 
 
+class BrokerConfig(ConfigModel):
+    """The broker of an attended run with a real vessel when it is not the cluster's: an external one such as WARA-PS's.
+
+    The password is kept with the config as it is given, in plain text.
+    """
+
+    host: str = Field(min_length=1)
+    port: int = Field(gt=0, lt=65536)
+    tls: bool = False
+    allow_certificates: bool = False
+    user: str = ""
+    password: str = ""
+
+
+class AttendedStackConfig(ConfigModel):
+    """A run an operator sets up vessel by vessel on the workbench and starts by hand: an attended simulation.
+
+    simulation is the workbench's setup as the console sends it (the simulator, wind and waves, the speed-up and, per
+    vessel, its ASV system and control layer), so the run's environment is the setup's and not the run's own. Mission
+    Planner may steer a vessel, and a vessel may be a real one, reached through the agent on board at the topic the
+    setup gives it. broker is the broker a real vessel's agent is on; the cluster's when absent. Only a workbench
+    entry may have such a run (config_validation.py): a campaign has no operator to start it. The simulation job's
+    attended runner runs it (cluster/worker_node/jobs/simulation_runners/attended_runner.py).
+    """
+
+    attended: Literal[True]
+    simulation: Dict[str, Any]
+    geofence: GeofenceSettings = Field(default_factory=GeofenceSettings)
+    start_timeout_s: Optional[float] = Field(default=None, gt=0)  # how long the stack waits for the operator's Start; the runner's default when absent
+    timeout_s: Optional[float] = Field(default=None, gt=0)  # the run's own time from the Start; the runner's default when absent
+    broker: Optional[BrokerConfig] = None  # with a real vessel: the broker its agent is on; the cluster's when absent
+
+    @model_validator(mode="after")
+    def _the_setup_is_an_instance(self) -> "AttendedStackConfig":
+        instance = self.instance()
+        if self.broker is not None and all(vessel.is_simulated for vessel in instance.vessels.values()):
+            raise ValueError("broker applies only to a setup with a real vessel: simulated vessels alone talk to no broker")
+        return self
+
+    def instance(self) -> Any:
+        """The setup as a simulation instance; ValueError for a setup the attended runner cannot run."""
+        from scenegems_tool.cluster.worker_node.jobs.simulation_runners.attended_runner import simulation_instance
+        from scenegems_tool.messaging.topic_layout import CLUSTER_TOPIC_ROOT, WARAPS_TOPIC_ROOT
+
+        return simulation_instance(dict(self.simulation), topic_root=CLUSTER_TOPIC_ROOT if self.broker is None else WARAPS_TOPIC_ROOT)
+
+    @property
+    def simulation_layer(self) -> str:
+        return self.instance().simulation_layer.value
+
+
 def _stack_by_layer(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
     """Validates a stack as the model of its simulation_layer and control_layer (kinematic when it names none), so an error names the field under stack and not a union member.
 
     control_layer custom picks CustomStackConfig. The control layer a simulation layer implies (none on
     kinematic, ardupilot on the ArduPilot layers) may be named too and is dropped, so it adds nothing to the JSON.
     """
-    if isinstance(value, (KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig)):
+    if isinstance(value, (KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig, AttendedStackConfig)):
         return value
+    if isinstance(value, Mapping) and value.get("attended"):
+        return AttendedStackConfig.model_validate(value)  # the workbench's setup, vessel by vessel
     if not isinstance(value, Mapping):
         return KinematicStackConfig.model_validate(value)
     layer = value.get("simulation_layer", "kinematic")
@@ -518,7 +571,7 @@ def _stack_by_layer(value: Any, handler: ValidatorFunctionWrapHandler) -> Any:
     return (ArdupilotStackConfig if layer in ARDUPILOT_LAYERS else KinematicStackConfig).model_validate(value)
 
 
-StackConfig = Annotated[Union[KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig], WrapValidator(_stack_by_layer)]
+StackConfig = Annotated[Union[KinematicStackConfig, ArdupilotStackConfig, CustomStackConfig, AttendedStackConfig], WrapValidator(_stack_by_layer)]
 
 
 class RunConfig(ConfigModel):
@@ -536,6 +589,8 @@ class RunConfig(ConfigModel):
             raise ValueError("early_stop needs the live monitor")
         if self.early_stop and isinstance(self.stack, ArdupilotStackConfig):
             raise ValueError("the ArduPilot stacks do not stop early: the lockstep run always finishes")
+        if self.early_stop and isinstance(self.stack, AttendedStackConfig):
+            raise ValueError("an attended run does not stop early: its operator ends it")
         if self.early_stop and isinstance(self.stack, CustomStackConfig):
             raise ValueError("the custom controller on Gazebo does not stop early: the lockstep run always finishes")
         return self

@@ -7,9 +7,9 @@ from scenegems_tool.cluster.fingerprints.components import (
     MONITORING,
     MONITORING_IMAGE,
     RUNNER_STACKS,
-    SCENARIO_EXECUTION_IMAGE,
     SCENE_GENERATION,
     SCENE_GENERATION_IMAGE,
+    SIMULATION_IMAGE,
     STACK_COMPONENTS,
     TRAJECTORY_GENERATION,
     TRAJECTORY_GENERATION_IMAGE,
@@ -51,12 +51,16 @@ def test_the_catalog_lists_the_campaign_layers_and_the_subsystems():
     assert COMPONENTS == (
         "asv_system/replay",
         "asv_system/usv_navigation",
+        "asv_system/mission_planner",
+        "asv_system/on_board",
         "control_layer/none",
         "control_layer/ardupilot",
         "control_layer/custom",
+        "control_layer/real_vessel",
         "simulation_layer/kinematic",
         "simulation_layer/ardupilot_sim",
         "simulation_layer/gazebo",
+        "simulation_layer/real_vessel",
         "design_space_exploration",
         "scene_generation",
         "trajectory_generation",
@@ -75,18 +79,30 @@ def test_every_layer_of_every_campaign_stack_is_a_component():
 def test_every_campaign_stacks_images_are_the_union_of_its_three_components_images():
     for stack in _campaign_stacks():
         triple = (stack.asv_system, stack.control_layer, stack.simulation_layer)
-        assert images_of(stack_components([triple])) == {SCENARIO_EXECUTION_IMAGE} | set(stack_images([triple])), stack
+        assert images_of(stack_components([triple])) == {SIMULATION_IMAGE} | set(stack_images([triple])), stack
 
 
 def test_the_layer_images_come_from_the_container_specs():
     images = component_images()
     assert images["control_layer/ardupilot"] == (SITL_IMAGE,)
-    assert images["simulation_layer/gazebo"] == tuple(sorted((GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE)))
-    assert images["simulation_layer/kinematic"] == images["simulation_layer/ardupilot_sim"] == (SCENARIO_EXECUTION_IMAGE,), "a simulation layer adds the runner"
-    assert images["asv_system/replay"] == images["control_layer/custom"] == (SCENARIO_EXECUTION_IMAGE,), "the replay and custom controller containers start from the scenario execution image"
+    assert images["simulation_layer/gazebo"] == tuple(sorted((GAZEBO_IMAGE, SIMULATION_IMAGE)))
+    assert images["simulation_layer/kinematic"] == images["simulation_layer/ardupilot_sim"] == (SIMULATION_IMAGE,), "a simulation layer adds the runner"
+    assert images["asv_system/replay"] == images["control_layer/custom"] == (SIMULATION_IMAGE,), "the replay and custom controller containers start from the simulation subsystem image"
     assert images["asv_system/usv_navigation"] == (USV_NAVIGATION_IMAGE,), "USV Navigation has an image of its own"
     assert images["control_layer/none"] == (), "no controller, no container"
-    assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(COMPONENTS), "the lockstep replay on ArduPilot needs neither"
+    assert images["asv_system/mission_planner"] == (MAVPROXY_IMAGE,), "the ground control station reaches the vessel through MAVProxy"
+    attended_only = {"asv_system/mission_planner", "asv_system/on_board", "control_layer/real_vessel", "simulation_layer/real_vessel"}
+    unattended = [component for component in COMPONENTS if component not in attended_only]
+    assert not {MAVPROXY_IMAGE, ARDUAGENT_IMAGE} & images_of(unattended), "the lockstep replay on ArduPilot needs neither"
+
+
+def test_a_real_vessels_components_bring_the_arduagent_images():
+    """A real vessel has no container, but the simulated vessels beside it run through MAVProxy and ArduAgent, and the runner drives them all."""
+    images = component_images()
+    assert images["control_layer/real_vessel"] == tuple(sorted((ARDUAGENT_IMAGE, MAVPROXY_IMAGE)))
+    assert images["simulation_layer/real_vessel"] == (SIMULATION_IMAGE,), "the runner"
+    assert images["asv_system/on_board"] == (), "the vessel's own software runs on the vessel"
+    assert ARDUAGENT_IMAGE not in images_of([component for component in COMPONENTS if component != "control_layer/real_vessel"])
 
 
 def test_the_subsystem_components_and_their_job_types():
@@ -95,7 +111,7 @@ def test_the_subsystem_components_and_their_job_types():
         (SCENE_GENERATION_IMAGE,),
         (TRAJECTORY_GENERATION_IMAGE,),
         (MONITORING_IMAGE,),
-        (SCENARIO_EXECUTION_IMAGE,),
+        (SIMULATION_IMAGE,),
     )
     assert set(JOB_TYPE_COMPONENTS) == set(JobType) - {JobType.SIMULATION}, "every job type but the simulation has its subsystem component"
     assert [job_type_of(component) for component in (SCENE_GENERATION, MONITORING, "control_layer/ardupilot")] == [JobType.SCENE_GENERATION, JobType.MONITORING_POST_HOC, JobType.SIMULATION]
@@ -104,12 +120,12 @@ def test_the_subsystem_components_and_their_job_types():
 
 
 def test_the_subsystem_images_are_the_ones_the_worker_node_launches(monkeypatch):
-    for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SCENARIO_EXECUTION_IMAGE"):
+    for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SIMULATION_IMAGE"):
         monkeypatch.delenv(variable, raising=False)
     assert subsystem_image(Subsystem.SCENE_GENERATION) == SCENE_GENERATION_IMAGE
     assert subsystem_image(Subsystem.TRAJECTORY_GENERATION) == TRAJECTORY_GENERATION_IMAGE
     assert subsystem_image(Subsystem.MONITORING) == MONITORING_IMAGE
-    assert subsystem_image(Subsystem.SCENARIO_EXECUTION) == SCENARIO_EXECUTION_IMAGE
+    assert subsystem_image(Subsystem.SIMULATION) == SIMULATION_IMAGE
 
 
 def test_components_come_in_catalog_order_and_unknown_ones_fail():
@@ -145,5 +161,17 @@ def test_the_custom_controller_needs_no_sitl():
     """A worker node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
     components = stack_components(RUNNER_STACKS[SimulationRunner.GAZEBO_CUSTOM])
     assert components == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
-    assert images_of(components) == {GAZEBO_IMAGE, SCENARIO_EXECUTION_IMAGE, USV_NAVIGATION_IMAGE}
+    assert images_of(components) == {GAZEBO_IMAGE, SIMULATION_IMAGE, USV_NAVIGATION_IMAGE}
     assert SITL_IMAGE not in images_of(components)
+
+
+def test_a_job_takes_a_slot_of_its_type_and_of_every_subsystem_it_runs_a_task_in():
+    from scenegems_tool.cluster.fingerprints.components import SHARED_SLOT_COMPONENTS, slot_job_types
+    from scenegems_tool.cluster.protocol.jobs import JobType
+
+    stack = ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"]
+    assert SHARED_SLOT_COMPONENTS == {"monitoring": JobType.MONITORING_POST_HOC}
+    assert slot_job_types(JobType.SIMULATION, stack) == (JobType.SIMULATION,)
+    assert slot_job_types(JobType.SIMULATION, stack + ["monitoring"]) == (JobType.SIMULATION, JobType.MONITORING_POST_HOC), "judged while it runs"
+    assert slot_job_types(JobType.MONITORING_POST_HOC, ["monitoring"]) == (JobType.MONITORING_POST_HOC,), "its own slot, once"
+    assert slot_job_types(JobType.SCENE_GENERATION, []) == (JobType.SCENE_GENERATION,)

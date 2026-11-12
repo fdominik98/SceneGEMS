@@ -7,9 +7,9 @@ from scenegems_tool.cluster.control_node.api.control_node_apps import create_ope
 from scenegems_tool.cluster.control_node.api.operator_routes import STATUS_PATH, WORKER_NODES_PATH
 from scenegems_tool.cluster.control_node.control_plane import ControlPlane
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENE_GENERATION_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream
+from scenegems_tool.cluster.protocol.messages import Cancel, Drain, JobStatus, LeaseOffer, LogLine, LogLines, LogStream, StartJob
 from scenegems_tool.cluster.protocol.routes import JOBS_PATH
 from tests.scenegems_tool.cluster.control_node.conftest import EXPECTED, EXPECTED_BY_REPOSITORY, KINEMATIC, SCENE
 from tests.scenegems_tool.cluster.payloads import valid_payload
@@ -116,7 +116,7 @@ def test_cancel_tells_the_worker_node(client, make_worker_node, schedule):
 def test_worker_nodes_show_connection_and_fingerprint_state(client, make_worker_node, schedule):
     current = make_worker_node("current", slots={SCENE: 1}, components=["scene_generation"])
     stale = make_worker_node(
-        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "control_layer/none"], fingerprints=dict(EXPECTED, **{SCENARIO_EXECUTION_IMAGE: "old"})
+        "stale", slots={KINEMATIC: 1, SCENE: 1}, components=["simulation_layer/kinematic", "scene_generation", "control_layer/none"], fingerprints=dict(EXPECTED, **{SIMULATION_IMAGE: "old"})
     )
     current.connect()
     stale.connect()
@@ -124,12 +124,12 @@ def test_worker_nodes_show_connection_and_fingerprint_state(client, make_worker_
     worker_nodes = {worker_node["worker_node_id"]: worker_node for worker_node in client.get(WORKER_NODES_PATH).json()}
     assert worker_nodes[current.worker_node_id]["connected"] and not worker_nodes[current.worker_node_id]["out_of_date"]
     assert worker_nodes[stale.worker_node_id]["out_of_date"]
-    assert worker_nodes[stale.worker_node_id]["fingerprint_mismatches"] == [{"image": image_repository(SCENARIO_EXECUTION_IMAGE), "required": "fp-execution", "actual": "old"}]
+    assert worker_nodes[stale.worker_node_id]["fingerprint_mismatches"] == [{"image": image_repository(SIMULATION_IMAGE), "required": "fp-execution", "actual": "old"}]
     assert worker_nodes[current.worker_node_id]["slots"] == {"scene_generation": {"slots": 1, "slots_in_use": 0}}
     assert worker_nodes[current.worker_node_id]["components"] == [{"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"}]
     assert worker_nodes[stale.worker_node_id]["components"] == [
         {"component": "control_layer/none", "images": [], "state": "usable"},  # the absence of a controller has no container
-        {"component": "simulation_layer/kinematic", "images": [SCENARIO_EXECUTION_IMAGE], "state": "out_of_date"},
+        {"component": "simulation_layer/kinematic", "images": [SIMULATION_IMAGE], "state": "out_of_date"},
         {"component": "scene_generation", "images": [SCENE_GENERATION_IMAGE], "state": "usable"},
     ], "in catalog order, the stale one marked"
     assert "capabilities" not in worker_nodes[current.worker_node_id]
@@ -183,18 +183,49 @@ def test_status(client, make_worker_node):
     status = client.get(STATUS_PATH).json()
     assert status["control_node_id"] == "lab-control-node" and status["connected_worker_nodes"] == [worker_node.worker_node_id]
     assert status["expected_fingerprints"]["state"] == "ready" and status["expected_fingerprints"]["images"] == EXPECTED_BY_REPOSITORY
-    assert status["live_sessions"] is False  # no gateway
+    assert set(status) == {"control_node_id", "expected_fingerprints", "connected_worker_nodes"}
 
 
-def test_status_reports_whether_the_gateway_starts_live_sessions(plane):
-    gateway = FastAPI()
-    with TestClient(create_operator_app(plane, gateway)) as client:
-        assert client.get(STATUS_PATH).json()["live_sessions"] is True
-    with TestClient(create_operator_app(plane, gateway, live_sessions=False)) as client:
-        assert client.get(STATUS_PATH).json()["live_sessions"] is False
+def test_status_says_nothing_about_live_sessions_with_or_without_the_gateway(plane):
+    """The control node runs no live session, so its status has no such field."""
+    with TestClient(create_operator_app(plane, FastAPI())) as client:
+        assert "live_sessions" not in client.get(STATUS_PATH).json()
+    with TestClient(create_operator_app(plane)) as client:
+        assert "live_sessions" not in client.get(STATUS_PATH).json()
 
 
 def test_the_operator_app_answers_health_without_a_gateway(plane):
     with TestClient(create_operator_app(plane)) as client:
         response = client.get("/health")
     assert response.status_code == 200 and response.json() == {"status": "ok"}
+
+
+def test_start_reaches_the_worker_node_of_an_attended_job_once_it_is_ready(client, make_worker_node, schedule):
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    worker_node.connect()
+    job = _submit(client).json()
+    start_path = f"{JOBS_PATH}/{job['job_id']}/start"
+    assert client.post(start_path).status_code == 409, "a queued job waits for a worker node, not for a start"
+    schedule()
+    offer = worker_node.expect(LeaseOffer)
+    worker_node.accept(offer)
+    worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], message="bringing the stack up", detail={"phase": "preparing"}))
+    refused = client.post(start_path)
+    assert refused.status_code == 409 and "preparing" in refused.json()["detail"]
+
+    ready = {"phase": "ready_to_start", "ground_control": {"0": 49153}}
+    worker_node.send_and_sync(JobStatus(lease_id=offer.lease_id, job_id=job["job_id"], message="ready to start", detail=ready))
+    assert client.get(f"{JOBS_PATH}/{job['job_id']}").json()["progress"]["detail"] == ready, "what the console reads when it opens the job late"
+    response = client.post(start_path)
+    assert response.status_code == 200 and response.json()["started"] and response.json()["job"]["state"] == "running"
+    start = worker_node.expect(StartJob)
+    assert (start.job_id, start.attempt) == (job["job_id"], 1)
+    assert client.post(f"{JOBS_PATH}/no-such-job/start").status_code == 404
+
+
+def test_a_connected_worker_node_shows_the_address_its_control_link_comes_from(client, make_worker_node):
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    assert "address" not in worker_node.__dict__  # the view's, not the fake's
+    worker_node.connect()
+    (view,) = client.get(WORKER_NODES_PATH).json()
+    assert view["connected"] and "address" in view, "where a ground control station reaches the ports its jobs publish"

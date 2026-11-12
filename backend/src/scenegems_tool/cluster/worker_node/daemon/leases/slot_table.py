@@ -3,10 +3,14 @@
 A slot is taken when the worker node accepts a lease and given back when the job's worker has
 stopped and its containers are gone, so a slot count is never exceeded on the machine,
 not even while a cancelled job is still being torn down.
+
+A job may take slots of more than one type: a simulation that is judged while it runs takes a
+monitoring slot beside its simulation slot (cluster/fingerprints/components.py slot_job_types).
+Its slots are taken together or not at all (take_all) and given back together (give_back_all).
 """
 
 import threading
-from typing import Dict
+from typing import Dict, Iterable, Optional
 
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.worker_node_description import SlotUsage
@@ -34,6 +38,21 @@ class SlotTable:
                 return False
             self._in_use[job_type] += 1
             return True
+
+    def take_all(self, job_types: Iterable[JobType]) -> Optional[JobType]:
+        """Take one slot of each of the job types, or none of them. None when all were taken, else the first type the worker node offers none of or has none free."""
+        wanted = list(job_types)
+        with self._lock:
+            for job_type in wanted:
+                if job_type not in self._slots or self._in_use[job_type] >= self._slots[job_type]:
+                    return job_type
+            for job_type in wanted:
+                self._in_use[job_type] += 1
+            return None
+
+    def give_back_all(self, job_types: Iterable[JobType]) -> None:
+        for job_type in job_types:
+            self.give_back(job_type)
 
     def give_back(self, job_type: JobType) -> None:
         with self._lock:

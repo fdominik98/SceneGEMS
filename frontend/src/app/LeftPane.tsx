@@ -189,7 +189,7 @@ const WORKBENCH_ITEMS: NavEntry<WorkbenchView>[] = [
   { id: "sceneGeneration", label: "Scene Generation", hint: "Create a starting scene", Icon: SceneGenerationIcon },
   { id: "trajectoryGeneration", label: "Trajectory Generation", hint: "Plan the vessel routes", Icon: TrajectoryGenerationIcon },
   { id: "simulation", label: "Simulation", hint: "Watch the scenario play", Icon: SimulationIcon },
-  { id: "connections", label: "Connections", hint: "MQTT broker for live runs", Icon: ConnectionsIcon },
+  { id: "connections", label: "Connections", hint: "MQTT broker of real vessels, reference area", Icon: ConnectionsIcon },
 ];
 
 const CLUSTER_ITEMS: NavEntry<AppSection>[] = [

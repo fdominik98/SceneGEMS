@@ -1,10 +1,10 @@
 name: scenegems-${SCENEGEMS_CONTROL_NODE_ID:?set SCENEGEMS_CONTROL_NODE_ID in .env}
 
 # One control node of a SceneGEMS cluster: Postgres, the cluster broker and control-node-api. The
-# deployment tool installs this file and docker-compose.live-sessions.yml with release.json and
-# .env into one folder per control node (scenegems_tool.cluster.release.roles) and runs
-# `docker compose up -d` in that folder; COMPOSE_FILE in .env says which of the two files compose
-# reads (by default both). The images carry the release's tag, SCENEGEMS_IMAGE_TAG.
+# deployment tool installs this file with release.json and .env into one folder per control node
+# (scenegems_tool.cluster.release.roles) and runs `docker compose up -d` in that folder. The
+# images carry the release's tag, SCENEGEMS_IMAGE_TAG. The control node starts no containers of
+# its own and has no Docker socket: every subsystem runs on a worker node.
 # Control node and worker nodes trust the VPN: there are no certificates, tokens or broker accounts, and
 # the worker node API and the broker are open to every machine that can reach them.
 # The control node id scopes the project, container and volume names, and the ports come from .env,
@@ -47,9 +47,7 @@ services:
   # with the workbench gateway on this machine only. The image's command migrates the database
   # before it starts; it reads the image fingerprints its worker nodes must have from release.json. It connects
   # to cluster-broker to observe pools for the UI. It mounts the artifact volume: the
-  # content-addressed job inputs and results worker nodes up- and download. The Docker socket for the
-  # workbench's live sessions comes with docker-compose.live-sessions.yml; without that file the
-  # control node runs with live sessions off.
+  # content-addressed job inputs and results worker nodes up- and download.
   control-node-api:
     image: scenegems-control-node-api:${SCENEGEMS_IMAGE_TAG:-latest}
     container_name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-control-node-api
@@ -72,8 +70,6 @@ services:
       SCENEGEMS_OPERATOR_LISTEN_HOST: 0.0.0.0
       SCENEGEMS_OPERATOR_LISTEN_PORT: "5174"
       SCENEGEMS_OPERATOR_ALLOWED_ORIGINS: ${SCENEGEMS_OPERATOR_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
-      # On only with docker-compose.live-sessions.yml, which mounts the Docker socket
-      SCENEGEMS_LIVE_SESSIONS: "false"
       SCENEGEMS_ARTIFACT_DIR: /var/lib/scenegems/artifacts
       SCENEGEMS_ARTIFACT_MAX_BYTES: ${SCENEGEMS_ARTIFACT_MAX_BYTES:-268435456}
       SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S: ${SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S:-600}

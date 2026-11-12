@@ -53,7 +53,10 @@ describe("requiredCapabilities", () => {
 
   it("needs the monitoring job only for post hoc runs and the calibration only for repeats", () => {
     const live = requiredCapabilities(config([{ monitor: "live" }, { monitor: "empty" }]));
-    expect(live.map((capability) => capability.stage)).toEqual(["generate_scene", "generate_trajectories", "simulate"]);
+    // No monitoring job: the live run is judged while it runs, by the monitoring subsystem of the worker node that simulates it
+    expect(live.map((capability) => capability.stage)).toEqual(["generate_scene", "generate_trajectories", "simulate", "simulate"]);
+    expect(live[2]).toMatchObject({ components: [...KINEMATIC_COMPONENTS, "monitoring"], reason: "run 1 is simulated on the kinematic layer, judged by the monitoring subsystem as it runs." });
+    expect(live[3]).toMatchObject({ components: KINEMATIC_COMPONENTS, reason: "run 2 is simulated on the kinematic layer." });
     const repeated = requiredCapabilities(config([{ name: "nav", monitor: "post_hoc", repeats: 3 }, { monitor: "post_hoc", repeats: 2 }]));
     expect(repeated.map((capability) => capability.stage)).toEqual(["generate_scene", "generate_trajectories", "simulate", "monitor", "calibrate"]);
     expect(repeated[3].reason).toBe("The post hoc monitor judges nav and run 2.");
@@ -73,7 +76,7 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
   it("needs the layers of the run's stack", () => {
     const required = requiredCapabilities(config([sitl]));
     expect(required[2]).toMatchObject({ jobType: "simulation", stage: "simulate", components: SITL_WORKER_NODE, reason: "The run is simulated on ArduPilot SITL." });
-    expect(requiredCapabilities(config([world, { ...world, name: "again" }]))[2].reason).toBe("Each of the 2 runs is simulated on Gazebo.");
+    expect(requiredCapabilities(config([world, { ...world, name: "again" }]))[2].reason).toBe("Each of the 2 runs is simulated on Gazebo, judged by the monitoring subsystem as it runs.");
     const navigation = requiredCapabilities(config([{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" } }]))[2];
     expect(navigation.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
     expect(navigation.reason).toBe("The run is simulated on the kinematic layer with USV Navigation.");
@@ -82,13 +85,13 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
   it("needs one simulation per distinct set of components, naming the runs of each", () => {
     const required = requiredCapabilities(config([{ name: "kinematic" }, sitl, world, { ...sitl, name: "sitl again" }]));
     const simulations = required.filter((capability) => capability.stage === "simulate");
-    expect(simulations.map((capability) => [capability.jobType, capability.components.at(-1), capability.reason])).toEqual([
+    expect(simulations.map((capability) => [capability.jobType, capability.components.find((component) => component.startsWith("simulation_layer/")), capability.reason])).toEqual([
       ["simulation", "simulation_layer/kinematic", "kinematic is simulated on the kinematic layer."],
       ["simulation", "simulation_layer/ardupilot_sim", "sitl and sitl again are simulated on ArduPilot SITL."],
-      ["simulation", "simulation_layer/gazebo", "run 3 is simulated on Gazebo."],
+      ["simulation", "simulation_layer/gazebo", "run 3 is simulated on Gazebo, judged by the monitoring subsystem as it runs."],
     ]);
     expect(capabilityLabel("simulation")).toBe("Simulation");
-    expect(needLabel(simulations[2])).toBe("simulation with Replay, ArduPilot and Gazebo");
+    expect(needLabel(simulations[2])).toBe("simulation with Replay, ArduPilot, Gazebo and Monitoring");
     expect(needLabel(required[0])).toBe("scene generation");
   });
 
@@ -99,7 +102,7 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
     expect(startBlocker(plan)).toBe("No usable machine of the campaign runs simulation with Replay, ArduPilot and ArduPilot SITL.");
     expect(planOfConfig(config([sitl], {}), workerNodes).missing).toEqual([]);
     // a SITL worker node does not run Gazebo runs
-    expect(planOfConfig(config([world], {}), workerNodes).missing.map((capability) => capability.components.at(-1))).toEqual(["simulation_layer/gazebo"]);
+    expect(planOfConfig(config([world], {}), workerNodes).missing.map((capability) => capability.components.slice(-2))).toEqual([["simulation_layer/gazebo", "monitoring"]]);
   });
 
   it("does not count a component that is out of date on the worker node", () => {

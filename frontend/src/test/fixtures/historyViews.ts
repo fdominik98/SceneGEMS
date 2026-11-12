@@ -243,11 +243,3 @@ export const sampleScenarioConfig = {
   },
   scene_generation: { monitor: "post_hoc" },
 };
-
-/** The `run_recording` gateway messages in the order a live session produces them. */
-export const sampleRunRecordingMessages = [
-  { type: "run_recording", status: "recording", campaignId: "wb3", caseId: 1, message: "Recording the run as a workbench entry" },
-  { type: "run_recording", status: "saved", campaignId: "wb3", caseId: 1, message: null },
-  { type: "run_recording", status: "failed", campaignId: "wb3", caseId: 1, message: "the control node refused the run record" },
-  { type: "run_recording", status: "unavailable", campaignId: null, caseId: null, message: "the gateway runs without a control node" },
-];

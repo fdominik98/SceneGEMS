@@ -17,7 +17,7 @@ import threading
 import time
 from collections import deque
 from datetime import datetime, timezone
-from typing import Callable, Deque, List, Optional, Tuple
+from typing import Any, Callable, Deque, Dict, List, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.messages import JobStatus, LogLine, LogLines, LogStream
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
@@ -54,7 +54,7 @@ class ReportBatcher:
         self._burst_lines = burst_lines
         self._lock = threading.Lock()
         self._lines: Deque[LogLine] = deque(maxlen=max_buffered_lines)
-        self._status: Optional[Tuple[str, Optional[float]]] = None
+        self._status: Optional[Tuple[str, Optional[float], Optional[Dict[str, Any]]]] = None
         self._status_dirty = False
         self._status_sent_at: Optional[float] = None
         self._tokens = float(burst_lines)
@@ -64,11 +64,11 @@ class ReportBatcher:
 
     # JobReport
 
-    def status(self, message: str, progress: Optional[float] = None) -> None:
+    def status(self, message: str, progress: Optional[float] = None, detail: Optional[Dict[str, Any]] = None) -> None:
         if progress is not None:
             progress = min(1.0, max(0.0, float(progress)))
         with self._lock:
-            self._status = (str(message)[:MAX_LINE_CHARACTERS], progress)
+            self._status = (str(message)[:MAX_LINE_CHARACTERS], progress, dict(detail) if detail else None)
             self._status_dirty = True
 
     def log(self, source: str, text: str, stream: LogStream = LogStream.STDOUT) -> None:
@@ -91,8 +91,8 @@ class ReportBatcher:
         frames: List[ProtocolFrame] = []
         with self._lock:
             if self._status_dirty and (force or self._status_sent_at is None or now - self._status_sent_at >= self._status_interval_s):
-                message, progress = self._status
-                frames.append(JobStatus(lease_id=self.lease_id, job_id=self.job_id, message=message, progress=progress))
+                message, progress, detail = self._status
+                frames.append(JobStatus(lease_id=self.lease_id, job_id=self.job_id, message=message, progress=progress, detail=detail))
                 self._status_dirty = False
                 self._status_sent_at = now
             pending = [*self._lines, *self._drop_notes()]

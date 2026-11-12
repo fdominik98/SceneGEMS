@@ -3,8 +3,9 @@ import ssl
 import paho.mqtt.client as mqtt
 import pytest
 
-from scenegems_tool.messaging import mqtt_client
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, resolve_mqtt_broker_endpoints
+from scenegems_tool.messaging.mqtt_agent_client import MqttAgentClient
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, mqtt_container_environment, service_name_from_environment
+from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_scene
 
 
 class _RecordingClient:
@@ -48,7 +49,7 @@ def test_cluster_tls_verifies_the_broker_against_the_ca():
 
 
 @pytest.mark.parametrize("allow_certificates,requirement", [(False, ssl.CERT_REQUIRED), (True, ssl.CERT_NONE)])
-def test_tls_without_a_ca_keeps_the_workbench_behaviour(allow_certificates, requirement):
+def test_tls_without_a_ca_trusts_the_system_store_or_nothing(allow_certificates, requirement):
     client = _RecordingClient()
     _info(port=8883, tls_connection=True, allow_certificates=allow_certificates).apply_to(client)
     assert client.calls == [("tls_set", {"cert_reqs": requirement}), ("tls_insecure_set", True)]
@@ -103,24 +104,33 @@ def test_repr_hides_the_password():
     assert "secret-pw" not in repr(_info(password="secret-pw"))
 
 
-@pytest.fixture
-def in_container(monkeypatch):
-    monkeypatch.setattr(mqtt_client, "_running_in_container", lambda: True)
+def test_a_connection_has_no_topic_prefix_and_a_client_uses_its_topics_as_they_are():
+    """Topics tell instances apart by the names in them (messaging/topic_layout.py); nothing is put in front of a topic."""
+    info = _info()
+    assert not hasattr(info, "topic_prefix") and not hasattr(info, "with_topic_prefix")
+    assert "MQTT_TOPIC_PREFIX" not in mqtt_container_environment(info)
+    assert not hasattr(MQttConnectionInfo.from_environment({"MQTT_BROKER": "broker", "MQTT_PORT": "1883", "MQTT_TOPIC_PREFIX": "scenegems/m1/workbench/live-1/"}), "topic_prefix")
+    scene = encounter_scene("head_on")
+    vessel = scene.get_by_id("0")
+    client = MqttAgentClient(vessel, info, "waraps/unit/surface/simulation/os", "autonomous", "os", GEOFENCE, scene[vessel], "simulation-subsystem-1", [])
+    assert type(client.client) is mqtt.Client, "a plain paho client: no wrapper rewrites the topics"
+    assert client.client.on_message == client.on_message
 
 
-@pytest.mark.parametrize("loopback", ["localhost", "127.0.0.1", "::1", " LocalHost "])
-def test_a_loopback_broker_is_the_control_node_machine_from_its_container(in_container, loopback):
-    assert resolve_mqtt_broker_endpoints(loopback, loopback, 1882, tls_connection=False) == ("host.docker.internal", "host.docker.internal", 1882)
+def test_the_topic_root_is_waraps_unless_the_broker_is_the_clusters():
+    plain = MQttConnectionInfo("", "", "broker", "broker", 1883, False, False)
+    assert plain.topic_root == "waraps" and "MQTT_TOPIC_ROOT" not in mqtt_container_environment(plain), "a WARA-PS or other external broker"
+    cluster = plain.with_topic_root("scenegems")
+    assert cluster.topic_root == "scenegems" and plain.topic_root == "waraps", "a copy"
+    environment = mqtt_container_environment(cluster)
+    assert environment["MQTT_TOPIC_ROOT"] == "scenegems"
+    assert MQttConnectionInfo.from_environment(environment).topic_root == "scenegems", "the container reads it back"
+    assert MQttConnectionInfo.from_environment(mqtt_container_environment(plain)).topic_root == "waraps"
+    with pytest.raises(ValueError):
+        plain.with_topic_root("scenegems/local-cluster")
 
 
-def test_other_brokers_and_the_port_stay_as_typed(in_container):
-    assert resolve_mqtt_broker_endpoints(" 10.0.0.5 ", "broker", 1883, tls_connection=False) == ("10.0.0.5", "broker", 1883)
-
-
-def test_a_tls_broker_keeps_its_name(in_container):
-    assert resolve_mqtt_broker_endpoints("localhost", "localhost", 8883, tls_connection=True) == ("localhost", "localhost", 8883)
-
-
-def test_outside_a_container_loopback_stays(monkeypatch):
-    monkeypatch.setattr(mqtt_client, "_running_in_container", lambda: False)
-    assert resolve_mqtt_broker_endpoints("localhost", "127.0.0.1", 1883, tls_connection=False) == ("localhost", "127.0.0.1", 1883)
+def test_a_service_takes_the_name_its_launcher_chose():
+    assert service_name_from_environment("scene-generation-subsystem", {"MQTT_SERVICE_NAME": "scene-generation-subsystem-2"}) == "scene-generation-subsystem-2"
+    assert service_name_from_environment("scene-generation-subsystem", {"MQTT_SERVICE_NAME": "  "}) == "scene-generation-subsystem"
+    assert service_name_from_environment("scene-generation-subsystem", {}) == "scene-generation-subsystem"

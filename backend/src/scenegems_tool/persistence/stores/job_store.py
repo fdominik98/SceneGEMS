@@ -25,12 +25,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, sessionmaker
 
 from scenegems_tool.cluster.fingerprints.comparison import with_legacy_names
+from scenegems_tool.cluster.fingerprints.components import SHARED_SLOT_COMPONENTS
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.persistence.clock import Clock, utc_now
 from scenegems_tool.persistence.database import transaction
 from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, JobRow, WorkerNodeRow, WorkerNodeStatus
-from scenegems_tool.persistence.stores.job_claim import free_job_types, next_queued_job_query
+from scenegems_tool.persistence.stores.job_claim import free_job_types, full_shared_components, next_queued_job_query, slot_usage
 from scenegems_tool.persistence.stores.job_event_log import append_job_event, job_events, rejections_since
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES, lease_is_current, result_status, retry_backoff_s, state_after_failed_attempt
 from scenegems_tool.persistence.stores.job_records import CancelOutcome, ExpiredLease, JobEventRecord, JobRecord, Lease, ResultReport, ResultStatus, SubmitOutcome
@@ -163,7 +164,8 @@ class JobStore:
         """Leases the next matching queued job to the worker node, or returns None.
 
         Considers only online worker nodes and job types the worker node has a free slot for (slots minus
-        its leased and running jobs of that type), optionally limited to job_types, and skips
+        its leased and running jobs of that type, and minus the jobs of other types that share the type's
+        slots: a simulation judged while it runs takes a monitoring slot), optionally limited to job_types, and skips
         the jobs in exclude_job_ids and those not available yet. A job's components must be among
         components (the worker node's usable ones, which the scheduler passes) or, when None, among the
         worker node's stored components. The match on labels, components, fingerprints, resources and allowed worker nodes and the
@@ -181,13 +183,35 @@ class JobStore:
             if worker_node.status != WorkerNodeStatus.ONLINE:
                 return None
             active_counts = dict(session.execute(select(JobRow.job_type, func.count()).where(JobRow.lease_owner == worker_node_id, JobRow.state.in_(ACTIVE_STATES)).group_by(JobRow.job_type)).all())
-            job_types = free_job_types({capability.job_type: capability.slots for capability in worker_node.capabilities}, active_counts, job_types)
+            sharing_counts = {
+                component: session.execute(
+                    select(func.count()).where(
+                        JobRow.lease_owner == worker_node_id,
+                        JobRow.state.in_(ACTIVE_STATES),
+                        JobRow.job_type != slot_type,
+                        JobRow.required_components.contains([component]),
+                    )
+                ).scalar_one()
+                for component, slot_type in SHARED_SLOT_COMPONENTS.items()
+            }
+            slots = {capability.job_type: capability.slots for capability in worker_node.capabilities}
+            usage = slot_usage(active_counts, sharing_counts)
+            job_types = free_job_types(slots, usage, job_types)
             if not job_types:
                 return None
             fingerprints = with_legacy_names({fingerprint.image: fingerprint.fingerprint for fingerprint in worker_node.fingerprints})
             offered = sorted(components) if components is not None else [component.component for component in worker_node.components]
             query = next_queued_job_query(
-                job_types, worker_node.labels, fingerprints, worker_node.free_memory_mb, worker_node.cpus, exclude_job_ids, now=now, worker_node_id=worker_node_id, components=offered
+                job_types,
+                worker_node.labels,
+                fingerprints,
+                worker_node.free_memory_mb,
+                worker_node.cpus,
+                exclude_job_ids,
+                now=now,
+                worker_node_id=worker_node_id,
+                components=offered,
+                without_components=full_shared_components(slots, usage),
             )
             row = session.execute(query).scalar_one_or_none()
             if row is None:

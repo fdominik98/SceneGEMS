@@ -99,6 +99,8 @@ const workerNodeViewFields = z.object({
   name: z.string(),
   /** The machine the worker node runs on (P5.1); missing or null from control nodes before it. */
   machine: z.string().nullable().optional(),
+  /** Where the worker node's control link comes from, while it is connected: where Mission Planner reaches the ports its jobs publish. */
+  address: z.string().nullable().optional(),
   status: workerNodeStatusSchema,
   connected: z.boolean(),
   /** Some component's images differ from the release; those components get no jobs, the others do. */
@@ -129,8 +131,6 @@ export const controlNodeStatusSchema = z.object({
     images: stringMap,
   }),
   connected_worker_nodes: z.array(z.string()),
-  /** Whether the control node's workbench gateway starts live sessions (it needs the Docker socket); absent from older control nodes. */
-  live_sessions: z.boolean().optional(),
 });
 export type WorkerNodeView = z.infer<typeof workerNodeViewSchema>;
 export type WorkerNodeComponentView = z.infer<typeof workerNodeComponentSchema>;
@@ -153,6 +153,8 @@ export const jobProgressSchema = z.object({
   progress: z.number().nullable(),
   message: z.string(),
   at: isoTime,
+  /** What the job said beyond its message: an attended simulation's phase and the ports of its ground control stations. */
+  detail: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export const logLineSchema = z.object({
@@ -201,6 +203,9 @@ export const jobDetailSchema = jobViewSchema.extend({
   /** The recent log lines the control node keeps (at most 200). */
   log_lines: z.array(logLineSchema),
 });
+
+/** The answer to an operator's Start of an attended simulation. */
+export const startJobResultSchema = z.object({ started: z.boolean(), job: z.lazy(() => jobViewSchema) });
 
 export const cancelJobResultSchema = z.object({
   cancelled: z.boolean(),

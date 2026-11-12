@@ -150,3 +150,22 @@ def test_list_worker_nodes(worker_node_store):
     worker_node_store.set_status("worker-node-b", WorkerNodeStatus.DRAINING)
     assert [worker_node.worker_node_id for worker_node in worker_node_store.list_worker_nodes()] == ["worker-node-a", "worker-node-b"]
     assert [worker_node.worker_node_id for worker_node in worker_node_store.list_worker_nodes(WorkerNodeStatus.DRAINING)] == ["worker-node-b"]
+
+
+def test_every_worker_node_gets_the_lowest_free_instance_number_and_keeps_it(worker_node_store):
+    first = worker_node_store.register(make_hello("worker-node-a"))
+    second = worker_node_store.register(make_hello("worker-node-b"))
+    third = worker_node_store.register(make_hello("worker-node-c"))
+    assert (first.instance_number, second.instance_number, third.instance_number) == (1, 2, 3)
+    assert worker_node_store.register(make_hello("worker-node-b", slots={KINEMATIC: 1})).instance_number == 2, "a reconnect keeps the number its pools are named by"
+    assert worker_node_store.get("worker-node-c").instance_number == 3
+    assert [worker_node.instance_number for worker_node in worker_node_store.list_worker_nodes()] == [1, 2, 3]
+
+
+def test_a_removed_worker_nodes_number_is_free_for_the_next_new_one(worker_node_store):
+    for worker_node_id in ("worker-node-a", "worker-node-b", "worker-node-c"):
+        worker_node_store.register(make_hello(worker_node_id))
+    worker_node_store.set_status("worker-node-b", WorkerNodeStatus.OFFLINE)
+    worker_node_store.remove_offline("worker-node-b")
+    assert worker_node_store.register(make_hello("worker-node-d")).instance_number == 2, "numbers stay small"
+    assert worker_node_store.register(make_hello("worker-node-b")).instance_number == 4

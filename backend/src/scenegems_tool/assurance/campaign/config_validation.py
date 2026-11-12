@@ -22,6 +22,7 @@ import numpy as np
 
 from scenegems_tool.assurance.campaign.campaign_config import (
     ArdupilotStackConfig,
+    AttendedStackConfig,
     CampaignConfig,
     CampaignConfigError,
     CampaignStep,
@@ -96,7 +97,11 @@ def _layers(stack: StackConfig) -> Tuple[ControlLayerId, SimulationLayerId]:
 
 
 def vessel_stacks(stack: StackConfig) -> Dict[str, VesselStackConfig]:
-    """The triple of the own ship and of the target ships for a run's stack: every vessel replays, and in mode usv_navigation the own ship runs USV Navigation."""
+    """The triple of the own ship and of the target ships for a run's stack: every vessel replays, and in mode usv_navigation the own ship runs USV Navigation.
+
+    An attended stack names each vessel's triple itself, so its stacks are by agent id."""
+    if isinstance(stack, AttendedStackConfig):
+        return {agent_id: vessel.stack for agent_id, vessel in stack.instance().vessels.items()}
     control_layer, simulation_layer = _layers(stack)
     replay = VesselStackConfig(AsvSystemId.REPLAY, control_layer, simulation_layer)
     if stack.mode == KinematicMode.USV_NAVIGATION:
@@ -129,9 +134,22 @@ def _calm_only(run: RunConfig) -> List[str]:
     return reasons
 
 
-def resolve_run(run: RunConfig, run_index: int, resolver: StackResolver) -> Tuple[Optional[RunStacks], List[str]]:
-    """The run's stacks on the resolver, as an unattended run; the reasons when it refuses them."""
+def resolve_run(run: RunConfig, run_index: int, resolver: StackResolver, attended: bool = False) -> Tuple[Optional[RunStacks], List[str]]:
+    """The run's stacks on the resolver, as an unattended run; the reasons when it refuses them.
+
+    attended: the config is a workbench entry, whose operator is there to start a run. Only then may a run have an attended
+    stack, which the resolver judges as an attended run (Mission Planner is allowed)."""
     label = f"execution.runs.{run_index}" + (f" ({run.name})" if run.name else "")
+    if isinstance(run.stack, AttendedStackConfig):
+        if not attended:
+            return None, [f"{label}: an attended run waits for its operator's Start, so only a workbench entry may have one"]
+        instance = run.stack.instance()
+        resolution = resolver.resolve_instance(instance, attended=True)
+        if resolution.errors or not resolution.accepted:
+            return None, [f"{label}: {error}" for error in resolution.errors] or [f"{label}: the resolver refuses the setup"]
+        tier = resolution.repeatability_tier
+        environment = {key: value for key, value in resolution.effective_environment().items() if key != "seed"}
+        return RunStacks(run_index, vessel_stacks(run.stack), None if tier is None else tier.value, environment, resolution.warnings), []
     stacks = vessel_stacks(run.stack)
     reasons = _calm_only(run) if isinstance(run.stack, ArdupilotStackConfig) else []
     instance = SimulationInstanceConfig(
@@ -247,8 +265,11 @@ def validate_campaign_config(
     resolver: Optional[StackResolver] = None,
     artifact_exists: Optional[ArtifactExists] = None,
     read_artifact: Optional[ReadArtifact] = None,
+    attended: bool = False,
 ) -> ValidatedCampaign:
     """Checks the config against the catalog, the artifact store and the resolver; raises CampaignConfigRejected with every reason.
+
+    attended: the config is a workbench entry, so a run may be an attended one (resolve_run).
 
     artifact_exists and read_artifact reach the control node's artifact store; a config with
     functional scenarios or items given is rejected without them.
@@ -262,7 +283,7 @@ def validate_campaign_config(
     if config.runs_step(CampaignStep.SIMULATION):
         resolver = resolver or default_resolver()
         for run_index, run in enumerate(config.execution.runs):
-            resolved, run_reasons = resolve_run(run, run_index, resolver)
+            resolved, run_reasons = resolve_run(run, run_index, resolver, attended)
             reasons.extend(run_reasons)
             if resolved is not None:
                 runs.append(resolved)

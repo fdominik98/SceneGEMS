@@ -3,7 +3,7 @@
 The worker node opens the WebSocket (outbound only) and sends Hello first; the control node answers
 Welcome or ProtocolError. After that:
 
-    control node to worker node: LeaseOffer, LeaseRenewed, Drain, Cancel, Observe, ProtocolError
+    control node to worker node: LeaseOffer, LeaseRenewed, Drain, Cancel, Observe, StartJob, ProtocolError
     worker node to control node: Heartbeat, LeaseAccept, LeaseReject, LeaseRenew, LeaseRelease,
                     JobStatus, JobResult, LogLines, ObservationFrames
 
@@ -29,6 +29,15 @@ DEFAULT_OBSERVED_SPEED = 10.0  # an observed run's pace as a multiple of real ti
 MAX_OBSERVED_SPEED = 1000.0
 MAX_OBSERVATION_FRAMES = 200  # frames per ObservationFrames batch
 MAX_OBSERVATION_BATCH_BYTES = 8 * 1024 * 1024  # the worker node keeps a batch's frames below this, far under the link's 64 MiB
+
+# Keys and values of JobStatus.detail
+STATUS_PHASE = "phase"  # where an attended simulation is
+PHASE_PREPARING = "preparing"  # its stack is coming up
+PHASE_READY_TO_START = "ready_to_start"  # it waits for the operator's Start (StartJob)
+PHASE_RUNNING = "running"
+STATUS_GROUND_CONTROL = "ground_control"  # agent id to the port on the worker node's host a ground control station connects to
+# With a real vessel, before the Start: agent id to what its agent reports (connected, position, armable, at_start); the run is ready when all are true
+STATUS_VESSELS = "vessels"
 
 # Worker node to control node
 
@@ -84,6 +93,8 @@ class JobStatus(ProtocolFrame):
     job_id: str
     progress: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     message: str = ""
+    # What the job says beyond its message: the phase of an attended simulation, the ports its stack published (job_container_io.py)
+    detail: Optional[Dict[str, Any]] = None
 
 
 class JobResult(ProtocolFrame):
@@ -134,6 +145,8 @@ class ObservationFrames(ProtocolFrame):
 class Welcome(ProtocolFrame):
     type: Literal["welcome"] = "welcome"
     control_node_id: str
+    # The worker node's number in the cluster, the same on every connection: it names the worker node's pooled services on MQTT
+    instance_number: int = Field(ge=1)
     heartbeat_interval_s: float = Field(gt=0.0)
     lease_timeout_s: float = Field(gt=0.0)
 
@@ -175,6 +188,14 @@ class Observe(ProtocolFrame):
     speed: float = Field(default=DEFAULT_OBSERVED_SPEED, gt=0.0, le=MAX_OBSERVED_SPEED)  # multiple of real time
 
 
+class StartJob(ProtocolFrame):
+    """The operator's Start of an attended simulation that waits for it; a job that does not wait ignores it."""
+
+    type: Literal["start_job"] = "start_job"
+    job_id: str
+    attempt: int = Field(ge=1)
+
+
 class ProtocolErrorCode(str, Enum):
     VERSION_MISMATCH = "version_mismatch"
     MALFORMED_FRAME = "malformed_frame"
@@ -195,6 +216,6 @@ WorkerNodeMessage = Annotated[
     Field(discriminator="type"),
 ]
 ControlNodeMessage = Annotated[
-    Union[Welcome, LeaseOffer, LeaseRenewed, Drain, Cancel, Observe, ProtocolError],
+    Union[Welcome, LeaseOffer, LeaseRenewed, Drain, Cancel, Observe, StartJob, ProtocolError],
     Field(discriminator="type"),
 ]

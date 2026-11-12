@@ -6,7 +6,7 @@ services:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
     - SITL_FRAME=motorboat
-    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/scenario_execution/gen_tmp/params-agent_0.params
+    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_0.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
     - SITL_SPEEDUP=5
@@ -30,7 +30,7 @@ services:
     networks:
     - maritime_net
   agent_0_asv_system:
-    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
@@ -48,7 +48,7 @@ services:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
     - SITL_FRAME=motorboat
-    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/scenario_execution/gen_tmp/params-agent_1.params
+    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_1.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
     - SITL_SPEEDUP=5
@@ -72,7 +72,7 @@ services:
     networks:
     - maritime_net
   agent_1_asv_system:
-    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
@@ -85,7 +85,6 @@ services:
     - maritime_net
 networks:
   maritime_net:
-    name: asv_maritime_net
     driver: bridge
 volumes:
   scenegems_runtime_assets:

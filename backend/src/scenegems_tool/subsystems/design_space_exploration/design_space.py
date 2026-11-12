@@ -16,13 +16,14 @@ relations, the fixed ones included), so it reads as a FEC specification of the c
 
 The generator names an object it creates after its class, with the first letter in lower case and a number per class
 (`tS1`, `staticObstacle1`). catalog_object_names gives such objects the names the catalog uses (`ts1`, `obst1`), so
-a FEC reads the same wherever it comes from.
+a FEC reads the same wherever it comes from. explored_fecs makes the subsystem's result of the generator's: every
+model as a functional scenario with the catalog's names, with its counts.
 """
 
 import hashlib
 import re
 from functools import lru_cache
-from typing import Dict, Tuple
+from typing import Any, Dict, List, Mapping, Tuple
 
 from utils.file_system_utils import ASSET_FOLDER
 
@@ -139,3 +140,32 @@ def default_specification() -> str:
     """The specification the control node ships: the catalog's metamodel and constraints with the own ship fixed."""
     with open(DEFAULT_SPECIFICATION_FILE, encoding="utf-8") as file:
         return normalize_newlines(file.read())
+
+
+# What the generator says about a whole exploration, kept as it is in the result
+RESULT_SUMMARY_FIELDS = ("stop_reason", "complete", "models_found", "max_models", "random_seed", "elapsed_s", "message")
+
+
+def explored_fecs(generated: Mapping[str, Any]) -> Dict[str, Any]:
+    """The result of an exploration from the generator's: the models' sources as functional scenarios with the catalog's object names, with their counts.
+
+    functional_scenarios are the FECs in the order they were found, fecs their index and their vessel and obstacle
+    counts; the summary fields say how the exploration ended. ValueError for a generator result without its models' sources.
+    """
+    models = generated.get("models")
+    if not isinstance(models, list):
+        raise ValueError("the model generator returned no model list")
+    fecs: List[Dict[str, int]] = []
+    scenarios: List[str] = []
+    for index, model in enumerate(models):
+        source = model.get("source") if isinstance(model, Mapping) else None
+        if not isinstance(source, str) or not source.strip():
+            raise ValueError(f"the model generator returned model {index} without its source")
+        source = catalog_object_names(normalize_newlines(source))
+        vessels, obstacles = count_instances(source)
+        fecs.append({"index": index, "vessel_count": vessels, "obstacle_count": obstacles})
+        scenarios.append(source)
+    result: Dict[str, Any] = {field: generated.get(field) for field in RESULT_SUMMARY_FIELDS}
+    result["fecs"] = fecs
+    result["functional_scenarios"] = scenarios
+    return result

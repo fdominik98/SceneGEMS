@@ -68,7 +68,7 @@ def cluster(tmp_path_factory):
     """The plain cluster broker and the fake control node: what a worker node sees of its control node."""
     if _docker("info", check=False).returncode != 0:
         pytest.skip("Docker engine is not reachable")
-    for image in (f"scenegems-worker-node:{WORKER_NODE_IMAGE_TAG}", BROKER_IMAGE, _image(Subsystem.SCENARIO_EXECUTION), _image(Subsystem.SCENE_GENERATION)):
+    for image in (f"scenegems-worker-node:{WORKER_NODE_IMAGE_TAG}", BROKER_IMAGE, _image(Subsystem.SIMULATION), _image(Subsystem.SCENE_GENERATION)):
         if _docker("image", "inspect", image, check=False).returncode != 0:
             pytest.fail(f"Image {image} is missing; build it with ./build.sh --worker-node --backend or set the test image tags")
 
@@ -135,7 +135,7 @@ def artifact_worker_node(cluster, tmp_path_factory):
 
 
 def _running_runners(control_node_id: str, worker_node_id: str) -> int:
-    prefix = InstanceScope.per_job(control_node_id, worker_node_id, "x").docker_name.rsplit("job-", 1)[0] + "job-"
+    prefix = f"{InstanceScope.per_job(control_node_id, worker_node_id, Subsystem.SIMULATION.value, 'x').compose_project}-"  # every container of the worker node
     names = _docker("ps", "--format", "{{.Names}}", check=False).stdout.split()
     return sum(1 for name in names if name.startswith(prefix) and name.endswith("-runner"))
 

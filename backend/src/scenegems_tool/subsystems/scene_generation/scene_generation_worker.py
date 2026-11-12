@@ -1,8 +1,6 @@
-import secrets
 import time
 from copy import deepcopy
 from datetime import datetime
-from multiprocessing.synchronize import Event
 from typing import List
 
 from concrete_level.trajectory_generation.scene_builder import SceneBuilder
@@ -15,23 +13,23 @@ from logical_level.mapping.instance_initializer import RandomInstanceInitializer
 from logical_level.mapping.logical_scenario_builder import LogicalScenarioBuilder
 from logical_level.mapping.static_obstacle import StaticObstacleTypeMap
 from logical_level.mapping.vessel_type import VesselTypeMap
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import MqttSceneGenerationTask
+from scenegems_tool.subsystems.pool.pool_task import TaskChannel
+from scenegems_tool.subsystems.scene_generation.scene_generation_types import GENERATED_SCENE_STREAM, MqttSceneGenerationTask
 from utils.colregs_approximations import COLREGSConstraints
 from utils.general_utils import set_seed
 
 _MSR_CDRS_PS = "rs-msr"
-MAX_SEED = 2**31 - 1
 
 
-def run_scene_generation_worker(
-    task: MqttSceneGenerationTask,
-    generated_scene_queue,
-    terminate_event: Event,
-) -> None:
+def run_scene_generation_worker(task: MqttSceneGenerationTask, channel: TaskChannel) -> None:
+    """One task of the scene generation pool, in a process of its own: the search for a scene of the task's class.
+
+    The best scene so far goes out on the task's stream once a second, the final one at the end;
+    a cancelled search ends without a final scene.
+    """
     # Every random draw of the generation (the random instance initializer, Scenic's sampling)
-    # comes from random and numpy, so one seed at task start fixes the scene. Without a seed
-    # the task draws one, which keeps scenes random and still records how to repeat them.
-    seed = task.seed if task.seed is not None else secrets.randbelow(MAX_SEED + 1)
+    # comes from random and numpy, so the task's seed fixes the scene.
+    seed = task.seed
     set_seed(seed)
     colregs_constants = COLREGSConstraints.from_file_content(task.colregs_constraints_content)
     vessel_type_map = VesselTypeMap(task.vessel_types_content)
@@ -73,10 +71,10 @@ def run_scene_generation_worker(
         eval_data.best_fitness = aggregate.evaluate(solution)
         eval_data.best_fitness_index = penalty.value
         eval_data.evaluation_time = runtime if eval_data.is_valid else eval_data.timeout
-        generated_scene_queue.put((task, eval_data, final))
+        channel.emit(GENERATED_SCENE_STREAM, eval_data, final=final)
 
     def _termination_signal() -> bool:
-        return terminate_event.is_set()
+        return channel.cancelled
 
     def _observer(solution: List[float], number_of_generations: int, runtime: float) -> None:
         nonlocal last_observer_publish_mono
@@ -91,5 +89,5 @@ def run_scene_generation_worker(
         (aggregate, logical_scenario, functional_scenario, logical_scenario.get_population(1)[0]),
         config,
     )
-    if not terminate_event.is_set():
+    if not channel.cancelled:
         _publish_generated_scene(some_results[0], some_results[1], some_results[2], final=True)

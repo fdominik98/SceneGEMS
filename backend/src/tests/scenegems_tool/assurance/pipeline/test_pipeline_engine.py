@@ -9,7 +9,7 @@ from scenegems_tool.assurance.campaign import campaign_config_from_dict, validat
 from scenegems_tool.assurance.pipeline.case_machine import CaseMachine
 from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.fingerprints.comparison import by_repository
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE, SCENE_GENERATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import SCENE_GENERATION_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobState, JobType
 from scenegems_tool.persistence.schema import (
     HELD_UNTIL,
@@ -131,7 +131,7 @@ def test_jobs_carry_the_pinned_fingerprints_labels_seeds_and_stage_priorities(ma
     (case,) = _cases(harness, campaign)
     jobs = {pipeline_job.stage: job for pipeline_job, job in _jobs_of(harness, case)}
     assert jobs[SCENE].requirements.fingerprints == by_repository({SCENE_GENERATION_IMAGE: EXPECTED[SCENE_GENERATION_IMAGE]})
-    assert jobs[SIMULATE].requirements.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
+    assert jobs[SIMULATE].requirements.fingerprints == by_repository({SIMULATION_IMAGE: EXPECTED[SIMULATION_IMAGE]})
     assert all(job.requirements.labels == {"site": "lab"} for job in jobs.values())
     assert [jobs[stage].priority for stage in (SCENE, TRAJECTORIES, SIMULATE, MONITOR)] == [10, 11, 12, 13]
     assert jobs[SCENE].payload["seed"] == case.seed == campaign_config_from_dict(config).case_seed(CLASS_A, 0)
@@ -155,7 +155,7 @@ def test_repeats_get_a_run_record_each_and_one_calibration(harness):
     assert len(calibrate_job.payload["trajectories"]) == 3 and calibrate_job.payload["reference"] == f"{CLASS_A}#0"
     (calibration,) = harness.stores.calibrations.list_results()
     assert (calibration.reference_scenario, calibration.repeats, calibration.exact, calibration.campaign_id) == (f"{CLASS_A}#0", 3, True, campaign.campaign_id)
-    assert calibration.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
+    assert calibration.fingerprints == by_repository({SIMULATION_IMAGE: EXPECTED[SIMULATION_IMAGE]})
     assert case.progress["runs"]["0"]["calibrated"] is True
 
 
@@ -187,7 +187,7 @@ def test_verdicts_and_run_records_carry_what_the_runs_reported(make_harness):
     sim_job = next(job for pipeline_job, job in _jobs_of(harness, case) if pipeline_job.stage == SIMULATE)
     assert (record.job_id, record.worker_node_id, record.steps, record.dt) == (sim_job.job_id, "fake-worker-node", 10, 1.0)
     assert record.state_digest == sim_job.result["state_digest"] and record.repeatability_tier == "exact"
-    assert record.fingerprints == by_repository({SCENARIO_EXECUTION_IMAGE: EXPECTED[SCENARIO_EXECUTION_IMAGE]})
+    assert record.fingerprints == by_repository({SIMULATION_IMAGE: EXPECTED[SIMULATION_IMAGE]})
     assert set(record.durations_s) == {"queued_s", "running_s", "total_s"}
     assert record.stack["config"]["mode"] == "replay" and record.stack["run_record"]["run_seed"] == record.seed
     assert record.environment == {"wind_vector": [0.0, 0.0, 0.0]}

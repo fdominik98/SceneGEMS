@@ -79,9 +79,7 @@ def test_the_cluster_broker_needs_only_a_host():
         ControlNodeSettings.from_environment(dict(environ, SCENEGEMS_BROKER_PORT="plain"))
 
 
-def test_live_sessions_are_on_unless_turned_off():
-    assert ControlNodeSettings.from_environment(REQUIRED).live_sessions is True
-    for text, expected in (("false", False), ("0", False), ("off", False), ("TRUE", True), ("yes", True), (" ", True)):
-        assert ControlNodeSettings.from_environment(dict(REQUIRED, SCENEGEMS_LIVE_SESSIONS=text)).live_sessions is expected, text
-    with pytest.raises(ValueError, match="SCENEGEMS_LIVE_SESSIONS"):
-        ControlNodeSettings.from_environment(dict(REQUIRED, SCENEGEMS_LIVE_SESSIONS="maybe"))
+def test_the_control_node_has_no_setting_for_live_sessions():
+    """It starts no containers; a .env of an earlier release may still name the variable, which is not read."""
+    settings = ControlNodeSettings.from_environment(dict(REQUIRED, SCENEGEMS_LIVE_SESSIONS="maybe"))
+    assert not hasattr(settings, "live_sessions")

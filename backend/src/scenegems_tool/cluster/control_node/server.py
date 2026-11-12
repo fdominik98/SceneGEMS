@@ -76,14 +76,8 @@ def build_control_node(settings: ControlNodeSettings, with_gateway: bool = True)
     live = build_live_channel(settings, plane, assurance)
     gateway = None
     if with_gateway:
+        # The console's helper socket: it reads scenario files and generates vessel models in this process and starts nothing
         from scenegems_tool.gateway.websocket_app import app as gateway
-        from scenegems_tool.gateway.websocket_app import set_live_sessions, set_run_recorder
-
-        set_run_recorder(build_run_recorder(plane, assurance, artifacts, live), gateway)
-        set_live_sessions(settings.live_sessions, gateway)
-    live_sessions = gateway is not None and settings.live_sessions
-    if not live_sessions:
-        logger.info("Live sessions are off on this control node (SCENEGEMS_LIVE_SESSIONS or --no-workbench): the workbench refuses them")
 
     return create_control_node_apps(
         plane,
@@ -92,17 +86,7 @@ def build_control_node(settings: ControlNodeSettings, with_gateway: bool = True)
         assurance=assurance,
         allowed_origins=settings.operator_allowed_origins,
         live=live,
-        live_sessions=live_sessions,
     )
-
-
-def build_run_recorder(plane: ControlPlane, assurance: AssuranceStores, artifacts: ControlNodeArtifacts, live: LiveChannel):
-    """The gateway's recorder of live sessions: workbench entries on the control node's stores, artifacts and pipeline engine (design doc 6.4)."""
-    from scenegems_tool.gateway.live_run_recorder import LiveRunRecorder
-
-    campaign_list = getattr(live.producers, "campaign_list", None)
-    announce = None if campaign_list is None else campaign_list.campaigns_changed
-    return LiveRunRecorder(assurance, artifacts.artifacts, plane.pipeline, max_bytes=artifacts.max_bytes, announce=announce)
 
 
 def build_live_channel(settings: ControlNodeSettings, plane: ControlPlane, assurance: AssuranceStores) -> LiveChannel:
@@ -150,10 +134,6 @@ async def serve(servers: Sequence[uvicorn.Server]) -> None:
     tasks = [asyncio.create_task(server.serve()) for server in servers]
     while not all(server.started for server in servers) and not any(task.done() for task in tasks):
         await asyncio.sleep(STARTUP_POLL_S)
-    # Again after startup: the workbench gateway's lifespan installs handlers that end the process at
-    # once. These stop every listener instead, and the gateway's lifespan teardown removes its containers.
-    for signum in (signal.SIGINT, signal.SIGTERM):
-        signal.signal(signum, stop)
     await asyncio.gather(*tasks)
 
 
@@ -173,7 +153,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     except (SettingMissing, FileNotFoundError, ValueError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
-    multiprocessing.set_start_method("spawn", force=True)  # workbench workers are spawned
+    multiprocessing.set_start_method("spawn", force=True)
     start_architecture_files_writer()  # the Capabilities page's description files, regenerated from the code on every start
     asyncio.run(serve(listeners(settings, apps)))
     return 0

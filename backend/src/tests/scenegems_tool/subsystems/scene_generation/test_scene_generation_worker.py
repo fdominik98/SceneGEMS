@@ -1,17 +1,17 @@
-"""The scene generation worker in process: a seed fixes the scene, the real seed is recorded, the last sample is final."""
+"""The scene generation worker in process: the task's seed fixes the scene and is recorded, the last sample is final, a cancelled search has none."""
 
 import hashlib
 import json
 import os
 import subprocess
 import sys
-import threading
 from pathlib import Path
 
 import pytest
 
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import MqttSceneGenerationTask
-from scenegems_tool.subsystems.scene_generation.scene_generation_worker import MAX_SEED, run_scene_generation_worker
+from scenegems_tool.subsystems.scene_generation.scene_generation_types import GENERATED_SCENE_STREAM, MqttSceneGenerationTask
+from scenegems_tool.subsystems.scene_generation.scene_generation_worker import run_scene_generation_worker
+from tests.scenegems_tool.subsystems.pool.pool_fakes import RecordingChannel
 from utils.file_system_utils import COLREGS_CONSTANTS_FOLDER, FUNCTIONAL_MODELS_FOLDER, STATIC_OBSTACLE_TYPES_FOLDER, VESSEL_TYPES_FOLDER
 
 SMALL_CLASS = "2vessel_0obstacle_scenarios"
@@ -36,19 +36,12 @@ def _task(seed, scenario_class: str = SMALL_CLASS) -> MqttSceneGenerationTask:
     )
 
 
-class _Queue:
-    def __init__(self):
-        self.items = []
-
-    def put(self, item):
-        self.items.append(item)
-
-
-def generate(seed, scenario_class: str = SMALL_CLASS):
-    """Every (evaluation data, final) the worker queued."""
-    queue = _Queue()
-    run_scene_generation_worker(_task(seed, scenario_class), queue, threading.Event())
-    return [(evaluation_data, final) for _, evaluation_data, final in queue.items]
+def generate(seed, scenario_class: str = SMALL_CLASS, cancelled: bool = False):
+    """Every (evaluation data, final) the worker put on its stream."""
+    channel = RecordingChannel(cancelled=cancelled)
+    run_scene_generation_worker(_task(seed, scenario_class), channel)
+    assert {stream for stream, _, _ in channel.emitted} <= {GENERATED_SCENE_STREAM}
+    return channel.of(GENERATED_SCENE_STREAM)
 
 
 def _scene(samples) -> str:
@@ -67,11 +60,8 @@ def test_another_seed_gives_another_scene():
     assert _scene(generate(7)) != _scene(generate(8))
 
 
-def test_without_a_seed_the_worker_draws_one_and_records_it():
-    samples = generate(None)
-    seed = samples[-1][0].random_seed
-    assert 0 <= seed <= MAX_SEED
-    assert _scene(samples) == _scene(generate(seed))
+def test_a_cancelled_search_ends_without_a_final_scene():
+    assert not [final for _, final in generate(7, cancelled=True) if final]
 
 
 _SCRIPT = """

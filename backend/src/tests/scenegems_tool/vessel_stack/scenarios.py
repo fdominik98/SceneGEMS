@@ -59,7 +59,7 @@ def stack_instance(
             str(vessel_id): VesselConfig(
                 agent_id=str(vessel_id),
                 stack=stack,
-                connection=AgentConnection(agent_name=f"agent_{vessel_id}", topic=f"waraps/unit/surface/agent_{vessel_id}", port=14550 + 10 * vessel_id),
+                connection=AgentConnection(agent_name=f"agent_{vessel_id}", topic=f"waraps/unit/surface/agent_{vessel_id}"),
                 adapter_ids=tuple(adapter_ids),
             )
             for vessel_id in vessel_ids

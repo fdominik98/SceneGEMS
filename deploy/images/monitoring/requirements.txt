@@ -5,5 +5,5 @@ numpy==2.5.4
 portion==2.6.3
 pyproj==3.8.0
 haversine==2.9.0
-# Job payloads and the cluster protocol of per-job runner containers (scenegems_tool.cluster.worker_node.jobs)
+# Models shared with the cluster's job code (scenegems_tool.cluster)
 pydantic==2.13.4

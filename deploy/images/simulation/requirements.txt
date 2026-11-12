@@ -1,0 +1,14 @@
+# Runtime dependencies for scenegems-simulation-subsystem (see deploy/images/simulation/Dockerfile).
+paho-mqtt==2.1.0
+pyyaml==6.0.3
+numpy==2.5.4
+scipy==1.18.1
+pyproj==3.8.0
+haversine==2.9.0
+# USV Navigation (colav-automaton) is not here: it runs in its own image, deploy/images/usv_navigation
+# MAVLink link of the lockstep ArduPilot adapter (vessel_stack/control_layers/ardupilot/mavlink_link.py); version measured in WP4
+pymavlink==2.4.50
+# Job payloads and the cluster protocol: the subsystem's tasks and the runner container of a run (scenegems_tool.cluster.worker_node.jobs)
+pydantic==2.13.4
+# The COLREGS monitor in process, for a run that was given no monitoring subsystem (utils/interval.py); a judged run on a worker node uses its monitoring subsystem
+portion==2.6.3

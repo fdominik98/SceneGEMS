@@ -29,14 +29,14 @@ describe("StepPanel", () => {
         title="Simulation"
         status={{ label: "Not initialized", tone: "idle" }}
         actions={null}
-        notices={[{ text: "Take the input trajectories." }, { text: "A live session needs the MQTT broker.", action: { label: "Connect it", onClick: connect } }]}
+        notices={[{ text: "Take the input trajectories." }, { text: "A real vessel needs an MQTT broker.", action: { label: "Name it", onClick: connect } }]}
       >
         {null}
       </StepPanel>
     );
     const notices = screen.getByRole("list", { name: "Before it can run" });
     expect(within(notices).getAllByRole("listitem")).toHaveLength(2);
-    await user.click(within(notices).getByRole("button", { name: "Connect it" }));
+    await user.click(within(notices).getByRole("button", { name: "Name it" }));
     expect(connect).toHaveBeenCalledTimes(1);
   });
 

@@ -55,3 +55,24 @@ def test_concurrent_takers_never_exceed_the_count():
         thread.join()
     assert taken.count(True) == 3
     assert table.in_use() == {KINEMATIC: 3}
+
+
+# A job that takes slots of two types: a simulation judged while it runs
+
+MONITORING = JobType.MONITORING_POST_HOC
+
+
+def test_the_slots_of_a_job_are_taken_together_or_not_at_all():
+    table = SlotTable({KINEMATIC: 2, MONITORING: 1})
+    assert table.take_all([KINEMATIC, MONITORING]) is None
+    assert table.in_use() == {KINEMATIC: 1, MONITORING: 1}
+    assert table.take_all([KINEMATIC, MONITORING]) == MONITORING, "the monitoring slot is in use"
+    assert table.in_use() == {KINEMATIC: 1, MONITORING: 1}, "no simulation slot was taken for the job that cannot start"
+    assert table.take_all([KINEMATIC]) is None and table.take_all([KINEMATIC]) == KINEMATIC
+    table.give_back_all([KINEMATIC, MONITORING])
+    assert table.in_use() == {KINEMATIC: 1} and table.take_all([KINEMATIC, MONITORING]) is None
+
+
+def test_a_job_that_needs_a_type_the_worker_node_does_not_offer_takes_nothing():
+    table = SlotTable({KINEMATIC: 2})
+    assert table.take_all([KINEMATIC, MONITORING]) == MONITORING and table.in_use() == {}

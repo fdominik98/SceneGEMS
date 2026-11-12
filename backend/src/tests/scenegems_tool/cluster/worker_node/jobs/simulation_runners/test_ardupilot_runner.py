@@ -11,7 +11,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.simulation_job import SimulationPayload, execute
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import STACK_NETWORK, ArduPilotSimulationPayload, build_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE
+from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, project_compose
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import StampedState
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import MavlinkRunResult
 from utils.file_system_utils import RUNTIME_ASSETS_VOLUME
@@ -30,13 +30,13 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
     job, stack = stack_for(layer, worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = [key for key in services if key.startswith("vessel_")]
-    assert sorted(vessel_services) == ["vessel_0", "vessel_0_asv_system", "vessel_1", "vessel_1_asv_system"], "SITL and a replay container per vessel"
+    vessel_services = [key for key in services if key.startswith(("os", "ts"))]
+    assert sorted(vessel_services) == ["os", "os_asv_system", "ts1", "ts1_asv_system"], "SITL and a replay container per vessel"
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
     runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-scenario-execution-subsystem:latest"
+    assert runner["image"] == "scenegems-simulation-subsystem:latest"
     assert runner["networks"] == [STACK_NETWORK]
     assert set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
     # The stack network has no fixed name, so compose scopes it by the project name.
@@ -52,18 +52,23 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
 def test_generated_files_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):
     job, stack = stack_for("gazebo", worker_node, make_job, head_on_trajectories)
     gen_folder = f"{worker_node.job_scope(job).folder}/gen"
-    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "params-vessel_0.params", "params-vessel_1.params", "trajectories.json", "vessel_0_model.sdf", "vessel_1_model.sdf"]
-    sitl_environment = stack.compose["services"]["vessel_0"]["environment"]
-    assert any(entry.startswith("SITL_PARAM_FILE=") and entry.endswith(f"{gen_folder}/params-vessel_0.params") for entry in sitl_environment)
+    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_model.sdf", "params-os.params", "params-ts1.params", "trajectories.json", "ts1_model.sdf"]
+    sitl_environment = stack.compose["services"]["os"]["environment"]
+    assert any(entry.startswith("SITL_PARAM_FILE=") and entry.endswith(f"{gen_folder}/params-os.params") for entry in sitl_environment)
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
 
 
 def test_two_jobs_get_disjoint_stacks(instances_folder, worker_node, make_job, head_on_trajectories):
     _, first = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="a")
     _, second = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="b")
-    first_names = {service["container_name"] for service in first.compose["services"].values()} | {first.project.name}
-    second_names = {service["container_name"] for service in second.compose["services"].values()} | {second.project.name}
+    first_names = {service["container_name"] for service in first.compose["services"].values()}
+    second_names = {service["container_name"] for service in second.compose["services"].values()}
     assert not first_names & second_names
+    assert first.project.name == second.project.name == "scenegems-m1-n1", "both stacks are in the worker node's project"
+    first_document, second_document = project_compose(first.scope, first.compose), project_compose(second.scope, second.compose)
+    assert not set(first_document["services"]) & set(second_document["services"]), "so compose needs their service keys to differ"
+    assert not set(first_document["networks"]) & set(second_document["networks"]), "and their network keys, or one stack would take the other's network away"
+    assert first.project.instance != second.project.instance, "and each is removed by its own label"
 
 
 def usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer="ardupilot_sim", **fields):
@@ -77,11 +82,11 @@ def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_fold
     """Every vessel has a SITL service and its ASV system container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"vessel_0", "vessel_1", "vessel_0_asv_system", "vessel_1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"os", "ts1", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
-    assert services["vessel_0"]["image"] == services["vessel_1"]["image"]
-    assert "scenegems-usv-navigation" in services["vessel_0_asv_system"]["image"]
-    assert "scenegems-scenario-execution-subsystem" in services["vessel_1_asv_system"]["image"]
+    assert services["os"]["image"] == services["ts1"]["image"]
+    assert "scenegems-usv-navigation" in services["os_asv_system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -202,15 +207,13 @@ def test_a_run_without_the_monitor_has_no_verdicts_or_trajectories(fake_sitl, ma
     assert frames and all(frame["ruleResults"] == [] for frame in frames)
 
 
-def test_the_live_monitor_gives_the_post_hoc_result_of_the_observed_run(fake_sitl, make_job, head_on_trajectories):
+def test_the_live_monitor_gives_the_post_hoc_result_of_the_observed_run(fake_sitl, make_job, head_on_trajectories, post_hoc):
     """The monitor judges every lockstep step, observed or not, as monitoring.post_hoc judges the run's trajectories."""
-    from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job
-
     job = ardupilot_job(make_job, head_on_trajectories, monitor="live", include_trajectories=True)
     result = execute(job, _quiet)
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": result["trajectories"]}), _quiet)
+    judged = post_hoc(result["trajectories"])
     summary_keys = ("scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "passed")
-    assert {key: result["monitor"][key] for key in summary_keys} == {key: post_hoc[key] for key in summary_keys}
+    assert {key: result["monitor"][key] for key in summary_keys} == {key: judged[key] for key in summary_keys}
     assert result["monitor"]["scenes"] == 121 and result["monitor"]["stopped_early_at"] is None
     observed, _ = _observe(job, speed=1.0)
     assert observed == result  # the observation changes nothing in the result

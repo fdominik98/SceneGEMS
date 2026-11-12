@@ -5,7 +5,7 @@ title: Monitoring panel
 
 # Monitoring panel
 
-The right pane of the Trajectory Generation and Simulation pages inspects the frames of a run. Its tabs switch between:
+The right pane of the Trajectory Generation and Simulation pages inspects the frames of a run. The frames come from the monitoring subsystem of a worker node, which judges a recorded run for a monitoring job and a running simulation step by step, with the same rule engine. Its tabs switch between:
 
 - **Live data**: The vessel pairs and the data of the current frame
 - **Charts**: Time-series metric charts (see [Metrics & analysis](./metrics))

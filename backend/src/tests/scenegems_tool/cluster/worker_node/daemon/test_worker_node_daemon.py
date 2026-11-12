@@ -34,6 +34,7 @@ from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 from scenegems_tool.cluster.protocol.worker_node_description import SlotOffer
 from scenegems_tool.cluster.worker_node.daemon.worker_node_daemon import DaemonStopped
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from tests.scenegems_tool.cluster.worker_node.daemon.conftest import FINGERPRINTS, make_job, make_offer, wait_for
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
 
@@ -277,8 +278,55 @@ def test_a_version_mismatch_error_from_the_control_node_stops_the_daemon(fake_co
     assert isinstance(error, DaemonStopped) and "control node speaks 2" in str(error)
 
 
+def test_the_welcome_gives_the_worker_node_its_instance_number(fake_control_node, worker_node_configuration, start_daemon):
+    fake_control_node.instance_number = 3
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.instance_number == 3
+    assert worker_node.pools.service_name(Subsystem.SCENE_GENERATION) == "scene-generation-subsystem-3", "the name its pool answers to on the cluster broker"
+
+
+def test_the_pools_of_the_worker_nodes_subsystems_start_with_the_welcome_not_with_the_first_job(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):
+    """A subsystem is long lived: its container is up before any job asks for it, under the number the control node gave the worker node."""
+    fake_control_node.instance_number = 3
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    wait_for(lambda: ("start", "scene-generation-subsystem-3") in pools_without_docker)
+    worker_node = daemon.daemon.manager.worker_node
+    wait_for(lambda: ("start", "simulation-subsystem-3") in pools_without_docker)
+    assert worker_node.pool_subsystems() == [Subsystem.SCENE_GENERATION, Subsystem.SIMULATION], "its components name scene generation and a simulation layer, not trajectory generation"
+    assert sorted(name for event, name in pools_without_docker if event == "start") == ["scene-generation-subsystem-3", "simulation-subsystem-3"]
+
+
+def test_a_worker_node_with_the_monitoring_component_starts_its_monitoring_pool(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):
+    fake_control_node.instance_number = 2
+    configuration = worker_node_configuration(SCENEGEMS_WORKER_NODE_SLOTS="monitoring.post_hoc:3", SCENEGEMS_WORKER_NODE_COMPONENTS="monitoring")
+    daemon, _, _ = connect(fake_control_node, start_daemon, configuration)
+    wait_for(lambda: ("start", "monitoring-subsystem-2") in pools_without_docker)
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.pool_subsystems() == [Subsystem.MONITORING] and worker_node.pools.get(Subsystem.MONITORING).workers == 3
+
+
+def test_a_worker_node_with_the_design_space_exploration_component_starts_its_exploration_pool(fake_control_node, worker_node_configuration, start_daemon, pools_without_docker):
+    fake_control_node.instance_number = 2
+    configuration = worker_node_configuration(SCENEGEMS_WORKER_NODE_SLOTS="design_space_exploration:2", SCENEGEMS_WORKER_NODE_COMPONENTS="design_space_exploration")
+    daemon, _, _ = connect(fake_control_node, start_daemon, configuration)
+    wait_for(lambda: ("start", "design-space-exploration-subsystem-2") in pools_without_docker)
+    worker_node = daemon.daemon.manager.worker_node
+    assert worker_node.pool_subsystems() == [Subsystem.DESIGN_SPACE_EXPLORATION] and worker_node.pools.get(Subsystem.DESIGN_SPACE_EXPLORATION).workers == 2
+
+
+def test_the_daemon_looks_after_its_pools_from_the_welcome_on(fake_control_node, worker_node_configuration, start_daemon, monkeypatch):
+    from scenegems_tool.cluster.worker_node.daemon import worker_node_daemon
+
+    monkeypatch.setattr(worker_node_daemon, "POOL_CHECK_S", 0.0)
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration())
+    checks = []
+    monkeypatch.setattr(daemon.daemon.manager.worker_node, "check_pools", lambda: checks.append(1))
+    wait_for(lambda: len(checks) >= 2)
+
+
 def test_a_welcome_from_another_control_node_stops_the_daemon(fake_control_node, worker_node_configuration, start_daemon):
-    fake_control_node.hello_reply = lambda _hello: Welcome(control_node_id="other-control-node", heartbeat_interval_s=1.0, lease_timeout_s=3.0)
+    fake_control_node.hello_reply = lambda _hello: Welcome(control_node_id="other-control-node", instance_number=1, heartbeat_interval_s=1.0, lease_timeout_s=3.0)
     error = start_daemon(worker_node_configuration()).wait_exit()
     assert isinstance(error, DaemonStopped) and "'other-control-node'" in str(error)
 

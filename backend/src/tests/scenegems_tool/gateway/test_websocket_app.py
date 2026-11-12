@@ -1,11 +1,6 @@
 """The WebSocket endpoint of the workbench gateway, driven with a scripted socket.
 
-Ported from the old test_websocket_initial_status.py, which patched simulation.backend_service.websocket_app
-and expected a `simulation_status` of `offline` first. The gateway now sends the simulation status of the empty
-simulation session (`not initialized`) and the WARA-PS connection status when a client connects.
-
-The endpoint function is called directly, without the FastAPI lifespan: the lifespan registers process signal
-handlers and shuts down Docker subsystems, which a test must not do.
+The endpoint function is called directly; the lifespan is tested apart with its folder creation replaced.
 """
 
 import json
@@ -54,14 +49,9 @@ async def test_the_connection_is_accepted():
     assert (await converse()).accepted
 
 
-async def test_initial_simulation_status_is_sent_on_connection():
-    socket = await converse()
-    assert socket.sent[0] == {"type": "simulation_status", "status": "not initialized"}
-
-
-async def test_mqtt_broker_status_is_disconnected_on_connection():
-    socket = await converse()
-    assert any(message["type"] == "mqtt_broker_status" and message["status"] == "disconnected" for message in socket.sent)
+async def test_nothing_is_sent_until_the_console_asks():
+    """The gateway has no broker, simulation or monitor to report on: it only answers its helper requests."""
+    assert (await converse()).sent == []
 
 
 async def test_the_session_is_removed_when_the_client_disconnects():
@@ -79,14 +69,20 @@ async def test_unknown_message_types_are_reported():
     assert {"type": "error", "message": "Unknown message type: make_coffee"} in socket.sent
 
 
-async def test_starting_a_simulation_that_was_never_initialized_is_an_error():
-    socket = await converse({"type": "start_simulation"})
-    assert {"type": "error", "message": "Simulation is not initialized"} in socket.sent
+async def test_the_stack_options_are_answered():
+    socket = await converse({"type": "query_stack_options"})
+    assert [message["type"] for message in socket.sent] == ["stack_options"]
+
+
+@pytest.mark.parametrize("message_type", ["connect_to_mqtt_broker", "initialize_simulation", "start_simulation", "initialize_monitor"])
+async def test_an_old_live_session_message_is_refused(message_type):
+    socket = await converse({"type": message_type})
+    assert socket.sent == [{"type": "error", "message": f"Unknown message type: {message_type}"}], "the control node runs no live session"
 
 
 async def test_an_invalid_simulation_configuration_is_rejected_with_the_reason():
     body = {
-        "type": "initialize_simulation",
+        "type": "generate_simulation_models",
         "simulatorType": "Webots",
         "windVector": [0, 0, 0],
         "wave": {"amplitude": 0, "period": 0, "steepness": 0, "direction": [0, 0]},
@@ -102,64 +98,17 @@ def test_health_endpoint():
     assert websocket_app.health() == {"status": "ok"}
 
 
-class TestRunRecorder:
-    async def test_the_gateway_on_its_own_records_nothing(self, monkeypatch):
-        monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
-        assert websocket_app.run_recorder() is None
-
-    async def test_each_connection_gets_the_recorder_the_control_node_set(self, monkeypatch):
-        monkeypatch.setattr(websocket_app.app.state, "run_recorder", None)
-        recorder = object()
-        websocket_app.set_run_recorder(recorder)
-        assert websocket_app.run_recorder() is recorder
-        sessions = []
-        create_session = websocket_app.websocket_session_manager.create_session
-
-        def created(websocket, live_sessions=True):
-            session, processor = create_session(websocket=websocket, live_sessions=live_sessions)
-            sessions.append(session)
-            return session, processor
-
-        monkeypatch.setattr(websocket_app.websocket_session_manager, "create_session", created)
-        await converse()
-        (session,) = sessions
-        assert session.run_recorder is recorder
+def test_the_gateway_has_nothing_to_do_with_docker_or_recording():
+    """It starts no container, so it installs no handler that removes any, and records no run."""
+    for name in ("shutdown_all_docker_subsystems", "_register_process_shutdown_handlers", "set_run_recorder", "set_live_sessions"):
+        assert not hasattr(websocket_app, name), name
 
 
 class TestStartup:
-    """The lifespan with its process side effects (signal handlers, Docker teardown, folders) replaced."""
-
-    @pytest.fixture(autouse=True)
-    def quiet(self, monkeypatch):
-        monkeypatch.setattr(websocket_app, "_register_process_shutdown_handlers", lambda: None)
-        monkeypatch.setattr(websocket_app, "shutdown_all_docker_subsystems", lambda: None)
-        monkeypatch.setattr(websocket_app, "ensure_directories", lambda: None)
-
-    async def test_the_live_entries_the_last_process_left_are_stopped_before_any_connection(self):
+    async def test_the_lifespan_makes_the_folders_and_ends_every_session(self, monkeypatch):
         calls = []
-
-        class Recorder:
-            async def stop_stranded_entries(self):
-                calls.append("stopped")
-                return ["entry-1"]
-
-        gateway = FastAPI()
-        websocket_app.set_run_recorder(Recorder(), gateway)
-        async with websocket_app.lifespan(gateway):
-            assert calls == ["stopped"]
-
-    async def test_a_failing_cleanup_does_not_stop_the_gateway(self):
-        class Recorder:
-            async def stop_stranded_entries(self):
-                raise ConnectionError("the database is gone")
-
-        gateway = FastAPI()
-        websocket_app.set_run_recorder(Recorder(), gateway)
-        async with websocket_app.lifespan(gateway):
-            pass
-
-    async def test_without_a_recorder_nothing_is_stopped(self):
-        gateway = FastAPI()
-        websocket_app.set_run_recorder(None, gateway)
-        async with websocket_app.lifespan(gateway):
-            pass
+        monkeypatch.setattr(websocket_app, "ensure_directories", lambda: calls.append("folders"))
+        monkeypatch.setattr(websocket_app.websocket_session_manager, "shutdown_all", lambda: calls.append("sessions ended"))
+        async with websocket_app.lifespan(FastAPI()):
+            assert calls == ["folders"]
+        assert calls == ["folders", "sessions ended"]

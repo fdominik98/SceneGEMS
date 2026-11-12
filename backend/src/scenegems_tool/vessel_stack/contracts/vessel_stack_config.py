@@ -74,11 +74,10 @@ class AgentContext(str, Enum):
 
 @dataclass
 class AgentConnection:
-    """How the workbench reaches a vessel's agent over the MQTT broker."""
+    """A vessel's name in its stack (its services are named after it) and the base topic of its agent on the MQTT broker."""
 
     agent_name: str
     topic: str
-    port: Optional[int]  # ground control station MAVLink port; a real vessel may have none
 
 
 @dataclass
@@ -114,3 +113,8 @@ class SimulationInstanceConfig:
     @property
     def simulated_vessels(self) -> Dict[str, VesselConfig]:
         return {agent_id: vessel for agent_id, vessel in self.vessels.items() if vessel.is_simulated}
+
+    @property
+    def has_real_vessel(self) -> bool:
+        """Whether a physical vessel takes part: then every vessel is driven through its ArduAgent over MQTT."""
+        return any(not vessel.is_simulated for vessel in self.vessels.values())

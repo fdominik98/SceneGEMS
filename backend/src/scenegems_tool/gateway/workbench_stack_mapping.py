@@ -14,10 +14,10 @@ Adapters: an instance with a real vessel runs through ArduAgent, which reaches r
 simulated vessels alike over the MQTT broker, so its simulated replay and Mission Planner
 vessels select the ArduAgent adapters. An instance of simulated vessels uses the registry's
 defaults (the lockstep MAVLink link, the custom controller's adapters, the Mission Planner
-ground station port), which the scenario execution worker drives with the lockstep runners.
+ground station port), which the attended simulation job drives with the lockstep runners.
 
-The labels sent back (simulation_models, the scenario execution worker body) are the ones the
-browser offers, so the round trip is unchanged.
+The labels sent back (simulation_models) are the ones the browser offers, so the round
+trip is unchanged.
 """
 
 from typing import Dict, Optional, Tuple

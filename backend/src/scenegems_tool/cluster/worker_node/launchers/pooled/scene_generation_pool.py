@@ -6,12 +6,14 @@ from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import SERVICE_CPUS, PooledService, PoolNames
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.subsystems.scene_generation.scene_generation_types import SCENE_GENERATION_SERVICE_NAME
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 _SERVICE_KEY = "scene_generation"
 
 
 class SceneGenerationPool(PooledService):
+    default_service_name = SCENE_GENERATION_SERVICE_NAME
     subsystem = Subsystem.SCENE_GENERATION
 
     @classmethod
@@ -22,6 +24,7 @@ class SceneGenerationPool(PooledService):
         reference_geofence: Geofence,
         workers: int,
         broker_network: Optional[str] = None,
+        service_name: Optional[str] = None,
     ) -> "SceneGenerationPool":
         return cls(
             PoolNames.for_scope(scope, _SERVICE_KEY),
@@ -30,4 +33,5 @@ class SceneGenerationPool(PooledService):
             cpus=workers + SERVICE_CPUS,
             workers=workers,
             broker_network=broker_network,
+            service_name=service_name,
         )

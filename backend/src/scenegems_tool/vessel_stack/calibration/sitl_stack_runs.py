@@ -307,7 +307,7 @@ def prepare_run_folder(
     else:
         instance = mavlink_instance(trajectories, spec.simulation_layer, asv_system, environment=environment, speedup=spec.speedup)
     connection = MQttConnectionInfo(user="", password="", agent_broker="broker", client_broker="broker", port=1883, tls_connection=False, allow_certificates=False)
-    pending_writes, compose = build_simulation_docker_stack_artifacts(instance, trajectories, connection, GEOFENCE, embedded_in_subsystem=True)
+    pending_writes, compose = build_simulation_docker_stack_artifacts(instance, trajectories, connection, GEOFENCE)
 
     replacements = host_assets_replacements()
     assets = os.path.join(folder, "runtime_assets")

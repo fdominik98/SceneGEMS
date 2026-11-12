@@ -28,3 +28,22 @@ def test_frame_lines_carry_one_json_object():
     assert parse_frame_line(format_frame_line("{broken")) is None
     assert parse_frame_line("frame {}") is None
     assert parse_status_line(format_frame_line("{}")) is None and parse_frame_line(format_status_line("x")) is None
+
+
+def test_a_status_line_may_carry_a_detail():
+    from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import format_status_line, parse_status
+
+    line = format_status_line("ready to start", None, {"phase": "ready_to_start"})
+    assert parse_status(line) == ("ready to start", None, {"phase": "ready_to_start"})
+    assert parse_status(format_status_line("running", 0.5)) == ("running", 0.5, None), "no detail unless the job gives one"
+    assert parse_status('scenegems-status {"message": "odd", "detail": "not an object"}') == ("odd", None, None)
+    assert parse_status("a log line") is None and parse_status("scenegems-status not json") is None
+
+
+def test_the_request_document_carries_the_operators_start():
+    from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl
+
+    assert not ObservationControl().started
+    started = ObservationControl(active=True, speed=5.0, revision=3, started=True)
+    assert ObservationControl.from_document(started.to_document()) == started
+    assert not ObservationControl.from_document('{"active": true, "speed": 5.0, "revision": 2}').started, "a document of before the start"

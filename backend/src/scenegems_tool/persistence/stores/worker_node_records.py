@@ -29,6 +29,7 @@ class WorkerNodeRecord:
     last_seen_at: datetime
     machine: Optional[str] = None  # the machine the worker node runs on, as it reported in its Hello
     components: Tuple[str, ...] = ()  # the components it offers, sorted
+    instance_number: int = 1  # the worker node's number in the cluster, unique and kept
 
     @classmethod
     def from_row(cls, row: WorkerNodeRow) -> "WorkerNodeRecord":
@@ -45,4 +46,5 @@ class WorkerNodeRecord:
             last_seen_at=row.last_seen_at,
             machine=row.machine,
             components=tuple(component.component for component in row.components),
+            instance_number=row.instance_number,
         )

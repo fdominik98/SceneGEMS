@@ -1,47 +1,36 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { usePlaybackStore } from "../../../domain/playback/playbackStore";
-import { sampleControlNodeStatus } from "../../../test/fixtures/clusterViews";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it } from "vitest";
+import { useConnectionStore } from "./connectionStore";
 import { MqttBrokerPanel } from "./MqttBrokerPanel";
 
-function serveStatus(liveSessions: boolean | undefined) {
-  const status = liveSessions === undefined ? { ...sampleControlNodeStatus, live_sessions: undefined } : { ...sampleControlNodeStatus, live_sessions: liveSessions };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL) =>
-      new URL(String(input)).pathname === "/cluster/status"
-        ? new Response(JSON.stringify(status), { status: 200, headers: { "Content-Type": "application/json" } })
-        : new Response("{}", { status: 404 })
-    )
-  );
-}
+const initialForm = useConnectionStore.getState();
 
-function renderPanel() {
-  usePlaybackStore.setState({ streamStatus: "connected", mqttBrokerStatus: "disconnected" });
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MqttBrokerPanel sendMessage={vi.fn()} />
-    </QueryClientProvider>
-  );
-}
-
-afterEach(() => {
-  vi.unstubAllGlobals();
+beforeEach(() => {
+  useConnectionStore.setState(initialForm, true);
 });
 
-describe("Connections page on a control node without live sessions", () => {
-  it("says live sessions are off and does not offer to connect", async () => {
-    serveStatus(false);
-    renderPanel();
-    expect(await screen.findByText(/Live sessions are off on this control node/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Connect" })).toBeDisabled();
+describe("Connections page", () => {
+  it("holds settings only: nothing connects from it", () => {
+    render(<MqttBrokerPanel />);
+    expect(screen.getByText(/nothing connects from this page/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Disconnect" })).toBeNull();
   });
 
-  it("says nothing when the control node has them on", async () => {
-    serveStatus(true);
-    renderPanel();
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
-    expect(screen.queryByText(/Live sessions are off/)).not.toBeInTheDocument();
+  it("asks for no address while the control node's own broker is chosen", () => {
+    render(<MqttBrokerPanel />);
+    expect(screen.getByRole("combobox")).toHaveValue("control_node_broker");
+    expect(screen.getByText(/The control node's own broker/)).toBeInTheDocument();
+    expect(screen.queryByText("Broker address")).toBeNull();
+  });
+
+  it("names another broker by the host the worker node's containers dial", async () => {
+    const user = userEvent.setup();
+    render(<MqttBrokerPanel />);
+    await user.selectOptions(screen.getByRole("combobox"), "waraps_tls_broker");
+    expect(useConnectionStore.getState()).toMatchObject({ selectedPreset: "waraps_tls_broker", agentBroker: "broker.waraps.org", port: 8883, tlsConnection: true });
+    expect(screen.getByText(/broker\.waraps\.org:8883, TLS/)).toBeInTheDocument();
+    expect(screen.getByText("Broker address")).toBeInTheDocument();
   });
 });

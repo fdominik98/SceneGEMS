@@ -22,7 +22,7 @@ export function sampleWorkerNode(overrides: Record<string, unknown> = {}): Recor
     components: [
       { component: "asv_system/replay", images: [], state: "usable" },
       { component: "control_layer/none", images: [], state: "usable" },
-      { component: "simulation_layer/kinematic", images: ["scenegems-scenario-execution-subsystem:latest"], state: "usable" },
+      { component: "simulation_layer/kinematic", images: ["scenegems-simulation-subsystem:latest"], state: "usable" },
       { component: "scene_generation", images: ["scenegems-scene-generation-subsystem:latest"], state: "usable" },
     ],
     leases: ["lease-1"],
@@ -40,7 +40,6 @@ export const sampleControlNodeStatus = {
     images: { "scenegems-worker-node": "sha256:aaaa", "scenegems-scene-generation": "sha256:bbbb" },
   },
   connected_worker_nodes: ["worker-node-a1"],
-  live_sessions: true,
 };
 
 export function sampleJob(overrides: Record<string, unknown> = {}): Record<string, unknown> {

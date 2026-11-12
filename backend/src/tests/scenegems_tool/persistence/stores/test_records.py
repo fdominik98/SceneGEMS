@@ -16,7 +16,7 @@ def _job_row(**overrides) -> JobRow:
         job_type=JobType.SIMULATION,
         payload={"steps": 300},
         required_labels={"site": "lab"},
-        required_fingerprints={"scenegems-scenario-execution": "f1"},
+        required_fingerprints={"scenegems-simulation": "f1"},
         min_memory_mb=2000,
         min_cpus=1.5,
         priority=5,
@@ -42,7 +42,7 @@ def _job_row(**overrides) -> JobRow:
 
 def test_job_record_rebuilds_the_requirements():
     record = JobRecord.from_row(_job_row())
-    assert record.requirements == JobRequirements(labels={"site": "lab"}, fingerprints={"scenegems-scenario-execution": "f1"}, min_memory_mb=2000, min_cpus=1.5)
+    assert record.requirements == JobRequirements(labels={"site": "lab"}, fingerprints={"scenegems-simulation": "f1"}, min_memory_mb=2000, min_cpus=1.5)
     assert (record.state, record.attempt, record.failed_attempts, record.error) == (JobState.RUNNING, 2, 1, "boom")
     assert record.allowed_worker_nodes == ()
     assert JobRecord.from_row(_job_row(allowed_worker_nodes=["worker-node-a", "worker-node-b"])).allowed_worker_nodes == ("worker-node-a", "worker-node-b")

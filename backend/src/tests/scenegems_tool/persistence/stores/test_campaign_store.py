@@ -26,7 +26,7 @@ pytestmark = pytest.mark.postgres
 
 def test_create_a_campaign_with_its_config_and_classes(stores, campaign):
     assert (campaign.name, campaign.desired_state, campaign.actual_state, campaign.config_version) == ("lab campaign", CampaignDesiredState.PAUSED, CampaignActualState.CREATED, 1)
-    assert campaign.pinned_fingerprints == {"scenegems-scenario-execution": "fp-execution"}
+    assert campaign.pinned_fingerprints == {"scenegems-simulation": "fp-execution"}
     assert (campaign.created_at, campaign.started_at, campaign.finished_at) == (START, None, None)
     assert stores.campaigns.get_campaign(campaign.campaign_id) == campaign
     config = stores.campaigns.config_version(campaign.campaign_id)

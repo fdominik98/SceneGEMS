@@ -22,7 +22,7 @@ from scenegems_tool.architecture.architecture_model import (
     MetamodelEdge,
     MetamodelNode,
 )
-from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, check_covers_enum, spec_edge, spec_node
+from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, check_covers_enum, pool_facts, spec_edge, spec_node
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import TrajectoryGeneratorId
 
 DOCUMENT_ID = "trajectory_generation"
@@ -190,25 +190,23 @@ def trajectory_generation_document(measurements: Optional[Mapping[str, MeasuredF
         facts = (Fact("code", "Code", code, GROUP_PROPERTY), *extra)
         return spec_node(DOCUMENT_ID, local, lane, label, description, implements, facts=facts, tags=tags, measurements=measurements)
 
-    entries = ("cluster_job", "workbench_service")
+    entries = ("request",)
     nodes = [
         node(
-            "cluster_job",
+            "request",
             LANE_ENTRY,
-            "Cluster job",
-            "The trajectory_generation job: dispatched to a worker node's trajectory generation pool, which queues requests for its workers (one per slot).",
+            "Request",
+            "A generate-trajectories request over the message broker, sent by the worker node's daemon for a job it leased. The subsystem is one long-lived container per worker node: "
+            "the request becomes one task, which waits in the queue and then runs in a worker process of the pool.",
             META_REQUEST,
-            "scenegems_tool/cluster/worker_node/jobs/trajectory_generation_job.py",
+            "scenegems_tool/messaging/mqtt_trajectory_generation_service.py",
             ("cluster",),
-        ),
-        node(
-            "workbench_service",
-            LANE_ENTRY,
-            "Workbench service",
-            "The MQTT service of the workbench: one worker, one request at a time, with live previews of the search.",
-            META_REQUEST,
-            f"{_PACKAGE}/trajectory_generation_service_main.py",
-            ("workbench",),
+            pool_facts(
+                "generate-trajectories",
+                "one per request: one plan for the scene",
+                "the request's seed fixes the search, so the same request gives the same plan; a request without one gets a seed drawn",
+                "sensor/planned_trajectory_preview: the plan as it stands; sensor/planned_trajectory: the result; exec/response: every task state",
+            ),
         ),
     ]
     edges = []
@@ -253,7 +251,7 @@ def trajectory_generation_document(measurements: Optional[Mapping[str, MeasuredF
     return ArchitectureDocument(
         id=DOCUMENT_ID,
         title="Trajectory generation",
-        summary="Generators that turn an initial scene into trajectories for every vessel, the entry points that reach them and the blocks they run on.",
+        summary="Generators that turn an initial scene into trajectories for every vessel, the request that reaches them through the subsystem's task pool and the blocks they run on.",
         lanes=(
             Lane(LANE_ENTRY, "Entry point", "How a request arrives."),
             Lane(LANE_GENERATOR, "Generator", "The algorithm that plans the trajectories."),

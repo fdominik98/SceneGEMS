@@ -86,7 +86,7 @@ def fake_gazebo(monkeypatch, trajectories, vessel):
     initial = trajectories.initial_scene[vessel]
 
     def link(host, port):
-        return FakeHullLink({"vessel_0": (HullSurgeYawModel(hull_dynamics(vessel, CALM)), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))}, ())
+        return FakeHullLink({"os": (HullSurgeYawModel(hull_dynamics(vessel, CALM)), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))}, ())
 
     monkeypatch.setattr(gz_lockstep_runner, "GzLockstepLink", link)
 

@@ -5,7 +5,7 @@ line-of-sight waypoint follower, or in mode usv_navigation the own ship (the sce
 own_ship_id names another vessel) on USV Navigation and the others on replay, as the kinematic
 runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
-scenario execution image on the stack network (vessel_job_stack.py). Every vessel has its ASV
+simulation subsystem image on the stack network (vessel_job_stack.py). Every vessel has its ASV
 system container and its controller container. The stack has no SITL: the Gazebo service starts
 paused with the gz-transport actuator listening (GZ_START_PAUSED, GZ_ACTUATOR_PORT), and the
 runner steps the world itself and carries the messages between the containers
@@ -131,7 +131,8 @@ def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: Gazeb
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
-    return build_vessel_job_stack(job, worker_node, instance, trajectories, payload.geofence.to_geofence() if payload.geofence is not None else worker_node.reference_geofence)
+    geofence = payload.geofence.to_geofence() if payload.geofence is not None else worker_node.reference_geofence
+    return build_vessel_job_stack(job, worker_node, instance, trajectories, geofence, monitored=payload.monitor == SimulationMonitor.LIVE)
 
 
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload: GazeboCustomSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
@@ -154,7 +155,7 @@ def execute(
     trajectories, instance, parameters = _instance(payload)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
-    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False) if payload.monitor == SimulationMonitor.LIVE else None
+    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False, job=job) if payload.monitor == SimulationMonitor.LIVE else None
     observer = observation.observer(frame_builder(job.job_id, trajectories, dt, monitor, state_of=plain_state), dt, last_index=steps) if observation is not None else None
     on_step = step_observer(trajectories, monitor, observer, state_of=plain_state)
     status(f"connecting to the Gazebo actuator for the {payload.mode.value} run" + (" with the live monitor" if monitor is not None else ""))

@@ -1,8 +1,8 @@
 """Runner side of the gz-transport actuator adapter: thrust in, odometry out, over one TCP connection.
 
 The adapter itself runs in the Gazebo container (gz_transport_actuator.py, which documents the
-protocol). This side needs only the standard library, so the runner can live in the scenario
-execution image, which has no gz bindings.
+protocol). This side needs only the standard library, so the runner can live in the simulation
+subsystem image, which has no gz bindings.
 """
 
 import json

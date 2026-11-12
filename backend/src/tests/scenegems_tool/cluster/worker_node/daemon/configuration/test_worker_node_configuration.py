@@ -47,7 +47,7 @@ def test_a_complete_configuration_parses():
     assert configuration.labels == {"gpu": "true", "site": "lab"}
     assert configuration.state_dir == Path("/var/lib/scenegems-worker-node")
     assert configuration.reference_geofence == DEFAULT_REFERENCE_GEOFENCE
-    assert configuration.docker_name == "scenegems-worker-node-lab-control-node-worker-1"
+    assert configuration.docker_name == "scenegems-lab-control-node-worker-1"
 
 
 def test_the_machine_is_optional_and_trimmed():

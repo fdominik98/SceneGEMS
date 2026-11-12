@@ -33,9 +33,20 @@ def job_view(job: JobRecord, progress: Optional[JobProgress] = None) -> Dict[str
     }
 
 
+MASKED = "***"
+
+
+def payload_without_secrets(payload: Any) -> Any:
+    """A job's payload as an operator may read it: the password of an attended run's broker is not shown."""
+    broker = payload.get("broker") if isinstance(payload, dict) else None
+    if isinstance(broker, dict) and broker.get("password"):
+        return {**payload, "broker": {**broker, "password": MASKED}}
+    return payload
+
+
 def job_detail_view(job: JobRecord, progress: Optional[JobProgress], events: List[JobEventRecord], log_lines: List[Any]) -> Dict[str, Any]:
     view = job_view(job, progress)
-    view["payload"] = job.payload
+    view["payload"] = payload_without_secrets(job.payload)
     view["events"] = [
         {
             "at": event.at,
@@ -72,6 +83,7 @@ def worker_node_view(worker_node: WorkerNodeRecord, session: Optional[WorkerNode
         "fingerprint_mismatches": [asdict(mismatch) for mismatch in session.out_of_date] if session else [],
         "software_revision": worker_node.software_revision,
         "machine": worker_node.machine,
+        "address": getattr(session.socket, "address", None) if session else None,  # where its control link comes from, on the VPN
         "labels": worker_node.labels,
         "resources": worker_node.resources.model_dump(),
         "slots": {job_type.value: {"slots": usage.slots, "slots_in_use": usage.slots_in_use} for job_type, usage in worker_node.slots.items()},

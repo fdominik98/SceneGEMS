@@ -18,14 +18,14 @@ The page opens on **Overview**. It draws the chain, one card per step in the ord
 | Trajectory generation | a scene | trajectories |
 | Simulation, done by the vessel stack | trajectories | a simulated run |
 
-An arrow between two cards names what the first step hands to the next. **Monitoring** stands under the chain, since it judges the scenes, the trajectories and the runs alike.
+An arrow between two cards names what the first step hands to the next. **Monitoring** stands under the chain, since it judges the scenes, the trajectories and the runs alike: recorded ones for a monitoring job, and running ones for a simulation that is judged while it runs.
 
 Each card says:
 
 - what the part is, in a few lines;
 - what it takes and what it gives;
-- the cluster job that runs it;
-- **On this cluster**: how many slots on how many machines of the selected cluster run that job now. "no machine offers it" means that a workbench run or a campaign step of this kind has nowhere to run until a machine with the component joins;
+- the cluster job that runs it, and for a subsystem the request that job becomes: its name, the tasks it makes, the size of the task pool, what the seed fixes and what the subsystem publishes;
+- **On this cluster**: how many slots on how many machines of the selected cluster run that job now. A slot is a place in the task pool of the subsystem that runs the job. "no machine offers it" means that a workbench run or a campaign step of this kind has nowhere to run until a machine with the component joins;
 - how many implementations are described and how many values were measured.
 
 **Open** shows the part. A control node from before the overview states no chain: the page then lists the parts side by side without arrows.
@@ -55,4 +55,4 @@ Drag the cards to rearrange them; the arrangement is kept in this browser, and t
 
 ## The matrix
 
-Each row is an ASV system on a control layer, and each column a simulation layer under it. A cell says whether the stack is **available** or **not possible**, with the reason. An available stack also shows whether it runs as a cluster job (and on which runner) or as a live session only, its repeatability, and what it supports, such as wind and waves. The values of a stack are the weakest link over its layers and adapters.
+Each row is an ASV system on a control layer, and each column a simulation layer under it. A cell says whether the stack is **available** or **not possible**, with the reason. An available stack also shows the cluster job that runs it and on which runner: an unattended one, which campaigns and the workbench use, or the attended one, which only the workbench uses and which waits for the operator's Start. It also shows its repeatability, and what it supports, such as wind and waves. The values of a stack are the weakest link over its layers and adapters.

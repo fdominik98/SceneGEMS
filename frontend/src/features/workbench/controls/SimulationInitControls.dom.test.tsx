@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe("SimulationInitControls", () => {
   it("names each vessel as the scenario does, with what it is written out", () => {
-    render(<SimulationInitControls streamControls={streamControls} liveSession paceApplies />);
+    render(<SimulationInitControls streamControls={streamControls} attended paceApplies />);
     const table = screen.getByRole("table");
     const names = within(table)
       .getAllByRole("row")
@@ -46,12 +46,14 @@ describe("SimulationInitControls", () => {
     expect(screen.getByRole("combobox", { name: "ASV system of ts2, target ship" })).toBeInTheDocument();
   });
 
-  it("uses the same names and the default agent names in the agent connections", async () => {
+  it("lets nobody name a vessel, and asks for a topic only where a real vessel publishes", async () => {
     const user = userEvent.setup();
-    render(<SimulationInitControls streamControls={streamControls} liveSession paceApplies />);
+    render(<SimulationInitControls streamControls={streamControls} attended paceApplies />);
     await user.click(screen.getByRole("button", { name: /Agent connections/ }));
-    expect(screen.getByRole("textbox", { name: "Agent name of os, own ship" })).toHaveValue("os_sim");
-    expect(screen.getByRole("textbox", { name: "Agent name of ts1, target ship" })).toHaveValue("ts1_sim");
-    expect(screen.getByRole("textbox", { name: "Topic of ts2, target ship" })).toHaveValue("waraps/unit/surface/simulation/ts2_sim");
+    expect(screen.queryByRole("textbox", { name: /Agent name of/ })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: /Topic of/ })).toBeNull();
+    await user.selectOptions(screen.getByRole("combobox", { name: "Kind of ts2, target ship" }), "real");
+    expect(screen.getByRole("textbox", { name: "Topic of ts2, target ship" })).toHaveValue("waraps/unit/surface/real/ts2");
+    expect(screen.queryByRole("textbox", { name: "Topic of os, own ship" })).toBeNull();
   });
 });

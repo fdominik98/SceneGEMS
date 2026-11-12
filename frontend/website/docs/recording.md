@@ -8,7 +8,7 @@ title: Recording & export
 There is nothing to start or stop: every run is recorded as an entry of [Campaign History](./campaign-history).
 
 - **A run on the cluster** is saved as a workbench entry, with its outputs.
-- **A live session** is recorded as a workbench entry too. The Result row of the [control panel](./control-panel) says whether it is recording, saved (with **Open the recorded run**), failed, or not recorded on this gateway.
+- **An attended run** (a real vessel, Mission Planner) is a run on the cluster too, and is saved the same way.
 
 ## Replay
 

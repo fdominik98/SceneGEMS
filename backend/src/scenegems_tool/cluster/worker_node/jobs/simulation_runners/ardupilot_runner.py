@@ -6,7 +6,7 @@ runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
 replay. The worker node resolves the instance, generates the vessel stack into the job's folder and adds
-a runner from the scenario execution image on the stack network (vessel_job_stack.py). Every
+a runner from the simulation subsystem image on the stack network (vessel_job_stack.py). Every
 vessel has its SITL and its ASV system container; the runner steps the ASV system, sends its
 commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 
@@ -133,7 +133,7 @@ def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: ArduP
         trajectories, instance, _ = _instance(payload)
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
-    return build_vessel_job_stack(job, worker_node, instance, trajectories, payload.geofence.to_geofence())
+    return build_vessel_job_stack(job, worker_node, instance, trajectories, payload.geofence.to_geofence(), monitored=payload.monitor == SimulationMonitor.LIVE)
 
 
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload: ArduPilotSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
@@ -168,15 +168,16 @@ def frame_builder(
 ) -> Callable[[int, Mapping[int, Any]], Dict[str, Any]]:
     """A lockstep step's frame in the workbench's wire format: the monitored scene when the live monitor judged the step, else the scene alone."""
     from concrete_level.trajectory_generation.scene_builder import SceneBuilder
-    from scenegems_tool.gateway.serialization import serialize_frame, serialize_monitored_frame
+    from scenegems_tool.gateway.serialization import serialize_frame
 
     scene_of = step_scene(trajectories.initial_scene, state_of)
     time_step = int(dt) if float(dt).is_integer() else dt
 
     def build(index: int, samples: Mapping[int, Any]) -> Dict[str, Any]:
         timestamp = index * time_step
-        if monitor is not None and monitor.last_monitored_index == index:
-            return serialize_monitored_frame(scenario_id=scenario_id, monitored_scene=monitor.last_monitored, timestamp=timestamp, time_step=time_step)
+        judged = monitor.frame_of(index) if monitor is not None else None
+        if judged is not None:
+            return judged
         builder = SceneBuilder()
         builder.set_states_as_dict(scene_of(samples))
         return serialize_frame(scenario_id=scenario_id, scene=builder.build(), timestamp=timestamp, time_step=time_step)
@@ -222,7 +223,7 @@ def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCal
     trajectories, instance, parameters = _instance(payload)
     dt = lockstep_dt(trajectories.time_step) if payload.dt is None else payload.dt
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
-    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False) if payload.monitor == SimulationMonitor.LIVE else None
+    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False, job=job) if payload.monitor == SimulationMonitor.LIVE else None
     observer = None
     if observation is not None:
         observer = observation.observer(frame_builder(job.job_id, trajectories, dt, monitor), dt, last_index=steps, pace=False, stride_speed=float(payload.speedup))

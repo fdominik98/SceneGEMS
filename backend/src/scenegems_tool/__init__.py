@@ -10,7 +10,7 @@ Present now:
     workbench/      single-machine demo orchestration kept working through the revision
     messaging/      MQTT clients and services that carry subsystem traffic
     subsystems/     one package per subsystem
-        scene_generation/, trajectory_generation/, monitoring/, scenario_execution/
+        scene_generation/, trajectory_generation/, monitoring/, simulation/
     vessel_stack/   ASV system, control layer and simulation layer as adapters, each layer in its own container
         contracts/              roles, ports, capabilities, adapter specs, clock, stack config, the wire protocol
                                 between a stack's containers (lockstep_wire.py) and their names (stack_services.py)

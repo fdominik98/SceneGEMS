@@ -6,8 +6,8 @@ hosting for every layer they step, and step what they get the same way:
 - InProcessHosting builds the layers in the caller's process. Tests and the calibration
   measurements use it; it needs no Docker.
 - ContainerHosting connects to the stack's containers, one per layer: an ASV system and a
-  controller container per vessel and one simulator per scenario. Cluster jobs and live sessions
-  use it; simulation_docker_stack.py generates the services it connects to.
+  controller container per vessel and one simulator per scenario. Simulation jobs use it;
+  simulation_docker_stack.py generates the services it connects to.
 
 Both give the same run for the same inputs: the containers run the classes the in-process
 hosting builds, and the wire protocol carries every float bit for bit.
@@ -70,7 +70,7 @@ class ContainerHosting:
 
     endpoints replaces the address of a service, by service name: by default every component is
     reached by its service name on the stack's network (contracts/stack_services.py), which is
-    where a job's runner and a live session's scenario execution service are.
+    where a job's runner is.
     """
 
     def __init__(self, endpoints: Optional[Mapping[str, Endpoint]] = None, *, connect_timeout_s: float = DEFAULT_CONNECT_TIMEOUT_S):
@@ -111,7 +111,7 @@ class ContainerHosting:
 
 
 def in_stack_hosting() -> StackHosting:
-    """The hosting of code that runs inside a stack, next to its containers: a job's runner, a live session's driver."""
+    """The hosting of code that runs inside a stack, next to its containers: a job's runner."""
     return ContainerHosting()
 
 

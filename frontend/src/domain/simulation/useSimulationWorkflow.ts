@@ -4,7 +4,7 @@ import { BackendWsClient } from "./wsClient";
 import type { ParsedServerMessage } from "./protocol";
 import { gatewayWsUrl } from "./simulationConfig";
 import type { SimulationFrame } from "./types";
-import type { ClientToServerMessage } from "./wireTypes";
+import { RETIRED_GATEWAY_MESSAGES, type ClientToServerMessage } from "./wireTypes";
 import { useUiStore } from "../../app/uiStore";
 import { useBatchGenerationStore } from "../sceneGeneration/batchGenerationStore";
 import { buildFramesFromTrajectoryData } from "../sceneGeneration/parseEvaluationDataFile";
@@ -25,12 +25,17 @@ import type { LoadedRun } from "../../features/workbench/pages/entryLoader";
 import { simulationInputToRestore, storedTrajectoryContent } from "../../features/workbench/pages/pageHandoff";
 import { OperatorApiError } from "../cluster/operatorApi";
 import { useSimulationPageStore, type PageInput } from "../../features/workbench/pages/pageStore";
-import { useRunRecordingStore } from "../../features/workbench/pages/runRecordingStore";
 import type { WorkbenchTarget } from "../../features/workbench/pages/workbenchTarget";
 import { isFullTrajectoryScenario } from "../sceneGeneration/parseEvaluationDataFile";
-import { missingTrajectoriesReason, NO_TRAJECTORIES_MESSAGE } from "./trajectoryGuard";
+import { NO_TRAJECTORIES_MESSAGE } from "./trajectoryGuard";
 
 let simulationModelsToken = 0;
+
+/** Whether an unknown gateway message is one of the former live session's, which a control node of an earlier release still sends. */
+export function isRetiredGatewayMessage(raw: unknown): boolean {
+  const type = typeof raw === "object" && raw !== null ? (raw as { type?: unknown }).type : undefined;
+  return typeof type === "string" && RETIRED_GATEWAY_MESSAGES.includes(type);
+}
 
 function trajectoryChunkMatchesActiveScenario(
   activeScenarioId: string | null,
@@ -72,22 +77,19 @@ export function setupRequestOf(run: LoadedRun) {
 }
 
 /**
- * The workbench's backend: scene generation, trajectory generation and monitoring run as jobs
- * on the active cluster (`WorkbenchJobDriver`); the interactive simulation runs through the
- * gateway WebSocket of the same cluster's control node, over the MQTT broker of the Connections page.
+ * The workbench's backend: design space exploration, scene generation, trajectory generation,
+ * simulation and monitoring run as jobs on the active cluster's worker nodes (`WorkbenchJobDriver`).
+ * The gateway WebSocket of the cluster's control node only loads scenario files, generates vessel
+ * models and lists the stack options: it runs no simulation and connects to no broker.
  */
 export function useSimulationWorkflow() {
   const ingestFrames = usePlaybackStore((s) => s.ingestFrames);
   const ingestSimulationFrames = usePlaybackStore((s) => s.ingestSimulationFrames);
-  const ingestPushFrame = usePlaybackStore((s) => s.ingestPushFrame);
   const clearSimulationTrajectories = usePlaybackStore((s) => s.clearSimulationTrajectories);
   const resetForNewScene = usePlaybackStore((s) => s.resetForNewScene);
   const markSimulationInitialized = usePlaybackStore((s) => s.markSimulationInitialized);
-  const setSimulationStatus = usePlaybackStore((s) => s.setSimulationStatus);
   const setStreamStatus = usePlaybackStore((s) => s.setStreamStatus);
   const setError = usePlaybackStore((s) => s.setError);
-  const setMqttBrokerStatus = usePlaybackStore((s) => s.setMqttBrokerStatus);
-  const setMonitorStatus = usePlaybackStore((s) => s.setMonitorStatus);
   const setPlaying = usePlaybackStore((s) => s.setPlaying);
   const setLatestTimestamp = usePlaybackStore((s) => s.setLatestTimestamp);
   const setScenarioTrajectoryLength = usePlaybackStore((s) => s.setScenarioTrajectoryLength);
@@ -155,14 +157,6 @@ export function useSimulationWorkflow() {
           // Merged into the store's current frames in one step (linear for sorted chunks), so a
           // chunk never lands on a stale copy of the frames.
           ingestFrames(message.frames);
-          break;
-        }
-        case "simulation_trajectory_chunk": {
-          const store = usePlaybackStore.getState();
-          if (!trajectoryChunkMatchesActiveScenario(store.activeScenarioId, message.scenarioId)) {
-            break;
-          }
-          ingestSimulationFrames(message.frames);
           break;
         }
         case "generated_scene": {
@@ -267,42 +261,11 @@ export function useSimulationWorkflow() {
           }
           break;
         }
-        case "frame": {
-          ingestPushFrame(message.frame);
-          break;
-        }
-        case "error": {
+        case "error":
           setError(message.message);
-          // A pending Connect click owns this error: the panel reports it inline with
-          // the endpoint-specific hints, which the global banner has no room for.
-          const connection = useConnectionStore.getState();
-          if (connection.connectionAttempt === "connecting") {
-            connection.markConnectionFailed(message.message);
-          }
           break;
-        }
         case "ack":
           setError(null);
-          break;
-        case "mqtt_broker_status": {
-          setMqttBrokerStatus(message.status, message.controlNodeBroker);
-          const connection = useConnectionStore.getState();
-          if (message.status === "connected" && connection.connectionAttempt !== "connected") {
-            connection.markConnectionSucceeded();
-            // Drop the banner left over from a failed attempt: it contradicts the
-            // Connected status now showing next to it.
-            setError(null);
-          }
-          break;
-        }
-        case "monitor_status":
-          setMonitorStatus(message.status);
-          break;
-        case "simulation_status":
-          setSimulationStatus(message.status, message.groundControlPortsByAgentId);
-          break;
-        case "run_recording":
-          useRunRecordingStore.getState().report(message);
           break;
         case "stack_options":
           usePlaybackStore.getState().setStackOptions(message.options);
@@ -315,7 +278,10 @@ export function useSimulationWorkflow() {
           });
           break;
         case "unknown":
-          console.warn("[SimulationWorkflow] Unknown server message shape", message.raw);
+          // A control node of an earlier release still sends the statuses of its live session: they mean nothing here.
+          if (!isRetiredGatewayMessage(message.raw)) {
+            console.warn("[SimulationWorkflow] Unknown server message shape", message.raw);
+          }
           break;
         default:
           break;
@@ -324,16 +290,12 @@ export function useSimulationWorkflow() {
     [
       ingestFrames,
       ingestSimulationFrames,
-      ingestPushFrame,
       markSimulationInitialized,
       resetForNewScene,
       setError,
       setLatestTimestamp,
       setScenarioTrajectoryLength,
       setPlaying,
-      setSimulationStatus,
-      setMqttBrokerStatus,
-      setMonitorStatus,
       setActiveScenarioId,
       setReceivedSimulationModels,
     ]
@@ -344,25 +306,11 @@ export function useSimulationWorkflow() {
     driver.setDispatch(dispatchMessage);
   }, [dispatchMessage, driver]);
 
-  const prepareForSimulationReset = useCallback(() => {
-    // Keep loaded scenario/animation chunks, but clear simulation stream data and rewind playback.
-    clearSimulationTrajectories();
-    setReceivedSimulationModels(null);
-    setPlaying(false);
-    setFollowLatestPush(false);
-    const { frames } = usePlaybackStore.getState();
-    if (frames.length > 0) {
-      seek(0);
-    }
-  }, [clearSimulationTrajectories, seek, setFollowLatestPush, setPlaying, setReceivedSimulationModels]);
-
   const gatewayUrl = gatewayWsUrl(workbenchCluster.operatorUrl);
   useEffect(() => {
     if (gatewayUrl === null) {
       // No cluster is selected, so there is no control-node-api whose gateway the workbench could use.
       setStreamStatus("disconnected");
-      setMqttBrokerStatus("disconnected");
-      setMonitorStatus("disconnected");
       usePlaybackStore.getState().setActiveScenarioId(null);
       return;
     }
@@ -376,8 +324,6 @@ export function useSimulationWorkflow() {
           client.send({ type: "query_stack_options" });
           return;
         }
-        setMqttBrokerStatus("disconnected");
-        setMonitorStatus("disconnected");
         if (status === "disconnected" || status === "error") {
           // The gateway's scenario session is gone with the socket. Jobs on the cluster do not
           // depend on it: they keep running and keep reporting.
@@ -392,7 +338,7 @@ export function useSimulationWorkflow() {
       client.disconnect();
       clientRef.current = null;
     };
-  }, [gatewayUrl, handleTransportError, setError, setStreamStatus, setMqttBrokerStatus, setMonitorStatus]);
+  }, [gatewayUrl, handleTransportError, setError, setStreamStatus]);
 
   const loadScenarioFromFile = useCallback(
     async (file: File | null, options: LoadScenarioOptions = {}) => {
@@ -411,7 +357,6 @@ export function useSimulationWorkflow() {
       const scenarioId = crypto.randomUUID();
       setActiveScenarioId(scenarioId);
       pendingReplayRef.current = options.replayFrames && options.replayFrames.length > 0 ? { scenarioId, frames: options.replayFrames } : null;
-      useRunRecordingStore.getState().clear();
       const fileContent = await file.text();
       loadedScenarioContentRef.current = fileContent;
       try {
@@ -514,7 +459,7 @@ export function useSimulationWorkflow() {
           await loadScenarioFromFile(new File([content], fileName, { type: "application/json" }), { colregsConstraintsContent: colregsRef.current, replayFrames });
           return;
         }
-        // Without the gateway the run still replays and can run again on the cluster; a live session needs the gateway.
+        // Without the gateway the run still replays and can run again on the cluster.
         try {
           const raw: unknown = JSON.parse(content);
           loadedTrajectoriesRef.current = isFullTrajectoryScenario(raw) ? (raw as { trajectories: Record<string, unknown> }).trajectories : null;
@@ -530,42 +475,15 @@ export function useSimulationWorkflow() {
   }, [clearSimulationTrajectories, driver, ingestSimulationFrames, loadScenarioFromFile]);
 
   return {
-    /** @deprecated Use loadScenarioFromFile: loads scenario JSON via load_scenario_file. */
-    initializeSimulation: loadScenarioFromFile,
     loadScenarioFromFile,
-    startSimulation: () => {
-      const currentStatus = usePlaybackStore.getState().simulationStatus;
-      if (currentStatus !== "ready to start") {
-        return;
-      }
-      clearSimulationTrajectories();
-      setSimulationStatus("agents are preparing", usePlaybackStore.getState().groundControlPortsByAgentId);
-      clientRef.current?.send({ type: "start_simulation" });
-    },
-    resetSimulation: () => {
-      prepareForSimulationReset();
-      clientRef.current?.send({ type: "reset_simulation" });
-    },
     setSpeed: (value: number) => {
       setSpeed(value);
     },
     seek: (value: number) => {
       seek(value);
     },
+    /** Sends the gateway one of its helper requests (generate_simulation_models). */
     sendMessage: (message: ClientToServerMessage) => {
-      if (message.type === "initialize_simulation") {
-        const missing = missingTrajectoriesReason(
-          usePlaybackStore.getState().scenarioTrajectoryLength
-        );
-        if (missing !== null) {
-          setError(missing);
-          return;
-        }
-        prepareForSimulationReset();
-        // Enter the local "initializing" state so the UI reflects the in-flight
-        // request until the backend reports a concrete simulation_status.
-        usePlaybackStore.getState().beginSimulationInitialization();
-      }
       clientRef.current?.send(message);
     },
     /** What the active cluster offers for a job type, and why the workbench cannot run it when it cannot. */
@@ -617,7 +535,7 @@ export function useSimulationWorkflow() {
       }
       void driver.runSimulation(simulationSubmission(plan, { trajectories, colregsConstraintsContent, geofence }), colregsConstraintsContent);
     },
-    /** Sets the simulation page's input and loads its trajectories (for a live session and the cluster). */
+    /** Sets the simulation page's input and loads its trajectories. */
     setSimulationInput,
     /** Loads the simulation page's stored input again after a reload. */
     restoreSimulationInput,
@@ -632,6 +550,7 @@ export function useSimulationWorkflow() {
       return driver.loadTarget(target, { quiet: true });
     },
     stopSimulationOnCluster: () => driver.stopSimulation(true),
+    startSimulationOnCluster: () => void driver.startSimulation(),
     setClusterRunSpeed: (speed: number) => driver.setSimulationSpeed(speed),
   };
 }

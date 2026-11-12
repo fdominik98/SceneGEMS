@@ -1,13 +1,14 @@
 """
 WebSocket message shapes shared with the React frontend (`src/domain/simulation/wireTypes.ts`).
 
-Copy this package into your FastAPI project and extend `SimulationSession` to call your
-`concrete_level` / monitor / trajectory code.
+The console sends the gateway three helper requests (load_scenario_file, generate_simulation_models,
+query_stack_options). The other server messages here are what the console's job driver dispatches
+from the results of cluster jobs (generated_scene, trajectory_generation_preview and _result), and
+SimulationModelsBody is also the setup an attended simulation job runs.
 """
 
 from __future__ import annotations
 
-from enum import Enum
 from typing import Any, Dict, List, Literal, NotRequired, Optional, Required, TypedDict, Union
 
 import numpy as np
@@ -24,44 +25,6 @@ class LoadScenarioFileMessage(TypedDict):
     fileContent: str
 
 
-class GeofencePayload(TypedDict):
-    """Circular reference geofence: WGS84 center and radius in meters.
-
-    Matches the frontend `wireTypes.ts` `connect_to_mqtt_broker.geofence` shape and the
-    keys read in `socket_message_processor.py`.
-    """
-
-    latitude: float
-    longitude: float
-    radius_meters: float
-
-
-class ConnectToMqttBrokerMessage(TypedDict):
-    """Connect the workbench's interactive simulation to an MQTT broker.
-
-    With use_control_node_broker the broker is the control node's own cluster broker (mqtt_broker_status
-    names it in controlNodeBroker) and the address, user and TLS fields are ignored.
-    """
-
-    type: Literal["connect_to_mqtt_broker"]
-    user: str
-    password: str
-    agent_broker: str
-    client_broker: str
-    port: int
-    tls_connection: bool
-    allow_certificates: bool
-    geofence: GeofencePayload
-    use_control_node_broker: NotRequired[bool]
-
-
-class SimulationStatusMessage(TypedDict):
-    type: Literal["simulation_status"]
-    status: str
-    # Host port of each Mission Planner vessel's ground control station endpoint (TCP on localhost), by agent id.
-    groundControlPortsByAgentId: NotRequired[Dict[str, int]]
-
-
 class QueryStackOptionsMessage(TypedDict):
     type: Literal["query_stack_options"]
 
@@ -76,18 +39,6 @@ class StackOptionsMessage(TypedDict):
     combinations: List[Dict[str, Any]]
 
 
-class DisconnectFromMqttBrokerMessage(TypedDict):
-    type: Literal["disconnect_from_mqtt_broker"]
-
-
-class StartSimulationMessage(TypedDict):
-    type: Literal["start_simulation"]
-
-
-class ResetSimulationMessage(TypedDict):
-    type: Literal["reset_simulation"]
-
-
 class SimulationConnectionInfo(TypedDict):
     context: str
     # The agent's stack: asvSystem and controlLayer (AsvSystemId and ControlLayerId values). An
@@ -97,7 +48,8 @@ class SimulationConnectionInfo(TypedDict):
     controlMode: NotRequired[str]
     agentName: str
     topic: str
-    port: Optional[int]
+    # Older setups carry a ground control station port per vessel; it is read by nothing any more (Docker assigns the port a job publishes).
+    port: NotRequired[Optional[int]]
     gazeboVesselModel: Optional[str]
 
 
@@ -109,7 +61,7 @@ class WaveInfo(TypedDict):
 
 
 class SimulationModelsBody(TypedDict):
-    """Shared body for initialize_simulation / generate_simulation_models / simulation_models."""
+    """The workbench's setup: the body of generate_simulation_models and simulation_models, and the setup of an attended simulation job."""
 
     simulatorType: str
     # [east, north, up] in m/s; exactly 3 components (validated in simulation_config_from_body).
@@ -120,37 +72,14 @@ class SimulationModelsBody(TypedDict):
     connectionsByAgentId: Dict[str, SimulationConnectionInfo]
 
 
-class InitializeSimulationMessage(SimulationModelsBody):
-    type: Literal["initialize_simulation"]
-
-
 class GenerateSimulationModelsMessage(SimulationModelsBody):
     type: Literal["generate_simulation_models"]
 
 
-class InitializeMonitorMessage(TypedDict):
-    type: Literal["initialize_monitor"]
-    scope: str
-    name: str
-    topic: str
-    colregsConstraintsContent: str
-
-
-class ShutDownMonitorMessage(TypedDict):
-    type: Literal["shut_down_monitor"]
-
-
-# Scene generation, trajectory generation and monitoring of loaded scenes are not here: the
-# workbench submits them as jobs to the cluster's operator API.
+# Scene generation, trajectory generation, simulation and monitoring are not here: the workbench
+# submits them as jobs to the cluster's operator API, and they run on worker nodes.
 ClientMessage = Union[
     LoadScenarioFileMessage,
-    ConnectToMqttBrokerMessage,
-    DisconnectFromMqttBrokerMessage,
-    StartSimulationMessage,
-    ResetSimulationMessage,
-    InitializeSimulationMessage,
-    InitializeMonitorMessage,
-    ShutDownMonitorMessage,
     GenerateSimulationModelsMessage,
     QueryStackOptionsMessage,
 ]
@@ -174,97 +103,22 @@ class PreviewTrajectoryChunkMessage(TypedDict):
     frames: List[Dict[str, Any]]
 
 
-class SimulationTrajectoryChunkMessage(TypedDict):
-    type: Literal["simulation_trajectory_chunk"]
-    scenarioId: str
-    fromTimestamp: int
-    toTimestamp: int
-    frames: List[Dict[str, Any]]
-
-
-class GeneratedSceneMessage(TypedDict):
-    type: Literal["generated_scene"]
-    requestId: str
-    scene: Dict[str, Any]
-    evaluationData: Dict[str, Any]
-    valid: bool
-
-
-class TrajectoryGenerationPreviewMessage(TypedDict):
-    type: Literal["trajectory_generation_preview"]
-    requestId: str
-    trajectoryData: Dict[str, Any]
-
-
-class TrajectoryGenerationResultMessage(TypedDict, total=False):
-    type: Literal["trajectory_generation_result"]
-    requestId: str
-    trajectoryData: Optional[Dict[str, Any]]
-    valid: bool
-    # Present when the subsystem sent it: false for the best partial path of a search that ended without a complete one.
-    complete: bool
-    errorMessage: Optional[str]
-
-
 class ErrorMessage(TypedDict):
     type: Literal["error"]
     message: str
-
-
-class MqttBrokerStatusMessage(TypedDict):
-    type: Literal["mqtt_broker_status"]
-    status: str
-    # The control node's own broker as this server dials it ("host:port"), None when it has none.
-    controlNodeBroker: Optional[str]
-
-
-class SimulationStatus(Enum):
-    NOT_INITIALIZED = "not initialized"
-    INITIALIZING = "initializing"
-    AGENTS_ARE_PREPARING = "agents are preparing"
-    READY_TO_START = "ready to start"
-    STARTING = "starting"
-    RUNNING = "running"
-
-
-class MonitorStatusMessage(TypedDict):
-    type: Literal["monitor_status"]
-    status: str
 
 
 class SimulationModelsMessage(SimulationModelsBody):
     type: Literal["simulation_models"]
 
 
-RunRecordingStatus = Literal["recording", "saved", "failed", "unavailable"]
-
-
-class RunRecordingMessage(TypedDict):
-    """Whether the live session's run is recorded as a workbench entry (design doc 6.4)."""
-
-    type: Literal["run_recording"]
-    status: RunRecordingStatus
-    # The workbench entry the run is recorded as, and its case once the run is recorded; None before they exist.
-    campaignId: Optional[str]
-    caseId: Optional[int]
-    message: Optional[str]
-
-
 ServerMessage = Union[
     InitialStateMessage,
     PreviewTrajectoryChunkMessage,
-    SimulationTrajectoryChunkMessage,
     ErrorMessage,
-    MqttBrokerStatusMessage,
     Dict[str, Any],
-    SimulationStatusMessage,
     StackOptionsMessage,
-    MonitorStatusMessage,
-    GeneratedSceneMessage,
-    TrajectoryGenerationPreviewMessage,
-    TrajectoryGenerationResultMessage,
     SimulationModelsMessage,
-    RunRecordingMessage,
 ]
 
 
@@ -290,60 +144,6 @@ def make_error_message(message: str) -> ErrorMessage:
     return {"type": "error", "message": message}
 
 
-def make_mqtt_broker_status_message(*, status: str, control_node_broker: Optional[str]) -> MqttBrokerStatusMessage:
-    return {"type": "mqtt_broker_status", "status": status, "controlNodeBroker": control_node_broker}
-
-
-def make_generated_scene_message(request_id: str, scene: Dict[str, Any], evaluation_data: Dict[str, Any], valid: bool) -> GeneratedSceneMessage:
-    return GeneratedSceneMessage(type="generated_scene", requestId=request_id, scene=scene, evaluationData=evaluation_data, valid=valid)
-
-
-def make_monitor_status_message(*, status: str) -> MonitorStatusMessage:
-    return MonitorStatusMessage(type="monitor_status", status=status)
-
-
-def make_run_recording_message(status: RunRecordingStatus, campaign_id: Optional[str] = None, case_id: Optional[int] = None, message: Optional[str] = None) -> RunRecordingMessage:
-    return RunRecordingMessage(type="run_recording", status=status, campaignId=campaign_id, caseId=case_id, message=message)
-
-
-def make_trajectory_generation_preview_message(request_id: str, trajectory_data: Dict[str, Any]) -> TrajectoryGenerationPreviewMessage:
-    return TrajectoryGenerationPreviewMessage(
-        type="trajectory_generation_preview",
-        requestId=request_id,
-        trajectoryData=trajectory_data,
-    )
-
-
-def make_trajectory_generation_result_message(
-    request_id: str,
-    trajectory_data: Optional[Dict[str, Any]],
-    valid: bool,
-    error_message: Optional[str],
-    complete: Optional[bool] = None,
-) -> TrajectoryGenerationResultMessage:
-    message = TrajectoryGenerationResultMessage(
-        type="trajectory_generation_result",
-        requestId=request_id,
-        trajectoryData=trajectory_data,
-        valid=bool(valid),
-        errorMessage=error_message,
-    )
-    if complete is not None:
-        message["complete"] = bool(complete)
-    return message
-
-
-def _parse_agent_port(connection: SimulationConnectionInfo) -> Optional[int]:
-    """Parse an agent connection port. A ``real`` context agent may omit the
-    port (``None``); any other context requires a concrete port value."""
-    raw_port = connection.get("port", None)
-    if raw_port is None:
-        if connection["context"] == "real":
-            return None
-        raise ValueError(f"Missing port for agent with context '{connection['context']}'.")
-    return int(raw_port)
-
-
 def _parse_agent_context(connection: SimulationConnectionInfo) -> AgentContext:
     try:
         return AgentContext(connection["context"])
@@ -352,8 +152,8 @@ def _parse_agent_context(connection: SimulationConnectionInfo) -> AgentContext:
 
 
 def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanceConfig:
-    """Convert an inbound simulation-models body (initialize_simulation /
-    generate_simulation_models / simulation_models) into a typed simulation instance.
+    """Convert a simulation-models body (generate_simulation_models, simulation_models, the setup of an
+    attended simulation job) into a typed simulation instance.
     simulatorType and each agent's asvSystem and controlLayer (or controlMode) become one
     stack triple per vessel; a real agent's stack is on its own layers (real_vessel), and an
     instance with a real vessel selects the ArduAgent adapters (see gateway.workbench_stack_mapping)."""
@@ -392,7 +192,7 @@ def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanc
                 agent_id=agent_id,
                 stack=stacks[agent_id],
                 context=contexts[agent_id],
-                connection=AgentConnection(agent_name=connection["agentName"], topic=connection["topic"], port=_parse_agent_port(connection)),
+                connection=AgentConnection(agent_name=connection["agentName"], topic=connection["topic"]),
                 gazebo_vessel_model=connection.get("gazeboVesselModel", None),
                 adapter_ids=workbench_adapter_ids(stacks[agent_id], has_real_vessel),
             )
@@ -408,7 +208,6 @@ def _connection_info(vessel: VesselConfig) -> SimulationConnectionInfo:
         controlLayer=vessel.stack.control_layer.value,
         agentName=vessel.require_connection().agent_name,
         topic=vessel.require_connection().topic,
-        port=vessel.require_connection().port,
         gazeboVesselModel=vessel.gazebo_vessel_model,
     )
     control_mode = control_mode_label(vessel.stack.asv_system)
@@ -452,25 +251,3 @@ def make_preview_chunk_message(
         toTimestamp=to_timestamp,
         frames=frames,
     )
-
-
-def make_simulation_chunk_message(
-    scenario_id: str,
-    from_timestamp: int,
-    to_timestamp: int,
-    frames: List[Dict[str, Any]],
-) -> SimulationTrajectoryChunkMessage:
-    return SimulationTrajectoryChunkMessage(
-        type="simulation_trajectory_chunk",
-        scenarioId=scenario_id,
-        fromTimestamp=from_timestamp,
-        toTimestamp=to_timestamp,
-        frames=frames,
-    )
-
-
-def make_simulation_status_message(status: SimulationStatus, ground_control_ports: Optional[Dict[str, int]] = None) -> SimulationStatusMessage:
-    message = SimulationStatusMessage(type="simulation_status", status=status.value)
-    if ground_control_ports:
-        message["groundControlPortsByAgentId"] = {agent_id: int(port) for agent_id, port in sorted(ground_control_ports.items())}
-    return message

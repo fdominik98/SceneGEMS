@@ -9,8 +9,8 @@ from concrete_level.models.concrete_actors import ConcreteActor
 from concrete_level.models.concrete_scene import ConcreteScene
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
-from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
+from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import mavlink_replay_instance
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from utils.file_system_utils import GAZEBO_GEN_MOUNT, RUNTIME_ASSETS_FOLDER, SIMULATION_GEN_FOLDER, docker_volume_path
@@ -42,14 +42,14 @@ def trajectories():
 def build(trajectories, **options):
     instance = mavlink_replay_instance(trajectories, SimulationLayerId.GAZEBO)
     connection = MQttConnectionInfo("user", "secret", "broker", "localhost", 1883, False, False)
-    return build_simulation_docker_stack_artifacts(instance, trajectories, connection, Geofence(57.7, 11.9, 2000.0), embedded_in_subsystem=True, **options)
+    return build_simulation_docker_stack_artifacts(instance, trajectories, connection, Geofence(57.7, 11.9, 2000.0), **options)
 
 
-def test_default_gen_folder_is_the_workbench_folder(trajectories):
+def test_the_default_gen_folder_is_the_shared_simulation_folder(trajectories):
     pending_writes, compose = build(trajectories)
     assert {path.rsplit("/", 1)[0] for path, _ in pending_writes} == {SIMULATION_GEN_FOLDER}
     world = next(content for path, content in pending_writes if path.endswith("ocean_world.sdf"))
-    assert f"{GAZEBO_GEN_MOUNT}/vessel_0_model.sdf" in world
+    assert f"{GAZEBO_GEN_MOUNT}/os_model.sdf" in world
 
 
 def test_custom_gen_folder_receives_every_file(trajectories):
@@ -57,5 +57,5 @@ def test_custom_gen_folder_receives_every_file(trajectories):
     pending_writes, compose = build(trajectories, gen_folder=gen_folder)
     assert {path.rsplit("/", 1)[0] for path, _ in pending_writes} == {gen_folder}
     world = next(content for path, content in pending_writes if path.endswith("ocean_world.sdf"))
-    assert f"{docker_volume_path(gen_folder)}/vessel_0_model.sdf" in world
+    assert f"{docker_volume_path(gen_folder)}/os_model.sdf" in world
     assert compose["services"]["gazebo"]["environment"]["WORLD_SDF"] == docker_volume_path(f"{gen_folder}/ocean_world.sdf")

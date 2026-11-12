@@ -1,10 +1,12 @@
 """A running job's observation on the worker node: the control node's latest Observe and the frames its run produced.
 
 The lease manager opens one per accepted job in WorkerNodeContext.observations and closes it when
-the job's worker stops. The control node's Observe sets the request (request); the job's stack
-(launchers/per_job/job_stack.py) passes every change into its runner container and hands the
-frames the runner writes back to add_frames. The daemon's relay takes them out in batches
-(take_batch) for ObservationFrames:
+the job's worker stops. The control node's Observe sets the request (request). The simulation job
+passes every change on to its task in the simulation subsystem, which keeps an observation of its
+own for the run: there the run's stack (launchers/per_job/job_stack.py) passes every change into its
+runner container and hands the frames the runner writes to add_frames, and the task publishes them.
+The job hands the frames it receives to add_frames here, and the daemon's relay takes them out in
+batches (take_batch) for ObservationFrames:
 
 - at most one batch per min_interval_s and job (about 10 a second);
 - at most MAX_OBSERVATION_FRAMES frames and MAX_OBSERVATION_BATCH_BYTES bytes of frame JSON
@@ -20,6 +22,7 @@ counted (observed_seconds): an observed run is paced, so the job's timeout leave
 import threading
 import time
 from collections import deque
+from dataclasses import replace
 from typing import Callable, Deque, Dict, Iterable, List, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
@@ -76,9 +79,22 @@ class JobObservation:
                 self._observed_s += now - self._observed_since
                 self._observed_since = None
                 self._frames.clear()
-            self._control = ObservationControl(active=active, speed=speed if active else self._control.speed, revision=self._control.revision + 1)
+            self._control = replace(self._control, active=active, speed=speed if active else self._control.speed, revision=self._control.revision + 1)
             self._changed.notify_all()
             return True
+
+    def start(self) -> bool:
+        """The operator's Start of an attended simulation; True the first time. The runner reads it with its next look at the request."""
+        with self._changed:
+            if self.closed or self._control.started:
+                return False
+            self._control = replace(self._control, started=True, revision=self._control.revision + 1)
+            self._changed.notify_all()
+            return True
+
+    @property
+    def started(self) -> bool:
+        return self.control.started
 
     @property
     def control(self) -> ObservationControl:

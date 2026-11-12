@@ -19,11 +19,14 @@ function vessel(vesselId: string, overrides: Partial<SimulationVesselSetup> = {}
   return { vesselId, context: "simulation", asvSystem: "replay", controlLayer: "none", isOwnShip: vesselId === "0", ...overrides };
 }
 
+/** The setup as the control node takes it; what it holds matters to an attended job only. */
+const BODY = { simulatorType: "Kinematic", connectionsByAgentId: {} };
+
 function setup(vessels: SimulationVesselSetup[], overrides: Partial<SimulationSetup> = {}): SimulationSetup {
-  return { simulatorType: "Kinematic", vessels, windVector: [0, 0, 0], waveAmplitude: 0, speedup: 1, ...overrides };
+  return { simulatorType: "Kinematic", vessels, windVector: [0, 0, 0], waveAmplitude: 0, speedup: 1, body: BODY, ...overrides };
 }
 
-describe("where a simulation runs", () => {
+describe("the job a simulation runs as", () => {
   it("runs a kinematic replay on the cluster", () => {
     expect(planSimulationRun(setup([vessel("0"), vessel("1")]))).toMatchObject({
       where: "cluster",
@@ -31,19 +34,19 @@ describe("where a simulation runs", () => {
       runner: "kinematic",
       mode: "replay",
       ownShipId: null,
-      components: ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"],
+      components: ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "monitoring"],
     });
   });
 
   it("runs USV Navigation on the own ship on the cluster", () => {
     const plan = planSimulationRun(setup([vessel("0", { asvSystem: "usv_navigation" }), vessel("1")]));
     expect(plan).toMatchObject({ where: "cluster", mode: "usv_navigation", ownShipId: 0 });
-    expect(clusterPlan(plan).components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(clusterPlan(plan).components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic", "monitoring"]);
   });
 
-  it("keeps real vessels and Mission Planner in a live session", () => {
-    expect(planSimulationRun(setup([vessel("0"), vessel("1", { context: "real", controlLayer: "real_vessel" })]))).toMatchObject({ where: "session", reason: expect.stringContaining("real vessel") });
-    expect(planSimulationRun(setup([vessel("0", { asvSystem: "mission_planner" })], { simulatorType: "ArduPilot Sim" }))).toMatchObject({ where: "session", reason: expect.stringContaining("Mission Planner") });
+  it("runs real vessels and Mission Planner as an attended job", () => {
+    expect(planSimulationRun(setup([vessel("0"), vessel("1", { context: "real", controlLayer: "real_vessel" })]))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("real vessel") });
+    expect(planSimulationRun(setup([vessel("0", { asvSystem: "mission_planner" })], { simulatorType: "ArduPilot Sim" }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("Mission Planner") });
   });
 
   it("runs replay on ArduPilot SITL and Gazebo on the cluster at the setup's speedup", () => {
@@ -54,7 +57,7 @@ describe("where a simulation runs", () => {
       runner: "ardupilot",
       simulationLayer: "ardupilot_sim",
       speedup: 5,
-      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"],
+      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "monitoring"],
     });
     expect(planSimulationRun(setup(onArduPilot, { simulatorType: "Gazebo", speedup: 0.4 }))).toMatchObject({
       where: "cluster",
@@ -62,30 +65,31 @@ describe("where a simulation runs", () => {
       runner: "ardupilot",
       simulationLayer: "gazebo",
       speedup: 1,
-      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo"],
+      components: ["asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo", "monitoring"],
     });
   });
 
-  it("keeps ArduPilot setups the job does not run in a live session", () => {
+  it("runs the ArduPilot setups no unattended job takes as an attended job, and plans nothing without vessels", () => {
     const onArduPilot = (overrides: Partial<SimulationVesselSetup> = {}) => [vessel("0", { controlLayer: "ardupilot", ...overrides }), vessel("1", { controlLayer: "ardupilot" })];
     const where = (vessels: SimulationVesselSetup[], overrides: Partial<SimulationSetup> = {}) => planSimulationRun(setup(vessels, { simulatorType: "ArduPilot Sim", ...overrides }));
     expect(where([vessel("0", { controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot", asvSystem: "usv_navigation" })])).toMatchObject({
-      where: "session",
+      where: "cluster",
+      runner: "attended",
       reason: expect.stringContaining("USV Navigation on the own ship only"),
     });
-    expect(where(onArduPilot({ controlLayer: "custom" }))).toMatchObject({ where: "session", reason: expect.stringContaining("replay on ArduPilot") });
-    expect(where(onArduPilot({ controlLayer: "custom" }), { simulatorType: "Gazebo" })).toMatchObject({ where: "session", reason: expect.stringContaining("custom controller") });
-    expect(where(onArduPilot({ context: "real", controlLayer: "real_vessel" }))).toMatchObject({ where: "session", reason: expect.stringContaining("real vessel") });
-    expect(where(onArduPilot(), { windVector: [0, 2, 0] })).toMatchObject({ where: "session", reason: expect.stringContaining("calm weather") });
-    expect(where(onArduPilot(), { waveAmplitude: 0.5 }).where).toBe("session");
-    expect(where([])).toMatchObject({ where: "session", reason: "Load a scenario first." });
+    expect(where(onArduPilot({ controlLayer: "custom" }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("replay on ArduPilot") });
+    expect(where(onArduPilot({ controlLayer: "custom" }), { simulatorType: "Gazebo" })).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("custom controller") });
+    expect(where(onArduPilot({ context: "real", controlLayer: "real_vessel" }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("real vessel") });
+    expect(where(onArduPilot(), { windVector: [0, 2, 0] })).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("calm weather") });
+    expect(where(onArduPilot(), { waveAmplitude: 0.5 })).toMatchObject({ where: "cluster", runner: "attended" });
+    expect(where([])).toBeNull();
   });
 
   it("runs USV Navigation on the own ship through ArduPilot on the cluster", () => {
     const vessels = [vessel("0", { controlLayer: "ardupilot", asvSystem: "usv_navigation" }), vessel("1", { controlLayer: "ardupilot" })];
     const plan = clusterPlan(planSimulationRun(setup(vessels, { simulatorType: "Gazebo", speedup: 4 })));
     expect(plan).toMatchObject({ runner: "ardupilot", simulationLayer: "gazebo", mode: "usv_navigation", ownShipId: 0, speedup: 4 });
-    expect(plan.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/gazebo"]);
+    expect(plan.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/gazebo", "monitoring"]);
     expect(simulationSubmission(plan, { trajectories: {}, colregsConstraintsContent: "", geofence: GEOFENCE }).payload).toMatchObject({
       runner: "ardupilot",
       simulation_layer: "gazebo",
@@ -98,7 +102,7 @@ describe("where a simulation runs", () => {
     const onCustom = [vessel("0", { controlLayer: "custom" }), vessel("1", { controlLayer: "custom" })];
     const plan = clusterPlan(planSimulationRun(setup(onCustom, { simulatorType: "Gazebo", windVector: [0, 3, 0], speedup: 7 })));
     expect(plan).toMatchObject({ where: "cluster", jobType: "simulation", runner: "gazebo_custom", mode: "replay", ownShipId: null, windVector: [0, 3, 0] });
-    expect(plan.components).toEqual(["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo"]);
+    expect(plan.components).toEqual(["asv_system/replay", "control_layer/custom", "simulation_layer/gazebo", "monitoring"]);
     if (plan.runner !== "gazebo_custom") {
       throw new Error("expected a custom controller plan");
     }
@@ -119,12 +123,16 @@ describe("where a simulation runs", () => {
     const navigating = clusterPlan(planSimulationRun(setup([vessel("0", { controlLayer: "custom", asvSystem: "usv_navigation" }), vessel("1", { controlLayer: "custom" })], { simulatorType: "Gazebo" })));
     expect(navigating).toMatchObject({ runner: "gazebo_custom", mode: "usv_navigation", ownShipId: 0 });
     expect(simulationSubmission(navigating, { trajectories: {}, colregsConstraintsContent: "", geofence: GEOFENCE }).payload).toMatchObject({ own_ship_id: 0, mode: "usv_navigation" });
-    expect(planSimulationRun(setup(onCustom, { simulatorType: "Gazebo", waveAmplitude: 0.5 }))).toMatchObject({ where: "session", reason: expect.stringContaining("waves") });
+    expect(planSimulationRun(setup(onCustom, { simulatorType: "Gazebo", waveAmplitude: 0.5 }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("waves") });
   });
 
-  it("keeps wind and USV Navigation on a target ship off the cluster", () => {
-    expect(planSimulationRun(setup([vessel("0")], { windVector: [1, 0, 0] })).where).toBe("session");
-    expect(planSimulationRun(setup([vessel("0"), vessel("1", { asvSystem: "usv_navigation" })])).where).toBe("session");
+  it("leaves wind and USV Navigation on a target ship to an attended job", () => {
+    expect(planSimulationRun(setup([vessel("0")], { windVector: [1, 0, 0] }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("wind") });
+    expect(planSimulationRun(setup([vessel("0"), vessel("1", { asvSystem: "usv_navigation" })]))).toMatchObject({
+      where: "cluster",
+      runner: "attended",
+      reason: expect.stringContaining("only the own ship may run USV Navigation"),
+    });
   });
 
   it("builds the kinematic job with the live monitor", () => {
@@ -189,8 +197,80 @@ describe("where a simulation runs", () => {
 });
 
 function clusterPlan(plan: SimulationRunPlan): ClusterRunPlan {
-  if (plan.where !== "cluster") {
-    throw new Error(`expected a cluster plan, got: ${plan.reason}`);
+  if (plan === null) {
+    throw new Error("expected a plan, got none");
   }
   return plan;
 }
+
+describe("an attended run", () => {
+  const body = { simulatorType: "ArduPilot Sim", windVector: [0, 0, 0], simulationSpeed: 1, connectionsByAgentId: { "0": { asvSystem: "mission_planner", controlLayer: "ardupilot" }, "1": { asvSystem: "replay", controlLayer: "ardupilot" } } };
+  const missionPlanner = setup([vessel("0", { asvSystem: "mission_planner", controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot" })], { simulatorType: "ArduPilot Sim", body });
+
+  it("is the plan of a setup no unattended runner takes", () => {
+    const plan = planSimulationRun(missionPlanner);
+    expect(plan).toMatchObject({
+      where: "cluster",
+      jobType: "simulation",
+      runner: "attended",
+      simulation: body,
+      components: ["asv_system/replay", "asv_system/mission_planner", "control_layer/ardupilot", "simulation_layer/ardupilot_sim", "monitoring"],
+    });
+    expect(describeClusterPlan(plan as ClusterRunPlan)).toContain("waits for your Start");
+    expect(isPacedByWatchSpeed(plan as ClusterRunPlan)).toBe(false);
+  });
+
+  it("takes the weather and the mixed setups the unattended jobs refuse", () => {
+    const windy = setup([vessel("0"), vessel("1")], { windVector: [3, 0, 0], body: { simulatorType: "Kinematic", connectionsByAgentId: {} } });
+    expect(planSimulationRun(windy)).toMatchObject({ runner: "attended", reason: expect.stringContaining("wind") });
+    const twoNavigators = setup([vessel("0", { asvSystem: "usv_navigation" }), vessel("1", { asvSystem: "usv_navigation" })], { body: { simulatorType: "Kinematic", connectionsByAgentId: {} } });
+    expect(planSimulationRun(twoNavigators)).toMatchObject({ runner: "attended" });
+  });
+
+  it("leaves a setup a runner takes to that runner, and an empty one to nobody", () => {
+    expect(planSimulationRun(setup([vessel("0"), vessel("1")], { body }))).toMatchObject({ runner: "kinematic" });
+    expect(planSimulationRun(setup([], { body }))).toBeNull();
+  });
+
+  describe("with a real vessel", () => {
+    const realConnection = { context: "real", asvSystem: "on_board", controlLayer: "real_vessel", agentName: "ts1", topic: "waraps/unit/surface/real/piraya" };
+    const realBody = { ...body, connectionsByAgentId: { "0": { context: "simulation", asvSystem: "replay", controlLayer: "ardupilot" }, "1": realConnection } };
+    const vessels = [vessel("0", { controlLayer: "ardupilot" }), vessel("1", { context: "real", asvSystem: "on_board", controlLayer: "real_vessel" })];
+    const broker = { host: "broker.waraps.org", port: 8883, tls: true, allow_certificates: false, user: "lab", password: "secret" };
+
+    it("is an attended job on the control node's broker, with the real vessel's components", () => {
+      const plan = planSimulationRun(setup(vessels, { simulatorType: "ArduPilot Sim", body: realBody, broker: null }));
+      expect(plan).toMatchObject({
+        where: "cluster",
+        runner: "attended",
+        simulation: realBody,
+        reason: expect.stringContaining("real vessel"),
+        summary: expect.stringContaining("real vessel"),
+        components: ["asv_system/replay", "asv_system/on_board", "control_layer/ardupilot", "control_layer/real_vessel", "simulation_layer/ardupilot_sim", "simulation_layer/real_vessel", "monitoring"],
+      });
+      expect(plan).not.toHaveProperty("broker");
+      const submission = simulationSubmission(plan as ClusterRunPlan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+      expect(submission.payload).not.toHaveProperty("broker");
+    });
+
+    it("names another broker in the plan and in the job", () => {
+      const plan = planSimulationRun(setup(vessels, { simulatorType: "ArduPilot Sim", body: realBody, broker })) as ClusterRunPlan;
+      expect(plan).toMatchObject({ runner: "attended", broker });
+      const submission = simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+      expect(submission.payload).toMatchObject({ runner: "attended", simulation: realBody, broker });
+    });
+
+    it("names no broker for a setup of simulated vessels, whatever the connection form says", () => {
+      const plan = planSimulationRun(setup([vessel("0", { asvSystem: "mission_planner", controlLayer: "ardupilot" })], { simulatorType: "ArduPilot Sim", body, broker }));
+      expect(plan).toMatchObject({ runner: "attended" });
+      expect(plan).not.toHaveProperty("broker");
+    });
+  });
+
+  it("submits the setup as it is, with the live monitor", () => {
+    const plan = planSimulationRun(missionPlanner) as ClusterRunPlan;
+    const submission = simulationSubmission(plan, { trajectories: { scene_list: [] }, colregsConstraintsContent: "rules: []", geofence: GEOFENCE });
+    expect(submission).toMatchObject({ job_type: "simulation", max_attempts: 1 });
+    expect(submission.payload).toMatchObject({ runner: "attended", simulation: body, geofence: GEOFENCE, monitor: "live", colregs_constraints_content: "rules: []" });
+  });
+});

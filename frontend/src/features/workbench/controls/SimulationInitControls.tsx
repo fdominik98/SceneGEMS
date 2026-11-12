@@ -1,10 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Disclosure } from "../../../components/Disclosure";
 import { IconButton } from "../../../components/IconButton";
 import { DownloadIcon } from "../../../components/icons";
 import { NumberSetting, Setting, StepRow } from "../pages/StepPanel";
 import { usePersistedState } from "../../../app/usePersistedState";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
+import { attendedBroker, useConnectionStore } from "../connection/connectionStore";
 import type { ActorStaticInfo } from "../../../domain/simulation/types";
 import { downloadBlob } from "../scene/sceneExport";
 import type { WaveInfoWire } from "../../../domain/simulation/wireTypes";
@@ -27,7 +28,7 @@ import {
   realVesselSoftwareChoice,
   round2,
   toPersistedVesselDrafts,
-  toTopicSegment,
+  vesselTopic,
   type AsvSystem,
   type ControlLayer,
   DEFAULT_SIMULATION_SPEED,
@@ -40,10 +41,6 @@ import {
   type VesselInitConnectionDraft,
 } from "./simulationInitConfig";
 import { vesselNameOf, vesselRole } from "../../../domain/simulation/actorNaming";
-
-export interface SimulationInitControlsHandle {
-  initializeSimulation: () => void;
-}
 
 const SDF_FILE_ACCEPT = ".sdf,.xml,.world,.model,text/xml,application/xml";
 
@@ -95,11 +92,11 @@ function ModelFileControls(props: {
 
 interface Props {
   streamControls: SimulationStreamControls;
-  /** The setup as it changes, so the run panel can tell where it runs. */
+  /** The setup as it changes, so the run panel can tell which job runs it. */
   onSetupChange?: (setup: SimulationSetup) => void;
-  /** Whether the setup runs as a live session (its connections and Gazebo models apply then only). */
-  liveSession: boolean;
-  /** Whether the real-time factor paces the run (a live session or an ArduPilot job; a kinematic job follows the watch speed). */
+  /** Whether the setup runs as an attended job (a real vessel's topic and the vessels' Gazebo models go with that job only). */
+  attended: boolean;
+  /** Whether the real-time factor paces the run (an attended or an ArduPilot job; a kinematic job follows the watch speed). */
   paceApplies: boolean;
   /** Settings of the run panel shown with the simulator (the seed of a cluster run). */
   extraSettings?: ReactNode;
@@ -165,8 +162,7 @@ function removeLegacyVesselDraftsWithModels(): void {
   window.localStorage.removeItem(LEGACY_VESSEL_DRAFTS_WITH_MODELS_KEY);
 }
 
-export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, Props>(
-  function SimulationInitControls({ streamControls, onSetupChange, liveSession, paceApplies, extraSettings, disabled = false }, ref) {
+export function SimulationInitControls({ streamControls, onSetupChange, attended, paceApplies, extraSettings, disabled = false }: Props) {
   // The simulation page's own trajectories: its input, or the run it replays.
   const animationActors = usePlaybackStore((s) => s.frames[0]?.actors ?? EMPTY_ACTORS);
   const simulationActors = usePlaybackStore((s) => s.simulationFrames[0]?.actors ?? EMPTY_ACTORS);
@@ -227,7 +223,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     setVesselConnectionDrafts(applySetupRequestToDrafts(vesselConnectionDrafts, setupRequest.mode, ownShipIdsOf([...animationActors, ...simulationActors]), setupRequest.controlLayer));
   }
 
-  // What `initialize_simulation` and `generate_simulation_models` both carry.
+  // The setup as `generate_simulation_models` carries it.
   const buildPayloadBase = () => ({
     simulatorType,
     simulationSpeed: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
@@ -235,12 +231,6 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     wave: waveToWire(wave),
     connectionsByAgentId: buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
   });
-
-  useImperativeHandle(ref, () => ({
-    initializeSimulation: () => {
-      streamControls.sendMessage({ type: "initialize_simulation", ...buildPayloadBase() });
-    },
-  }));
 
   useEffect(() => {
     removeLegacyVesselDraftsWithModels();
@@ -253,6 +243,8 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
     setPersistedVesselSettings(toPersistedVesselDrafts(vesselConnectionDrafts));
   }, [vesselConnectionDrafts, setPersistedVesselSettings]);
 
+  // The broker a real vessel's agent is on: the one of the connection form, named in the job unless it is the control node's own
+  const brokerKey = useConnectionStore((s) => JSON.stringify(attendedBroker(s)));
   const ownShipIds = useMemo(
     () => new Set([...animationActors, ...simulationActors].filter((actor) => actor.isOwnShip).map((actor) => actor.id)),
     [animationActors, simulationActors]
@@ -270,8 +262,16 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
       windVector: [round2(windEast), round2(windNorth), round2(windUp)],
       waveAmplitude: round2(wave.amplitude),
       speedup: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
+      body: {
+        simulatorType,
+        simulationSpeed: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
+        windVector: [round2(windEast), round2(windNorth), round2(windUp)],
+        wave: waveToWire(wave),
+        connectionsByAgentId: buildInitializeSimulationConnectionsByAgentIdMap(stackDrafts),
+      },
+      broker: stackDrafts.some((draft) => draft.context === "real") ? JSON.parse(brokerKey) : null,
     });
-  }, [onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave.amplitude, windEast, windNorth, windUp]);
+  }, [brokerKey, onSetupChange, ownShipIds, simulationSpeed, simulatorType, stackDrafts, wave, windEast, windNorth, windUp]);
 
   useEffect(() => {
     const mergeWithExistingDrafts = (vessels: { id: string; isOwnShip: boolean }[]) => {
@@ -318,13 +318,9 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
           return draft;
         }
         const updatedDraft = { ...draft, [key]: value };
-        if (key === "context" || key === "agentName") {
-          return {
-            ...updatedDraft,
-            topic: `waraps/unit/surface/${toTopicSegment(
-              (key === "context" ? value : updatedDraft.context) as SimulationContext
-            )}/${(key === "agentName" ? value : updatedDraft.agentName) as string}`,
-          };
+        if (key === "context") {
+          // The topic follows the kind: a simulated vessel's is the job's, a real vessel's starts at the default of its name
+          return { ...updatedDraft, topic: vesselTopic(value as SimulationContext, updatedDraft.agentName) };
         }
         return updatedDraft;
       })
@@ -366,7 +362,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
           width={3}
           value={simulationSpeed}
           disabled={disabled}
-          title={`Real-time factor of a live session or an ArduPilot run, ${SIMULATION_SPEED_MIN} to ${SIMULATION_SPEED_MAX}`}
+          title={`Real-time factor of an attended or an ArduPilot run, ${SIMULATION_SPEED_MIN} to ${SIMULATION_SPEED_MAX}`}
           onChange={setSimulationSpeed}
         />
       ) : null}
@@ -470,7 +466,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
         </div>
       </Disclosure>
 
-      {liveSession ? (
+      {attended ? (
         <Disclosure
           id="simulation:agent-connections"
           variant="link"
@@ -484,9 +480,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
               <thead>
                 <tr>
                   <th>Vessel</th>
-                  <th>Agent name</th>
                   <th>Topic</th>
-                  <th>Port</th>
                 </tr>
               </thead>
               <tbody>
@@ -496,24 +490,11 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
                       <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
                     </td>
                     <td>
-                      <input aria-label={`Agent name of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} value={draft.agentName} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "agentName", e.target.value)} />
-                    </td>
-                    <td>
-                      <input aria-label={`Topic of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} title={draft.topic} value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
-                    </td>
-                    <td className="sim-port-cell">
-                      {draft.context === "simulation" ? (
-                        <input
-                          aria-label={`Simulator port of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`}
-                          type="number"
-                          step={1}
-                          value={draft.port}
-                          disabled={disabled}
-                          onChange={(e) => updateConnection(draft.vesselId, "port", Number.isFinite(Number(e.target.value)) ? Math.trunc(Number(e.target.value)) : draft.port)}
-                        />
+                      {draft.context === "real" ? (
+                        <input aria-label={`Topic of ${vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}`} title="Where the agent on board the vessel publishes" value={draft.topic} disabled={disabled} onChange={(e) => updateConnection(draft.vesselId, "topic", e.target.value)} />
                       ) : (
-                        <span className="step-value-note" title="A real vessel needs no simulator port">
-                          none
+                        <span className="step-value-note" title="A simulated vessel gets its topic from the job that runs it: the vessel's name and the job's id">
+                          set by the job
                         </span>
                       )}
                     </td>
@@ -525,7 +506,7 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
         </Disclosure>
       ) : null}
 
-      {liveSession && simulatorType === "Gazebo" ? (
+      {attended && simulatorType === "Gazebo" ? (
         <Disclosure
           id="simulation:vessel-physics-models"
           variant="link"
@@ -569,5 +550,4 @@ export const SimulationInitControls = forwardRef<SimulationInitControlsHandle, P
       ) : null}
     </StepRow>
   );
-  }
-);
+}

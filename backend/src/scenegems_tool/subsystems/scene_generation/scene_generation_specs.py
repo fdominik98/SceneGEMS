@@ -26,7 +26,7 @@ from scenegems_tool.architecture.architecture_model import (
     MetamodelEdge,
     MetamodelNode,
 )
-from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, spec_edge, spec_node
+from scenegems_tool.subsystems.subsystem_spec import MeasuredFacts, pool_facts, spec_edge, spec_node
 
 DOCUMENT_ID = "scene_generation"
 _PACKAGE = "scenegems_tool/subsystems/scene_generation"
@@ -235,22 +235,22 @@ def scene_generation_document(measurements: Optional[Mapping[str, MeasuredFacts]
     metamodel_nodes, metamodel_edges = _metamodel()
     entries = (
         (
-            "cluster_job",
-            "Cluster job",
-            "The scene_generation job: dispatched to a worker node's scene generation pool, which runs as many generations at once as the worker node has slots. With a seed the scene is reproducible unless the timeout ended the search.",
-            "scenegems_tool/cluster/worker_node/jobs/scene_generation_job.py",
+            "request",
+            "Request",
+            "A generate-scene request over the message broker, sent by the worker node's daemon for a job it leased. The subsystem is one long-lived container per worker node: "
+            "the request becomes one task, which waits in the queue and then runs in a worker process of the pool.",
+            "scenegems_tool/messaging/mqtt_scene_generation_service.py",
             "cluster",
         ),
-        (
-            "workbench_service",
-            "Workbench service",
-            "The MQTT scene generation service of the workbench: a pool of worker processes streaming samples while they search.",
-            f"{_PACKAGE}/scene_generation_service_main.py",
-            "workbench",
-        ),
+    )
+    pool = pool_facts(
+        "generate-scene",
+        "one per request: the search for one scene",
+        "the request's seed fixes every random draw of the search, so the same request gives the same scene; a request without one gets a seed drawn",
+        "sensor/generated_scene: the best scene so far once a second, then the final one; exec/response: every task state",
     )
     nodes = [
-        spec_node(DOCUMENT_ID, local, LANE_ENTRY, label, description, META_REQUEST, facts=(Fact("code", "Code", code, GROUP_PROPERTY),), tags=(tag,), measurements=measurements)
+        spec_node(DOCUMENT_ID, local, LANE_ENTRY, label, description, META_REQUEST, facts=(Fact("code", "Code", code, GROUP_PROPERTY), *pool), tags=(tag,), measurements=measurements)
         for local, label, description, code, tag in entries
     ]
     for stage in stages():
@@ -271,7 +271,7 @@ def scene_generation_document(measurements: Optional[Mapping[str, MeasuredFacts]
     return ArchitectureDocument(
         id=DOCUMENT_ID,
         title="Scene generation",
-        summary="The pipeline that turns a functional scenario into one concrete scene, as the live subsystem and the cluster job run it.",
+        summary="The pipeline that turns a functional scenario into one concrete scene: a request becomes one task of the subsystem's pool, and the task runs the pipeline.",
         lanes=(
             Lane(LANE_ENTRY, "Entry point", "How a request arrives."),
             Lane(LANE_MODEL, "Scenario model", "From the functional text to the logical search problem."),

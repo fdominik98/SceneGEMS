@@ -40,7 +40,7 @@ def campaign(stores):
         {"name": "lab campaign"},
         CONFIG_HASH,
         [make_class_spec(CLASS_A, quota=3, failure_budget=2), make_class_spec(CLASS_B, quota=2, failure_budget=1, vessels=3, obstacles=1)],
-        pinned_fingerprints={"scenegems-scenario-execution": "fp-execution"},
+        pinned_fingerprints={"scenegems-simulation": "fp-execution"},
     )
 
 

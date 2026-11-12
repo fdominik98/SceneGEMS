@@ -73,12 +73,8 @@ def create_operator_app(
     assurance: Optional[AssuranceStores] = None,
     allowed_origins: Sequence[str] = DEFAULT_OPERATOR_ALLOWED_ORIGINS,
     live: Optional[LiveChannel] = None,
-    live_sessions: Optional[bool] = None,
 ) -> FastAPI:
     """The operator routes, with the workbench gateway mounted behind them when given.
-
-    live_sessions is whether the gateway starts live sessions, which /cluster/status reports; by
-    default it has them exactly when it is mounted.
 
     The campaign routes need the campaign stores (assurance); without them they answer 503.
     Browsers of allowed_origins may read, post and delete (CORS): GET, POST, DELETE and HEAD with a
@@ -101,7 +97,7 @@ def create_operator_app(
     app.state.artifact_store = None if artifacts is None else artifacts.artifacts
     app.state.campaigns_topic = getattr(live.producers, "campaign_list", None)
     app.add_api_route(HEALTH_PATH, _health, methods=["GET"])  # before the gateway's mount, which answers it too
-    app.include_router(operator_router(plane, assurance, live_sessions=gateway is not None if live_sessions is None else live_sessions))
+    app.include_router(operator_router(plane, assurance))
     app.include_router(live_router(live))
     if assurance is not None:
         app.include_router(run_frames_router(assurance, plane))
@@ -128,11 +124,10 @@ def create_control_node_apps(
     assurance: Optional[AssuranceStores] = None,
     allowed_origins: Sequence[str] = DEFAULT_OPERATOR_ALLOWED_ORIGINS,
     live: Optional[LiveChannel] = None,
-    live_sessions: Optional[bool] = None,
 ) -> ControlNodeApps:
     return ControlNodeApps(
         worker_node_api=create_worker_node_api_app(plane, run_timers, artifacts),
-        operator=create_operator_app(plane, gateway, artifacts, assurance, allowed_origins=allowed_origins, live=live, live_sessions=live_sessions),
+        operator=create_operator_app(plane, gateway, artifacts, assurance, allowed_origins=allowed_origins, live=live),
     )
 
 

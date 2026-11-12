@@ -108,6 +108,7 @@ class FakeControlNode:
     heartbeat_interval_s: float = 0.2
     lease_timeout_s: float = 3.0
     hello_reply: Optional[HelloReply] = None  # replaces the Welcome
+    instance_number: int = 1  # the number this control node gives the worker node
     renew_leases: bool = True
     connections: "queue.Queue[FakeWorkerNodeConnection]" = field(default_factory=queue.Queue)  # handed out by wait_for_connection
     all_connections: List[FakeWorkerNodeConnection] = field(default_factory=list)  # every connection, in order
@@ -127,7 +128,7 @@ class FakeControlNode:
         return f"http://{self.host}:{self.port}"
 
     def welcome(self) -> Welcome:
-        return Welcome(control_node_id=self.control_node_id, heartbeat_interval_s=self.heartbeat_interval_s, lease_timeout_s=self.lease_timeout_s)
+        return Welcome(control_node_id=self.control_node_id, instance_number=self.instance_number, heartbeat_interval_s=self.heartbeat_interval_s, lease_timeout_s=self.lease_timeout_s)
 
     def wait_for_connection(self, timeout_s: float = TIMEOUT_S) -> FakeWorkerNodeConnection:
         try:

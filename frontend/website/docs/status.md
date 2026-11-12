@@ -14,18 +14,14 @@ The bottom panel of each workbench page shows the state of its step in a chip be
 | Design Space Exploration | Idle, Exploring, N FECs found, No FEC found |
 | Scene Generation | Idle, Generating, Generating the batch, Valid scene, No valid scene |
 | Trajectory Generation | Idle, Ready to plan, Planning (with the seed step) or Generating, Trajectory ready, Incomplete trajectory, No usable trajectory, Failed |
-| Simulation, on the cluster | Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
-| Simulation, live session | Not initialized, Initializing, Agents are preparing, Agents are ready, Starting, Running, No simulator connected |
+| Simulation | Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
+| Simulation, attended run | As above, and **Ready to start** once the job has brought the vessels up and waits for **Start**. Before that the Result row lists what each vessel still waits for: its agent on the broker, a position, to be at its start point, to be armable. |
 
-When something outside the panel blocks the run (the cluster, the domain configuration, the MQTT broker), the panel lists it under the header. A disabled run button says in its tooltip what it waits for.
+When something outside the panel blocks the run (the cluster, the domain configuration), the panel lists it under the header. A disabled run button says in its tooltip what it waits for.
 
-## Connection statuses
+## Connection status
 
-The [Connections](./connections) page shows:
-
-- **Server**: the WebSocket link to the workbench gateway of the selected cluster's control node; disconnected while no cluster is selected
-- **MQTT broker**: the live session's broker connection, and the broker it is connected to
-- **Live monitor**: the state of the live COLREGS monitor, once the broker is connected
+The console has one connection of its own: the WebSocket link to the workbench gateway of the selected cluster's control node, which reads scenario files and lists the stack options. It is disconnected while no cluster is selected. The console connects to no MQTT broker: the [Connections](./connections) page only holds the broker setting of a run with a real vessel.
 
 Status text is colored for quick visual identification. A global error bar at the bottom of the screen shows scene generation and workbench gateway errors; click to dismiss.
 

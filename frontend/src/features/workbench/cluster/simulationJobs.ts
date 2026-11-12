@@ -1,18 +1,20 @@
 import { SIMULATION_JOB, simulationPayloadComponents } from "../../../domain/cluster/components";
 import type { JobSubmission } from "../../../domain/cluster/operatorApi";
+import type { AttendedBroker } from "../connection/connectionLibrary";
 import type { ReferenceGeofence } from "../connection/referenceGeofence";
 import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } from "../controls/simulationInitConfig";
 
 /**
- * Where a workbench simulation runs. A setup a runner of the cluster's simulation job runs goes
- * there as one job, judged live by the COLREGS monitor in the job: on the kinematic layer (runner
+ * How a workbench simulation runs: always as one simulation job on a worker node of the cluster. A
+ * setup an unattended runner takes is judged live by the COLREGS monitor in the job: on the kinematic layer (runner
  * kinematic), on ArduPilot SITL or Gazebo over the lockstep MAVLink adapters (runner ardupilot), or
  * on the custom controller in a Gazebo world the runner steps (runner gazebo_custom). Each runs
- * every vessel on replay, or USV Navigation on the own ship and replay on the others. Every other
- * setup is a live session on the control node over the MQTT broker: real vessels and Mission Planner are
- * only ever run that way, and so are setups no runner takes (USV Navigation on a target ship,
- * mixed control layers, the weather a job does not apply). A plan names the components its job
- * needs, so the workbench counts the worker nodes that have them.
+ * every vessel on replay, or USV Navigation on the own ship and replay on the others. A setup none
+ * of them takes (Mission Planner, USV Navigation on a target ship, mixed control layers, the weather
+ * a job does not apply, a real vessel) runs as an attended job (runner attended): the job brings the
+ * stack up and waits for the operator's Start. With a real vessel every vessel runs through its
+ * ArduAgent on the MQTT broker: the control node's own, or the one the plan names. A plan names the
+ * components its job needs, so the workbench counts the worker nodes that have them.
  */
 
 export { SIMULATION_JOB };
@@ -35,8 +37,12 @@ export interface SimulationSetup {
   vessels: SimulationVesselSetup[];
   windVector: [number, number, number];
   waveAmplitude: number;
-  /** The real-time factor: a live session's pace, and SITL's speedup in an ArduPilot job. */
+  /** The real-time factor: the pace of an attended run, and SITL's speedup in an ArduPilot job. */
   speedup: number;
+  /** The whole setup as the control node takes it (simulatorType, windVector, wave, simulationSpeed, connectionsByAgentId): what an attended job runs. */
+  body: Record<string, unknown>;
+  /** With a real vessel: the broker its agent is on, when it is not the control node's own. */
+  broker?: AttendedBroker | null;
 }
 
 export type KinematicRunPlan = {
@@ -75,9 +81,30 @@ export type GazeboCustomRunPlan = {
   summary: string;
 };
 
-export type ClusterRunPlan = KinematicRunPlan | ArduPilotRunPlan | GazeboCustomRunPlan;
+/** A run the operator starts by hand once the job's stack is up: the setup as it is, vessel by vessel. */
+export type AttendedRunPlan = {
+  where: "cluster";
+  jobType: typeof SIMULATION_JOB;
+  runner: "attended";
+  /** The setup the job runs (SimulationSetup.body). */
+  simulation: Record<string, unknown>;
+  /** Why no unattended runner takes the setup. */
+  reason: string;
+  /** With a real vessel: the broker of the run, when it is not the control node's own. */
+  broker?: AttendedBroker;
+  components: string[];
+  summary: string;
+};
 
-export type SimulationRunPlan = ClusterRunPlan | { where: "session"; reason: string };
+/** The plans whose run needs no operator beside it. */
+export type UnattendedRunPlan = KinematicRunPlan | ArduPilotRunPlan | GazeboCustomRunPlan;
+export type ClusterRunPlan = UnattendedRunPlan | AttendedRunPlan;
+
+/** The job a setup runs as; null while there is nothing to run (no scenario with vessels is loaded). */
+export type SimulationRunPlan = ClusterRunPlan | null;
+
+/** Why no unattended runner takes a setup, so it runs attended. */
+type NeedsAnOperator = { where: "attended"; reason: string };
 
 const ARDUPILOT_LAYERS: Partial<Record<GlobalSimulatorType, ArduPilotSimulationLayer>> = {
   "ArduPilot Sim": "ardupilot_sim",
@@ -110,18 +137,35 @@ const SUMMARIES: Record<ControlLayerOfPlan, Record<RunMode, string>> = {
   custom: { replay: "every vessel follows its trajectory with the custom controller", usv_navigation: "USV Navigation steers the own ship through the custom controller, the others replay" },
 };
 
-const MODE_ONLY = "On the cluster only the own ship may run USV Navigation; this setup runs as a live session.";
+const MODE_ONLY = "Unattended, only the own ship may run USV Navigation.";
 
-export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
+/** Every run of the workbench is judged while it runs, so its job needs the monitoring subsystem beside the layers of its stack. */
+const LIVE_MONITOR = "live";
+
+/** The setup as an attended job, for the reason no unattended runner takes it. */
+function attended(setup: SimulationSetup, reason: string): AttendedRunPlan {
+  const realVessel = setup.vessels.some((vessel) => vessel.context === "real");
+  const missionPlanner = setup.vessels.some((vessel) => vessel.asvSystem === "mission_planner");
+  return {
+    where: "cluster",
+    jobType: SIMULATION_JOB,
+    runner: "attended",
+    simulation: setup.body,
+    reason,
+    ...(realVessel && setup.broker ? { broker: setup.broker } : {}),
+    components: simulationPayloadComponents({ runner: "attended", simulation: setup.body, monitor: LIVE_MONITOR }),
+    summary: realVessel ? "a real vessel takes part through its agent on the MQTT broker" : missionPlanner ? "you steer a vessel from Mission Planner" : "the setup as it is, vessel by vessel",
+  };
+}
+
+/** The unattended runner that takes the setup, or why none does. Use planSimulationRun, which runs such a setup attended. */
+function planUnattendedRun(setup: SimulationSetup): UnattendedRunPlan | NeedsAnOperator {
   const { vessels } = setup;
   if (vessels.some((vessel) => vessel.context === "real")) {
-    return { where: "session", reason: "A real vessel joins only a live session over the MQTT broker." };
+    return { where: "attended", reason: "A real vessel takes part through its agent on the MQTT broker: the run is ready to start when every vessel is at its start point and reports there." };
   }
   if (vessels.some((vessel) => vessel.asvSystem === "mission_planner")) {
-    return { where: "session", reason: "Mission Planner is flown from the desktop in a live session." };
-  }
-  if (vessels.length === 0) {
-    return { where: "session", reason: "Load a scenario first." };
+    return { where: "attended", reason: "Mission Planner steers a vessel by hand, so its operator starts the run." };
   }
   const arduPilotLayer = ARDUPILOT_LAYERS[setup.simulatorType];
   if (setup.simulatorType === "Gazebo" && onControlLayer(vessels, "custom")) {
@@ -131,29 +175,41 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
     return planArduPilotRun(setup, arduPilotLayer);
   }
   if (setup.simulatorType !== "Kinematic") {
-    return { where: "session", reason: `${setup.simulatorType} has no cluster job yet, so it runs as a live session on the control node.` };
+    return { where: "attended", reason: `${setup.simulatorType} has no unattended job yet.` };
   }
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
-    return { where: "session", reason: "The kinematic layer has no wind or waves." };
+    return { where: "attended", reason: "The kinematic layer has no wind or waves." };
   }
   const mode = onControlLayer(vessels, "none") ? modeOf(vessels) : null;
   if (mode === null) {
-    return { where: "session", reason: MODE_ONLY };
+    return { where: "attended", reason: MODE_ONLY };
   }
-  return { where: "cluster", jobType: SIMULATION_JOB, runner: "kinematic", ...mode, components: simulationPayloadComponents({ runner: "kinematic", mode: mode.mode }), summary: SUMMARIES.none[mode.mode] };
+  return { where: "cluster", jobType: SIMULATION_JOB, runner: "kinematic", ...mode, components: simulationPayloadComponents({ runner: "kinematic", mode: mode.mode, monitor: LIVE_MONITOR }), summary: SUMMARIES.none[mode.mode] };
+}
+
+/**
+ * The job the setup runs as on a worker node: an unattended one where a runner takes it, an attended one otherwise
+ * (a real vessel included). Null for a setup without vessels: there is nothing to run before a scenario is loaded.
+ */
+export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
+  if (setup.vessels.length === 0) {
+    return null;
+  }
+  const plan = planUnattendedRun(setup);
+  return plan.where === "cluster" ? plan : attended(setup, plan.reason);
 }
 
 /** Replay or USV Navigation on SITL or Gazebo runs as one job; the job's stack runs in calm weather. */
-function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimulationLayer): SimulationRunPlan {
+function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimulationLayer): UnattendedRunPlan | NeedsAnOperator {
   const mode = onControlLayer(setup.vessels, "ardupilot") ? modeOf(setup.vessels) : null;
   if (mode === null) {
     return {
-      where: "session",
-      reason: `On the cluster ${setup.simulatorType} runs replay on ArduPilot, with USV Navigation on the own ship only${setup.simulatorType === "Gazebo" ? ", or every vessel on the custom controller" : ""}; this setup runs as a live session.`,
+      where: "attended",
+      reason: `Unattended, ${setup.simulatorType} runs replay on ArduPilot, with USV Navigation on the own ship only${setup.simulatorType === "Gazebo" ? ", or every vessel on the custom controller" : ""}.`,
     };
   }
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
-    return { where: "session", reason: "The cluster's ArduPilot job runs in calm weather; with wind or waves the setup runs as a live session." };
+    return { where: "attended", reason: "The unattended ArduPilot job runs in calm weather." };
   }
   return {
     where: "cluster",
@@ -161,20 +217,20 @@ function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimu
     runner: "ardupilot",
     simulationLayer,
     ...mode,
-    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer, mode: mode.mode }),
+    components: simulationPayloadComponents({ runner: "ardupilot", simulation_layer: simulationLayer, mode: mode.mode, monitor: LIVE_MONITOR }),
     speedup: Math.max(1, Math.round(setup.speedup)),
     summary: SUMMARIES.ardupilot[mode.mode],
   };
 }
 
 /** The custom controller on Gazebo runs as one job that steps the world itself, in the setup's wind. */
-function planGazeboCustomRun(setup: SimulationSetup): SimulationRunPlan {
+function planGazeboCustomRun(setup: SimulationSetup): UnattendedRunPlan | NeedsAnOperator {
   const mode = modeOf(setup.vessels);
   if (mode === null) {
-    return { where: "session", reason: MODE_ONLY };
+    return { where: "attended", reason: MODE_ONLY };
   }
   if (setup.waveAmplitude > 0) {
-    return { where: "session", reason: "The cluster's custom controller job takes the wind from the workbench, not the waves; with waves the setup runs as a live session." };
+    return { where: "attended", reason: "The unattended custom controller job takes the wind from the workbench, not the waves." };
   }
   return {
     where: "cluster",
@@ -182,14 +238,14 @@ function planGazeboCustomRun(setup: SimulationSetup): SimulationRunPlan {
     runner: "gazebo_custom",
     ...mode,
     windVector: [...setup.windVector],
-    components: simulationPayloadComponents({ runner: "gazebo_custom", mode: mode.mode }),
+    components: simulationPayloadComponents({ runner: "gazebo_custom", mode: mode.mode, monitor: LIVE_MONITOR }),
     summary: SUMMARIES.custom[mode.mode],
   };
 }
 
 function liveMonitorFields(colregsConstraintsContent: string): Record<string, unknown> {
   return {
-    monitor: "live",
+    monitor: LIVE_MONITOR,
     colregs_constraints_content: colregsConstraintsContent.trim().length > 0 ? colregsConstraintsContent : null,
     // The run's trajectories, monitored after the run when it ended before anyone watched it.
     include_trajectories: true,
@@ -250,7 +306,7 @@ export function gazeboCustomSimulationSubmission(
   return { job_type: plan.jobType, payload, max_attempts: 1 };
 }
 
-function withOwnShip(payload: Record<string, unknown>, plan: ClusterRunPlan): void {
+function withOwnShip(payload: Record<string, unknown>, plan: UnattendedRunPlan): void {
   if (plan.mode === "usv_navigation" && plan.ownShipId !== null) {
     payload.own_ship_id = plan.ownShipId;
   }
@@ -262,8 +318,27 @@ export interface SimulationJobInput {
   geofence: ReferenceGeofence;
 }
 
+/**
+ * The simulation job's attended runner (cluster/worker_node/jobs/simulation_runners/attended_runner.py): the setup as it is,
+ * with the COLREGS monitor live. The job waits for the operator's Start.
+ */
+export function attendedSimulationSubmission(plan: AttendedRunPlan, trajectories: Record<string, unknown>, geofence: ReferenceGeofence, colregsConstraintsContent: string): JobSubmission {
+  const payload: Record<string, unknown> = {
+    runner: plan.runner,
+    simulation: plan.simulation,
+    trajectories,
+    geofence: { latitude: geofence.latitude, longitude: geofence.longitude, radius_meters: geofence.radius_meters },
+    ...(plan.broker ? { broker: plan.broker } : {}),
+    ...liveMonitorFields(colregsConstraintsContent),
+  };
+  return { job_type: plan.jobType, payload, max_attempts: 1 };
+}
+
 /** The job a cluster plan submits. */
 export function simulationSubmission(plan: ClusterRunPlan, input: SimulationJobInput): JobSubmission {
+  if (plan.runner === "attended") {
+    return attendedSimulationSubmission(plan, input.trajectories, input.geofence, input.colregsConstraintsContent);
+  }
   if (plan.runner === "kinematic") {
     return kinematicSimulationSubmission(plan, input.trajectories, input.colregsConstraintsContent);
   }
@@ -277,6 +352,9 @@ const LAYER_LABELS: Record<ArduPilotSimulationLayer, string> = { ardupilot_sim: 
 
 /** How the run panel says what a cluster plan runs. */
 export function describeClusterPlan(plan: ClusterRunPlan): string {
+  if (plan.runner === "attended") {
+    return `Runs on the cluster as one attended job (${plan.summary}): the job brings the vessels up and waits for your Start. ${plan.reason}`;
+  }
   if (plan.runner === "kinematic") {
     return `Runs on the cluster as one kinematic job (${plan.summary}), judged by the COLREGS monitor as it runs.`;
   }
@@ -296,5 +374,5 @@ export function describeClusterPlan(plan: ClusterRunPlan): string {
  * is the playback speed of the shown run in the browser instead.
  */
 export function isPacedByWatchSpeed(plan: ClusterRunPlan): boolean {
-  return plan.runner !== "ardupilot";
+  return plan.runner !== "ardupilot" && plan.runner !== "attended"; // an attended run follows the setup's own speed
 }

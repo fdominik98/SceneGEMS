@@ -14,12 +14,16 @@ export const SIMULATION_JOB = "simulation";
 export const COMPONENTS = [
   "asv_system/replay",
   "asv_system/usv_navigation",
+  "asv_system/mission_planner",
+  "asv_system/on_board",
   "control_layer/none",
   "control_layer/ardupilot",
   "control_layer/custom",
+  "control_layer/real_vessel",
   "simulation_layer/kinematic",
   "simulation_layer/ardupilot_sim",
   "simulation_layer/gazebo",
+  "simulation_layer/real_vessel",
   "design_space_exploration",
   "scene_generation",
   "trajectory_generation",
@@ -30,12 +34,16 @@ export const COMPONENTS = [
 const COMPONENT_LABELS: Record<string, string> = {
   "asv_system/replay": "Replay",
   "asv_system/usv_navigation": "USV Navigation",
+  "asv_system/mission_planner": "Mission Planner",
+  "asv_system/on_board": "On-board software",
   "control_layer/none": "No control layer",
   "control_layer/ardupilot": "ArduPilot",
   "control_layer/custom": "Custom controller",
+  "control_layer/real_vessel": "Real vessel autopilot",
   "simulation_layer/kinematic": "Kinematic layer",
   "simulation_layer/ardupilot_sim": "ArduPilot SITL",
   "simulation_layer/gazebo": "Gazebo",
+  "simulation_layer/real_vessel": "Real vessel",
   design_space_exploration: "Design space exploration",
   scene_generation: "Scene generation",
   trajectory_generation: "Trajectory generation",
@@ -85,15 +93,67 @@ function layerComponents(controlLayer: string, simulationLayer: string, mode: un
  * implies, replay for every vessel, and USV Navigation for the own ship in mode usv_navigation.
  */
 export function runStackComponents(stack: unknown): string[] {
+  if (field(stack, "attended") === true) {
+    return attendedSetupComponents(field(stack, "simulation"));
+  }
   const layer = field(stack, "simulation_layer");
   const simulationLayer = typeof layer === "string" && layer in IMPLIED_CONTROL_LAYERS ? layer : "kinematic";
   const controlLayer = field(stack, "control_layer") === "custom" ? "custom" : IMPLIED_CONTROL_LAYERS[simulationLayer];
   return layerComponents(controlLayer, simulationLayer, field(stack, "mode"));
 }
 
-/** The components a simulation job payload needs, by its runner (`simulation_job.required_components`). */
+/** The component of the monitoring subsystem, which also judges a run that is judged while it runs. */
+const MONITORING = "monitoring";
+
+/**
+ * The components with the monitoring subsystem's when the run is judged while it runs (monitor live): its scenes are
+ * judged by the worker node's monitoring subsystem, so only a worker node that runs one takes it
+ * (`simulation_job.required_components`, `stage_graph.StageGraph.run_components`).
+ */
+function withLiveMonitor(components: string[], monitor: unknown): string[] {
+  return monitor === "live" ? orderedComponents([...components, MONITORING]) : components;
+}
+
+/** The components a campaign run needs: those of its stack section, and the monitoring subsystem when its monitor is live (`stage_graph.StageGraph.run_components`). */
+export function runComponents(run: unknown): string[] {
+  return withLiveMonitor(runStackComponents(field(run, "stack")), field(run, "monitor"));
+}
+
+/** The simulation layer of the workbench's simulator names (`workbench_stack_mapping.simulation_layer_from_simulator_type`). */
+const SIMULATOR_LAYERS: Record<string, string> = { kinematic: "kinematic", "ardupilot sim": "ardupilot_sim", gazebo: "gazebo" };
+
+/**
+ * The components an attended run needs, from the workbench's setup (`AttendedSimulationPayload.vessel_stacks`): the
+ * simulation layer, and every vessel's ASV system and control layer (the layer's own when a vessel names none). A real
+ * vessel is its own control and simulation layer.
+ */
+export function attendedSetupComponents(simulation: unknown): string[] {
+  const simulator = field(simulation, "simulatorType");
+  const layer = SIMULATOR_LAYERS[typeof simulator === "string" ? simulator.toLowerCase() : ""] ?? "kinematic";
+  const connections = field(simulation, "connectionsByAgentId");
+  const components = [`simulation_layer/${layer}`];
+  for (const connection of Object.values(typeof connections === "object" && connections !== null ? connections : {})) {
+    const asvSystem = field(connection, "asvSystem");
+    if (field(connection, "context") === "real") {
+      components.push(`asv_system/${typeof asvSystem === "string" ? asvSystem : "replay"}`, "control_layer/real_vessel", "simulation_layer/real_vessel");
+      continue;
+    }
+    const controlLayer = field(connection, "controlLayer");
+    components.push(`asv_system/${typeof asvSystem === "string" ? asvSystem : "replay"}`, `control_layer/${typeof controlLayer === "string" ? controlLayer : IMPLIED_CONTROL_LAYERS[layer]}`);
+  }
+  return orderedComponents(components);
+}
+
+/** The components a simulation job payload needs: its stack's by its runner, and the monitoring subsystem when its monitor is live (`simulation_job.required_components`). */
 export function simulationPayloadComponents(payload: unknown): string[] {
+  return withLiveMonitor(stackComponentsOfPayload(payload), field(payload, "monitor"));
+}
+
+function stackComponentsOfPayload(payload: unknown): string[] {
   const runner = field(payload, "runner");
+  if (runner === "attended") {
+    return attendedSetupComponents(field(payload, "simulation"));
+  }
   const layer = field(payload, "simulation_layer");
   const mode = field(payload, "mode");
   if (runner === "ardupilot" && typeof layer === "string") {

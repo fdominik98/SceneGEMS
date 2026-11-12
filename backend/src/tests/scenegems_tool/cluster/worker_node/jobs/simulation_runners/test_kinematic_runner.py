@@ -6,7 +6,7 @@ import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
-from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job, simulation_job
+from scenegems_tool.cluster.worker_node.jobs import simulation_job
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation, RunObserver
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicSimulationPayload, build_job_stack, kinematic_run_instance
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
@@ -41,21 +41,45 @@ def test_the_stack_is_the_simulator_an_asv_system_container_per_vessel_and_the_r
     job, stack = kinematic_stack(worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    assert set(services) == {"kinematic_sim", "vessel_0_asv_system", "vessel_1_asv_system", RUNNER_SERVICE}
+    assert set(services) == {"kinematic_sim", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE}
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
-        assert "scenegems-scenario-execution-subsystem" in service["image"], "the simulator, replay and the runner start from the scenario execution image"
+        assert "scenegems-simulation-subsystem" in service["image"], "the simulator, replay and the runner start from the simulation subsystem image"
         assert service["networks"] == [STACK_NETWORK] and "ports" not in service
     assert set(services[RUNNER_SERVICE]["depends_on"]) == set(services) - {RUNNER_SERVICE}
     assert stack.compose["networks"] == {STACK_NETWORK: {"driver": "bridge"}}, "the job's own network, which reaches nothing else"
     assert "volumes" not in stack.compose, "the runner sends every container what it needs"
 
 
+def test_the_runner_of_a_judged_run_is_told_the_monitoring_subsystem_and_reaches_the_clusters_broker(instances_folder, worker_node, make_job, head_on_trajectories):
+    """Its scenes are judged by the worker node's monitoring pool; the simulator and the ASV systems still reach nothing but the stack."""
+    from scenegems_tool.subsystems.monitoring.monitoring_types import monitoring_pool_from_environment
+
+    worker_node.set_instance_number(3)
+    worker_node.broker_network = "scenegems-m1-n1"
+    _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, monitor="live")
+    services = stack.compose["services"]
+    runner = services[RUNNER_SERVICE]
+    service, broker, geofence = monitoring_pool_from_environment(runner["environment"])
+    assert service == "monitoring-subsystem-3" and broker["MQTT_BROKER"] == "broker" and geofence == (57.7, 11.9, 2000.0)
+    assert runner["environment"]["PYTHONUNBUFFERED"] == "1"
+    assert runner["networks"] == [STACK_NETWORK, "scenegems_broker"]
+    assert stack.compose["networks"]["scenegems_broker"] == {"external": True, "name": "scenegems-m1-n1"}
+    for key, other in services.items():
+        if key != RUNNER_SERVICE:
+            assert other["networks"] == [STACK_NETWORK] and "SCENEGEMS_MONITORING_POOL" not in other.get("environment", {})
+
+
+def test_the_runner_of_a_run_without_a_monitor_is_told_of_none(instances_folder, worker_node, make_job, head_on_trajectories):
+    _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories)
+    assert "SCENEGEMS_MONITORING_POOL" not in stack.compose["services"][RUNNER_SERVICE]["environment"]
+
+
 def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1)
     services = stack.compose["services"]
-    assert "scenegems-usv-navigation" in services["vessel_1_asv_system"]["image"]
-    assert "scenegems-scenario-execution-subsystem" in services["vessel_0_asv_system"]["image"]
+    assert "scenegems-usv-navigation" in services["ts1_asv_system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["os_asv_system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -81,11 +105,11 @@ def test_a_run_without_a_monitor_is_the_plain_replay(simulate, head_on_trajector
     assert result["steps"] == 120
 
 
-def test_the_live_monitor_gives_the_post_hoc_result_of_the_same_run(simulate, make_job):
+def test_the_live_monitor_gives_the_post_hoc_result_of_the_same_run(simulate, post_hoc):
     plain, live = simulate(), simulate(monitor="live")
     assert live["state_digest"] == plain["state_digest"] and live["steps"] == plain["steps"]
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": plain["trajectories"]}), _quiet)
-    assert {key: live["monitor"][key] for key in SUMMARY_KEYS} == {key: post_hoc[key] for key in SUMMARY_KEYS}
+    judged = post_hoc(plain["trajectories"])
+    assert {key: live["monitor"][key] for key in SUMMARY_KEYS} == {key: judged[key] for key in SUMMARY_KEYS}
     assert live["monitor"]["stopped_early_at"] is None
     assert not live["monitor"]["passed"] and live["monitor"]["failed_rules"][0]["first_failed_at"] == 61
 

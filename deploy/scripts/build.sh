@@ -30,10 +30,10 @@ Options:
 
   -1, --backend           scenegems-control-node-api and the Python subsystems (monitoring,
                           scene-generation, trajectory-generation,
-                          scenario-execution, design-space-exploration)
+                          the simulation subsystem, design-space-exploration)
 
-  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); live
-                          sessions with ArduPilot run it on the control node's machine
+  -4, --arduagent         ArduPilot agent only (scenegems-arduagent:latest); an attended
+                          simulation with a real vessel runs it on a worker node
 
   -5, --worker-node       Worker node daemon image only (scenegems-worker-node:latest);
                           a worker node also needs the images of the components it offers
@@ -45,7 +45,7 @@ Options:
   --all                   Build every image (same as no arguments)
 
   --release <folder>      Build the images a cluster runs (broker, control-node-api and
-                          subsystems, simulation, worker node daemon) as :latest, pull
+                          subsystems, simulation, ArduAgent, worker node daemon) as :latest, pull
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
@@ -156,8 +156,8 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/deploy/images/monitoring/requirements.txt" "$SCRIPT_DIR/deploy/images/monitoring/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
-    build_subsystem_if_stale "scenegems-scenario-execution-subsystem:latest" "$SCRIPT_DIR/deploy/images/scenario_execution/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/scenario_execution/requirements.txt" "$SCRIPT_DIR/deploy/images/scenario_execution/Dockerfile" \
+    build_subsystem_if_stale "scenegems-simulation-subsystem:latest" "$SCRIPT_DIR/deploy/images/simulation/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/simulation/requirements.txt" "$SCRIPT_DIR/deploy/images/simulation/Dockerfile" \
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
     build_subsystem_if_stale "scenegems-scene-generation-subsystem:latest" "$SCRIPT_DIR/deploy/images/scene_generation/Dockerfile" \
@@ -169,9 +169,11 @@ build_backend_stack_images() {
         "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" \
         "$SCRIPT_DIR/backend/assets/domain_config"
     # The design space exploration image fetches the pinned Refinery fork (deploy/images/upstream_pins.env,
-    # which is then part of its fingerprint); nothing of backend/ goes into it.
+    # which is then part of its fingerprint) and puts the subsystem's request service, from backend/src, next to it.
     build_subsystem_if_stale "scenegems-design-space-exploration-subsystem:latest" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
-        "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" "$SCRIPT_DIR/deploy/images/design_space_exploration"
+        "$SCRIPT_DIR/deploy/images/design_space_exploration/requirements.txt" "$SCRIPT_DIR/deploy/images/design_space_exploration/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/design_space_exploration" \
+        "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src"
     build_subsystem_if_stale "scenegems-control-node-api:latest" "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/control_node_api/Dockerfile" "$SCRIPT_DIR/backend/pyproject.toml" "$SCRIPT_DIR/backend/setup.py" \
         "$SCRIPT_DIR/backend/README.md" "$SCRIPT_DIR/backend/src" "$SCRIPT_DIR/backend/assets"
@@ -187,12 +189,15 @@ build_worker_node_image() {
 
 parse_build_args "$@"
 
-# A release builds what a cluster runs. ArduAgent and MAVProxy are only used by live sessions,
-# which run the :latest images of the control node's machine (deploy/control_node/docker-compose.live-sessions.yml).
+# A release builds what a cluster runs. MAVProxy is part of it: an attended simulation on a worker node
+# needs it for a vessel steered from Mission Planner (the component asv_system/mission_planner).
+# ArduAgent is part of it too: beside a real vessel every simulated vessel of an attended simulation runs
+# through one (the component control_layer/real_vessel).
 if [ -n "$RELEASE_DIR" ]; then
     BUILD_BROKER=1
     BUILD_BACKEND=1
     BUILD_SIMULATION=1
+    BUILD_ARDUAGENT=1
     BUILD_WORKER_NODE=1
 fi
 

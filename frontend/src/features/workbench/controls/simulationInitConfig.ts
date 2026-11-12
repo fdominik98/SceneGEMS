@@ -68,7 +68,6 @@ export interface VesselInitConnectionDraft {
   controlLayer: ControlLayer;
   agentName: string;
   topic: string;
-  port: number;
   /** Gazebo SDF model file content; undefined means the server generates one. */
   gazeboVesselModel?: string;
 }
@@ -81,7 +80,6 @@ export type SimulationConnectionWire =
       controlMode?: ControlMode;
       agentName: string;
       topic: string;
-      port: number;
       gazeboVesselModel?: string;
     }
   | {
@@ -104,31 +102,37 @@ export function toTopicSegment(context: SimulationContext): "simulation" | "real
   return context;
 }
 
-function toContextSuffix(context: SimulationContext): "sim" | "real" {
-  return context === "simulation" ? "sim" : "real";
+/**
+ * Where a vessel's agent publishes by default. A simulated vessel's topic is set by the job that runs it; a real
+ * vessel's is where the agent on board publishes, which the operator may change.
+ */
+export function vesselTopic(context: SimulationContext, agentName: string): string {
+  return `waraps/unit/surface/${toTopicSegment(context)}/${agentName}`;
+}
+
+/** The draft under the vessel's own name (os, ts1), which the operator does not choose; only a real vessel keeps a topic of its own. */
+export function withVesselName(draft: VesselInitConnectionDraft, agentName: string): VesselInitConnectionDraft {
+  const topic = draft.context === "real" && draft.topic.trim().length > 0 ? draft.topic : vesselTopic(draft.context, agentName);
+  return { ...draft, agentName, topic };
 }
 
 export function buildInitialVesselConnectionDrafts(
   vessels: VesselDescriptor[]
 ): VesselInitConnectionDraft[] {
   const nameOf = createActorNamer();
-  return vessels.map((vessel, index) => {
-    // The vessel's name (os, ts1) and where it runs: os_sim, ts1_sim.
-    const vesselPrefix = nameOf(vessel.id, { isOwnShip: vessel.isOwnShip, isVessel: true });
+  return vessels.map((vessel) => {
+    // The agent is named as the vessel: os, ts1.
+    const agentName = nameOf(vessel.id, { isOwnShip: vessel.isOwnShip, isVessel: true });
     const context: SimulationContext = "simulation";
-    const agentName = `${vesselPrefix}_${toContextSuffix(context)}`;
     const parsedId = Number.parseInt(vessel.id, 10);
-    const hasNumericId = Number.isFinite(parsedId);
-    const portOffset = hasNumericId ? parsedId : index;
-    const asvSystem: AsvSystem = hasNumericId && parsedId === 0 ? "mission_planner" : "replay";
+    const asvSystem: AsvSystem = Number.isFinite(parsedId) && parsedId === 0 ? "mission_planner" : "replay";
     return {
       vesselId: vessel.id,
       context,
       asvSystem,
       controlLayer: "ardupilot",
       agentName,
-      topic: `waraps/unit/surface/${toTopicSegment(context)}/${agentName}`,
-      port: 14570 + portOffset,
+      topic: vesselTopic(context, agentName),
     };
   });
 }
@@ -155,7 +159,6 @@ function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire
     ...mode,
     agentName: draft.agentName,
     topic: draft.topic,
-    port: draft.port,
     ...(hasModel ? { gazeboVesselModel: draft.gazeboVesselModel } : {}),
   };
 }
@@ -187,12 +190,14 @@ export function toPersistedVesselDrafts(
 
 /**
  * Settings saved before the stack choices existed carry a controlMode instead of an ASV system, and settings saved
- * while the ASV system was called the ASV software carry it under that name.
+ * while the ASV system was called the ASV software carry it under that name. Settings saved while a vessel had a
+ * ground station port carry one, which is dropped: Docker assigns the port a job publishes.
  */
-type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode; asvSoftware?: PersistedVesselConnectionDraft["asvSystem"] };
+type LegacyPersistedDraft = Partial<PersistedVesselConnectionDraft> & { controlMode?: ControlMode; asvSoftware?: PersistedVesselConnectionDraft["asvSystem"]; port?: number };
 
 function upgradePersistedDraft(saved: LegacyPersistedDraft): Partial<PersistedVesselConnectionDraft> {
-  const { controlMode, asvSoftware: formerName, ...rest } = saved;
+  const { controlMode, asvSoftware: formerName, port: formerPort, ...rest } = saved;
+  void formerPort;
   if (rest.asvSystem === undefined && formerName !== undefined) {
     return { ...rest, asvSystem: formerName };
   }
@@ -202,7 +207,7 @@ function upgradePersistedDraft(saved: LegacyPersistedDraft): Partial<PersistedVe
   return rest;
 }
 
-/** Restore saved connection settings onto generated drafts; optional in-session SDF models only. */
+/** Restore saved connection settings onto generated drafts; optional in-session SDF models only. A name saved while names could be typed is not restored. */
 export function mergePersistedVesselSettings(
   persisted: PersistedVesselConnectionDraft[],
   generated: VesselInitConnectionDraft[],
@@ -211,7 +216,7 @@ export function mergePersistedVesselSettings(
   const byId = new Map(persisted.map((draft) => [draft.vesselId, draft]));
   return generated.map((draft) => {
     const saved = byId.get(draft.vesselId);
-    const base = saved ? { ...draft, ...upgradePersistedDraft(saved) } : draft;
+    const base = saved ? withVesselName({ ...draft, ...upgradePersistedDraft(saved) }, draft.agentName) : draft;
     const model = sessionModelsByVesselId?.get(draft.vesselId);
     return model != null ? { ...base, gazeboVesselModel: model } : base;
   });
@@ -305,9 +310,26 @@ export function normalizeDraftStack(
   return working === undefined ? draft : { ...draft, controlLayer: working };
 }
 
-/** "vessel 1: TCP localhost:49153" per Mission Planner vessel, ordered by vessel id: where Mission Planner connects. */
-export function groundControlEndpointLabels(portsByAgentId: Record<string, number>): string[] {
+/** "vessel 1: TCP localhost:49153" per Mission Planner vessel, ordered by vessel id: where Mission Planner connects. The host is the machine that runs the vessels: the worker node of an attended job. */
+/** What a vessel's agent has to report before an attended run with a real vessel may start (`STATUS_VESSELS`), as the operator reads it. */
+const VESSEL_STATE_LABELS: Record<string, string> = {
+  connected: "its agent on the broker",
+  position: "a position",
+  armable: "to be armable",
+  at_start: "to be at its start point",
+};
+
+/** "vessel 1 waits for a position, to be at its start point" per vessel that is not ready, ordered by vessel id; nothing for a vessel that is. */
+export function vesselReadinessLabels(statesByAgentId: Record<string, Record<string, boolean>>): string[] {
+  return Object.entries(statesByAgentId)
+    .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+    .map(([agentId, state]) => ({ agentId, lacking: Object.entries(state).filter(([, met]) => !met).map(([key]) => VESSEL_STATE_LABELS[key] ?? key) }))
+    .filter(({ lacking }) => lacking.length > 0)
+    .map(({ agentId, lacking }) => `vessel ${agentId} waits for ${lacking.join(", ")}`);
+}
+
+export function groundControlEndpointLabels(portsByAgentId: Record<string, number>, host = "localhost"): string[] {
   return Object.entries(portsByAgentId)
     .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-    .map(([agentId, port]) => `vessel ${agentId}: TCP localhost:${port}`);
+    .map(([agentId, port]) => `vessel ${agentId}: TCP ${host}:${port}`);
 }

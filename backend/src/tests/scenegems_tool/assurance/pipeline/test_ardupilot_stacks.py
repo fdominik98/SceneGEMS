@@ -6,7 +6,7 @@ from scenegems_tool.assurance.campaign import campaign_config_from_dict
 from scenegems_tool.assurance.pipeline.payload_builder import PayloadBuilder, PayloadError, required_fingerprints, validate_payload
 from scenegems_tool.assurance.pipeline.stage_graph import STAGE_JOB_TYPES, StageGraph, Step
 from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
-from scenegems_tool.cluster.fingerprints.components import SCENARIO_EXECUTION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.worker_node.jobs.job_types import payload_components
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import ArduPilotSimulationPayload
@@ -21,6 +21,8 @@ SIMULATION = JobType.SIMULATION
 ON_KINEMATIC = ("asv_system/replay", "control_layer/none", "simulation_layer/kinematic")
 ON_SITL = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
 ON_GAZEBO = ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
+# A run that is judged while it runs also needs the monitoring subsystem: its series of scenes is judged there
+JUDGED = ("monitoring",)
 KINEMATIC = {"monitor": "post_hoc"}
 SITL = {"stack": {"simulation_layer": "ardupilot_sim"}, "monitor": "post_hoc"}
 GAZEBO = {"stack": {"simulation_layer": "gazebo", "speedup": 4, "dt": 2, "steps": 20, "geofence": {"latitude": 58.5, "longitude": 15.5, "radius_meters": 40}}, "monitor": "live", "seed": 77}
@@ -41,14 +43,14 @@ def _builder(*runs, **sections) -> PayloadBuilder:
 def test_every_simulate_step_is_a_simulation_job_needing_its_runs_components():
     graph = _graph(KINEMATIC, SITL, GAZEBO)
     assert [graph.job_type_of(Step(SIMULATE, run, 0)) for run in range(3)] == [SIMULATION] * 3
-    assert [graph.run_components(run) for run in range(3)] == [ON_KINEMATIC, ON_SITL, ON_GAZEBO]
+    assert [graph.run_components(run) for run in range(3)] == [ON_KINEMATIC, ON_SITL, ON_GAZEBO + JUDGED], "the Gazebo run's monitor is live"
     assert graph.job_type_of(Step(MONITOR, 1)) == JobType.MONITORING_POST_HOC and graph.job_type_of(Step(CALIBRATE, 2)) == JobType.CALIBRATION_DEVIATION
     assert Step(SIMULATE, 1, 0).job_type == SIMULATION
 
 
 def test_a_stage_lists_the_components_its_runs_need():
     graph = _graph(KINEMATIC, SITL, SITL, GAZEBO)
-    assert graph.stage_needs(SIMULATE) == [(SIMULATION, ON_KINEMATIC), (SIMULATION, ON_SITL), (SIMULATION, ON_GAZEBO)]
+    assert graph.stage_needs(SIMULATE) == [(SIMULATION, ON_KINEMATIC), (SIMULATION, ON_SITL), (SIMULATION, ON_GAZEBO + JUDGED)]
     assert graph.stage_needs(MONITOR) == [(JobType.MONITORING_POST_HOC, ("monitoring",))] and graph.stage_needs(PipelineStage.VERDICT) == []
     assert graph.stage_needs(CALIBRATE) == [(JobType.CALIBRATION_DEVIATION, ("calibration",))]
     assert StageGraph(campaign_config_from_dict(format2_dict(["scene_generation"]))).stage_needs(SIMULATE) == [], "a campaign without runs simulates nothing"
@@ -69,9 +71,9 @@ def test_a_run_knows_its_images_and_tier():
     graph = _graph(KINEMATIC, SITL, GAZEBO)
     assert [graph.run_tier(run) for run in range(3)] == [None, "bounded", "bounded"]
     assert [required_fingerprints(graph.run_components(run), EXPECTED) for run in range(3)] == [
-        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution"}),
-        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}),
-        by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo"}),
+        by_repository({SIMULATION_IMAGE: "fp-execution"}),
+        by_repository({SIMULATION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl"}),
+        by_repository({SIMULATION_IMAGE: "fp-execution", SITL_IMAGE: "fp-sitl", GAZEBO_IMAGE: "fp-gazebo", MONITORING_IMAGE: "fp-monitoring"}),  # judged live: the monitor's image counts too
     ]
     assert STAGE_JOB_TYPES[SIMULATE] == JobType.SIMULATION
 
@@ -103,7 +105,7 @@ def test_a_gazebo_run_with_the_live_monitor_carries_its_settings():
     assert payload["geofence"] == {"latitude": 58.5, "longitude": 15.5, "radius_meters": 40.0}
     assert payload["monitor"] == "live" and payload["colregs_constraints_content"] == builder.config.domain.colregs_constants
     assert "early_stop" not in payload and payload["include_trajectories"] is True
-    assert validate_payload(SIMULATION, payload) == ON_GAZEBO
+    assert validate_payload(SIMULATION, payload) == ON_GAZEBO + JUDGED
 
 
 def test_a_run_that_names_no_seed_takes_the_case_seed():
@@ -135,9 +137,9 @@ def test_the_submission_has_the_runs_components_the_images_and_the_stage_priorit
         step = Step(SIMULATE, run, 0)
         jobs.append(builder.submission(step, builder.simulation(5, run, TRAJECTORY_RESULT), step.idempotency_key("c1", 1), EXPECTED))
     assert [job.job_type for job in jobs] == [SIMULATION] * 3
-    assert [tuple(job.requirements.components) for job in jobs] == [ON_KINEMATIC, ON_SITL, ON_GAZEBO]
+    assert [tuple(job.requirements.components) for job in jobs] == [ON_KINEMATIC, ON_SITL, ON_GAZEBO + JUDGED]
     assert [set(job.requirements.fingerprints) for job in jobs] == [
-        set(repositories(images)) for images in ([SCENARIO_EXECUTION_IMAGE], [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE], [SCENARIO_EXECUTION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE])
+        set(repositories(images)) for images in ([SIMULATION_IMAGE], [SIMULATION_IMAGE, SITL_IMAGE], [SIMULATION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE, MONITORING_IMAGE])
     ]
     assert {job.priority for job in jobs} == {12} and jobs[1].idempotency_key == "campaign:c1:case:1:simulate:1:0"
 
@@ -155,7 +157,7 @@ def test_the_post_hoc_monitor_and_the_calibration_take_the_observed_trajectories
 @pytest.mark.parametrize("layer, components", [("ardupilot_sim", ON_SITL), ("gazebo", ON_GAZEBO)])
 def test_the_payload_model_accepts_what_the_builder_sends_with_every_option(layer, components):
     run = {"stack": {"simulation_layer": layer, "speedup": 2, "dt": 1, "steps": 5}, "monitor": "live"}
-    assert validate_payload(SIMULATION, _builder(run).simulation(1, 0, TRAJECTORY_RESULT)) == components
+    assert validate_payload(SIMULATION, _builder(run).simulation(1, 0, TRAJECTORY_RESULT)) == components + JUDGED
 
 
 def test_an_ardupilot_payload_needs_its_layer_and_the_kinematic_runner_refuses_its_fields():
@@ -182,11 +184,11 @@ def test_the_new_stacks_components_are_the_ones_the_control_node_computes_from_t
 
 def test_the_new_stacks_need_their_layers_images_and_are_bounded():
     graph = _graph(SITL_USV_NAVIGATION, CUSTOM, CUSTOM_USV_NAVIGATION)
-    assert graph.run_components(0) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/ardupilot_sim")
+    assert graph.run_components(0) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/ardupilot", "simulation_layer/ardupilot_sim") + JUDGED
     assert graph.run_components(1) == ON_CUSTOM
-    assert graph.run_components(2) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
+    assert graph.run_components(2) == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo") + JUDGED
     assert [graph.run_tier(run) for run in range(3)] == ["bounded"] * 3
-    assert required_fingerprints(graph.run_components(1), EXPECTED) == by_repository({SCENARIO_EXECUTION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}), "no SITL"
+    assert required_fingerprints(graph.run_components(1), EXPECTED) == by_repository({SIMULATION_IMAGE: "fp-execution", GAZEBO_IMAGE: "fp-gazebo"}), "no SITL"
     assert graph.stage_needs(SIMULATE) == [(SIMULATION, graph.run_components(run)) for run in range(3)]
 
 

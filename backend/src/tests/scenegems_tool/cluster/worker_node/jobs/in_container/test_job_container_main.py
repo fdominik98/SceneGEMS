@@ -10,7 +10,6 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.worker_node.jobs.in_container import job_container_main
 from scenegems_tool.cluster.worker_node.jobs.in_container.job_container_main import json_safe
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
-from scenegems_tool.cluster.worker_node.jobs.monitoring_post_hoc_job import execute as execute_post_hoc
 from scenegems_tool.cluster.worker_node.jobs.simulation_job import execute as execute_kinematic
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_closed_loop, run_kinematic_replay
@@ -61,18 +60,6 @@ def test_kinematic_closed_loop_matches_the_in_process_run(make_job, head_on_traj
     assert result["run_record"]["usv_navigation"]["vessel"] == 0
 
 
-def test_post_hoc_monitoring_summarizes_the_verdicts(make_job, head_on_trajectories):
-    job = make_job(JobType.MONITORING_POST_HOC, {"trajectories": head_on_trajectories.to_dict(), "include_frames": True})
-    result = execute_post_hoc(job, lambda message, progress=None: None)
-    assert (result["scenes"], result["monitored_scenes"], result["time_step"]) == (121, 121, 1)
-    assert len(result["frames"]) == 121
-    # The vessels keep their reciprocal courses, so the give-way rule fails once the monitor expects action.
-    assert not result["passed"]
-    assert all(set(item) == {"relation", "rule", "first_failed_at"} for item in result["failed_rules"])
-    assert [item["first_failed_at"] for item in result["failed_rules"]] == sorted(item["first_failed_at"] for item in result["failed_rules"])
-    assert json_safe(result) == json.loads(json.dumps(json_safe(result)))
-
-
 def test_main_writes_the_result_document(job_folder, make_job, head_on_trajectories, capsys):
     write_job(job_folder, make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}))
     assert job_container_main.main() == 0
@@ -104,10 +91,9 @@ def test_an_observed_simulation_writes_frame_lines_and_the_same_result(job_folde
     assert [frame["timestamp"] for frame in frames] == [0, 50, 100, 120]  # 1000 steps a second, 20 frames a second at most, and the last step
 
 
-def test_jobs_that_are_not_simulations_get_no_observation(job_folder, make_job, head_on_trajectories, monkeypatch):
-    def refuse(folder):
-        raise AssertionError("a post-hoc monitoring job is not observable")
-
-    monkeypatch.setattr(job_container_main, "ContainerObservation", refuse)
-    write_job(job_folder, make_job(JobType.MONITORING_POST_HOC, {"trajectories": head_on_trajectories.to_dict()}))
-    assert job_container_main.main() == 0 and "result" in read_outcome(job_folder)
+def test_a_job_that_is_no_simulation_has_no_runner_container(job_folder, make_job, head_on_trajectories):
+    """Every other job is a request to its subsystem; a runner container that is handed one says so and fails for good."""
+    write_job(job_folder, make_job(JobType.CALIBRATION_DEVIATION, {"trajectories": [head_on_trajectories.to_dict()] * 2, "reference": "head_on"}))
+    assert job_container_main.main() == 1
+    outcome = read_outcome(job_folder)
+    assert "has no runner container" in outcome["error"] and outcome["retryable"] is False and "result" not in outcome

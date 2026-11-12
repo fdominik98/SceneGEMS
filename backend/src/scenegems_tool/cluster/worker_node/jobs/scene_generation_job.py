@@ -1,13 +1,13 @@
 """scene_generation: one concrete scene from a functional scenario, by the worker node's scene generation pool.
 
-The job is dispatched to the pooled scene generation service over the pool's scoped
-topics with today's generate-scene task, so the daemon only relays it. The pool runs as
+The job is one generate-scene request to the worker node's scene generation subsystem
+(jobs/pool_client.py run_pool_request), so the daemon only relays it. The pool runs as
 many generations at once as the worker node has scene_generation slots.
 
 The worker streams its samples while it searches and marks its last one final; the job's
-result is that final scene. With a seed the scene is reproducible (unless the generation
-ran into its timeout, which depends on the machine); the seed used is recorded in
-evaluation_data.random_seed either way.
+result is that final scene. The seed fixes the scene (unless the generation ran into its
+timeout, which depends on the machine); a job that names none gets one drawn, and the seed
+used is in the result (seed) and in evaluation_data.random_seed.
 
 A job that stops waiting without its final scene (cancelled, lost, released, timed out)
 cancels its own generation by request id, so the pool's other generations keep running and
@@ -18,26 +18,23 @@ artifact that the worker node resolves to its text before the job runs (a scenar
 to a campaign); the text must parse either way, a reference is checked for shape only.
 """
 
-import logging
 import threading
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 
 from pydantic import Field, field_validator
 
 from scenegems_tool.cluster.protocol.artifacts import ArtifactContent, ArtifactField, ArtifactKind, artifact_or, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.model_base import ProtocolModel
-from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport, JobResultData
+from scenegems_tool.cluster.worker_node.job_report import JobReport, JobResultData
 from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
-from scenegems_tool.cluster.worker_node.jobs.pool_client import wait_for_pool, wait_for_reply
+from scenegems_tool.cluster.worker_node.jobs.pool_client import run_pool_request
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.subsystems.scene_generation.scene_generation_types import SCENE_GENERATION_SERVICE_NAME, SCENE_GENERATION_SERVICE_TOPIC
+from scenegems_tool.subsystems.scene_generation.scene_generation_types import GENERATE_SCENE_TASK, GENERATED_SCENE_STREAM
 
 REPLY_MARGIN_S = 60.0  # time beyond the generation timeout for the worker to start and the reply to arrive
 MAX_SEED = 2**31 - 1
-CANCEL_FLUSH_TIMEOUT_S = 2.0  # how long the job waits for the broker to take its cancel before it disconnects
-_logger = logging.getLogger(__name__)
 
 # functional_scenario_content is a string (the .problem text); a reference to a functional scenario artifact resolves to its text.
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("functional_scenario_content", ArtifactKind.FUNCTIONAL_SCENARIO, ArtifactContent.TEXT),)
@@ -51,7 +48,7 @@ class SceneGenerationPayload(ProtocolModel):
     obstacle_types_content: str  # static obstacle types YAML
     timeout_s: int = Field(default=60, gt=0)  # the generation's own time limit
     enforce_low_tcpa: bool = False
-    seed: Optional[int] = Field(default=None, ge=0, le=MAX_SEED)  # seeds random and numpy at task start; the worker draws one when None
+    seed: Optional[int] = Field(default=None, ge=0, le=MAX_SEED)  # the request's seed, which fixes the scene; one is drawn for the request when None
 
     @field_validator("functional_scenario_content")
     @classmethod
@@ -71,66 +68,35 @@ PAYLOAD_MODEL = SceneGenerationPayload
 
 
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    from scenegems_tool.messaging.mqtt_scene_generation_client import MqttSceneGenerationClient
-
     payload = parse_payload(SceneGenerationPayload, job)
-    request_id = f"{job.job_id}-{job.attempt}"  # an earlier attempt's late reply is never taken for this one
-    reply: Dict[str, Any] = {}
-    replied = threading.Event()
     samples = 0
 
-    def on_scene_result(scene_request_id: str, evaluation_data: Dict[str, Any], valid: bool, final: bool) -> None:
+    def sample(stream: str, message: Mapping[str, Any]) -> str:
         nonlocal samples
-        if scene_request_id != request_id or replied.is_set():
-            return
-        if not final:
-            samples += 1
-            report.status(f"search sample {samples}")
-            return
-        reply.update(valid=valid, evaluation_data=evaluation_data)
-        replied.set()
+        samples += 1
+        return f"search sample {samples}"
 
-    pool = worker_node.pools.get(Subsystem.SCENE_GENERATION)
-    client = MqttSceneGenerationClient(
-        mqtt_connection=pool.mqtt_connection,
-        topic=SCENE_GENERATION_SERVICE_TOPIC,
-        reference_geofence=worker_node.reference_geofence,
-        parent_service_name=SCENE_GENERATION_SERVICE_NAME,
-        send_payload=lambda message: None,
-        on_generated_scene=lambda request_id, scene, evaluation_data, valid: None,
-        on_scene_result=on_scene_result,
+    reply = run_pool_request(
+        job,
+        worker_node,
+        report,
+        cancel,
+        subsystem=Subsystem.SCENE_GENERATION,
+        task_name=GENERATE_SCENE_TASK,
+        params={
+            "functional-scenario-content": payload.functional_scenario_content,
+            "colregs-constraints-content": payload.colregs_constraints_content,
+            "vessel-types-content": payload.vessel_types_content,
+            "obstacle-types-content": payload.obstacle_types_content,
+            "timeout": payload.timeout_s,
+            "enforce-low-tcpa": bool(payload.enforce_low_tcpa),
+        },
+        seed=payload.seed,
+        streams=(GENERATED_SCENE_STREAM,),
+        is_result=lambda stream, message: bool(message.get("final", True)),  # the worker's samples are search progress; its last scene is final
+        timeout_s=payload.timeout_s + REPLY_MARGIN_S,
+        pool_description="scene generation pool",
+        reply_description="generated scene",
+        progress=sample,
     )
-    try:
-        client.connect()
-    except RuntimeError as error:
-        raise JobFailed(str(error), retryable=True) from error
-    generating = False
-    try:
-        wait_for_pool(lambda: client.is_connected and client.is_heartbeat_valid, report, "scene generation pool", cancel)
-        client.publish_generate_scene_command(
-            request_id,
-            payload.functional_scenario_content,
-            payload.colregs_constraints_content,
-            payload.vessel_types_content,
-            payload.obstacle_types_content,
-            payload.timeout_s,
-            payload.enforce_low_tcpa,
-            seed=payload.seed,
-        )
-        generating = True
-        wait_for_reply(replied, report, "generated scene", cancel, payload.timeout_s + REPLY_MARGIN_S)
-    finally:
-        if generating and not replied.is_set():
-            _cancel_generation(client, request_id)
-        client.disconnect()
-    return {"request_id": request_id, **reply}
-
-
-def _cancel_generation(client: Any, request_id: str) -> None:
-    """Stop this job's generation in the pool; a cancel that cannot be sent leaves the job's outcome as it is."""
-    try:
-        info = client.publish_cancel_command(request_id)
-        if info is not None:
-            info.wait_for_publish(timeout=CANCEL_FLUSH_TIMEOUT_S)
-    except Exception as error:
-        _logger.warning("Could not cancel the generation of request %s: %s", request_id, error)
+    return {"request_id": reply.request_id, "valid": bool(reply.result["valid"]), "evaluation_data": reply.result["evaluation-data"], "seed": reply.seed}

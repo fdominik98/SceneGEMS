@@ -3,14 +3,15 @@
 Two modes: replay of every vessel's generated trajectory (kinematic_runner.run_kinematic_replay),
 or USV Navigation on the own ship against replaying targets (run_kinematic_closed_loop).
 The stack holds the kinematic simulator, one container for the scenario, and an ASV system
-container per vessel (vessel_job_stack.py); the runner, from the scenario execution image, owns
+container per vessel (vessel_job_stack.py); the runner, from the simulation subsystem image, owns
 the clock and carries the commands and states between them. The stack's network is its own and
 reaches nothing else. A run is bit-identical for the same payload, and the result carries its
 state digest.
 
-With monitor live, the COLREGS monitor judges every step in process (live_monitor.py) with the
-post-hoc monitor's summary (subsystems/monitoring/rule_outcomes.py), and early_stop ends the run once
-every rule is decided. A run without a monitor is the same run as before the monitor existed.
+With monitor live, the worker node's monitoring subsystem judges the run's scenes as one series
+(live_monitor.py), with the post-hoc monitor's summary (subsystems/monitoring/rule_outcomes.py), and
+early_stop ends the run once every rule is decided: the run then waits for each step's answer, so it
+stops at the same step every time. A run without a monitor is the same run as before the monitor existed.
 
 Observed live (the worker node's observation, in_container/run_observation.py), the run is paced to
 the observers' speed and writes frames: every vessel's state at the step and, with the live
@@ -160,7 +161,7 @@ def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: Kinem
         trajectories, instance = kinematic_run_instance(payload)
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
-    return build_vessel_job_stack(job, worker_node, instance, trajectories, worker_node.reference_geofence)
+    return build_vessel_job_stack(job, worker_node, instance, trajectories, worker_node.reference_geofence, monitored=payload.monitor == SimulationMonitor.LIVE)
 
 
 def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload: KinematicSimulationPayload, cancel: Optional[threading.Event] = None) -> JobResultData:
@@ -173,15 +174,16 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload
 def frame_builder(scenario_id: str, actors, dt: float, monitor: Optional[LiveMonitor]) -> Callable[[int, Any], Dict[str, Any]]:
     """A step's frame in the workbench's wire format: the monitored scene when the live monitor judged the step, else the scene alone."""
     from concrete_level.trajectory_generation.scene_builder import SceneBuilder
-    from scenegems_tool.gateway.serialization import serialize_frame, serialize_monitored_frame
+    from scenegems_tool.gateway.serialization import serialize_frame
 
     actors = tuple(actors)
     time_step = int(dt) if float(dt).is_integer() else dt
 
     def build(index: int, states) -> Dict[str, Any]:
         timestamp = index * time_step
-        if monitor is not None and monitor.last_monitored_index == index:
-            return serialize_monitored_frame(scenario_id=scenario_id, monitored_scene=monitor.last_monitored, timestamp=timestamp, time_step=time_step)
+        judged = monitor.frame_of(index) if monitor is not None else None
+        if judged is not None:
+            return judged
         builder = SceneBuilder()
         builder.set_states_as_dict(dict(zip(actors, states)))
         return serialize_frame(scenario_id=scenario_id, scene=builder.build(), timestamp=timestamp, time_step=time_step)
@@ -216,7 +218,7 @@ def execute(job: JobSpec, payload: KinematicSimulationPayload, status: StatusCal
     environment = EnvironmentConfig.calm(seed=payload.seed)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
     planned_steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
-    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, payload.early_stop) if payload.monitor == SimulationMonitor.LIVE else None
+    monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, payload.early_stop, job=job) if payload.monitor == SimulationMonitor.LIVE else None
     observer = observation.observer(frame_builder(job.job_id, trajectories.initial_scene.actors, dt, monitor), dt, last_index=planned_steps) if observation is not None else None
     on_step = step_observer(monitor, observer)
     status(f"running the kinematic {payload.mode.value} run" + (" with the live monitor" if monitor is not None else ""))

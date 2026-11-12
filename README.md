@@ -4,7 +4,7 @@ SceneGEMS generates COLREGS encounter scenarios, simulates them with pluggable v
 
 SceneGEMS runs on a cluster: one control node and any number of worker nodes, deployed by Machine Hub (the control node's machine can be your own PC). The web console works on the cluster selected in its left pane:
 
-- **Workbench**: you explore the scenario classes of a specification, design a scenario, generate its scene and trajectories and simulate it interactively. The control node's control-node-api serves the workbench gateway and runs the live sessions; the jobs run on the cluster's worker nodes.
+- **Workbench**: you explore the scenario classes of a specification, design a scenario, generate its scene and trajectories and simulate it interactively. The control node's control-node-api serves the workbench gateway, which only reads scenario files and generates vessel models; everything that computes is a job, which a subsystem on one of the cluster's worker nodes runs.
 - **Campaigns**: every scenario class in a campaign's scope, or every class a design space exploration finds, is generated, simulated and monitored automatically; the web console configures, follows and inspects the campaigns.
 
 ## Repository layout
@@ -13,7 +13,7 @@ SceneGEMS runs on a cluster: one control node and any number of worker nodes, de
 |------|---------|
 | [`backend/`](backend/) | Python package roots under `backend/src/`: `scenegems_tool` (workbench gateway, subsystems, vessel stacks, the cluster's control node and worker node, the assurance pipeline, persistence), `functional_level`, `logical_level`, `concrete_level`, `evaluation`, `visualization`, `scripts`, `utils`, `tests`. Domain configuration, the 828 functional scenario classes and runtime assets are in `backend/assets/` |
 | [`frontend/`](frontend/) | React and Vite web console with the sections Workbench, Cluster, Domain Configuration, Capabilities, Campaigns, Campaign History and Results; in-app documentation in `frontend/website/` |
-| [`deploy/images/`](deploy/images/) | One folder per Docker image: `control_node_api`, `worker_node`, `mqtt_broker`, the subsystems `design_space_exploration`, `monitoring`, `scene_generation`, `scenario_execution`, `trajectory_generation`, the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`, and `usv_navigation`, the image of the USV Navigation ASV system. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images and the Refinery commit and base images of the design space exploration image |
+| [`deploy/images/`](deploy/images/) | One folder per Docker image: `control_node_api`, `worker_node`, `mqtt_broker`, the subsystems `design_space_exploration`, `monitoring`, `scene_generation`, `simulation`, `trajectory_generation`, the simulation images `gazebo`, `sitl`, `mavproxy`, `arduagent`, and `usv_navigation`, the image of the USV Navigation ASV system. `upstream_pins.env` pins the upstream sources of the Gazebo and SITL images and the Refinery commit and base images of the design space exploration image |
 | [`deploy/control_node/`](deploy/control_node/), [`deploy/worker_node/`](deploy/worker_node/) | The compose file and `.env.example` of each cluster role |
 | [`deploy/scripts/`](deploy/scripts/) | `build.sh` and its fingerprint and build helpers `docker-common.sh`; `./build.sh` in the repository root calls it |
 
@@ -40,7 +40,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The workbench has no backend of its own: it uses the cluster selected in the console's left pane. That cluster's control-node-api serves the workbench gateway on its operator port (5174) and starts the live sessions on the control node's machine, and its worker nodes run the design space exploration, scene generation, trajectory generation, simulation and monitoring jobs. Deploy a cluster first (see [Deploying a cluster](#deploying-a-cluster)); without a selected cluster the workbench stays disconnected.
+Open http://localhost:5173. The workbench has no backend of its own: it uses the cluster selected in the console's left pane. That cluster's control-node-api serves the workbench gateway on its operator port (5174), and its worker nodes run the design space exploration, scene generation, trajectory generation, simulation and monitoring jobs. Deploy a cluster first (see [Deploying a cluster](#deploying-a-cluster)); without a selected cluster the workbench stays disconnected.
 
 In the web console, under Workbench:
 
@@ -60,7 +60,7 @@ Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and 
 |--------|--------|
 | *(none)* or `--all` | every image |
 | `-1`, `--backend` | `scenegems-control-node-api` and the five subsystem images |
-| `-4`, `--arduagent` | `scenegems-arduagent` (live sessions with ArduPilot, on the control node's machine) |
+| `-4`, `--arduagent` | `scenegems-arduagent` (the simulated vessels of an attended simulation with a real vessel, on a worker node) |
 | `-5`, `--worker-node` | `scenegems-worker-node`, the worker node daemon |
 | `--simulation` | `scenegems-gazebo-harmonic`, `scenegems-ardupilot-sitl`, `scenegems-mavproxy`, `scenegems-usv-navigation` |
 | `--release <folder>` | everything a cluster runs, then the release bundle (see below) |
@@ -69,7 +69,7 @@ Under Cluster, **Domain Configuration** holds the COLREGS constants, vessel and 
 
 Simulation images are needed only for Gazebo or ArduPilot runs. The first build of the Gazebo and SITL images compiles ArduPilot and the Gazebo plugins and takes a long time; later builds skip unchanged images.
 
-The design space exploration image (`scenegems-design-space-exploration-subsystem`) is the Refinery model generator. Its source is not in this repository: the build fetches the commit of [fdominik98/refinery](https://github.com/fdominik98/refinery) that `REFINERY_COMMIT` in `deploy/images/upstream_pins.env` names and builds it with Gradle inside Docker (a few minutes the first time). To take a newer generator, change that pin and build again.
+The design space exploration image (`scenegems-design-space-exploration-subsystem`) holds the Refinery model generator and the subsystem's request service around it. The generator's source is not in this repository: the build fetches the commit of [fdominik98/refinery](https://github.com/fdominik98/refinery) that `REFINERY_COMMIT` in `deploy/images/upstream_pins.env` names and builds it with Gradle inside Docker (a few minutes the first time). To take a newer generator, change that pin and build again.
 
 ## Deploying a cluster
 
@@ -85,8 +85,11 @@ A cluster is one control node and any number of worker nodes:
  machines on the VPN 10.88.0.0/24
    control node   postgres | cluster-broker (plain MQTT, 1883) | control-node-api: worker node API (HTTP, 8443),
             operator API and workbench gateway (127.0.0.1:5174), scheduler, pipeline engine, artifact store
-   worker nodes    worker node daemon, which starts a subsystem container per job or pool
+   worker nodes    worker node daemon, which keeps one long-lived container per subsystem the worker node offers;
+            the simulation subsystem starts and removes the vessel stack of each run
 ```
+
+A worker node runs at most one of each subsystem: design space exploration, scene generation, trajectory generation, monitoring and simulation, and only those its components need. Each is a service on the cluster's broker with a pool of tasks. The daemon leases a job from the control node and passes it to the subsystem as a request; the subsystem turns it into a task, queues it and runs it, as many at once as the worker node has slots for that kind of work. Every request carries a seed, so a job repeats exactly.
 
 SceneGEMS does not install machines or set up their network. Machine Hub, a separate repository, connects the machines in a WireGuard mesh and installs a SceneGEMS release bundle on the machines you give a role. SceneGEMS defines what each role needs in its release bundle and works with whichever machines are ready.
 
@@ -109,16 +112,13 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
    |------|---------|
    | `release.json` | revision, every image under its release tag with its ID and fingerprint, and the roles `control-node` and `worker-node` with their images, fixed values, parameters, secrets, setup commands and outputs |
    | `stacks/control_node/docker-compose.yml` | copy of `deploy/control_node/docker-compose.yml` |
-   | `stacks/control_node/docker-compose.live-sessions.yml` | copy of `deploy/control_node/docker-compose.live-sessions.yml`: the Docker socket for the workbench's live sessions |
    | `stacks/worker_node/docker-compose.yml` | copy of `deploy/worker_node/docker-compose.yml` |
 
 3. **Create the cluster.** In **Clusters**, create a cluster from the bundle folder. Its name becomes the control node id: lowercase letters, digits and hyphens. It names the cluster's topics, containers and volumes.
-4. **Add the control node.** Give one machine the role `control-node`. Its parameters have defaults: worker node API port 8443, broker port 1883, operator port 5174, Postgres port 5432, the browser origins the operator API allows (`http://localhost:5173,http://127.0.0.1:5173`), the artifact limits and `COMPOSE_FILE`. The control node's address is the machine's VPN address.
-
-   `COMPOSE_FILE` (default `docker-compose.yml:docker-compose.live-sessions.yml`) chooses the compose files `docker compose up -d` reads. The live sessions file mounts the Docker socket into control-node-api, which the workbench's live sessions need (MQTT broker, real vessels, Mission Planner, ArduPilot live): they start their containers on the control node's machine, with that machine's locally built `:latest` images. Set it to `docker-compose.yml` for a control node without Docker access: the workbench then refuses live sessions with a clear error, the Connections page says that live sessions are off on this control node, and campaigns and cluster jobs work as before.
+4. **Add the control node.** Give one machine the role `control-node`. Its parameters have defaults: worker node API port 8443, broker port 1883, operator port 5174, Postgres port 5432, the browser origins the operator API allows (`http://localhost:5173,http://127.0.0.1:5173`), and the artifact limits. The control node's address is the machine's VPN address. The control node starts no containers of its own and has no Docker socket: every subsystem runs on a worker node.
 5. **Add the worker nodes.** Give any number of machines (the control node's machine too) the role `worker-node`. A worker node needs nothing from a deployed control node: it only needs the control node added to the cluster, because its `.env` gets the control node's VPN address and ports from it. Set two parameters per worker node member:
-   - `SCENEGEMS_WORKER_NODE_COMPONENTS`: what the worker node runs, as a comma list. Vessel stack layers: `asv_system/replay`, `asv_system/usv_navigation`, `control_layer/none`, `control_layer/ardupilot` (SITL), `control_layer/custom`, `simulation_layer/kinematic`, `simulation_layer/ardupilot_sim`, `simulation_layer/gazebo` (Gazebo); subsystems: `design_space_exploration`, `scene_generation`, `trajectory_generation`, `monitoring`, `calibration`. The release lists the images of each component (a simulation layer adds the scenario execution runner) and Machine Hub installs the images of the components chosen. A simulation runs on a worker node that has every layer of every vessel's stack: a kinematic replay needs `asv_system/replay,control_layer/none,simulation_layer/kinematic`, USV Navigation adds `asv_system/usv_navigation`, a SITL replay needs `asv_system/replay,control_layer/ardupilot,simulation_layer/ardupilot_sim`, a Gazebo replay the same with `simulation_layer/gazebo`, and the custom controller on Gazebo `asv_system/replay,control_layer/custom,simulation_layer/gazebo` (no SITL).
-   - `SCENEGEMS_WORKER_NODE_SLOTS`: how many jobs of each type the worker node runs at once, as `type:slots`, for example `design_space_exploration:1,scene_generation:2,trajectory_generation:9,simulation:2,monitoring.post_hoc:2,calibration.deviation:1` on a 12-core machine (trajectory generation slots: cores minus 3). Job types: `design_space_exploration`, `scene_generation`, `trajectory_generation`, `simulation`, `monitoring.post_hoc`, `calibration.deviation`; each needs a component that serves it (a simulation layer for `simulation`, `monitoring` for `monitoring.post_hoc`, `calibration` for `calibration.deviation`). A design space exploration keeps every explored state in memory, so one slot per worker node is usually right.
+   - `SCENEGEMS_WORKER_NODE_COMPONENTS`: what the worker node runs, as a comma list. Vessel stack layers: `asv_system/replay`, `asv_system/usv_navigation`, `control_layer/none`, `control_layer/ardupilot` (SITL), `control_layer/custom`, `simulation_layer/kinematic`, `simulation_layer/ardupilot_sim`, `simulation_layer/gazebo` (Gazebo); subsystems: `design_space_exploration`, `scene_generation`, `trajectory_generation`, `monitoring`, `calibration`. The release lists the images of each component (a simulation layer adds the simulation subsystem's image) and Machine Hub installs the images of the components chosen. The worker node starts the subsystem of every component it lists; any simulation layer, and `calibration`, start the simulation subsystem. A simulation runs on a worker node that has every layer of every vessel's stack: a kinematic replay needs `asv_system/replay,control_layer/none,simulation_layer/kinematic`, USV Navigation adds `asv_system/usv_navigation`, a SITL replay needs `asv_system/replay,control_layer/ardupilot,simulation_layer/ardupilot_sim`, a Gazebo replay the same with `simulation_layer/gazebo`, and the custom controller on Gazebo `asv_system/replay,control_layer/custom,simulation_layer/gazebo` (no SITL).
+   - `SCENEGEMS_WORKER_NODE_SLOTS`: how many jobs of each type the worker node runs at once, which is the size of the task pool of the subsystem that runs them, as `type:slots`, for example `design_space_exploration:1,scene_generation:2,trajectory_generation:9,simulation:2,monitoring.post_hoc:2,calibration.deviation:1` on a 12-core machine (trajectory generation slots: cores minus 3). Job types: `design_space_exploration`, `scene_generation`, `trajectory_generation`, `simulation`, `monitoring.post_hoc`, `calibration.deviation`; each needs a component that serves it (a simulation layer for `simulation`, `monitoring` for `monitoring.post_hoc`, `calibration` for `calibration.deviation`). A design space exploration keeps every explored state in memory, so one slot per worker node is usually right. A simulation that is judged while it runs (monitor live) also needs the `monitoring` component and takes a `monitoring.post_hoc` slot for as long as it runs, so give a worker node that runs such campaigns as many monitoring slots as simulation slots, plus those for post hoc monitoring.
 
    The defaults make a kinematic worker node. A worker node refuses `SCENEGEMS_WORKER_NODE_CAPABILITIES` and the job types `simulation.kinematic`, `simulation.ardupilot_sim` and `simulation.gazebo` of earlier releases with a message naming their replacements, so Machine Hub members that set them need the two parameters above. Optional: labels that jobs can require (`key=value`) and the artifact cache bound.
 6. **Deploy all.** Machine Hub deploys every member; a worker node does not wait for the control node, since it keeps retrying its connection. For each member it:
@@ -167,7 +167,7 @@ SceneGEMS does not install machines or set up their network. Machine Hub, a sepa
 
 The same steps by hand, which is also what the single-host rehearsal test (`backend/src/tests/scenegems_tool/assurance/local_cluster.py`) does:
 
-1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The control node needs `scenegems-control-node-api`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a worker node needs `scenegems-worker-node` and the images of each component it offers (the role's `SCENEGEMS_WORKER_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-scenario-execution-subsystem` for the simulation layers, `asv_system/replay`, `control_layer/custom` and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-usv-navigation` for `asv_system/usv_navigation`, `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
+1. Copy the images of each role in `release.json` to its machine under the names `release.json` lists (the release's tag), for example `docker save <images> | ssh <user>@<machine> docker load`. The control node needs `scenegems-control-node-api`, `scenegems-mqtt-broker` and `postgres:16.10-alpine`; a worker node needs `scenegems-worker-node` and the images of each component it offers (the role's `SCENEGEMS_WORKER_NODE_COMPONENTS` items in `release.json`: `scenegems-scene-generation-subsystem`, `scenegems-trajectory-generation-subsystem`, `scenegems-simulation-subsystem` for the simulation layers, `asv_system/replay`, `control_layer/custom` and calibration, `scenegems-monitoring-subsystem`, plus `scenegems-usv-navigation` for `asv_system/usv_navigation`, `scenegems-ardupilot-sitl` for `control_layer/ardupilot` and `scenegems-gazebo-harmonic` for `simulation_layer/gazebo`).
 2. On the control node, in a folder of its own with both files of `stacks/control_node/` and `release.json`: write `.env` from [`deploy/control_node/.env.example`](deploy/control_node/.env.example) (control node id, project name, the release's `SCENEGEMS_IMAGE_TAG`, `COMPOSE_FILE`, a generated Postgres password), `chmod 600 .env`, then:
 
    ```bash
@@ -238,12 +238,14 @@ The workbench connects to the gateway of the cluster selected in the left pane (
 |---------|-------------|
 | The web console loads but its WebSocket fails | select a cluster in the left pane and check that its control node answers at `<operator URL>/health` (the tunnel is open) |
 | Scene generation hangs | check under **Cluster** that a worker node offering `scene_generation` is online and not out of date |
-| Gazebo or ArduPilot live sessions fail | the control node's machine needs `./build.sh --simulation` and `--arduagent` images, and control-node-api the Docker socket (`docker-compose.live-sessions.yml` in `COMPOSE_FILE`) |
+| An attended simulation with Mission Planner or a real vessel finds no worker node | a worker node must list the stack's components (`asv_system/mission_planner`, or `asv_system/on_board`, `control_layer/real_vessel` and `simulation_layer/real_vessel`) in `SCENEGEMS_WORKER_NODE_COMPONENTS` and have their images |
 | Gazebo GUI on Windows | an invalid `DISPLAY` falls back to headless (`deploy/images/gazebo/gazebo_entrypoint_prod.sh`); `GZ_HEADLESS=1` forces it |
 | Old behavior after code changes | build a new release (`./build.sh --release <folder>`) and deploy it with Machine Hub |
 | The tunnel cannot bind 5174 | a control node on this PC already publishes it; tunnel to another local port |
 | A cluster section shows an unreachable control node or a CORS error | the tunnel is closed, or the page's origin is not in `SCENEGEMS_OPERATOR_ALLOWED_ORIGINS` |
 | A worker node gets no jobs | it is out of date: its images differ from the release; deploy the release to it |
+| A subsystem container of a worker node keeps restarting | its image is older than the worker node's daemon and has no request service: deploy the same release to the worker node's subsystem images |
+| A simulation with the live monitor stays queued | no worker node with every layer of its stack also lists `monitoring` and has a free `monitoring.post_hoc` slot |
 
 ## License
 

@@ -38,7 +38,7 @@ def test_the_bundle_holds_the_release_and_the_stacks(tmp_path):
         for compose_file in compose_files:
             stack = tmp_path / "stacks" / scenegems_roles()[role]["stack"] / Path(compose_file).name
             assert stack.read_bytes() == (REPO_ROOT / compose_file).read_bytes()
-    assert sorted(path.name for path in (tmp_path / "stacks" / "control_node").iterdir()) == ["docker-compose.live-sessions.yml", "docker-compose.yml"]
+    assert sorted(path.name for path in (tmp_path / "stacks" / "control_node").iterdir()) == ["docker-compose.yml"], "one file: the control node starts no containers"
 
 
 def test_the_release_tags_the_latest_builds_with_its_revision(tmp_path):

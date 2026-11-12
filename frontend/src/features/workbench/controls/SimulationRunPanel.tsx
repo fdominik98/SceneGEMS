@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import "./simulationPanel.css";
-import { useUiStore } from "../../../app/uiStore";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
 import { isClusterRunActive, useClusterRunStore, type ClusterRunStatus } from "../cluster/clusterRunStore";
-import { describeClusterPlan, isPacedByWatchSpeed, KINEMATIC_SIMULATION_JOB, planSimulationRun, type SimulationSetup } from "../cluster/simulationJobs";
+import { describeClusterPlan, isPacedByWatchSpeed, planSimulationRun, type SimulationSetup } from "../cluster/simulationJobs";
 import { describeResources } from "../cluster/workbenchResources";
 import { formatClock } from "../scene/encounterGeometry";
 import { activateLiveMode, getLatestSimulationTimestamp, watchClusterRun } from "./livePlayback";
-import { groundControlEndpointLabels } from "./simulationInitConfig";
-import { SimulationInitControls, type SimulationInitControlsHandle } from "./SimulationInitControls";
+import { groundControlEndpointLabels, vesselReadinessLabels } from "./simulationInitConfig";
+import { SimulationInitControls } from "./SimulationInitControls";
 import type { SimulationStreamControls } from "./types";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
 import { EntrySeedField } from "../pages/EntrySeedField";
@@ -16,7 +15,6 @@ import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { PageInputPanel } from "../pages/PageInputPanel";
 import { inputOfFile, trajectoriesOfTrajectoryPage, trajectoryContentOfDocument } from "../pages/pageHandoff";
 import { useSimulationPageStore, type PageInput } from "../pages/pageStore";
-import { RunRecordingStatus } from "../pages/RunRecordingStatus";
 import { StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
 
 interface Props {
@@ -36,30 +34,19 @@ const CLUSTER_STATUS: Record<ClusterRunStatus, StepStatus> = {
   stopped: { label: "Stopped", tone: "idle" },
 };
 
-const SESSION_STATUS: Record<string, StepStatus> = {
-  running: { label: "Running", tone: "live" },
-  starting: { label: "Starting", tone: "busy" },
-  "agents are preparing": { label: "Agents are preparing", tone: "busy" },
-  initializing: { label: "Initializing", tone: "busy" },
-  "ready to start": { label: "Agents are ready", tone: "ok" },
-  offline: { label: "No simulator connected", tone: "error" },
-  "not initialized": { label: "Not initialized", tone: "idle" },
-};
+const READY_TO_START: StepStatus = { label: "Ready to start", tone: "ok" };
+const NO_INPUT: StepStatus = { label: "No input yet", tone: "idle" };
 
 /**
- * The simulation page's panel. The setup decides where the run happens: on the cluster as one
- * job (Run on the cluster), or as a live session on the control node over the MQTT broker
- * (Initialize, then Start). Playback is in the bar under the canvas; the frames export from
- * the monitoring panel and every run is kept as an entry of Campaign History.
+ * The simulation page's panel. Every run is one job on a worker node of the cluster (Run on the
+ * cluster): the setup decides which runner takes it, and an attended job then waits for Start once
+ * its vessels are up. Playback is in the bar under the canvas; the frames export from the
+ * monitoring panel and every run is kept as an entry of Campaign History.
  */
 export function SimulationRunPanel({ streamControls, colregsConstraintsContent }: Props) {
-  const setWorkbenchView = useUiStore((s) => s.setWorkbenchView);
-  const simulationStatus = usePlaybackStore((s) => s.simulationStatus);
   const simulationInitialized = usePlaybackStore((s) => s.simulationInitialized);
-  const brokerStatus = usePlaybackStore((s) => s.mqttBrokerStatus);
   const followSimulationLive = usePlaybackStore((s) => s.followSimulationLive);
   const simulationFrames = usePlaybackStore((s) => s.simulationFrames);
-  const groundControlPorts = usePlaybackStore((s) => s.groundControlPortsByAgentId);
   const previewMonitor = usePlaybackStore((s) => s.previewMonitor);
   const run = useClusterRunStore();
   const playbackSpeed = usePlaybackStore((s) => s.speed);
@@ -69,39 +56,35 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const trajectoryPageHasResult = useTrajectoryGenerationStore((s) => s.resultValid && s.resultScenarioJson !== null);
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
 
-  const simInitRef = useRef<SimulationInitControlsHandle>(null);
   const [setup, setSetup] = useState<SimulationSetup | null>(null);
   const onSetupChange = useCallback((next: SimulationSetup) => setSetup(next), []);
 
+  // The job the setup runs as; null until a scenario with vessels is loaded
   const plan = setup ? planSimulationRun(setup) : null;
-  const onCluster = plan?.where === "cluster";
-  const resources = plan?.where === "cluster" ? streamControls.clusterResources(plan.jobType, plan.components) : streamControls.clusterResources(KINEMATIC_SIMULATION_JOB);
+  const resources = plan !== null ? streamControls.clusterResources(plan.jobType, plan.components) : null;
   const clusterActive = isClusterRunActive(run.status);
-  const sessionStatus = SESSION_STATUS[simulationStatus] ?? { label: simulationStatus, tone: "idle" as const };
-  const status = onCluster ? CLUSTER_STATUS[run.status] : sessionStatus;
-  const endpoints = groundControlEndpointLabels(groundControlPorts);
+  // An attended job brings the vessels up and waits: its Start is the operator's
+  const attendedPlan = plan?.runner === "attended";
+  const awaitsStart = attendedPlan && run.status === "running" && run.phase === "ready_to_start";
+  const status = plan === null && !clusterActive ? NO_INPUT : awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status];
+  const endpoints = groundControlEndpointLabels(clusterActive ? run.groundControlPorts : {}, run.workerNodeAddress ?? (run.workerNodeId ? `worker node ${run.workerNodeId}` : "the worker node"));
+  // With a real vessel the job is ready to start only when every vessel is: until then it says what each one lacks
+  const waitingVessels = attendedPlan && run.status === "running" && run.phase === "preparing" ? vesselReadinessLabels(run.vesselStates) : [];
   const latestTimestamp = getLatestSimulationTimestamp(simulationFrames);
   const firstTimestamp = simulationFrames[0]?.timestamp ?? null;
 
-  // A cluster run needs only the input (a loaded run replays and runs again without the gateway session).
-  const hasInput = simulationInitialized || (onCluster && input !== null && simulationFrames.length > 0);
+  // The run needs only the input (a loaded run replays and runs again without the gateway).
+  const hasInput = simulationInitialized || (plan !== null && input !== null && simulationFrames.length > 0);
   const needsInput = hasInput ? undefined : "Take the input trajectories first";
   const notices: StepNotice[] = [];
-  if (onCluster && resources.blocker) {
+  if (resources?.blocker) {
     notices.push({ text: resources.blocker });
   }
-  if (!onCluster && brokerStatus !== "connected") {
-    notices.push({ text: "A live session needs the MQTT broker.", action: { label: "Connect it on the Connections page", onClick: () => setWorkbenchView("connections") } });
-  }
 
-  const canRunOnCluster = onCluster && hasInput && notices.length === 0 && !clusterActive;
-  const canInitialize = !onCluster && hasInput && notices.length === 0;
-  const canStart = !onCluster && simulationStatus === "ready to start";
-  const sessionStarted = simulationStatus === "running" || simulationStatus === "starting";
-  const sessionBusy = sessionStarted || simulationStatus === "initializing" || simulationStatus === "agents are preparing";
-  const locked = clusterActive || sessionBusy;
+  const canRunOnCluster = plan !== null && hasInput && notices.length === 0 && !clusterActive;
+  const locked = clusterActive;
   // SITL runs free, so the watch speed of an ArduPilot run is the speed it plays at in the browser
-  const pacedOnWorkerNode = plan?.where === "cluster" ? isPacedByWatchSpeed(plan) : true;
+  const pacedOnWorkerNode = plan !== null ? isPacedByWatchSpeed(plan) : true;
 
   useEffect(() => {
     if (!clusterActive) {
@@ -109,7 +92,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
     }
   }, [clusterActive, setHoldAtLiveEdge]);
 
-  // The input's trajectories go to the gateway session and the cluster run; a new input replaces the shown run.
+  // The input's trajectories go to the gateway (which shows them) and to the cluster run; a new input replaces the shown run.
   const takeInput = async (picked: PageInput, content: string | null) => {
     if (content === null) {
       throw new Error("The file holds no trajectories (a trajectories.scene_list).");
@@ -118,7 +101,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   };
 
   const runOnCluster = () => {
-    if (plan?.where !== "cluster") {
+    if (plan === null) {
       return;
     }
     streamControls.runSimulationOnCluster(plan, colregsConstraintsContent);
@@ -126,16 +109,25 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   };
 
   const where =
-    plan === null
-      ? "Take the input trajectories to set up the vessels."
-      : plan.where === "cluster"
-        ? `${describeClusterPlan(plan)} Cluster: ${describeResources(resources)}.`
-        : `Runs as a live session on the control node over the MQTT broker. ${plan.reason}`;
+    plan === null || resources === null ? "Take the input trajectories to set up the vessels." : `${describeClusterPlan(plan)} Cluster: ${describeResources(resources)}.`;
 
-  const actions = onCluster ? (
+  const actions =
     clusterActive ? (
       <>
-        {plan?.where === "cluster" ? (
+        {attendedPlan ? (
+          <button
+            type="button"
+            className="primary-btn accent"
+            disabled={!awaitsStart}
+            title={awaitsStart ? "Start the run on the vessels the job brought up" : "The job is bringing the vessels up"}
+            onClick={() => {
+              streamControls.startSimulationOnCluster();
+              activateLiveMode({ followSimulationLive });
+            }}
+          >
+            Start
+          </button>
+        ) : plan !== null ? (
           <label className="step-setting" title={pacedOnWorkerNode ? "The pace the worker node runs the simulation at while you watch" : "SITL runs free at the job's speedup, so this is the speed the arriving run plays at here, as the playback bar's"}>
             <span className="step-setting-label">Watch at</span>
             <select
@@ -158,36 +150,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
       <button type="button" className="primary-btn accent" disabled={!canRunOnCluster} title={needsInput} onClick={runOnCluster}>
         Run on the cluster
       </button>
-    )
-  ) : (
-    <>
-      {canStart ? (
-        <button
-          type="button"
-          className="primary-btn accent"
-          onClick={() => {
-            streamControls.startSimulation();
-            activateLiveMode({ followSimulationLive });
-          }}
-        >
-          Start
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="primary-btn accent"
-          disabled={!canInitialize || sessionBusy}
-          title={needsInput ?? "Start the vessels' simulators and agents for these trajectories"}
-          onClick={() => simInitRef.current?.initializeSimulation()}
-        >
-          Initialize
-        </button>
-      )}
-      <button type="button" disabled={simulationStatus === "not initialized"} title="Stop the session and its agents" onClick={streamControls.resetSimulation}>
-        Reset
-      </button>
-    </>
-  );
+    );
 
   return (
     <StepPanel page="simulation" title="Simulation" status={status} where={where} notices={notices} actions={actions}>
@@ -211,12 +174,11 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
       />
 
       <SimulationInitControls
-        ref={simInitRef}
         streamControls={streamControls}
         onSetupChange={onSetupChange}
-        liveSession={plan !== null && !onCluster}
-        paceApplies={!(plan?.where === "cluster" && isPacedByWatchSpeed(plan))}
-        extraSettings={onCluster ? <EntrySeedField disabled={locked} /> : null}
+        attended={attendedPlan}
+        paceApplies={!(plan !== null && isPacedByWatchSpeed(plan))}
+        extraSettings={plan !== null ? <EntrySeedField disabled={locked} /> : null}
         disabled={locked}
       />
 
@@ -230,15 +192,15 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
           </span>
         </span>
         <PageEntryStatus store={useSimulationPageStore} />
-        {onCluster && run.message && run.status !== "idle" ? <p className="step-line step-row-full">{run.message}</p> : null}
-        {!onCluster ? (
-          <div className="step-row-full">
-            <RunRecordingStatus />
-          </div>
-        ) : null}
+        {run.message && run.status !== "idle" ? <p className="step-line step-row-full">{run.message}</p> : null}
         {previewMonitor.status === "running" || previewMonitor.status === "failed" ? (
           <p className={`step-line step-row-full${previewMonitor.status === "failed" ? " warning" : ""}`}>
             {previewMonitor.status === "running" ? previewMonitor.message : `The preview stays unmonitored: ${previewMonitor.message}`}
+          </p>
+        ) : null}
+        {waitingVessels.length > 0 ? (
+          <p className="step-line step-row-full" title="The run can start when every vessel is on the broker, at its start point and, when commanded, armable">
+            Not ready to start: {waitingVessels.join("; ")}
           </p>
         ) : null}
         {endpoints.length > 0 ? (

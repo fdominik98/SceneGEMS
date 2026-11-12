@@ -6,7 +6,7 @@ services:
     - SITL_SIMULATOR=gazebo
     - SITL_VEHICLE=Rover
     - SITL_FRAME=motorboat
-    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/scenario_execution/gen_tmp/params-agent_0.params
+    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_0.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
     - SITL_SPEEDUP=1
@@ -32,7 +32,7 @@ services:
     networks:
     - maritime_net
   agent_0_asv_system:
-    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
@@ -50,7 +50,7 @@ services:
     - SITL_SIMULATOR=gazebo
     - SITL_VEHICLE=Rover
     - SITL_FRAME=motorboat
-    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/scenario_execution/gen_tmp/params-agent_1.params
+    - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_1.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
     - SITL_SPEEDUP=1
@@ -76,7 +76,7 @@ services:
     networks:
     - maritime_net
   agent_1_asv_system:
-    image: ${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}
+    image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
@@ -95,7 +95,7 @@ services:
       GZ_VERBOSE: '4'
       DISPLAY: host.docker.internal:0.0
       QT_X11_NO_MITSHM: '1'
-      WORLD_SDF: <backend>/assets/runtime_assets/scenario_execution/gen_tmp/ocean_world.sdf
+      WORLD_SDF: <backend>/assets/runtime_assets/simulation/gen_tmp/ocean_world.sdf
     volumes:
     - scenegems_runtime_assets:<backend>/assets/runtime_assets:ro
     entrypoint:
@@ -115,7 +115,6 @@ services:
     - agent_1
 networks:
   maritime_net:
-    name: asv_maritime_net
     driver: bridge
 volumes:
   scenegems_runtime_assets:

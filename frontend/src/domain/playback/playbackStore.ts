@@ -37,7 +37,6 @@ function applyPreviewMergeResult(
     playbackCursor: nextPlaybackCursor,
     hasTrajectoryChunk: true,
     autoFitPending: firstTrajectoryChunk ? true : state.autoFitPending,
-    simulationInitializing: firstTrajectoryChunk ? false : state.simulationInitializing,
     // Keep latestGeneratedScene so the scene generation panel retains the
     // loaded/generated scenario and it can be initialized again.
   };
@@ -75,8 +74,6 @@ function applySimulationMergeResult(
     hasSimulationTrajectoryChunk: true,
     currentTimestamp: state.followLatestPush ? previewKeyAt(state.frames, latest) : state.currentTimestamp,
     playbackCursor: state.followLatestPush ? latest : state.playbackCursor,
-    simulationInitializing:
-      state.simulationFrames.length === 0 ? false : state.simulationInitializing,
   };
 }
 
@@ -89,15 +86,12 @@ const clearedLoadedPlaybackState = {
   latestTimestamp: 0,
   scenarioTrajectoryLength: null as number | null,
   simulationInitialized: false,
-  simulationInitializing: false,
   hasTrajectoryChunk: false,
   autoFitPending: false,
   serverTimeStep: null,
   hasSimulationTrajectoryChunk: false,
   simulationFrames: [] as SimulationFrame[],
   simulationFrameIndexByTimestamp: {} as Record<number, number>,
-  simulationStatus: "not initialized" as const,
-  groundControlPortsByAgentId: {} as Record<string, number>,
   activeScenarioId: null as string | null,
   receivedSimulationModels: null,
 };
@@ -161,12 +155,8 @@ export interface PreviewMonitorState {
 export const IDLE_PREVIEW_MONITOR: PreviewMonitorState = { status: "idle", scenarioId: null, message: null };
 
 export interface PlaybackState {
+  /** The gateway socket of the active cluster's control node: it loads scenario files and answers the stack options. */
   streamStatus: "connecting" | "connected" | "disconnected" | "error";
-  /** The interactive simulation's MQTT broker connection on the server. */
-  mqttBrokerStatus: "connected" | "disconnected";
-  /** The control node's own broker as the server dials it ("host:port"), null when it has none or is not known yet. */
-  controlNodeBroker: string | null;
-  monitorStatus: "connected" | "disconnected";
   errorMessage: string | null;
   isPlaying: boolean;
   speed: number;
@@ -177,10 +167,8 @@ export interface PlaybackState {
   /** Active scenario load id; trajectory chunks must match this when set. */
   activeScenarioId: string | null;
   serverTimeStep: number | null;
-  /** Backend has accepted scenario init; playback control is available. */
+  /** The gateway has loaded the scenario (`initial_state`): the page has an input and playback control is available. */
   simulationInitialized: boolean;
-  /** True after Initialize is clicked until the first trajectory chunk or an error. */
-  simulationInitializing: boolean;
   autoFitPending: boolean;
   hasTrajectoryChunk: boolean;
   /** Discrete frame key (snapped to buffered samples). */
@@ -199,14 +187,6 @@ export interface PlaybackState {
   hasSimulationTrajectoryChunk: boolean;
   simulationFrames: SimulationFrame[];
   simulationFrameIndexByTimestamp: Record<number, number>;
-  simulationStatus:
-    | "running"
-    | "starting"
-    | "ready to start"
-    | "agents are preparing"
-    | "initializing"
-    | "offline"
-    | "not initialized";
   activeSceneGenerationRequestId: string | null;
   completedSceneGenerationRequestId: string | null;
   latestGeneratedScene: GeneratedSceneData | null;
@@ -218,16 +198,12 @@ export interface PlaybackState {
   sceneGenerationEvaluationBaselineByRequestId: Record<string, number>;
   /** Latest server-generated Gazebo models (from `simulation_models`), to load into the init tables. */
   receivedSimulationModels: ReceivedSimulationModels | null;
-  /** Host port (TCP on localhost) of each Mission Planner vessel's ground control station, by agent id. */
-  groundControlPortsByAgentId: Record<string, number>;
   /** The backend resolver's stack combinations (from `stack_options`); null until received. */
   stackOptions: StackOptionsPayload | null;
   setStackOptions: (options: StackOptionsPayload | null) => void;
   setStreamStatus: (status: PlaybackState["streamStatus"]) => void;
-  setMqttBrokerStatus: (status: PlaybackState["mqttBrokerStatus"], controlNodeBroker?: string | null) => void;
   previewMonitor: PreviewMonitorState;
   setPreviewMonitor: (state: PreviewMonitorState) => void;
-  setMonitorStatus: (status: PlaybackState["monitorStatus"]) => void;
   setError: (message: string | null) => void;
   setFollowLatestPush: (value: boolean) => void;
   /** Follow the latest simulation trajectory frame without starting RAF playback. */
@@ -236,7 +212,6 @@ export interface PlaybackState {
   setScenarioTrajectoryLength: (value: number | null) => void;
   setActiveScenarioId: (id: string | null) => void;
   resetForNewScene: () => void;
-  beginSimulationInitialization: () => void;
   requestAutoFit: () => void;
   consumeAutoFit: () => void;
   ingestFrame: (frame: SimulationFrame) => void;
@@ -247,13 +222,8 @@ export interface PlaybackState {
   setTrajectoryPreviewFrames: (frames: SimulationFrame[]) => void;
   /** Drop the preview trajectory without touching simulation/scene-generation state. */
   clearPreviewFrames: () => void;
-  ingestPushFrame: (frame: SimulationFrame) => void;
   clearSimulationTrajectories: () => void;
   markSimulationInitialized: () => void;
-  setSimulationStatus: (
-    status: PlaybackState["simulationStatus"],
-    groundControlPortsByAgentId?: Record<string, number>
-  ) => void;
   setActiveSceneGenerationRequestId: (requestId: string | null) => void;
   recordSceneGenerationEvaluation: (requestId: string, evaluationData: EvaluationData) => void;
   completeSceneGeneration: (requestId: string) => void;
@@ -282,8 +252,8 @@ export interface PlaybackStoreOptions {
 
 /**
  * A playback store: one per workbench page, so each page renders its own scene, trajectories or
- * run (design doc 6.6). `usePlaybackStore` is the simulation page's and also holds the gateway
- * session (stream, broker, monitor and simulation status, stack options, errors);
+ * run (design doc 6.6). `usePlaybackStore` is the simulation page's and also holds what the
+ * gateway socket gives the workbench (its status, the stack options, errors);
  * `useScenePlaybackStore` holds the scene generation page's scene, `useTrajectoryPlaybackStore`
  * the trajectory generation page's planned trajectories. Components of a page read the page's
  * store through `PlaybackStoreContext` (`playbackContext.ts`).
@@ -291,11 +261,8 @@ export interface PlaybackStoreOptions {
 export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
   const store = create<PlaybackState>((set, get) => ({
     streamStatus: "disconnected",
-    mqttBrokerStatus: "disconnected",
-    controlNodeBroker: null,
     previewMonitor: IDLE_PREVIEW_MONITOR,
     setPreviewMonitor: (previewMonitor) => set({ previewMonitor }),
-    monitorStatus: "disconnected",
     errorMessage: null,
     isPlaying: false,
     speed: 1,
@@ -304,7 +271,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     activeScenarioId: null,
     serverTimeStep: null,
     simulationInitialized: false,
-    simulationInitializing: false,
     autoFitPending: false,
     hasTrajectoryChunk: false,
     currentTimestamp: 0,
@@ -316,7 +282,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     hasSimulationTrajectoryChunk: false,
     simulationFrames: [],
     simulationFrameIndexByTimestamp: {},
-    simulationStatus: "not initialized",
     activeSceneGenerationRequestId: null,
     completedSceneGenerationRequestId: null,
     latestGeneratedScene: options.persistScene ? loadPersistedScene() : null,
@@ -325,18 +290,10 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     sceneGenerationEvaluationByRequestId: {},
     sceneGenerationEvaluationBaselineByRequestId: {},
     receivedSimulationModels: null,
-    groundControlPortsByAgentId: {},
     stackOptions: null,
     setStackOptions: (options) => set({ stackOptions: options }),
     setStreamStatus: (status) => set({ streamStatus: status }),
-    setMqttBrokerStatus: (status, controlNodeBroker) =>
-      set(controlNodeBroker === undefined ? { mqttBrokerStatus: status } : { mqttBrokerStatus: status, controlNodeBroker }),
-    setMonitorStatus: (status) => set({ monitorStatus: status }),
-    setError: (message) =>
-      set({
-        errorMessage: message,
-        ...(message !== null ? { simulationInitializing: false } : {}),
-      }),
+    setError: (message) => set({ errorMessage: message }),
     setFollowLatestPush: (value) => set({ followLatestPush: value }),
     followSimulationLive: () =>
       set((state) => {
@@ -356,12 +313,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     setScenarioTrajectoryLength: (value) => set({ scenarioTrajectoryLength: value }),
     setActiveScenarioId: (id) => set({ activeScenarioId: id }),
     resetForNewScene: () => set(clearedLoadedPlaybackState),
-    beginSimulationInitialization: () =>
-      set({
-        simulationInitializing: true,
-        simulationStatus: "initializing",
-        errorMessage: null,
-      }),
     requestAutoFit: () => set({ autoFitPending: true }),
     consumeAutoFit: () => set({ autoFitPending: false }),
     ingestFrame: (frame) =>
@@ -419,7 +370,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
             ? Math.min(Math.max(state.playbackCursor, first), last)
             : first,
           hasTrajectoryChunk: true,
-          simulationInitializing: false,
           autoFitPending: wasEmpty ? true : state.autoFitPending,
         };
       }),
@@ -431,22 +381,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
         currentTimestamp: 0,
         playbackCursor: 0,
         latestTimestamp: 0,
-      }),
-    ingestPushFrame: (frame) =>
-      set((state) => {
-        const exists = state.frameIndexByTimestamp[frame.timestamp] !== undefined;
-        const frames = exists ? state.frames : [...state.frames, frame];
-        const frameIndexByTimestamp = exists
-          ? state.frameIndexByTimestamp
-          : rebuildIndex(frames);
-        const latest = Math.max(state.latestTimestamp, frame.timestamp);
-        return {
-          frames,
-          frameIndexByTimestamp,
-          latestTimestamp: latest,
-          currentTimestamp: state.followLatestPush ? frame.timestamp : state.currentTimestamp,
-          playbackCursor: state.followLatestPush ? frame.timestamp : state.playbackCursor,
-        };
       }),
     clearSimulationTrajectories: () =>
       set((state) => {
@@ -474,15 +408,6 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
         };
       }),
     markSimulationInitialized: () => set({ simulationInitialized: true }),
-    setSimulationStatus: (status, groundControlPortsByAgentId = {}) =>
-      set((state) => ({
-        simulationStatus: status,
-        groundControlPortsByAgentId,
-        // Any concrete status report from the backend ends the local "initializing"
-        // spinner state started by beginSimulationInitialization().
-        simulationInitializing:
-          status === "initializing" ? state.simulationInitializing : false,
-      })),
     setActiveSceneGenerationRequestId: (requestId) =>
       set((state) => ({
         activeSceneGenerationRequestId: requestId,
@@ -641,7 +566,7 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
 
 export type PlaybackStore = ReturnType<typeof createPlaybackStore>;
 
-/** The simulation page's frames and the workbench's gateway session. */
+/** The simulation page's frames, and what the gateway socket gives the workbench. */
 export const usePlaybackStore = createPlaybackStore();
 /** The scene generation page's scene, restored after a reload. */
 export const useScenePlaybackStore = createPlaybackStore({ persistScene: true });

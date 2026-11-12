@@ -24,7 +24,8 @@ pytestmark = pytest.mark.anyio
 WORKER_NODE = "lab-1"
 SCENE_POOL = "scene_generation-0"
 TRAJECTORY_POOL = "trajectory_generation-0"
-SCENE_PREFIX = f"scenegems/lab-control-node/{WORKER_NODE}/{SCENE_POOL}/"
+# The first worker node the control node registered is number 1: its pools carry that number on the broker.
+SCENE_PREFIX = "scenegems/service/virtual/real/scene-generation-subsystem-1/"
 
 
 @pytest.fixture
@@ -80,13 +81,13 @@ async def test_pool_previews_reach_their_observers_translated(channel, broker):
     browser.socket.subscribe(scene_topic)
     browser.socket.subscribe(trajectory_topic)
     await browser.messages(2)
-    trajectory_prefix = f"scenegems/lab-control-node/{WORKER_NODE}/{TRAJECTORY_POOL}/"
+    trajectory_prefix = "scenegems/service/virtual/real/trajectory-generation-subsystem-1/"
     assert sorted(broker.filters) == sorted([SCENE_PREFIX + GENERATED_SCENE_TOPIC, trajectory_prefix + TRAJECTORY_PREVIEW_TOPIC, trajectory_prefix + TRAJECTORY_RESULT_TOPIC])
 
     broker.publish_from_its_thread(SCENE_PREFIX + GENERATED_SCENE_TOPIC, _sample("r1"))
     broker.publish_from_its_thread(trajectory_prefix + TRAJECTORY_PREVIEW_TOPIC, {"request-id": "t1", "trajectory-data": {"trajectories": [1]}})
     broker.publish_from_its_thread(trajectory_prefix + TRAJECTORY_RESULT_TOPIC, {"request-id": "t1", "trajectory-data": {"trajectories": [2]}, "valid": True, "complete": True, "error-message": None})
-    broker.publish_from_its_thread(f"scenegems/lab-control-node/{WORKER_NODE}/scene_generation-1/" + GENERATED_SCENE_TOPIC, _sample("unobserved"))
+    broker.publish_from_its_thread("scenegems/service/virtual/real/scene-generation-subsystem-2/" + GENERATED_SCENE_TOPIC, _sample("unobserved"))  # another worker node's pool
     await settle()
     sample, preview, result = browser.socket.take()
     assert sample["topic"] == scene_topic and sample["data"] == {
@@ -162,7 +163,7 @@ async def test_a_job_instance_gets_status_and_simulation_frames(channel, plane, 
     hub.publish_simulation_frames(WORKER_NODE, "another-job", 1, [{"timestamp": 0}])
     await settle()
     status, frames = browser.socket.take()  # both batches waited unsent together, so they were joined
-    assert status["data"] == {"kind": "status", "state": "leased", "message": "step 25", "progress": 0.25, "observed_speed": 10.0}
+    assert status["data"] == {"kind": "status", "state": "leased", "message": "step 25", "progress": 0.25, "observed_speed": 10.0, "detail": None}
     assert frames["data"] == {"kind": "simulation_frames", "job_id": job.job_id, "frames": [{"timestamp": 0}, {"timestamp": 1}, {"timestamp": 2}]}
     hub.publish_simulation_frames(WORKER_NODE, job.job_id, 1, [{"timestamp": 3}])
     await settle()
@@ -213,7 +214,7 @@ async def test_an_observed_job_instance_hears_state_changes(channel, plane):
     await channel.producers.idle()
     await settle()
     (update,) = browser.socket.take()
-    assert update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0}
+    assert update["data"] == {"kind": "status", "state": "running", "message": "", "progress": None, "observed_speed": 10.0, "detail": None}
     await browser.leave()
 
 
@@ -224,5 +225,5 @@ def test_pool_messages_translate():
     assert preview == TrajectoryPreview(request_id="t", trajectories={"a": 1})
     result = translate_pool_message(TRAJECTORY_RESULT_TOPIC, {"request-id": "t", "trajectory-data": None, "valid": False, "complete": False, "error-message": "no path"})
     assert result == TrajectoryPreview(request_id="t", final=True, valid=False, complete=False, error_message="no path")
-    assert translate_pool_message("waraps/service/virtual/real/scene_generation_service/heartbeat", {"type": "HeartBeat"}) is None
+    assert translate_pool_message("heartbeat", {"type": "HeartBeat"}) is None
     assert translate_pool_message(GENERATED_SCENE_TOPIC, {"request-id": "r", "evaluation-data": "not a dict"}) is None

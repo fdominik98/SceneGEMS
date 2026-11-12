@@ -37,9 +37,9 @@ def stack_for(worker_node, make_job, head_on_trajectories, job_id="sim-1", **fie
 def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="usv_navigation")
     services = stack.compose["services"]
-    own_ship, target = services["vessel_0_asv_system"], services["vessel_1_asv_system"]
+    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
     assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server"
-    assert "scenegems-scenario-execution-subsystem" in target["image"], "the other vessel replays"
+    assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
 
 def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_and_the_runner(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -47,12 +47,12 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = {f"vessel_{vessel}_{layer}" for vessel in (0, 1) for layer in ("controller", "asv_system")}
+    vessel_services = {f"{vessel}_{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv_system")}
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
-        assert services[name]["image"].endswith("scenegems-scenario-execution-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
-    assert services["vessel_0_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
-    assert services["vessel_0_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
+        assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
+    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
+    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)
@@ -61,7 +61,7 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service
     runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-scenario-execution-subsystem:latest"
+    assert runner["image"] == "scenegems-simulation-subsystem:latest"
     assert runner["networks"] == [STACK_NETWORK] and set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
     assert stack.project.name == scope.compose_project
 
@@ -69,9 +69,9 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
 def test_the_world_and_the_models_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     gen_folder = f"{worker_node.job_scope(job).folder}/gen"
-    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "trajectories.json", "vessel_0_model.sdf", "vessel_1_model.sdf"]
+    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_model.sdf", "trajectories.json", "ts1_model.sdf"]
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
-    model = open(f"{gen_folder}/vessel_0_model.sdf", encoding="utf-8").read()
+    model = open(f"{gen_folder}/os_model.sdf", encoding="utf-8").read()
     assert "ArduPilotPlugin" not in model
 
 
@@ -101,9 +101,9 @@ def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_
     ],
 )
 def test_a_gazebo_worker_node_without_sitl_runs_it(head_on_trajectories, fields, components, asv_images):
-    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the scenario execution image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
+    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the simulation subsystem image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
     assert payload_components(JobType.SIMULATION, custom_payload(head_on_trajectories, **fields)) == components
-    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-scenario-execution-subsystem:latest"} | asv_images
+    assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-simulation-subsystem:latest"} | asv_images
 
 
 @pytest.mark.parametrize(
@@ -232,9 +232,8 @@ def test_an_observed_run_is_paced_and_unchanged(fake_actuator, make_job, head_on
     assert frames[-1]["scenarioId"] == job.job_id and set(frames[-1]["statesByActorId"]) == {"0", "1"}
 
 
-def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_states(fake_actuator, make_job, head_on_trajectories):
+def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_states(fake_actuator, make_job, head_on_trajectories, post_hoc):
     from concrete_level.models.trajectories import Trajectories
-    from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job
 
     job = custom_job(make_job, head_on_trajectories, fake_actuator, monitor="live", include_trajectories=True)
     result, frames, _ = _observe(job)
@@ -242,6 +241,6 @@ def test_the_live_monitor_judges_the_run_and_its_trajectories_hold_the_observed_
     assert frames[0]["ruleResults"] and frames[-1]["ruleResults"]
     run = Trajectories.from_dict(result["trajectories"])
     assert run.time_step == 1 and len(run.scene_list) == 21
-    post_hoc = monitoring_post_hoc_job.execute(make_job(JobType.MONITORING_POST_HOC, {"trajectories": result["trajectories"]}), _quiet)
+    judged = post_hoc(result["trajectories"])
     summary_keys = ("scenes", "monitored_scenes", "time_step", "rules", "failed_rules", "passed")
-    assert {key: result["monitor"][key] for key in summary_keys} == {key: post_hoc[key] for key in summary_keys}
+    assert {key: result["monitor"][key] for key in summary_keys} == {key: judged[key] for key in summary_keys}

@@ -1,7 +1,8 @@
 # scenegems-worker-node: the worker node daemon (python -m scenegems_tool.cluster.worker_node.daemon).
 #
-# Python, the Docker CLI with the compose plugin, Git and the backend source. The daemon starts
-# every job in a subsystem container through the host's Docker socket and runs no job itself.
+# Python, the Docker CLI with the compose plugin, Git and the backend source. The daemon starts the
+# worker node's subsystems through the host's Docker socket and passes every job to one of them as a
+# request over the cluster's broker; it runs no job itself.
 # deploy/worker_node/docker-compose.yml starts it with the socket, the repository and its volumes.
 FROM python:3.12-slim
 

@@ -36,4 +36,4 @@ While the search runs, the canvas shows the best path so far and the status coun
 - **Incomplete trajectory**: the planner found no complete plan, so this is the best path it found: it ends early or still fails a COLREGS rule. It can still be simulated and exported.
 - **No usable trajectory**: the planner found no compliant step from this scene.
 
-The button with the download icon exports the trajectory as JSON. **Next: Simulation** makes it the input of the Simulation page and opens it; it needs the gateway connection.
+The button with the download icon exports the trajectory as JSON. **Next: Simulation** makes it the input of the Simulation page and opens it; it needs the connection to the control node's gateway.

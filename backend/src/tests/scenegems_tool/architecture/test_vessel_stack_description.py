@@ -120,9 +120,15 @@ def test_an_available_stack_names_the_cluster_job_that_runs_it(document):
     assert fact(_combination(document, "replay", "custom", "gazebo"), CLUSTER_JOB_FACT).value == "simulation, runner gazebo_custom"
     assert fact(_combination(document, "usv_navigation", "custom", "gazebo"), CLUSTER_JOB_FACT).value == "simulation, runner gazebo_custom"
     workbench_only = fact(_combination(document, "mission_planner", "ardupilot", "gazebo"), CLUSTER_JOB_FACT)
-    assert workbench_only.value is None and workbench_only.note.startswith("workbench only")
+    assert workbench_only.value == "simulation, runner attended" and workbench_only.note.startswith("workbench only")
+    assert "attended simulation job" in workbench_only.note and "live session" not in workbench_only.note
+    available = [combination for combination in document.combinations if any(item.key == CLUSTER_JOB_FACT for item in combination.facts)]
+    assert available and all(fact(combination, CLUSTER_JOB_FACT).value for combination in available), "every available stack runs as a job on a worker node"
     assert not any(item.key == CLUSTER_JOB_FACT for item in _combination(document, "replay", "custom", "kinematic").facts), "a stack that is not available names none"
-    assert any("only when a runner of the simulation job runs it" in note for note in document.notes)
+    assert any("only when an unattended runner of the simulation job runs it" in note and "attended simulation jobs" in note for note in document.notes)
+    assert not any("live session" in note for note in document.notes)
+    assert any("run-simulation request" in note and "simulation slots" in note and "observe, start and cancel" in note for note in document.notes), "how a run is delivered"
+    assert any("monitoring slot" in note and "calibration" in note for note in document.notes)
 
 
 def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
@@ -137,8 +143,8 @@ def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
         == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}", "${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}"}
     )
     assert images(edges["mission_planner_gcs_port"]) == {"${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}"}
-    replay_container = {"${SCENARIO_EXECUTION_IMAGE:-scenegems-scenario-execution-subsystem:latest}"}
+    replay_container = {"${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}"}
     assert images(edges["replay_mavlink_lockstep"]) == images(edges["replay_state_follower"]) == replay_container, "the vessel's replay container, and no MAVProxy or ArduAgent"
     assert images(nodes["asv_system/usv_navigation"]) == {"${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"}
-    assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the scenario execution image too"
+    assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the simulation subsystem image too"
     assert images(nodes["control_layer/none"]) == set(), "no controller, no container"

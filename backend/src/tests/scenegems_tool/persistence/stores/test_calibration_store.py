@@ -5,7 +5,7 @@ from scenegems_tool.persistence.stores import NewCalibrationResult
 pytestmark = pytest.mark.postgres
 
 STACK = {"asv_system": "replay", "control_layer": "ardupilot", "simulation_layer": "ardupilot_sim", "adapter": "replay_mavlink_lockstep"}
-FINGERPRINTS = {"scenegems-sitl": "fp-sitl", "scenegems-scenario-execution": "fp-execution"}
+FINGERPRINTS = {"scenegems-sitl": "fp-sitl", "scenegems-simulation": "fp-execution"}
 CALM = {"wind_vector": None, "waves": None, "speedup": 5}
 
 

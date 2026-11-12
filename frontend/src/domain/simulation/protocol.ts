@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { EvaluationData, SimulationFrame } from "./types";
-import type { RunRecordingStatus, StackOptionsPayload } from "./wireTypes";
+import type { StackOptionsPayload } from "./wireTypes";
 
 const stateSchema = z
   .object({
@@ -471,14 +471,6 @@ export type ParsedServerMessage =
       toTimestamp: number;
       frames: SimulationFrame[];
     }
-  | {
-      kind: "simulation_trajectory_chunk";
-      scenarioId: string | null;
-      fromTimestamp: number;
-      toTimestamp: number;
-      frames: SimulationFrame[];
-    }
-  | { kind: "frame"; frame: SimulationFrame }
   | { kind: "error"; message: string }
   | { kind: "ack"; action: string }
   | {
@@ -502,30 +494,7 @@ export type ParsedServerMessage =
       complete: boolean | null;
       errorMessage: string | null;
     }
-  | {
-      kind: "simulation_status";
-      status:
-        | "running"
-        | "starting"
-        | "ready to start"
-        | "agents are preparing"
-        | "initializing"
-        | "not initialized"
-        | "offline";
-      /** Host port of each Mission Planner vessel's ground control station (TCP on localhost), by agent id. */
-      groundControlPortsByAgentId: Record<string, number>;
-    }
   | { kind: "stack_options"; options: StackOptionsPayload }
-  | { kind: "mqtt_broker_status"; status: "connected" | "disconnected"; controlNodeBroker: string | null }
-  | { kind: "monitor_status"; status: "connected" | "disconnected" }
-  | {
-      kind: "run_recording";
-      status: RunRecordingStatus;
-      /** The workbench entry the live run is recorded as; null before it exists (and when unavailable). */
-      campaignId: string | null;
-      caseId: number | null;
-      message: string | null;
-    }
   | {
       kind: "simulation_models";
       /** Per-vessel SDF model content keyed by the same id used in connectionsByAgentId. */
@@ -542,14 +511,6 @@ const initialStateSchema = z.object({
 
 const previewTrajectoryChunkSchema = z.object({
   type: z.literal("preview_trajectory_chunk"),
-  scenarioId: z.string().optional().nullable(),
-  fromTimestamp: z.number(),
-  toTimestamp: z.number(),
-  frames: z.array(z.unknown()),
-});
-
-const simulationTrajectoryChunkSchema = z.object({
-  type: z.literal("simulation_trajectory_chunk"),
   scenarioId: z.string().optional().nullable(),
   fromTimestamp: z.number(),
   toTimestamp: z.number(),
@@ -574,25 +535,6 @@ const ackSchema = z.object({
   action: z.string(),
 });
 
-const mqttBrokerStatusSchema = z.object({
-  type: z.literal("mqtt_broker_status"),
-  status: z.enum(["connected", "disconnected"]),
-  controlNodeBroker: z.string().nullable().optional(),
-});
-
-const monitorStatusSchema = z.object({
-  type: z.literal("monitor_status"),
-  status: z.enum(["connected", "disconnected"]),
-});
-
-const runRecordingSchema = z.object({
-  type: z.literal("run_recording"),
-  status: z.enum(["recording", "saved", "failed", "unavailable"]),
-  campaignId: z.string().nullable(),
-  caseId: z.number().int().nullable(),
-  message: z.string().nullable(),
-});
-
 const simulationModelsConnectionSchema = z
   .object({
     gazeboVesselModel: z.string().optional().nullable(),
@@ -605,20 +547,6 @@ const simulationModelsSchema = z.object({
     .record(z.string(), simulationModelsConnectionSchema)
     .optional()
     .default({}),
-});
-
-const simulationStatusSchema = z.object({
-  type: z.literal("simulation_status"),
-  status: z.enum([
-    "running",
-    "starting",
-    "ready to start",
-    "agents are preparing",
-    "initializing",
-    "not initialized",
-    "offline",
-  ]),
-  groundControlPortsByAgentId: z.record(z.string(), z.number().int().positive()).optional().default({}),
 });
 
 const asvSystemSchema = z.enum(["replay", "usv_navigation", "mission_planner", "on_board"]);
@@ -648,19 +576,18 @@ const stackOptionsSchema = z.object({
   ),
 });
 
-const framePushSchema = z
-  .object({
-    type: z.literal("frame"),
-  })
-  .and(frameSchema);
-
+/**
+ * A message of the gateway, or one the job driver dispatches from a cluster job's result. Anything
+ * without a known `type` is unknown, the messages of the former live session included (wireTypes.ts
+ * RETIRED_GATEWAY_MESSAGES): the gateway runs no broker, simulation or monitor session.
+ */
 export function parseServerMessage(raw: unknown): ParsedServerMessage {
   if (typeof raw !== "object" || raw === null) {
-    return { kind: "frame", frame: parseFrame(raw) };
+    return { kind: "unknown", raw };
   }
   const obj = raw as Record<string, unknown>;
   if (typeof obj.type !== "string") {
-    return { kind: "frame", frame: parseFrame(raw) };
+    return { kind: "unknown", raw };
   }
 
   const msgType = typeof obj.type === "string" ? obj.type : "";
@@ -705,29 +632,6 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
     const parsed = previewTrajectoryChunkSchema.parse(chunkCandidate);
     return {
       kind: "preview_trajectory_chunk",
-      scenarioId: parsed.scenarioId ?? null,
-      fromTimestamp: parsed.fromTimestamp,
-      toTimestamp: parsed.toTimestamp,
-      frames: parsed.frames.map((frame) => parseFrame(frame)),
-    };
-  }
-  if (msgType === "simulation_trajectory_chunk") {
-    const chunkCandidate = {
-      type: "simulation_trajectory_chunk" as const,
-      scenarioId: payload.scenarioId ?? payload.scenario_id ?? null,
-      fromTimestamp: payload.fromTimestamp ?? payload.from_timestamp ?? 0,
-      toTimestamp:
-        payload.toTimestamp ??
-        payload.to_timestamp ??
-        payload.timestamp ??
-        payload.upToTimestamp ??
-        payload.up_to_timestamp ??
-        0,
-      frames: payload.frames ?? [],
-    };
-    const parsed = simulationTrajectoryChunkSchema.parse(chunkCandidate);
-    return {
-      kind: "simulation_trajectory_chunk",
       scenarioId: parsed.scenarioId ?? null,
       fromTimestamp: parsed.fromTimestamp,
       toTimestamp: parsed.toTimestamp,
@@ -782,47 +686,11 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
       errorMessage: (payload.errorMessage ?? payload.error_message ?? null) as string | null,
     };
   }
-  if (msgType === "frame") {
-    const parsed = framePushSchema.parse(raw);
-    const { type: _type, ...rest } = parsed;
-    void _type;
-    return { kind: "frame", frame: parseFrame(rest) };
-  }
   if (msgType === "error") {
     return { kind: "error", message: errorSchema.parse(raw).message };
   }
   if (msgType === "ack") {
     return { kind: "ack", action: ackSchema.parse(raw).action };
-  }
-  if (msgType === "mqtt_broker_status") {
-    const parsed = mqttBrokerStatusSchema.parse(raw);
-    return {
-      kind: "mqtt_broker_status",
-      status: parsed.status,
-      controlNodeBroker: parsed.controlNodeBroker ?? null,
-    };
-  }
-  if (msgType === "monitor_status") {
-    return {
-      kind: "monitor_status",
-      status: monitorStatusSchema.parse(raw).status,
-    };
-  }
-  if (msgType === "run_recording") {
-    const parsed = runRecordingSchema.parse({
-      type: "run_recording",
-      status: payload.status,
-      campaignId: payload.campaignId ?? payload.campaign_id ?? null,
-      caseId: payload.caseId ?? payload.case_id ?? null,
-      message: payload.message ?? null,
-    });
-    return {
-      kind: "run_recording",
-      status: parsed.status,
-      campaignId: parsed.campaignId,
-      caseId: parsed.caseId,
-      message: parsed.message,
-    };
   }
   if (msgType === "simulation_models") {
     const parsed = simulationModelsSchema.parse({
@@ -844,18 +712,6 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
     return {
       kind: "simulation_models",
       vesselModelsByAgentId,
-    };
-  }
-  if (msgType === "simulation_status") {
-    const parsed = simulationStatusSchema.parse({
-      type: "simulation_status",
-      status: payload.status ?? obj.status,
-      groundControlPortsByAgentId: payload.groundControlPortsByAgentId ?? obj.groundControlPortsByAgentId,
-    });
-    return {
-      kind: "simulation_status",
-      status: parsed.status,
-      groundControlPortsByAgentId: parsed.groundControlPortsByAgentId,
     };
   }
   if (msgType === "stack_options") {

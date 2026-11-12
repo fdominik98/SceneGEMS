@@ -664,3 +664,25 @@ def test_a_case_of_an_explored_fec_names_the_exploration_as_its_source(client, s
     assert (detail["fec_id"], detail["input_artifact"], detail["input_source"]) == ("explored/00000", specs[0].content_hash, source)
     (row,) = client.get(f"{CAMPAIGNS_PATH}/{campaign_id}/outputs", params={"step": "scene_generation"}).json()
     assert row["input_source"] == source and "vessel_count" not in row
+
+
+def test_only_a_workbench_entry_takes_an_attended_run(client):
+    connection = {"context": "simulation", "asvSystem": "replay", "controlLayer": "ardupilot", "agentName": "typed", "topic": "", "port": 14570, "gazeboVesselModel": None}
+    setup = {
+        "simulatorType": "ArduPilot Sim",
+        "windVector": [0.0, 0.0, 0.0],
+        "wave": {"amplitude": 0.0, "period": 0.0, "steepness": 0.0, "direction": [0.0, 0.0]},
+        "simulationSpeed": 1,
+        "connectionsByAgentId": {"0": {**connection, "asvSystem": "mission_planner"}, "1": connection},
+    }
+    config = {"name": "attended", "scope": [{"classes": ["2vessel_0obstacle_scenarios/fec0"], "quota": 1}], "execution": {"runs": [{"stack": {"attended": True, "simulation": setup}}]}}
+
+    def post(path: str, **body):
+        return client.post(path, content=json.dumps({"config": config, **body}), headers=JSON)
+
+    refused = post(CAMPAIGNS_PATH, kind="campaign")
+    assert refused.status_code == 422 and "only a workbench entry may have one" in refused.text, "a campaign has no operator to start the run"
+    assert post(CAMPAIGNS_PATH + "/validate", kind="campaign").status_code == 422
+    assert post(CAMPAIGNS_PATH + "/validate", kind="workbench").status_code == 200
+    made = post(CAMPAIGNS_PATH, kind="workbench", origin="simulation")
+    assert made.status_code == 201 and made.json()["kind"] == "workbench"
