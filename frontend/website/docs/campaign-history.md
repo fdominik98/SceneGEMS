@@ -13,12 +13,12 @@ Each row shows:
 
 | Column | Description |
 |--------|-------------|
-| Entry | The name, the kind (campaign or workbench run) and where it was made (the wizard, the command line or a workbench page; an entry an earlier release recorded from a live session on the control node says "live session", and entries made before Campaign History existed say "not recorded") |
+| Entry | The name, the kind (campaign or workbench run) and, for a campaign, where it was made (the wizard or the command line). A workbench run comes from the page of the step its **Steps** column names, so the row does not repeat it; the kind's tooltip has it. An entry an earlier release recorded from a live session on the control node says "live session", and entries made before Campaign History existed say "not recorded" |
 | Steps | The steps the entry runs, in chain order |
 | State | Created, running, paused, draining, stalled, stopped or completed, with what it is asked to become when that differs |
 | Made from | Links to the entries whose outputs this one took as its input; "its own input" when it started from catalog FECs, scenarios or files |
 | Totals | Cases by state, and the monitor result summaries of each monitored step |
-| Created | When the entry was made |
+| Created | When the entry was made, in your local time to the minute (the tooltip has the seconds). Every page writes a time the same way: `2026-11-12 13:08` |
 
 Filter the list by kind, by state, by step and by a part of the name. The kind, state and name filters are applied by the control node; the step filter narrows the page that is shown. The list follows the control node's live channel (the badge says **live**); when the channel does not deliver, it is read every 4 seconds (**polling**).
 

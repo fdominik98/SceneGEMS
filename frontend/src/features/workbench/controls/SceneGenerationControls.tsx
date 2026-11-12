@@ -7,6 +7,7 @@ import { EntrySeedField } from "../pages/EntrySeedField";
 import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { useScenePageStore } from "../pages/pageStore";
 import { NumberSetting, StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
+import { describeWhere, NO_INPUT_STATUS, readyStatus } from "../pages/stepWords";
 import { sceneSelectionMode } from "../../../domain/sceneGeneration/batchGenerationStore";
 import { runButtonLabel } from "./sceneSelection";
 
@@ -119,14 +120,16 @@ export function SceneGenerationControls(props: SceneGenerationControlsProps) {
       ? scene.valid
         ? { label: "Valid scene", tone: "ok" }
         : { label: "No valid scene", tone: "warn" }
-      : { label: "Idle", tone: "idle" };
+      : missing !== null
+        ? NO_INPUT_STATUS
+        : readyStatus("generate");
 
   return (
     <StepPanel
       page="sceneGeneration"
       title="Scene Generation"
       status={status}
-      where={`Generates as a job on the cluster: ${describeResources(resources)}. Every run is kept in Campaign History.`}
+      where={describeWhere(describeResources(resources))}
       notices={notices}
       actions={
         busy ? (

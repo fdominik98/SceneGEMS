@@ -180,7 +180,7 @@ describe("entry seeds, names and YAML", () => {
   });
 
   it("names entries by what ran on what, and the origin by the page", () => {
-    expect(entryName("Scene generation", "head_on", new Date("2026-10-28T10:20:30Z"))).toBe("Scene generation: head_on (2026-10-28 10:20)");
+    expect(entryName("Scene generation", "head_on", new Date(2026, 9, 28, 10, 20, 30))).toBe("Scene generation: head_on (2026-10-28 10:20)");
     expect(WORKBENCH_ORIGIN).toEqual({ designSpaceExploration: "design_space_exploration", sceneGeneration: "scene_generation", trajectoryGeneration: "trajectory_generation", simulation: "simulation" });
   });
 });

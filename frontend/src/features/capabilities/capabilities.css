@@ -24,40 +24,42 @@
   gap: var(--space-3) var(--space-5);
 }
 
-.cap-tabs,
+/* The parts are tabs (components.css); the views of one part are a switch, as Text and Graph are. */
+.cap-toolbar .cap-tabs {
+  flex: 1 1 auto;
+}
+
 .cap-views {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--bg-pane);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
 }
 
-.cap-tab,
 .cap-view {
-  min-height: calc(var(--control-height) - 8px);
-  padding: 0 var(--space-4);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
+  border-radius: 0;
   color: var(--text-muted);
-  font: inherit;
   font-weight: 600;
-  cursor: pointer;
 }
 
-.cap-tab:hover,
-.cap-view:hover {
-  color: var(--text);
-  background: var(--bg-control);
+.cap-view + .cap-view {
+  margin-left: -1px;
 }
 
-.cap-tab.active,
+.cap-view:first-child {
+  border-radius: var(--radius) 0 0 var(--radius);
+}
+
+.cap-view:last-child {
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.cap-view:only-child {
+  border-radius: var(--radius);
+}
+
 .cap-view.active {
-  color: var(--bg);
-  background: var(--accent);
+  position: relative;
+  border-color: var(--accent-strong);
+  background: var(--accent-solid);
+  color: var(--text);
 }
 
 .cap-toggle {
@@ -1175,9 +1177,9 @@
   }
 }
 
-/* The shown tab and view keep their highlight under the pointer */
-.cap-tab.active:hover,
+/* The shown view keeps its highlight under the pointer */
 .cap-view.active:hover {
-  color: var(--bg);
-  background: var(--accent);
+  border-color: var(--accent-strong);
+  background: var(--accent-solid);
+  color: var(--text);
 }

@@ -52,7 +52,7 @@ describe("SceneGenerationControls", () => {
     const user = userEvent.setup();
     const props = renderControls();
     expect(screen.getByRole("group", { name: "Input" })).toHaveTextContent("FEC 2vessel/fec2");
-    expect(screen.getByText(/Generates as a job on the cluster: 4 slots on 2 machines, 3 free/)).toBeInTheDocument();
+    expect(screen.getByText(/Runs as a job on the cluster: 4 slots on 2 machines, 3 free/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Generate scene" }));
     expect(props.onGenerate).toHaveBeenCalledTimes(1);
   });

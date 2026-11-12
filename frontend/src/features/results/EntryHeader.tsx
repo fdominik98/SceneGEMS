@@ -1,5 +1,6 @@
 import type { CampaignSummary } from "../../domain/cluster/schemas";
-import { describeOrigin, executedSteps, hasStepViews, KIND_LABEL, STEP_LABEL, stateBadgeClass } from "./stepViews";
+import { StateBadge, ToneBadge } from "../history/campaignParts";
+import { describeOrigin, executedSteps, hasStepViews, KIND_LABEL, STEP_LABEL } from "./stepViews";
 
 /** Which entry the findings belong to: its name, kind, origin, state and the steps it executed. */
 export function EntryHeader({ entry }: { entry: CampaignSummary }) {
@@ -8,8 +9,8 @@ export function EntryHeader({ entry }: { entry: CampaignSummary }) {
   return (
     <header className="results-entry">
       <h2 className="results-entry-name">{entry.name}</h2>
-      {entry.kind && <span className="run-tag">{KIND_LABEL[entry.kind]}</span>}
-      <span className={stateBadgeClass(entry.actual_state)}>{entry.actual_state}</span>
+      {entry.kind && <ToneBadge tone={entry.kind === "campaign" ? "info" : "idle"}>{KIND_LABEL[entry.kind]}</ToneBadge>}
+      <StateBadge state={entry.actual_state} desired={entry.desired_state} />
       {hasStepViews(entry) && (
         <span className="meta">
           {executedSteps(entry)

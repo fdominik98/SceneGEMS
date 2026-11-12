@@ -1,3 +1,4 @@
+import { jobTypeLabel } from "../../domain/cluster/jobTypeLabels";
 import { describeComponents, isWhollyOutOfDate, JOB_TYPE_COMPONENTS, offersJob, runComponents, SIMULATION_JOB } from "../../domain/cluster/components";
 import type { WorkerNodeView } from "../../domain/cluster/schemas";
 import { QUEUE_DEPTH_DEFAULTS } from "./wizard/wizardState";
@@ -46,19 +47,8 @@ function simulatedWhere(components: readonly string[]): string {
   return components.includes("monitoring") ? `${stack}, judged by the monitoring subsystem as it runs` : stack;
 }
 
-const CAPABILITY_LABELS: Record<string, string> = {
-  design_space_exploration: "Design space exploration",
-  scene_generation: "Scene generation",
-  trajectory_generation: "Trajectory generation",
-  simulation: "Simulation",
-  "monitoring.post_hoc": "Post hoc monitoring",
-  "calibration.deviation": "Repeat calibration",
-};
-
 /** A job type as a capability name ("Simulation"). */
-export function capabilityLabel(jobType: string): string {
-  return CAPABILITY_LABELS[jobType] ?? jobType;
-}
+export const capabilityLabel = jobTypeLabel;
 
 /** The config's run defaults (`RunConfig`). */
 const DEFAULT_MONITOR = "post_hoc";

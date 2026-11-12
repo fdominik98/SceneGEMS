@@ -49,8 +49,44 @@
 /* The list and the outputs fit the page beside the left pane: tighter sides and links that wrap */
 .history-table th,
 .history-table td {
-  padding-left: var(--space-3);
-  padding-right: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+}
+
+/* The whole row opens the entry, so its links are text sized: a page shows many entries at once. */
+.history-table .camp-link {
+  min-height: 0;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+}
+
+/* The name and what it was made from take the room: both are long, the other columns are a word or a number. */
+.history-table .camp-cell-name {
+  display: table-cell;
+  width: 38%;
+  min-width: 260px;
+}
+
+.history-table .history-cell-made-from {
+  width: 26%;
+  min-width: 200px;
+}
+
+.history-table .camp-cell-name > * {
+  display: flex;
+}
+
+.history-table .history-kind-line {
+  margin-top: 2px;
+}
+
+.history-table .history-kind-line .meta {
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+
+.history-table .history-verdicts {
+  margin-top: 0;
 }
 
 .history-table .camp-link,
@@ -111,25 +147,7 @@
   gap: var(--space-3);
 }
 
-.history-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--border);
-}
-
-.history-tab {
-  border: none;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-  background: transparent;
-}
-
-.history-tab--on {
-  border-bottom-color: var(--accent);
-  color: var(--accent);
-  font-weight: 600;
-}
+/* The step tabs are the tabs of components.css. */
 
 .history-step-title {
   margin: 0 0 var(--space-2);

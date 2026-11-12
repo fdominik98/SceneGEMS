@@ -1,3 +1,4 @@
+import { DEFAULT_THEME } from "../../../../app/theme";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -176,9 +177,10 @@ Buoy(marker).
   it("gives a vessel the color it has everywhere else in the console, whatever the case of its id", () => {
     render(<ModelGraph text={SHIPS} />);
     const colorOf = (name: string) => (screen.getByTitle(name).closest(".pg-card") as HTMLElement).style.getPropertyValue("--pg-node-color");
-    expect(colorOf("os")).toBe(shipColorOfName("os", "dark"));
-    expect(colorOf("tS1")).toBe(shipColorOfName("ts1", "dark"));
-    expect(colorOf("ts2")).toBe(shipColorOfName("ts2", "dark"));
+    // the console starts in light mode, so these are the day chart's vessel colors
+    expect(colorOf("os")).toBe(shipColorOfName("os", DEFAULT_THEME));
+    expect(colorOf("tS1")).toBe(shipColorOfName("ts1", DEFAULT_THEME));
+    expect(colorOf("ts2")).toBe(shipColorOfName("ts2", DEFAULT_THEME));
     expect(new Set([colorOf("os"), colorOf("tS1"), colorOf("ts2")]).size).toBe(3);
     // any other object takes the tone of its class instead
     expect(colorOf("marker")).toBe("");

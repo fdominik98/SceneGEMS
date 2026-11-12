@@ -79,6 +79,17 @@ export function madeByLabel(origin: CampaignOrigin | null | undefined): string {
   return origin ? `from the ${ORIGIN_LABELS[origin]}` : "origin not recorded";
 }
 
+const WORKBENCH_PAGE_ORIGINS: ReadonlySet<CampaignOrigin> = new Set<CampaignOrigin>(["design_space_exploration", "scene_generation", "trajectory_generation", "simulation"]);
+
+/**
+ * What a list row says about the origin beside the kind, or null when the row says it already: a workbench
+ * run comes from the page of the step its Steps column names.
+ */
+export function rowOriginNote(entry: Pick<CampaignSummary, "kind" | "origin">): string | null {
+  const repeated = entryKind(entry) === "workbench" && entry.origin != null && WORKBENCH_PAGE_ORIGINS.has(entry.origin);
+  return repeated ? null : madeByLabel(entry.origin);
+}
+
 /** The executed steps in chain order; an entry without `steps` (format 1, or a control node without Phase 6) runs the chain of then. */
 export function entrySteps(entry: Pick<CampaignSummary, "steps">): CampaignStep[] {
   const steps = entry.steps ?? [];

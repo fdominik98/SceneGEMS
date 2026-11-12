@@ -39,6 +39,7 @@ interface StepPanelProps {
 export function StepPanel({ page, title, status, where, actions, notices = [], children }: StepPanelProps) {
   return (
     <section className="step-panel" aria-label={title}>
+      {/* The title and the run buttons share the first line on every page; where it runs takes the line under them. */}
       <header className="step-panel-head">
         <div className="step-panel-title">
           <span className="step-panel-step">
@@ -47,8 +48,8 @@ export function StepPanel({ page, title, status, where, actions, notices = [], c
           <h3>{title}</h3>
           <StatusChip status={status} />
         </div>
-        {where ? <p className="step-panel-where">{where}</p> : null}
         <div className="step-panel-actions">{actions}</div>
+        {where ? <p className="step-panel-where">{where}</p> : null}
       </header>
       {notices.length > 0 ? (
         <ul className="step-notices" aria-label="Before it can run">

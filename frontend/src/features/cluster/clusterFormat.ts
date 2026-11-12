@@ -2,17 +2,7 @@ import type { WorkerNodeView } from "../../domain/cluster/schemas";
 
 /** Readable text for the Cluster section's values. */
 
-const JOB_TYPE_LABELS: Record<string, string> = {
-  scene_generation: "Scene generation",
-  trajectory_generation: "Trajectory generation",
-  simulation: "Simulation",
-  "monitoring.post_hoc": "Monitoring, post hoc",
-  "calibration.deviation": "Calibration deviation",
-};
-
-export function jobTypeLabel(jobType: string): string {
-  return JOB_TYPE_LABELS[jobType] ?? jobType;
-}
+export { jobTypeLabel } from "../../domain/cluster/jobTypeLabels";
 
 /** Megabytes as MB below 1 GB, otherwise GB with one decimal. */
 export function formatMegabytes(mb: number): string {

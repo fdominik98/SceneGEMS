@@ -16,6 +16,7 @@ import { PageInputPanel } from "../pages/PageInputPanel";
 import { inputOfFile, trajectoriesOfTrajectoryPage, trajectoryContentOfDocument } from "../pages/pageHandoff";
 import { useSimulationPageStore, type PageInput } from "../pages/pageStore";
 import { StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
+import { NO_INPUT_STATUS, readyStatus } from "../pages/stepWords";
 
 interface Props {
   streamControls: SimulationStreamControls;
@@ -25,7 +26,7 @@ interface Props {
 const RUN_SPEEDS = [1, 5, 10, 50, 200] as const;
 
 const CLUSTER_STATUS: Record<ClusterRunStatus, StepStatus> = {
-  idle: { label: "Ready to run", tone: "idle" },
+  idle: readyStatus("run"),
   queued: { label: "Queued", tone: "busy" },
   running: { label: "Running", tone: "live" },
   finishing: { label: "Finishing", tone: "busy" },
@@ -35,7 +36,6 @@ const CLUSTER_STATUS: Record<ClusterRunStatus, StepStatus> = {
 };
 
 const READY_TO_START: StepStatus = { label: "Ready to start", tone: "ok" };
-const NO_INPUT: StepStatus = { label: "No input yet", tone: "idle" };
 
 /**
  * The simulation page's panel. Every run is one job on a worker node of the cluster (Run on the
@@ -66,7 +66,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   // An attended job brings the vessels up and waits: its Start is the operator's
   const attendedPlan = plan?.runner === "attended";
   const awaitsStart = attendedPlan && run.status === "running" && run.phase === "ready_to_start";
-  const status = plan === null && !clusterActive ? NO_INPUT : awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status];
+  const status = plan === null && !clusterActive ? NO_INPUT_STATUS : awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status];
   const endpoints = groundControlEndpointLabels(clusterActive ? run.groundControlPorts : {}, run.workerNodeAddress ?? (run.workerNodeId ? `worker node ${run.workerNodeId}` : "the worker node"));
   // With a real vessel the job is ready to start only when every vessel is: until then it says what each one lacks
   const waitingVessels = attendedPlan && run.status === "running" && run.phase === "preparing" ? vesselReadinessLabels(run.vesselStates) : [];
@@ -82,6 +82,8 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   }
 
   const canRunOnCluster = plan !== null && hasInput && notices.length === 0 && !clusterActive;
+  // A disabled button says what it waits for: the input first, then what blocks the run elsewhere.
+  const disabledReason = needsInput ?? notices[0]?.text;
   const locked = clusterActive;
   // SITL runs free, so the watch speed of an ArduPilot run is the speed it plays at in the browser
   const pacedOnWorkerNode = plan !== null ? isPacedByWatchSpeed(plan) : true;
@@ -109,7 +111,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   };
 
   const where =
-    plan === null || resources === null ? "Take the input trajectories to set up the vessels." : `${describeClusterPlan(plan)} Cluster: ${describeResources(resources)}.`;
+    plan === null || resources === null ? "Take the input trajectories to set up the vessels." : `${describeClusterPlan(plan)} The cluster has ${describeResources(resources)} for it. Every run is kept in Campaign History.`;
 
   const actions =
     clusterActive ? (
@@ -147,7 +149,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
         </button>
       </>
     ) : (
-      <button type="button" className="primary-btn accent" disabled={!canRunOnCluster} title={needsInput} onClick={runOnCluster}>
+      <button type="button" className="primary-btn accent" disabled={!canRunOnCluster} title={canRunOnCluster ? undefined : disabledReason} onClick={runOnCluster}>
         Run on the cluster
       </button>
     );

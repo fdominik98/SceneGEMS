@@ -11,10 +11,10 @@ The bottom panel of each workbench page shows the state of its step in a chip be
 
 | Page | States |
 |------|--------|
-| Design Space Exploration | Idle, Exploring, N FECs found, No FEC found |
-| Scene Generation | Idle, Generating, Generating the batch, Valid scene, No valid scene |
-| Trajectory Generation | Idle, Ready to plan, Planning (with the seed step) or Generating, Trajectory ready, Incomplete trajectory, No usable trajectory, Failed |
-| Simulation | Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
+| Design Space Exploration | No input yet, Input incomplete, Ready to explore, Exploring, N FECs found, No FEC found |
+| Scene Generation | No input yet, Ready to generate, Generating, Generating the batch, Valid scene, No valid scene |
+| Trajectory Generation | No input yet, Ready to plan, Planning (with the seed step) or Generating, Trajectory ready, Incomplete trajectory, No usable trajectory, Failed |
+| Simulation | No input yet, Ready to run, Queued, Running, Finishing, Finished, Failed, Stopped |
 | Simulation, attended run | As above, and **Ready to start** once the job has brought the vessels up and waits for **Start**. Before that the Result row lists what each vessel still waits for: its agent on the broker, a position, to be at its start point, to be armable. |
 
 When something outside the panel blocks the run (the cluster, the domain configuration), the panel lists it under the header. A disabled run button says in its tooltip what it waits for.

@@ -22,6 +22,8 @@ describe("cluster formatting", () => {
     expect(shortHash("abc")).toBe("abc");
     expect(shortHash(null)).toBe("none");
     expect(jobTypeLabel("simulation")).toBe("Simulation");
+    expect(jobTypeLabel("design_space_exploration")).toBe("Design space exploration");
+    expect(jobTypeLabel("monitoring.post_hoc")).toBe("Post hoc monitoring");
     expect(jobTypeLabel("future.kind")).toBe("future.kind");
     expect(memoryUseFraction(1000, 250)).toBe(0.75);
     expect(memoryUseFraction(0, 0)).toBe(0);

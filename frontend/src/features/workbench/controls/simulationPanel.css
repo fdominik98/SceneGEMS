@@ -45,7 +45,7 @@
 }
 
 .monitor-stream-option.active {
-  background: var(--bg-control);
+  background: var(--accent-solid);
   color: var(--text);
 }
 

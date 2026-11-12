@@ -1,3 +1,4 @@
+import { formatLocalDateTime } from "../../../domain/localDateTime";
 import { stringify } from "yaml";
 import type { CampaignConfigFormat2, ConfigArtifactRef, InputItemSource, StepMonitor } from "../../../domain/cluster/campaignApi";
 import type { ArtifactRef, CampaignOrigin } from "../../../domain/cluster/schemas";
@@ -259,8 +260,7 @@ export function toConfigYaml(config: CampaignConfigFormat2): string {
   return stringify(config, { lineWidth: 0 });
 }
 
-/** A short name for an entry: what ran, on what, and when. */
+/** A short name for an entry: what ran, on what, and when, in the local time every page shows. */
 export function entryName(what: string, on: string, at: Date = new Date()): string {
-  const time = at.toISOString().slice(0, 16).replace("T", " ");
-  return `${what}: ${on} (${time})`.slice(0, 256);
+  return `${what}: ${on} (${formatLocalDateTime(at, "minute")})`.slice(0, 256);
 }

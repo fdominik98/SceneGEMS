@@ -1,6 +1,7 @@
 /*
- * Every color of the console, one token per role. `:root` is dark mode, the default;
- * `data-theme="light"` on the root element (app/theme.ts) overrides all of them. Stylesheets
+ * Every color of the console, one token per role. `:root` is dark mode;
+ * `data-theme="light"` on the root element overrides all of them and is what the console starts
+ * with (index.html, app/theme.ts). Stylesheets
  * and components use the tokens and hold no colors of their own (app/themeTokens.test.ts).
  *
  * The *-rgb tokens are channels, for a tint that keeps its alpha at the place of use:

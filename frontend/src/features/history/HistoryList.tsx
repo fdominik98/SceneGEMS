@@ -6,7 +6,7 @@ import { formatDateTime, plural } from "../campaigns/campaignFormat";
 import { ACTUAL_STATES, ACTUAL_STATE_LABELS, LIST_PAGE_SIZES, pageInfo } from "./campaignModel";
 import { EmptyState, StateBadge, ToneBadge } from "./campaignParts";
 import { DeleteEntry } from "./DeleteEntry";
-import { entryKind, entrySteps, KIND_LABELS, madeByLabel, rowTotalsSummary, STEP_LABELS, stepsLabel } from "./historyModel";
+import { entryKind, entrySteps, KIND_LABELS, madeByLabel, rowOriginNote, rowTotalsSummary, STEP_LABELS, stepsLabel } from "./historyModel";
 import { MadeFrom, VerdictChips } from "./historyParts";
 import { useHistoryStore } from "./historyStore";
 import { useHistoryList } from "./useHistoryData";
@@ -27,6 +27,7 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
   const kind = entryKind(entry);
   const steps = entrySteps(entry);
   const totals = rowTotalsSummary(entry.totals, steps);
+  const originNote = rowOriginNote(entry);
   return (
     <tr className="camp-row" onClick={() => onOpen(entry.campaign_id)}>
       <td className="camp-cell-name">
@@ -34,8 +35,10 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
           {entry.name}
         </button>
         <span className="history-kind-line">
-          <ToneBadge tone={kind === "campaign" ? "info" : "idle"}>{KIND_LABELS[kind]}</ToneBadge>
-          <span className="meta">{madeByLabel(entry.origin)}</span>
+          <ToneBadge tone={kind === "campaign" ? "info" : "idle"} title={madeByLabel(entry.origin)}>
+            {KIND_LABELS[kind]}
+          </ToneBadge>
+          {originNote && <span className="meta">{originNote}</span>}
         </span>
         {entry.state_reason && <span className="camp-reason">{entry.state_reason}</span>}
       </td>
@@ -43,14 +46,16 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
       <td>
         <StateBadge state={entry.actual_state} desired={entry.desired_state} />
       </td>
-      <td>
+      <td className="history-cell-made-from">
         <MadeFrom ids={entry.made_from ?? []} names={names} onOpen={onOpen} />
       </td>
       <td className="history-cell-totals">
         {totals.cases === null ? <span className="meta">not reported</span> : <span>{totals.cases}</span>}
         <VerdictChips lines={totals.verdicts} />
       </td>
-      <td className="camp-cell-time">{formatDateTime(entry.created_at)}</td>
+      <td className="camp-cell-time" title={formatDateTime(entry.created_at)}>
+        {formatDateTime(entry.created_at).slice(0, 16)}
+      </td>
       <td className="history-cell-actions">
         <DeleteEntry entry={entry} compact />
       </td>

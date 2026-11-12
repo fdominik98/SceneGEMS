@@ -1,6 +1,7 @@
 import type { ReactElement, SVGProps } from "react";
 import { Disclosure } from "../components/Disclosure";
 import { useClusterStore } from "../domain/cluster/clusterStore";
+import { describeRunningEntries, NO_SYSTEM_STATUS, type ClusterStatusLine, type StatusTone, type SystemStatus } from "./systemStatus";
 import { useTheme, useThemeStore } from "./theme";
 import type { AppSection, WorkbenchView } from "./uiStore";
 
@@ -185,41 +186,71 @@ interface NavEntry<T> {
 
 /** The workbench views in the order of the workflow: explore the design space, generate a scene, plan trajectories, simulate. */
 const WORKBENCH_ITEMS: NavEntry<WorkbenchView>[] = [
-  { id: "designSpaceExploration", label: "Design Space Exploration", hint: "Find the scenario classes", Icon: DesignSpaceExplorationIcon },
+  { id: "designSpaceExploration", label: "Design Space Exploration", hint: "Find the FECs", Icon: DesignSpaceExplorationIcon },
   { id: "sceneGeneration", label: "Scene Generation", hint: "Create a starting scene", Icon: SceneGenerationIcon },
   { id: "trajectoryGeneration", label: "Trajectory Generation", hint: "Plan the vessel routes", Icon: TrajectoryGenerationIcon },
   { id: "simulation", label: "Simulation", hint: "Watch the scenario play", Icon: SimulationIcon },
-  { id: "connections", label: "Connections", hint: "MQTT broker of real vessels, reference area", Icon: ConnectionsIcon },
+  { id: "connections", label: "Connections", hint: "Broker and reference area", Icon: ConnectionsIcon },
 ];
 
 const CLUSTER_ITEMS: NavEntry<AppSection>[] = [
   { id: "cluster", label: "Cluster", hint: "Machines and what they run", Icon: ClusterIcon },
-  { id: "domain", label: "Domain Configuration", hint: "Rules and vessel types of the cluster", Icon: DomainConfigIcon },
+  { id: "domain", label: "Domain Configuration", hint: "Rules and vessel types", Icon: DomainConfigIcon },
   { id: "capabilities", label: "Capabilities", hint: "What the system can run", Icon: CapabilitiesIcon },
   { id: "campaigns", label: "Campaigns", hint: "Define and start a campaign", Icon: CampaignsIcon },
-  { id: "history", label: "Campaign History", hint: "Campaigns and runs, with outputs", Icon: HistoryIcon },
+  { id: "history", label: "Campaign History", hint: "Every campaign and run", Icon: HistoryIcon },
   { id: "results", label: "Results", hint: "Review finished runs", Icon: ResultsIcon },
 ];
 
-function ClusterSelect() {
+/** A state as a colored dot. The words that go with it are beside it or in the tooltip of what carries it. */
+function StatusDot({ tone }: { tone: StatusTone }) {
+  return <span className={`status-dot status-dot--${tone}`} aria-hidden />;
+}
+
+interface ClusterPanelProps {
+  status: ClusterStatusLine;
+  isCollapsed: boolean;
+  onOpenCluster: () => void;
+}
+
+/**
+ * Which cluster the console works on and how it is doing, above the navigation since every page
+ * depends on it. The status line opens the Cluster section; on the rail only its dot is left.
+ */
+function ClusterPanel({ status, isCollapsed, onOpenCluster }: ClusterPanelProps) {
   const clusters = useClusterStore((s) => s.clusters);
   const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
   const selectCluster = useClusterStore((s) => s.selectCluster);
+  const selected = clusters.find((cluster) => cluster.id === selectedClusterId) ?? null;
+  const spoken = `${selected ? selected.name : "Cluster"}: ${status.label}${status.detail ? `, ${status.detail}` : ""}`;
+  if (isCollapsed) {
+    return (
+      <button type="button" className="left-pane-status left-pane-status--rail" onClick={onOpenCluster} title={spoken} aria-label={spoken}>
+        <StatusDot tone={status.tone} />
+      </button>
+    );
+  }
   return (
-    <label className="left-pane-cluster">
-      <span className="left-pane-cluster-label">Active cluster</span>
-      <select
-        value={selectedClusterId ?? ""}
-        onChange={(e) => selectCluster(e.target.value === "" ? null : e.target.value)}
-      >
-        <option value="">{clusters.length === 0 ? "No clusters yet" : "None selected"}</option>
-        {clusters.map((cluster) => (
-          <option key={cluster.id} value={cluster.id}>
-            {cluster.name}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="left-pane-cluster">
+      <label className="left-pane-cluster-field">
+        <span className="left-pane-cluster-label">Active cluster</span>
+        <select value={selectedClusterId ?? ""} onChange={(e) => selectCluster(e.target.value === "" ? null : e.target.value)}>
+          <option value="">{clusters.length === 0 ? "No clusters yet" : "None selected"}</option>
+          {clusters.map((cluster) => (
+            <option key={cluster.id} value={cluster.id}>
+              {cluster.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="left-pane-status" onClick={onOpenCluster} title="Open the Cluster page" aria-label={spoken}>
+        <StatusDot tone={status.tone} />
+        <span className="left-pane-status-text">
+          <span className="left-pane-status-label">{status.label}</span>
+          {status.detail && <span className="left-pane-status-detail">{status.detail}</span>}
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -239,13 +270,21 @@ function ThemeToggle() {
   );
 }
 
+/** What a destination has to tell now: a state, its words, and a count where there is one. */
+interface NavMark {
+  tone: StatusTone;
+  label: string;
+  count?: number;
+}
+
 interface NavButtonProps {
   entry: NavEntry<string>;
   active: boolean;
+  mark?: NavMark;
   onSelect: () => void;
 }
 
-function NavButton({ entry, active, onSelect }: NavButtonProps) {
+function NavButton({ entry, active, mark, onSelect }: NavButtonProps) {
   const { label, hint, Icon } = entry;
   return (
     <button
@@ -254,13 +293,19 @@ function NavButton({ entry, active, onSelect }: NavButtonProps) {
       onClick={onSelect}
       aria-current={active ? "page" : undefined}
       aria-label={label}
-      title={label}
+      aria-description={mark?.label}
+      title={mark ? `${label}: ${mark.label}` : `${label}: ${hint}`}
     >
       <Icon />
       <span className="left-nav-text">
         <span className="left-nav-label">{label}</span>
         <span className="left-nav-hint">{hint}</span>
       </span>
+      {mark && (
+        <span className={`left-nav-mark left-nav-mark--${mark.tone}`} data-mark={mark.label} aria-hidden>
+          {mark.count !== undefined ? <span className="left-nav-mark-count">{mark.count}</span> : <StatusDot tone={mark.tone} />}
+        </span>
+      )}
     </button>
   );
 }
@@ -273,12 +318,19 @@ interface LeftPaneProps {
   workbenchView: WorkbenchView;
   /** Selecting a workbench view also shows the workbench section. */
   onWorkbenchViewSelect: (view: WorkbenchView) => void;
+  /** The state of the cluster, of the workbench pages and of the running entries (`useSystemStatus`). */
+  system?: SystemStatus;
 }
 
 /**
  * The main navigation. Expanded it shows each destination with a plain-language hint; collapsed
  * it is an icon rail (names stay as tooltips and accessible names), so every section is one
  * click away in both states. On narrow screens it becomes a bar at the top.
+ *
+ * It also tells the state of the system on every page: the selected cluster and how it is doing
+ * above the navigation, a mark on a workbench page that runs, failed or shows a result, and the
+ * number of running entries on Campaign History. Only the navigation scrolls when the window is
+ * short, so the cluster and the footer stay in view.
  */
 export function LeftPane({
   isCollapsed,
@@ -287,8 +339,13 @@ export function LeftPane({
   onSectionSelect,
   workbenchView,
   onWorkbenchViewSelect,
+  system = NO_SYSTEM_STATUS,
 }: LeftPaneProps) {
   const workbenchActive = activeSection === "workbench";
+  const sectionMark = (section: AppSection): NavMark | undefined =>
+    section === "history" && system.runningEntries
+      ? { tone: "busy", label: describeRunningEntries(system.runningEntries), count: system.runningEntries }
+      : undefined;
   return (
     <aside className={`left-pane${isCollapsed ? " collapsed" : ""}`}>
       <div className="left-pane-top">
@@ -308,18 +365,7 @@ export function LeftPane({
           <MenuIcon />
         </button>
       </div>
-      {!isCollapsed && (
-        <Disclosure
-          id="left-pane:about"
-          variant="link"
-          headingLevel={null}
-          title="About SceneGEMS"
-          className="left-pane-about"
-        >
-          A Scenario Generation and Execution Framework for Simulation-Based Assurance of Maritime
-          Autonomous Surface Vehicles.
-        </Disclosure>
-      )}
+      <ClusterPanel status={system.cluster} isCollapsed={isCollapsed} onOpenCluster={() => onSectionSelect("cluster")} />
       <nav id="main-navigation" className="left-nav" aria-label="Main">
         <p className="left-nav-heading">Workbench</p>
         <div className="left-nav-group">
@@ -328,6 +374,7 @@ export function LeftPane({
               key={entry.id}
               entry={entry}
               active={workbenchActive && workbenchView === entry.id}
+              mark={entry.id === "connections" ? undefined : system.steps[entry.id]}
               onSelect={() => onWorkbenchViewSelect(entry.id)}
             />
           ))}
@@ -339,13 +386,19 @@ export function LeftPane({
               key={entry.id}
               entry={entry}
               active={activeSection === entry.id}
+              mark={sectionMark(entry.id)}
               onSelect={() => onSectionSelect(entry.id)}
             />
           ))}
         </div>
       </nav>
       <div className="left-pane-footer">
-        {!isCollapsed && <ClusterSelect />}
+        {!isCollapsed && (
+          <Disclosure id="left-pane:about" variant="link" headingLevel={null} title="About SceneGEMS" className="left-pane-about">
+            A Scenario Generation and Execution Framework for Simulation-Based Assurance of Maritime Autonomous Surface
+            Vehicles.
+          </Disclosure>
+        )}
         <ThemeToggle />
         <a href="/docs/" className="left-nav-item left-nav-link" title="Documentation" aria-label="Documentation">
           <DocumentationIcon />

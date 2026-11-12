@@ -8,6 +8,7 @@ import { EntrySeedField } from "../pages/EntrySeedField";
 import { PageEntryStatus } from "../pages/PageEntryStatus";
 import { useExplorationPageStore } from "../pages/pageStore";
 import { NumberSetting, Setting, StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
+import { describeWhere, NO_INPUT_STATUS, readyStatus } from "../pages/stepWords";
 import { useExplorationInputStore } from "./explorationInputStore";
 import { useExplorationStore } from "./explorationStore";
 import { explorationInputProblem } from "./explorationModel";
@@ -62,14 +63,20 @@ export function DesignSpaceExplorationControls({ resources, busy, onExplore, onS
       ? fecs.length > 0
         ? { label: `${fecs.length} FEC${fecs.length === 1 ? "" : "s"} found`, tone: result?.stop_reason === "exhausted" ? "ok" : "warn" }
         : { label: "No FEC found", tone: "warn" }
-      : { label: "Idle", tone: "idle" };
+      : lines === 0
+        ? NO_INPUT_STATUS
+        : inputProblem !== null
+          ? { label: "Input incomplete", tone: "idle" }
+          : readyStatus("explore");
+  // A disabled button says what it waits for: the input first, then what blocks the run elsewhere.
+  const disabledReason = inputProblem ?? notices[0]?.text;
 
   return (
     <StepPanel
       page="designSpaceExploration"
       title="Design Space Exploration"
       status={status}
-      where={`Runs as a job on the cluster: ${describeResources(resources)}. Every run is kept in Campaign History.`}
+      where={describeWhere(describeResources(resources))}
       notices={notices}
       actions={
         busy ? (
@@ -77,7 +84,7 @@ export function DesignSpaceExplorationControls({ resources, busy, onExplore, onS
             Stop
           </button>
         ) : (
-          <button className="primary-btn accent" type="button" disabled={!canExplore} title={inputProblem ?? undefined} onClick={onExplore}>
+          <button className="primary-btn accent" type="button" disabled={!canExplore} title={canExplore ? undefined : disabledReason} onClick={onExplore}>
             Explore
           </button>
         )

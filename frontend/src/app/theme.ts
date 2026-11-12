@@ -5,11 +5,14 @@ export type Theme = "dark" | "light";
 /** The inline script of `index.html` reads this key too, to set the theme before the first paint. */
 export const THEME_STORAGE_KEY = "scenegems:theme";
 
+/** Light mode unless the browser holds a choice for dark mode. */
+export const DEFAULT_THEME: Theme = "light";
+
 export function readStoredTheme(): Theme {
   try {
-    return globalThis.localStorage?.getItem(THEME_STORAGE_KEY) === "light" ? "light" : "dark";
+    return globalThis.localStorage?.getItem(THEME_STORAGE_KEY) === "dark" ? "dark" : DEFAULT_THEME;
   } catch {
-    return "dark";
+    return DEFAULT_THEME;
   }
 }
 

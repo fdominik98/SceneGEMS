@@ -60,7 +60,7 @@ The field checks the scope as you type, and its message names the entry that is 
 
 ## Bottom panel
 
-The header holds the status and the run button. The status reads Idle, Exploring, "N FECs found" or "No FEC found".
+The header holds the status and the run button. The status reads No input yet, Input incomplete, Ready to explore, Exploring, "N FECs found" or "No FEC found".
 
 | Row | Control | Description |
 |-----|---------|-------------|

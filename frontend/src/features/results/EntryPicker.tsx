@@ -1,5 +1,5 @@
 import type { CampaignSummary } from "../../domain/cluster/schemas";
-import { entryOption, stateBadgeClass, type KindFilter } from "./stepViews";
+import { entryOption, type KindFilter } from "./stepViews";
 
 interface EntryPickerProps {
   entries: readonly CampaignSummary[];
@@ -47,7 +47,6 @@ export function EntryPicker({ entries, total, loading, selectedId, selected, kin
           ))}
         </select>
       </label>
-      {selected && <span className={stateBadgeClass(selected.actual_state)}>{selected.actual_state}</span>}
       {total !== null && total > entries.length && (
         <span className="meta">
           newest {entries.length} of {total}, narrow by name

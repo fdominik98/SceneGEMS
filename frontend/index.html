@@ -1,13 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
-      // Light mode before the first paint, so a reload does not flash dark. src/app/theme.ts owns the key and the toggle.
+      // Light mode is the default. A stored choice for dark mode is set before the first paint, so a reload does
+      // not flash light. src/app/theme.ts owns the key and the toggle.
       try {
-        if (localStorage.getItem("scenegems:theme") === "light") document.documentElement.dataset.theme = "light";
+        if (localStorage.getItem("scenegems:theme") === "dark") document.documentElement.dataset.theme = "dark";
       } catch {}
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
