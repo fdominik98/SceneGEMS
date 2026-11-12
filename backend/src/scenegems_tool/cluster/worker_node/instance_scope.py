@@ -5,7 +5,6 @@ pooled services and the containers of every job carry it, so Docker lists them a
 the project an instance is named after its subsystem:
 
     pooled service          scene-generation-subsystem
-    single-container job    monitoring-subsystem-<job>
     container of a stack    simulation-subsystem-<job>-<part>, such as -runner or -kinematic-sim
 
 <job> is the first characters of the job id (JOB_ID_LENGTH), with the attempt after it on a retry.

@@ -1,6 +1,6 @@
 """The module of each job type. Every module defines its payload model (PAYLOAD_MODEL), its artifact fields
-(ARTIFACT_INPUT_FIELDS, ARTIFACT_RESULT_FIELDS) and `run`; the ones that run in a per-job runner container
-also define `execute`, their in-container part. A module whose components depend on the payload defines
+(ARTIFACT_INPUT_FIELDS, ARTIFACT_RESULT_FIELDS) and `run`; the simulation, whose run has a runner container,
+also defines `execute`, its in-container part. A module whose components depend on the payload defines
 `required_components(payload)` (the simulation); the others need their subsystem component
 (cluster/fingerprints/components.py JOB_TYPE_COMPONENTS)."""
 

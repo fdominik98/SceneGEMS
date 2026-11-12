@@ -26,6 +26,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.pool_client import run_pool_request
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
+from scenegems_tool.subsystems.pool.pool_task import MAX_SEED
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import (
     GENERATE_TRAJECTORIES_TASK,
     TRAJECTORY_PREVIEW_STREAM,
@@ -50,7 +51,6 @@ PARAM_KEYS = frozenset(
 # Keys of the old RRT search that the planner never read. Stored campaigns and workbench runs still
 # carry them, so they are accepted and dropped instead of rejected as unknown.
 RETIRED_PARAM_KEYS = frozenset({"goalSampleRate", "bestLeafSampleRate", "maxLeafs"})
-MAX_SEED = 2**31 - 1
 
 # scenario_content is a string (the EvaluationData JSON); a reference to a scene artifact resolves to its text.
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("scenario_content", ArtifactKind.SCENE, ArtifactContent.TEXT),)

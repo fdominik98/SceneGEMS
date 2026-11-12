@@ -7,7 +7,7 @@ the run's scenes are one series of the worker node's monitoring subsystem, which
 where it needs an answer: at every step of a run that ends early once every rule is decided, for the frame of a
 step somebody observes, and at the end for the verdict.
 
-A run that was given no monitoring subsystem (a test, a run hosted in process) judges its series with the same
+A run that was given no monitoring subsystem (a test) judges its series with the same
 monitor in process (InProcessSeries); the outcomes are the same either way.
 """
 

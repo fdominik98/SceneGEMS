@@ -35,7 +35,7 @@ def geofence_from_environment() -> Geofence:
 
 
 def worker_count_from_environment(default: int) -> int:
-    """The pool size the launcher chose from the worker node's slots, or the subsystem's own default (the workbench)."""
+    """The pool size the launcher chose from the worker node's slots, or the subsystem's own default when it was started without one."""
     value = os.environ.get(WORKER_COUNT_VARIABLE, "").strip()
     if not value:
         return default

@@ -105,13 +105,6 @@
   min-height: 0;
 }
 
-.cap-graph--loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-}
-
 .cap-graph .react-flow {
   --xy-background-color: var(--bg-panel);
   --xy-background-pattern-color: var(--graph-dots);

@@ -11,10 +11,6 @@
   flex: 1;
 }
 
-.results-push {
-  margin-left: auto;
-}
-
 .results-picker {
   display: flex;
   flex-wrap: wrap;
@@ -71,19 +67,10 @@
   gap: var(--space-4);
 }
 
-.results-panel-head h3,
-.results-subhead {
+.results-panel-head h3 {
   margin: 0;
   font-size: var(--font-size);
   font-weight: 600;
-}
-
-.results-subhead {
-  margin-bottom: var(--space-3);
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .results-back {

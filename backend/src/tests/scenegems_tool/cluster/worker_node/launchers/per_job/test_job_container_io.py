@@ -1,16 +1,16 @@
 import pytest
 
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl, format_frame_line, format_status_line, parse_frame_line, parse_status_line
+from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl, format_frame_line, format_status_line, parse_frame_line, parse_status
 
 
 def test_status_lines_round_trip():
-    assert parse_status_line(format_status_line("monitored 100 of 200 scenes", 0.5)) == ("monitored 100 of 200 scenes", 0.5)
-    assert parse_status_line(format_status_line("started")) == ("started", None)
+    assert parse_status(format_status_line("monitored 100 of 200 scenes", 0.5)) == ("monitored 100 of 200 scenes", 0.5, None)
+    assert parse_status(format_status_line("started")) == ("started", None, None)
 
 
 def test_other_lines_are_log_lines():
-    assert parse_status_line("Traceback (most recent call last):") is None
-    assert parse_status_line("scenegems-status not json") is None
+    assert parse_status("Traceback (most recent call last):") is None
+    assert parse_status("scenegems-status not json") is None
 
 
 def test_observation_requests_round_trip_and_partial_documents_are_refused():
@@ -27,7 +27,7 @@ def test_frame_lines_carry_one_json_object():
     assert parse_frame_line(format_frame_line("[1, 2]")) is None
     assert parse_frame_line(format_frame_line("{broken")) is None
     assert parse_frame_line("frame {}") is None
-    assert parse_status_line(format_frame_line("{}")) is None and parse_frame_line(format_status_line("x")) is None
+    assert parse_status(format_frame_line("{}")) is None and parse_frame_line(format_status_line("x")) is None
 
 
 def test_a_status_line_may_carry_a_detail():

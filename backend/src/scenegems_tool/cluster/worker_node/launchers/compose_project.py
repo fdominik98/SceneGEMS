@@ -46,7 +46,7 @@ class ComposeProject:
         return subprocess.run([*COMPOSE_COMMAND, "-f", self.compose_filename, "--project-name", self.name, *arguments], check=check, capture_output=capture, text=capture, env=self._environment())
 
     def up(self, *options: str) -> subprocess.CompletedProcess:
-        """Start detached from local images only, as the workbench always has."""
+        """Start detached from local images only: a worker node never builds an image."""
         return self._compose("up", "-d", "--no-build", *options)
 
     def published_port(self, service: str, container_port: int) -> Optional[int]:

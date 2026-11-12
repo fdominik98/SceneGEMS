@@ -21,7 +21,7 @@ _DEFAULT_IMAGES = {
     Subsystem.MONITORING: tagged("scenegems-monitoring-subsystem"),
     Subsystem.SIMULATION: tagged("scenegems-simulation-subsystem"),
 }
-# Environment variables that replace a default image, for the workbench and the worker node alike.
+# Environment variables that replace a default image, on a worker node and in the tests alike.
 IMAGE_ENVIRONMENT_VARIABLES = {
     Subsystem.DESIGN_SPACE_EXPLORATION: "DESIGN_SPACE_EXPLORATION_IMAGE",
     Subsystem.SCENE_GENERATION: "SCENE_GENERATION_IMAGE",

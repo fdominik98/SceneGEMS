@@ -1,7 +1,7 @@
 """How a running job talks back to its caller: status lines, log lines and failure.
 
-The worker node daemon (P3.4) turns these calls into JobStatus and LogLines frames; the workbench
-or a test can collect them directly.
+The worker node daemon (P3.4) turns these calls into JobStatus and LogLines frames, the simulation
+subsystem into progress and log messages of its task; a test can collect them directly.
 """
 
 import threading

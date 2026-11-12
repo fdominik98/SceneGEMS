@@ -7,7 +7,7 @@ to stdout with STATUS_LINE_PREFIX; every other line is a log line. A status may 
 a small object that says more than the message, such as the phase of an attended simulation
 or the ports its stack published (the keys are in cluster/protocol/messages.py).
 
-Observation (live simulations), with the container still without network:
+Observation (live simulations), through the job folder and the container's output, so it needs no network:
     in   the launcher copies OBSERVE_DOCUMENT into JOB_FOLDER whenever the control node's request
          changes (observe on or off, a speed, the operator's Start of an attended simulation); the
          runner reads it between steps and while it waits for the Start, at most a few times a second;
@@ -34,17 +34,6 @@ def format_status_line(message: str, progress: Optional[float] = None, detail: O
     if detail:
         status["detail"] = detail
     return STATUS_LINE_PREFIX + json.dumps(status)
-
-
-def parse_status_line(line: str) -> Optional[Tuple[str, Optional[float]]]:
-    """(message, progress) of a status line, None for a log line."""
-    if not line.startswith(STATUS_LINE_PREFIX):
-        return None
-    try:
-        status = json.loads(line[len(STATUS_LINE_PREFIX) :])
-        return str(status["message"]), status.get("progress")
-    except (ValueError, KeyError, TypeError):
-        return None
 
 
 def parse_status(line: str) -> Optional[Tuple[str, Optional[float], Optional[Dict[str, Any]]]]:

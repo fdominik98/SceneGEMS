@@ -4,7 +4,6 @@
  * range. The ranges never overlap (the own ship 0, targets 1 to 99, obstacles from 100), so an id
  * stays unique while the names read as in the paper's figures.
  */
-export const OS_ID = 0;
 export const FIRST_TS_ID = 1;
 export const FIRST_OBSTACLE_ID = 100;
 

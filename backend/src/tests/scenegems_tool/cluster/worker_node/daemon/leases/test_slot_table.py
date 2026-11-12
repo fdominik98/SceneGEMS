@@ -10,19 +10,19 @@ KINEMATIC, SCENES = JobType.SIMULATION, JobType.SCENE_GENERATION
 
 def test_slots_are_taken_up_to_the_count_and_given_back():
     table = SlotTable({KINEMATIC: 2, SCENES: 1})
-    assert table.try_take(KINEMATIC) and table.try_take(KINEMATIC)
-    assert not table.try_take(KINEMATIC)
-    assert table.try_take(SCENES) and not table.try_take(SCENES)
+    assert table.take_all([KINEMATIC]) is None and table.take_all([KINEMATIC]) is None
+    assert table.take_all([KINEMATIC]) == KINEMATIC
+    assert table.take_all([SCENES]) is None and table.take_all([SCENES]) == SCENES
     assert table.in_use() == {KINEMATIC: 2, SCENES: 1}
     table.give_back(KINEMATIC)
     assert table.free(KINEMATIC) == 1 and table.in_use() == {KINEMATIC: 1, SCENES: 1}
-    assert table.try_take(KINEMATIC)
+    assert table.take_all([KINEMATIC]) is None
 
 
 def test_a_type_without_slots_is_never_taken():
     table = SlotTable({KINEMATIC: 1})
     assert not table.offers(SCENES)
-    assert not table.try_take(SCENES)
+    assert table.take_all([SCENES]) == SCENES
     assert table.free(SCENES) == 0
 
 
@@ -46,7 +46,7 @@ def test_concurrent_takers_never_exceed_the_count():
 
     def take():
         barrier.wait()
-        taken.append(table.try_take(KINEMATIC))
+        taken.append(table.take_all([KINEMATIC]) is None)
 
     threads = [threading.Thread(target=take) for _ in range(16)]
     for thread in threads:

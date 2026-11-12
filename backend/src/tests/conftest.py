@@ -17,7 +17,7 @@ def snapshot(request: pytest.FixtureRequest) -> SnapshotChecker:
 
 @pytest.fixture(autouse=True)
 def stack_layers_in_process(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A unit test has no stack of containers next to it, so code that runs inside a stack (a job's runner, a live session's
+    """A unit test has no stack of containers next to it, so code that runs inside a stack (a job's runner, an attended run's
     driver) hosts the layers in the test's process. The tests of the containers pass a ContainerHosting themselves."""
     from scenegems_tool.vessel_stack import hosting
 

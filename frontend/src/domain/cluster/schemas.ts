@@ -133,7 +133,6 @@ export const controlNodeStatusSchema = z.object({
   connected_worker_nodes: z.array(z.string()),
 });
 export type WorkerNodeView = z.infer<typeof workerNodeViewSchema>;
-export type WorkerNodeComponentView = z.infer<typeof workerNodeComponentSchema>;
 export type ControlNodeStatus = z.infer<typeof controlNodeStatusSchema>;
 
 // Jobs (views.py)

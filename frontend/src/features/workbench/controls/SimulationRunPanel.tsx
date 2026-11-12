@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import "./simulationPanel.css";
 import { usePlaybackStore } from "../../../domain/playback/playbackStore";
 import { isClusterRunActive, useClusterRunStore, type ClusterRunStatus } from "../cluster/clusterRunStore";
+import { setupBlockers } from "../cluster/setupBlockers";
 import { describeClusterPlan, isPacedByWatchSpeed, planSimulationRun, type SimulationSetup } from "../cluster/simulationJobs";
 import { describeResources } from "../cluster/workbenchResources";
 import { formatClock } from "../scene/encounterGeometry";
@@ -36,6 +37,8 @@ const CLUSTER_STATUS: Record<ClusterRunStatus, StepStatus> = {
 };
 
 const READY_TO_START: StepStatus = { label: "Ready to start", tone: "ok" };
+/** The setup breaks a rule of a whole setup (setupBlockers.ts), so no job runs it as it is. */
+const SETUP_BLOCKED: StepStatus = { label: "Cannot run", tone: "warn" };
 
 /**
  * The simulation page's panel. Every run is one job on a worker node of the cluster (Run on the
@@ -55,6 +58,7 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   const input = useSimulationPageStore((s) => s.input);
   const trajectoryPageHasResult = useTrajectoryGenerationStore((s) => s.resultValid && s.resultScenarioJson !== null);
   const streamStatus = usePlaybackStore((s) => s.streamStatus);
+  const stackOptions = usePlaybackStore((s) => s.stackOptions);
 
   const [setup, setSetup] = useState<SimulationSetup | null>(null);
   const onSetupChange = useCallback((next: SimulationSetup) => setSetup(next), []);
@@ -66,7 +70,9 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   // An attended job brings the vessels up and waits: its Start is the operator's
   const attendedPlan = plan?.runner === "attended";
   const awaitsStart = attendedPlan && run.status === "running" && run.phase === "ready_to_start";
-  const status = plan === null && !clusterActive ? NO_INPUT_STATUS : awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status];
+  // The rules of a whole setup that a worker node would only find when it builds the job's stack
+  const blockers = setup !== null && plan !== null && !clusterActive ? setupBlockers(setup, plan, stackOptions) : [];
+  const status = plan === null && !clusterActive ? NO_INPUT_STATUS : blockers.length > 0 ? SETUP_BLOCKED : awaitsStart ? READY_TO_START : CLUSTER_STATUS[run.status];
   const endpoints = groundControlEndpointLabels(clusterActive ? run.groundControlPorts : {}, run.workerNodeAddress ?? (run.workerNodeId ? `worker node ${run.workerNodeId}` : "the worker node"));
   // With a real vessel the job is ready to start only when every vessel is: until then it says what each one lacks
   const waitingVessels = attendedPlan && run.status === "running" && run.phase === "preparing" ? vesselReadinessLabels(run.vesselStates) : [];
@@ -76,8 +82,9 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   // The run needs only the input (a loaded run replays and runs again without the gateway).
   const hasInput = simulationInitialized || (plan !== null && input !== null && simulationFrames.length > 0);
   const needsInput = hasInput ? undefined : "Take the input trajectories first";
-  const notices: StepNotice[] = [];
-  if (resources?.blocker) {
+  const notices: StepNotice[] = blockers.map((text) => ({ text }));
+  // What the cluster lacks for the job matters only for a setup a job can run
+  if (blockers.length === 0 && resources?.blocker) {
     notices.push({ text: resources.blocker });
   }
 
@@ -111,7 +118,11 @@ export function SimulationRunPanel({ streamControls, colregsConstraintsContent }
   };
 
   const where =
-    plan === null || resources === null ? "Take the input trajectories to set up the vessels." : `${describeClusterPlan(plan)} The cluster has ${describeResources(resources)} for it. Every run is kept in Campaign History.`;
+    plan === null || resources === null
+      ? "Take the input trajectories to set up the vessels."
+      : blockers.length > 0
+        ? "No job runs this setup as it is: change what is listed below."
+        : `${describeClusterPlan(plan)} The cluster has ${describeResources(resources)} for it. Every run is kept in Campaign History.`;
 
   const actions =
     clusterActive ? (

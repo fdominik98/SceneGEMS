@@ -71,7 +71,6 @@ def runner_service(
     *,
     networks: Optional[List[str]] = None,
     depends_on: Optional[List[str]] = None,
-    cpus: Optional[float] = None,
     environment: Optional[Dict[str, str]] = None,
 ) -> dict:
     """The service that runs the job's in-container part; without networks it has no network at all.
@@ -84,8 +83,6 @@ def runner_service(
         "environment": dict(environment) if environment is not None else {"PYTHONUNBUFFERED": "1"},
         "logging": bounded_logging(),
     }
-    if cpus is not None:
-        service["cpus"] = cpus
     if depends_on:
         service["depends_on"] = list(depends_on)
     if networks:

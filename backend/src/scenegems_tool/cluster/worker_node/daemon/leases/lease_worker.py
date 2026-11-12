@@ -1,4 +1,4 @@
-"""The worker thread of one lease: run_job in the job's subsystem container, then its JobResult.
+"""The worker thread of one lease: run_job as a request to the job's subsystem, then its JobResult.
 
 JobFailed becomes a failed result with the job's own `retryable`; any other exception a
 failed result the control node may retry, as run_job documents. A result that cannot be encoded

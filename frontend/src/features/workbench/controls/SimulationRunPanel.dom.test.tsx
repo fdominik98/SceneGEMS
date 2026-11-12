@@ -83,6 +83,27 @@ describe("SimulationRunPanel", () => {
     expect(streamControls.sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: "initialize_simulation" }));
   });
 
+  it("does not submit a setup no job runs, and says what to change", async () => {
+    const user = userEvent.setup();
+    const streamControls = controls();
+    loadScenario();
+    renderPanel(streamControls);
+    // A Gazebo world steps with ArduPilot or with the custom controller: the own ship stays on ArduPilot
+    await user.selectOptions(screen.getByRole("combobox", { name: "Control layer of ts1, target ship" }), "custom");
+    expect(screen.getByText("Cannot run")).toBeInTheDocument();
+    expect(screen.getByText(/No job runs this setup as it is/)).toBeInTheDocument();
+    expect(screen.getByText(/now os on ArduPilot, ts1 on Custom/)).toBeInTheDocument();
+    expect(screen.queryByText(/waits for your Start/)).toBeNull();
+    const runButton = screen.getByRole("button", { name: "Run on the cluster" });
+    expect(runButton).toBeDisabled();
+    expect(runButton).toHaveAttribute("title", expect.stringContaining("either with ArduPilot or with the custom controller"));
+
+    await user.selectOptions(screen.getByRole("combobox", { name: "Control layer of ts1, target ship" }), "ardupilot");
+    expect(screen.queryByText("Cannot run")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Run on the cluster" }));
+    expect(streamControls.runSimulationOnCluster).toHaveBeenCalledTimes(1);
+  });
+
   it("gives the operator the Start of an attended job once its vessels are up", async () => {
     const user = userEvent.setup();
     const streamControls = controls();

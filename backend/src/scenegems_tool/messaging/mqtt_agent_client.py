@@ -1,7 +1,7 @@
 import json
 import uuid
 from enum import Enum
-from typing import Any, List, Optional, Tuple
+from typing import Any, List
 
 import numpy as np
 import paho.mqtt.client as mqtt
@@ -11,21 +11,6 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from scenegems_tool.messaging.mqtt_client import WARAPS_TOPIC_ROOT, MqttClient, MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence, from_true_north
-
-
-def normalized_to_pwm(norm_value):
-    """
-    Converts a float between -1.0 and 1.0 to a standard PWM integer.
-    E.g., -0.5 becomes 1250.
-    """
-    # 1. Clamp the value to ensure it never exceeds the -1.0 to 1.0 range
-    clamped_value = max(-1.0, min(1.0, norm_value))
-
-    # 2. Calculate the PWM
-    pwm = 1500 + (clamped_value * 500)
-
-    # 3. Return as an integer (MAVLink requires ints for RC overrides)
-    return int(pwm)
 
 
 class ExecutionState(Enum):
@@ -192,29 +177,3 @@ class MqttAgentClient(MqttClient):
         error = float(np.linalg.norm(self.current_agent_state.p - self.initial_state.p))
         # print(f"{self.vessel_name} at start point error: {error}")
         return error < self.actor.waypoint_radius
-
-    def publish_obstacle_distances(self, distances: List[float], increment: int, min_distance: float, max_distance: float):
-
-        if increment <= 0 or 360 / increment != len(distances) or any(distance < min_distance or distance > max_distance for distance in distances):
-            raise ValueError("Invalid obstacle distances")
-
-        command = {
-            "distances": distances,
-            "increment": increment,
-            "min_distance": min_distance,
-            "max_distance": max_distance,
-        }
-        self.client.publish(self.obstacle_distances_topic, json.dumps(command), qos=1)
-
-    def publish_rc_override(self, pwms: Optional[Tuple[float, float]] = None):
-        # left_pwm and right_pwm are normalized values between -1.0 and 1.0
-        left_pwm = None
-        right_pwm = None
-        if pwms is not None:
-            left_pwm, right_pwm = normalized_to_pwm(pwms[0]), normalized_to_pwm(pwms[1])
-
-        command = {
-            "left_pwm": left_pwm,
-            "right_pwm": right_pwm,
-        }
-        self.client.publish(self.rc_override_topic, json.dumps(command), qos=1)

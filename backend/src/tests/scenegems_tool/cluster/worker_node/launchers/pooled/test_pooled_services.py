@@ -28,7 +28,7 @@ def test_scoped_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqtt_connec
     assert compose["networks"]["scene_generation_net"] == {"name": "scenegems-m1-n1-scene-generation-subsystem-net", "driver": "bridge", "labels": {INSTANCE_LABEL: "scene-generation-subsystem"}}
     assert compose["networks"]["scenegems_broker"] == {"external": True, "name": "worker_node_broker_net"}
     assert pool.project.name == scope.compose_project == "scenegems-m1-n1" and pool.project.instance == scope.key
-    assert pool.compose_filename == f"{scope.folder}/docker-compose.yml"
+    assert pool.project.compose_filename == f"{scope.folder}/docker-compose.yml"
     # Clients of the pool address it by the name and the topic its container was given.
     assert (pool.service_name, pool.service_topic) == ("scene-generation-subsystem-2", "scenegems/service/virtual/real/scene-generation-subsystem-2")
     assert pool.mqtt_connection is cluster_broker, "the connection as it was given: nothing is put in front of its topics"
@@ -48,7 +48,7 @@ def test_two_scoped_pools_share_no_docker_name(no_docker, mqtt_connection, geofe
     def names(pool):
         compose = pool.build_compose()
         service = compose["services"]["trajectory-generation-subsystem"]
-        return {pool.project.name, service["container_name"], compose["networks"]["trajectory_generation_net"]["name"], pool.compose_filename}
+        return {pool.project.name, service["container_name"], compose["networks"]["trajectory_generation_net"]["name"], pool.project.compose_filename}
 
     assert not names(first) & names(second)
 

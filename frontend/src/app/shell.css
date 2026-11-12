@@ -536,12 +536,6 @@
   background: rgb(var(--ok-rgb) / 0.1);
 }
 
-.section-badge--warn {
-  color: var(--warn-text);
-  border-color: rgb(var(--warn-rgb) / 0.45);
-  background: rgb(var(--warn-rgb) / 0.1);
-}
-
 .section-badge--bad {
   color: var(--danger-text);
   border-color: rgb(var(--danger-rgb) / 0.45);
@@ -552,26 +546,4 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.section-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-2);
-  padding: var(--space-5) var(--space-5) var(--space-5) 14px;
-  background: var(--bg-panel);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
-}
-
-.section-empty h3 {
-  margin: 0;
-  font-size: var(--font-size);
-  font-weight: 600;
-}
-
-.section-empty .meta {
-  margin: 0;
-  max-width: 70ch;
 }

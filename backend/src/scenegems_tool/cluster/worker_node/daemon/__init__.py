@@ -1,8 +1,8 @@
 """The worker node daemon: one per worker node instance, in its own container, connected to one control node.
 
 It needs no control node to start and no pairing: it dials its control node, keeps retrying until that is up,
-keeps a WebSocket to it, leases jobs within its slots and runs each one through jobs/run_job in
-the job's subsystem container. It never runs simulation or generation code itself.
+keeps a WebSocket to it, leases jobs within its slots and runs each one through jobs/run_job as
+a request to the pool of the job's subsystem. It never runs simulation or generation code itself.
 
     configuration/   environment and .env: control node address, slots, components, state folder
     control/         the control WebSocket, reconnect backoff, Hello and Heartbeat

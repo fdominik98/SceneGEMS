@@ -7,7 +7,6 @@ import { LiveTopicWatcher } from "../../../domain/cluster/liveTopicWatcher";
 import type { JobSubmission, OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { JobView } from "../../../domain/cluster/schemas";
 import type { SimulationFrame } from "../../../domain/simulation/types";
-import type { TrajectoryGenerationParamsWire } from "../../../domain/simulation/wireTypes";
 
 /**
  * The workbench's jobs on the selected cluster: scene generation, trajectory generation and
@@ -88,13 +87,6 @@ export async function sceneJobResult(cluster: WorkbenchCluster, job: JobView, si
 }
 
 // Trajectory generation (cluster/worker_node/jobs/trajectory_generation_job.py)
-
-export interface TrajectoryGenerationInput {
-  /** The generated scene as the workbench exports it (EvaluationData JSON with `best_scene`). */
-  scenarioContent: string;
-  colregsConstraintsContent: string;
-  params: TrajectoryGenerationParamsWire;
-}
 
 export interface TrajectoryJobResult {
   /** The TrajectoryData payload (`trajectories`, and `monitor_frames` when the search recorded them), null when nothing was planned. */

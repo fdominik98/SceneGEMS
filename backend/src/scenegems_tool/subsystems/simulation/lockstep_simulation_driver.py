@@ -70,7 +70,6 @@ class LockstepSimulationDriver:
         self._clock = clock
         self._hosting_factory = hosting
         self._scene = trajectories.initial_scene
-        self._running = False
         self._lock = threading.Lock()
 
     @property
@@ -80,10 +79,6 @@ class LockstepSimulationDriver:
             return "kinematic"
         layers = {vessel.stack.control_layer for vessel in self.simulation.simulated_vessels.values()}
         return "gz_custom" if layers == {ControlLayerId.CUSTOM} else "mavlink"
-
-    @property
-    def is_running(self) -> bool:
-        return self._running
 
     @property
     def current_scene(self) -> ConcreteScene:
@@ -110,7 +105,6 @@ class LockstepSimulationDriver:
             scene = self._scene_of(states)
             with self._lock:
                 self._scene = scene
-                self._running = True
             on_scene(index * dt, scene)
 
         try:
@@ -136,8 +130,6 @@ class LockstepSimulationDriver:
                 )
         except RunStopped:
             return None
-        finally:
-            self._running = False
 
     def _run_kinematic(self, dt: float, steps: int, observe: Callable[[int, Mapping[int, ActorState]], None]) -> Any:
         from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_instance

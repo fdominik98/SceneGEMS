@@ -4,7 +4,7 @@ job_runner.py                 run_job(job, worker node, report): the worker node
 job_types.py                  job type to module
 job_payload.py                shared payload pieces and payload parsing
 pool_client.py                a job as a request to its subsystem's pool (run_pool_request)
-runner_container.py           running a job in one runner container
+runner_container.py           the job document and the status callback of a run's runner container
 design_space_exploration_job.py  design_space_exploration, on the design space exploration pool
 scene_generation_job.py       scene_generation, on the scene generation pool
 trajectory_generation_job.py  trajectory_generation, on the trajectory generation pool

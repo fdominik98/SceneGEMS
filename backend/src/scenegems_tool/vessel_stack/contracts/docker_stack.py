@@ -27,7 +27,7 @@ class DockerStackRequest:
     mqtt_connection: MQttConnectionInfo
     reference_geofence: Geofence
     headless: bool
-    # Where the generated files go: the workbench's shared folder, or a per-job folder. Both
+    # Where the generated files go: the shared folder of a calibration run, or a per-job folder. Both
     # lie on the runtime assets volume; mounted_gen_folder is the same folder as the
     # simulator containers see it.
     gen_folder: str = SIMULATION_GEN_FOLDER

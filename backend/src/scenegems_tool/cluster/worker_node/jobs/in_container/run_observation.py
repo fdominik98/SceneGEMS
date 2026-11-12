@@ -1,7 +1,7 @@
 """The runner's side of live observation: the request from the job folder, pacing, and frames on stdout.
 
 The worker node copies the control node's request into the job folder (OBSERVE_DOCUMENT, see
-launchers/per_job/job_container_io.py); the runner has no network. A run's step observer
+launchers/per_job/job_container_io.py); the runner needs no network for it. A run's step observer
 (RunObserver.step, called after every step) reads the request at most every
 check_interval_s, and while it is active:
 

@@ -565,15 +565,3 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-
-.right-trajectory-empty-strip {
-  flex: 0 0 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: var(--font-size-xs);
-  color: var(--text-faint);
-  border-left: 1px solid var(--border);
-}

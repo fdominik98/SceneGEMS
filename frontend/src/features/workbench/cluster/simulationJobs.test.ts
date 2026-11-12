@@ -23,7 +23,7 @@ function vessel(vesselId: string, overrides: Partial<SimulationVesselSetup> = {}
 const BODY = { simulatorType: "Kinematic", connectionsByAgentId: {} };
 
 function setup(vessels: SimulationVesselSetup[], overrides: Partial<SimulationSetup> = {}): SimulationSetup {
-  return { simulatorType: "Kinematic", vessels, windVector: [0, 0, 0], waveAmplitude: 0, speedup: 1, body: BODY, ...overrides };
+  return { simulatorType: "Kinematic", vessels, windVector: [0, 0, 0], waveAmplitude: 0, waveSpeed: 0, speedup: 1, body: BODY, ...overrides };
 }
 
 describe("the job a simulation runs as", () => {

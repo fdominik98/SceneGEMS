@@ -45,7 +45,7 @@ class WorkerNodeContext:
     mqtt_connection: MQttConnectionInfo
     reference_geofence: Geofence  # frame of the pooled services; simulation payloads carry their own
     slots: Dict[JobType, int] = field(default_factory=dict)
-    components: FrozenSet[str] = frozenset()  # what the worker node runs jobs with; empty for any (the workbench)
+    components: FrozenSet[str] = frozenset()  # what the worker node runs jobs with; empty for any (a test)
     broker_network: Optional[str] = None  # Docker network the broker is reachable on; SCENEGEMS_DOCKER_NETWORK when None
     artifacts: Optional[ArtifactTransport] = None  # downloads referenced inputs and uploads results; None keeps results inline
     observations: JobObservations = field(default_factory=JobObservations)  # running jobs' live observations; the daemon's lease manager opens them

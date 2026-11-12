@@ -14,15 +14,15 @@ Observed live, the runner forwards each step's observed states as frames, at mos
 number a second at the stack's own pace: SITL runs free at the payload's speedup, so the run is
 not slowed to the observers' speed (that would delay its commands in SITL time and change it).
 
-With monitor live, the COLREGS monitor judges every lockstep step in process (live_monitor.py),
-whether or not the run is observed, and a judged step's frame carries its verdicts. The lockstep
+With monitor live, the COLREGS monitor judges every lockstep step as a series of the worker node's
+monitoring subsystem (live_monitor.py), whether or not the run is observed, and a judged step's frame carries its verdicts. The lockstep
 runner does not stop early, so the monitor has no early stop here. A step's scene is the
 vessels' observed states plus the static obstacles at their initial state, as in the run's
 trajectories (include_trajectories).
 
 The generated files reach SITL and Gazebo through the runtime assets volume, so the caller
-must run where that volume is mounted at RUNTIME_ASSETS_FOLDER: the worker node daemon's container
-or the workbench backend's.
+must run where that volume is mounted at RUNTIME_ASSETS_FOLDER: the simulation subsystem's container
+(vessel_job_stack.py).
 """
 
 import threading

@@ -36,7 +36,7 @@ class Agent:
 
         self.mav.set_auto_arm(AgentConfig.REAL_SIM == "simulation")
 
-        # Positions of other agents, under the agent's topic prefix when it is scoped.
+        # Positions of other agents, under the agent's topic root.
         self.pos_front_topic: str = AgentConfig.TOPICS.positions_root
         self.pos_end_topic: str = "/sensor/position"
 

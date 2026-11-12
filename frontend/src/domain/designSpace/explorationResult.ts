@@ -25,11 +25,11 @@ export function exploredFecId(index: number): string {
   return `${EXPLORED_FEC_PREFIX}${String(index).padStart(5, "0")}`;
 }
 
-/** Why the search ended: every FEC found, no model at all, the cap, the time limit, or a stop. */
-export const STOP_REASONS = ["exhausted", "unsatisfiable", "cap_reached", "timeout", "stopped"] as const;
-export type StopReason = (typeof STOP_REASONS)[number];
-
-/** The job's result; unknown fields are kept out, a stop reason this console does not know reads as a plain string. */
+/**
+ * The job's result; unknown fields are kept out. `stop_reason` says why the search ended: `exhausted`
+ * (every FEC found), `unsatisfiable` (no model at all), `cap_reached`, `timeout` or `stopped`; one
+ * this console does not know reads as a plain string.
+ */
 export const explorationResultSchema = z.object({
   stop_reason: z.string(),
   complete: z.boolean().optional(),

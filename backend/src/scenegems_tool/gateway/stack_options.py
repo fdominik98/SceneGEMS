@@ -3,7 +3,7 @@
 The browser asks with query_stack_options and builds its simulator, ASV system and control
 layer choices from the answer, disabling every combination the resolver rules out and showing
 its reason. A combination counts per vessel; the instance's environment and speedup are checked
-when it is initialized (SocketSession._accept_simulation_config).
+when its vessel models are generated (SocketSession._accept_simulation_config).
 
 simulatorTypes are the simulators an instance runs on. A real agent's choices are the rows whose
 simulatorType is "Real vessel" (control layer real_vessel); they are workbench only.

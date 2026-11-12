@@ -31,14 +31,6 @@ class SlotTable:
     def offers(self, job_type: JobType) -> bool:
         return job_type in self._slots
 
-    def try_take(self, job_type: JobType) -> bool:
-        """Take one slot of the job type; False when the worker node offers none or all are in use."""
-        with self._lock:
-            if job_type not in self._slots or self._in_use[job_type] >= self._slots[job_type]:
-                return False
-            self._in_use[job_type] += 1
-            return True
-
     def take_all(self, job_types: Iterable[JobType]) -> Optional[JobType]:
         """Take one slot of each of the job types, or none of them. None when all were taken, else the first type the worker node offers none of or has none free."""
         wanted = list(job_types)

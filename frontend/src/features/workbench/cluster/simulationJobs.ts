@@ -15,11 +15,14 @@ import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } 
  * stack up and waits for the operator's Start. With a real vessel every vessel runs through its
  * ArduAgent on the MQTT broker: the control node's own, or the one the plan names. A plan names the
  * components its job needs, so the workbench counts the worker nodes that have them.
+ *
+ * A plan says which job would take a setup, not that the job can run it: the setups no job runs (a
+ * Gazebo world on both ArduPilot and the custom controller, wind where the simulator has none) are
+ * told apart in setupBlockers.ts, and the run panel does not submit them.
  */
 
-export { SIMULATION_JOB };
 /** The simulation job type, as every cluster plan submits it. */
-export const KINEMATIC_SIMULATION_JOB = SIMULATION_JOB;
+export { SIMULATION_JOB };
 export type ArduPilotSimulationLayer = "ardupilot_sim" | "gazebo";
 /** What a cluster run runs on the vessels: every one replays, or the own ship runs USV Navigation. */
 export type RunMode = "replay" | "usv_navigation";
@@ -37,6 +40,8 @@ export interface SimulationSetup {
   vessels: SimulationVesselSetup[];
   windVector: [number, number, number];
   waveAmplitude: number;
+  /** The speed the waves travel at, m/s: an attended job counts waves as asked for when it is above 0. */
+  waveSpeed: number;
   /** The real-time factor: the pace of an attended run, and SITL's speedup in an ArduPilot job. */
   speedup: number;
   /** The whole setup as the control node takes it (simulatorType, windVector, wave, simulationSpeed, connectionsByAgentId): what an attended job runs. */

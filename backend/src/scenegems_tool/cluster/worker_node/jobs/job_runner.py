@@ -6,10 +6,10 @@ succeed on another attempt.
 
 Artifacts (cluster/protocol/artifacts.py): before the job runs, every reference in its
 type's input fields is replaced by the artifact's content, downloaded through the worker node's
-artifact transport, so the job and its runner container (which has no network) see inline
+artifact transport, so the job, the subsystem it asks and a run's runner container see inline
 data. After the run, the type's large result fields are uploaded and the result carries
 references in their place. A job without references runs exactly as before; a worker node
-without artifact transport (tests, the workbench) keeps its results inline.
+without artifact transport (a test) keeps its results inline.
 
 Failures: a download or upload that fails (connection, timeout, control node error) is
 retryable; content that does not match its hash, a missing artifact or a reference that
@@ -28,7 +28,7 @@ from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeCon
 
 
 def run_job(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel: Optional[threading.Event] = None) -> JobResultData:
-    """Run one job in its subsystem container and return its result. Setting cancel stops it."""
+    """Run one job as a request to its subsystem and return its result. Setting cancel stops it."""
     if worker_node.slots and job.job_type not in worker_node.slots:
         raise JobFailed(f"This worker node offers no {job.job_type.value} slots", retryable=True)
     lacking = worker_node.lacks(job)

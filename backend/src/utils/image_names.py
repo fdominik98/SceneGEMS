@@ -1,7 +1,7 @@
 """Names of the images SceneGEMS builds: one tag for all of them, and the repository a name compares by.
 
 Every image SceneGEMS builds is named <repository>:<tag>, the tag from SCENEGEMS_IMAGE_TAG. Without it
-the tag is latest, what ./build.sh builds, so the workbench and the tests name the local builds. A
+the tag is latest, what ./build.sh builds, so a local cluster and the tests name the local builds. A
 release tags its images with its revision (cluster/release/bundle.py) and its roles pass that tag to
 the machines, so a control node and its worker nodes name the release's images. Image fingerprints compare by
 repository, so a tag change never hides a fingerprint (cluster/fingerprints/comparison.py).

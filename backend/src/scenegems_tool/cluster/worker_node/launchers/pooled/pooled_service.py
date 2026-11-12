@@ -80,7 +80,6 @@ class PooledService:
         self.workers = workers
         self.broker_network = broker_network
         self.project = ComposeProject(names.compose_project, f"{names.folder}/docker-compose.yml", instance=names.instance)
-        self.compose_filename = self.project.compose_filename
         self._shutdown = threading.Event()
         docker_compose = self.labelled(self.build_compose())
         self._lifecycle_thread: Optional[threading.Thread] = threading.Thread(

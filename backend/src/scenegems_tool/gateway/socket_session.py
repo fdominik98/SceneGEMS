@@ -22,8 +22,6 @@ class SocketSession:
 
     def __init__(self, websocket: WebSocket):
         self.websocket: WebSocket = websocket
-        self.loop = asyncio.get_running_loop()
-
         self.outbound_queue: asyncio.Queue[ServerMessage] = asyncio.Queue()
         self.outbound_task: asyncio.Task[None] = asyncio.create_task(self._outbound_loop())
 

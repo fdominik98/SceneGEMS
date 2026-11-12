@@ -101,7 +101,6 @@ class TestKinematic:
 
         driver.run(on_scene, stop)
         assert scenes == [0.0, 1.0, 2.0, 3.0]
-        assert not driver.is_running
 
 
 class TestMavlink:

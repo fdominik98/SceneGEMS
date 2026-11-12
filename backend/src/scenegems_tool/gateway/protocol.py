@@ -2,8 +2,7 @@
 WebSocket message shapes shared with the React frontend (`src/domain/simulation/wireTypes.ts`).
 
 The console sends the gateway three helper requests (load_scenario_file, generate_simulation_models,
-query_stack_options). The other server messages here are what the console's job driver dispatches
-from the results of cluster jobs (generated_scene, trajectory_generation_preview and _result), and
+query_stack_options) and gets their answers; the results of cluster jobs do not pass here.
 SimulationModelsBody is also the setup an attended simulation job runs.
 """
 

@@ -1,4 +1,4 @@
-"""Launchers: start and stop subsystem containers. The workbench and the worker node daemon call the same ones.
+"""Launchers: start and stop subsystem containers. The worker node daemon starts the pools, the simulation subsystem the stack of a run.
 
 docker_cli.py             thin wrappers around the Docker CLI
 compose_project.py        one compose project: its file and the CLI calls that run it

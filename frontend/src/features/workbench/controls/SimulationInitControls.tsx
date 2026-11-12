@@ -261,6 +261,7 @@ export function SimulationInitControls({ streamControls, onSetupChange, attended
       })),
       windVector: [round2(windEast), round2(windNorth), round2(windUp)],
       waveAmplitude: round2(wave.amplitude),
+      waveSpeed: Math.hypot(round2(wave.east), round2(wave.north)),
       speedup: Math.round(clamp(simulationSpeed, SIMULATION_SPEED_MIN, SIMULATION_SPEED_MAX)),
       body: {
         simulatorType,

@@ -24,7 +24,7 @@ unless the payload names another (root waraps). Such a run is ready to start onl
 vessel is connected, reports its position, is at its start point and, when commanded, armable;
 until then the job's status says what each vessel lacks (STATUS_VESSELS).
 
-With monitor live the COLREGS monitor judges every step in process (live_monitor.py), and the
+With monitor live the COLREGS monitor judges every step as a series of the worker node's monitoring subsystem (live_monitor.py), and the
 result carries the run record, the state digest, the monitor's summary and the observed
 trajectories, as the other runners' do.
 """
@@ -47,6 +47,7 @@ from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallb
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack, ground_control_ports
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.messaging.topic_layout import CLUSTER_TOPIC_ROOT, SIMULATION_CONTEXT, WARAPS_TOPIC_ROOT, unit_topic
+from scenegems_tool.subsystems.simulation.simulation_types import SIMULATION_SERVICE_NAME
 
 if TYPE_CHECKING:
     from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
@@ -60,7 +61,7 @@ DEFAULT_START_TIMEOUT_S = 3600.0  # how long a stack waits for its operator befo
 WAITING_FRAME_INTERVAL_S = 2.0  # how often the scene the run starts from is shown again while it waits
 
 
-DEFAULT_SERVICE_NAME = "simulation-subsystem"  # the runner's name on the broker when its launcher gave it none
+DEFAULT_SERVICE_NAME = SIMULATION_SERVICE_NAME  # the runner's name on the broker when its launcher gave it none
 
 
 def simulation_instance(simulation: Dict[str, Any], seed: int = 0, *, job_id: str = "", topic_root: str = CLUSTER_TOPIC_ROOT) -> "SimulationInstanceConfig":
