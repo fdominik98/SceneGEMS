@@ -55,6 +55,9 @@ Things that mean the same look the same:
 - The parts of a page, one shown at a time, are underlined tabs (`cap-tab`, `results-step`, `history-tab`
   styled together in `components.css`; `scene-gen-tab` and `ce-tab` are the same look). Two views of the same
   content are a joined switch (`pg-switch`, `wiz-switch`, `cap-views`), a filter is a pill (`camp-chip`).
+- A file is opened from a button with the browser's own file field hidden (`UploadControl` of the wizard
+  too), and a checkbox says in words what it does, never the config key it writes (the keys of the control
+  node's generator and stack parameters are the exception: `ParameterInput` labels them by key on purpose).
 - The four step panels share their words (`pages/stepWords.ts`): `NO_INPUT_STATUS` ("No input yet"),
   `readyStatus(verb)` ("Ready to plan") and `describeWhere(resources)`; a disabled run button always says in
   its tooltip what it waits for, the input first and then the first notice.

@@ -115,6 +115,12 @@ export interface FolderSummary {
   obstacles: number[];
 }
 
+/** The counts a folder holds of something, as words: "1 vessel", "2 vessels", "2 or 3 vessels". */
+export function countsLabel(counts: readonly number[], noun: string): string {
+  const one = counts.length === 1 && counts[0] === 1;
+  return `${counts.length === 0 ? "no" : counts.join(" or ")} ${noun}${one ? "" : "s"}`;
+}
+
 /** The catalog's folders in catalog order with their class counts, and the vessel and obstacle counts they hold. */
 export function summarizeFolders(catalog: readonly CatalogClass[]): FolderSummary[] {
   const folders = new Map<string, FolderSummary>();

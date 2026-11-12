@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useRef } from "react";
 import type { OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { UploadKind } from "../../../domain/cluster/historyApi";
 import type { ArtifactRef } from "../../../domain/cluster/schemas";
@@ -14,20 +14,22 @@ export interface UploadControlProps {
   onUploaded: (fileName: string, ref: ArtifactRef) => void;
 }
 
-/** A file picker that uploads each chosen file to the control node as an artifact and lists the ones that failed. */
+/**
+ * A button that opens the file picker, uploads each chosen file to the control node as an artifact and lists the
+ * ones that failed. The browser's own file field stays hidden, as on every other page that opens a file.
+ */
 export function UploadControl({ client, kind, label, accept, onUploaded }: UploadControlProps) {
-  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { attempts, upload, dismiss } = useArtifactUpload(client, kind, onUploaded);
   return (
     <div className="wiz-upload">
-      <label htmlFor={inputId} className="wiz-label">
-        {label}
-      </label>
       <input
-        id={inputId}
+        ref={inputRef}
+        hidden
         type="file"
         multiple
         accept={accept}
+        aria-label={label}
         disabled={!client}
         onChange={(event) => {
           const files = Array.from(event.target.files ?? []);
@@ -35,6 +37,11 @@ export function UploadControl({ client, kind, label, accept, onUploaded }: Uploa
           void upload(files);
         }}
       />
+      <div>
+        <button type="button" disabled={!client} onClick={() => inputRef.current?.click()}>
+          {label}...
+        </button>
+      </div>
       {!client && <p className="wiz-hint wiz-hint--warn">Select a cluster to upload files.</p>}
       {attempts.length > 0 && (
         <ul className="wiz-uploads" aria-label="Uploads">
