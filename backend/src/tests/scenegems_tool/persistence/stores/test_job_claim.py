@@ -1,7 +1,7 @@
 from sqlalchemy.dialects import postgresql
 
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.persistence.stores.job_claim import free_job_types, next_queued_job_query
+from scenegems_tool.persistence.stores.job_claim import free_job_types, full_shared_components, next_queued_job_query, slot_usage
 from tests.scenegems_tool.persistence.stores.builders import START
 
 SCENE = JobType.SCENE_GENERATION
@@ -67,3 +67,27 @@ def test_claim_query_binds_the_worker_node_for_allowed_worker_nodes():
     params = next_queued_job_query([SCENE], {}, {}, free_memory_mb=4000, cpus=4.0, now=START, worker_node_id="worker-node-7").compile(dialect=postgresql.dialect()).params
     assert params["allowed_worker_nodes_1"] == []
     assert params["allowed_worker_nodes_2"] == ["worker-node-7"]
+
+
+# A job that shares another subsystem's slots: a simulation judged while it runs takes a monitoring slot
+
+MONITORING = JobType.MONITORING_POST_HOC
+
+
+def test_a_job_that_requires_the_monitoring_component_uses_a_monitoring_slot():
+    assert slot_usage({KINEMATIC: 3, MONITORING: 1}, {"monitoring": 2}) == {KINEMATIC: 3, MONITORING: 3}
+    assert slot_usage({KINEMATIC: 3}, {"monitoring": 1}) == {KINEMATIC: 3, MONITORING: 1}
+    assert slot_usage({KINEMATIC: 3}, {}) == {KINEMATIC: 3} and slot_usage({KINEMATIC: 3}, {"monitoring": 0}) == {KINEMATIC: 3}
+
+
+def test_a_shared_component_is_full_when_its_slots_are_all_in_use_or_the_worker_node_offers_none():
+    assert full_shared_components({KINEMATIC: 4, MONITORING: 2}, {KINEMATIC: 1, MONITORING: 1}) == []
+    assert full_shared_components({KINEMATIC: 4, MONITORING: 2}, {KINEMATIC: 1, MONITORING: 2}) == ["monitoring"]
+    assert full_shared_components({KINEMATIC: 4}, {}) == ["monitoring"], "no monitoring slots: no judged run"
+
+
+def test_claim_query_skips_jobs_that_need_a_full_shared_component_only_when_asked():
+    assert "NOT (job.required_components @>" not in _compiled_query()
+    query = next_queued_job_query([KINEMATIC], {}, {}, free_memory_mb=4000, cpus=4.0, now=START, worker_node_id="worker-node-1", without_components=["monitoring"])
+    compiled = query.compile(dialect=postgresql.dialect())
+    assert "NOT (job.required_components @> %(required_components_2)s::JSONB)" in str(compiled) and compiled.params["required_components_2"] == ["monitoring"]

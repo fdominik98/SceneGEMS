@@ -535,3 +535,49 @@ def test_active_leases_per_worker_node(job_store, worker_node_store):
     lease_b = job_store.claim_next("worker-node-b", LEASE_S)
     assert [lease.lease_id for lease in job_store.active_leases("worker-node-a")] == [lease_a.lease_id]
     assert {lease.lease_id for lease in job_store.active_leases()} == {lease_a.lease_id, lease_b.lease_id}
+
+
+# A simulation judged while it runs takes a monitoring slot too
+
+STACK = ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"]
+MONITORING = JobType.MONITORING_POST_HOC
+
+
+def _judged() -> JobRequirements:
+    return JobRequirements(components=STACK + ["monitoring"])
+
+
+def test_a_judged_simulation_takes_a_monitoring_slot_beside_its_own(job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={KINEMATIC: 3, MONITORING: 1}))
+    first = job_store.submit(make_submission(job_type=KINEMATIC, requirements=_judged())).job
+    second = job_store.submit(make_submission(job_type=KINEMATIC, requirements=_judged())).job
+    post_hoc = job_store.submit(make_submission(job_type=MONITORING, requirements=JobRequirements(components=["monitoring"]))).job
+    plain = job_store.submit(make_submission(job_type=KINEMATIC, requirements=JobRequirements(components=STACK))).job
+    lease = job_store.claim_next("worker-node-a", LEASE_S)
+    assert lease.job.job_id == first.job_id
+    # The one monitoring slot is taken by the judged run: the second judged run and the post hoc job wait, a plain run does not
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == plain.job_id, "simulation slots are free and it needs no monitor"
+    assert job_store.claim_next("worker-node-a", LEASE_S) is None
+    job_store.accept(lease.lease_id, LEASE_S)
+    job_store.report_result(_result(lease))
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == second.job_id, "the finished run gave its monitoring slot back"
+    assert job_store.claim_next("worker-node-a", LEASE_S) is None and job_store.get(post_hoc.job_id).state == JobState.QUEUED
+
+
+def test_a_post_hoc_job_takes_the_monitoring_slot_a_judged_run_needs(job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={KINEMATIC: 2, MONITORING: 1}))
+    post_hoc = job_store.submit(make_submission(job_type=MONITORING, requirements=JobRequirements(components=["monitoring"]))).job
+    judged = job_store.submit(make_submission(job_type=KINEMATIC, requirements=_judged())).job
+    lease = job_store.claim_next("worker-node-a", LEASE_S)
+    assert lease.job.job_id == post_hoc.job_id and job_store.claim_next("worker-node-a", LEASE_S) is None
+    job_store.accept(lease.lease_id, LEASE_S)
+    job_store.report_result(_result(lease))
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == judged.job_id
+
+
+def test_a_worker_node_without_monitoring_slots_takes_no_judged_run(job_store, worker_node_store):
+    worker_node_store.register(make_hello("worker-node-a", slots={KINEMATIC: 2}))
+    job_store.submit(make_submission(job_type=KINEMATIC, requirements=_judged()))
+    plain = job_store.submit(make_submission(job_type=KINEMATIC, requirements=JobRequirements(components=STACK))).job
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == plain.job_id
+    assert job_store.claim_next("worker-node-a", LEASE_S) is None

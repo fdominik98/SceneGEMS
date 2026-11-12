@@ -36,13 +36,14 @@ from typing import TYPE_CHECKING, Annotated, Any, Dict, Mapping, Optional, Set, 
 
 from pydantic import ConfigDict, Field, RootModel
 
-from scenegems_tool.cluster.fingerprints.components import ComponentId, SimulationRunner, StackTriple, stack_components
+from scenegems_tool.cluster.fingerprints.components import MONITORING, ComponentId, SimulationRunner, StackTriple, ordered, stack_components
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.protocol.messages import LogStream
 from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport, JobResultData
 from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
+from scenegems_tool.cluster.worker_node.jobs.live_monitor import SimulationMonitor
 from scenegems_tool.cluster.worker_node.jobs.pool_client import run_pool_request
 from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners import ardupilot_runner, attended_runner, gazebo_custom_runner, kinematic_runner
@@ -105,8 +106,15 @@ PAYLOAD_MODEL = SimulationPayload
 
 
 def required_components(payload: SimulationPayload) -> Tuple[ComponentId, ...]:
-    """Every layer of every vessel's stack, in catalog order."""
-    return stack_components(payload.vessel_stacks())
+    """Every layer of every vessel's stack, in catalog order, and the monitoring subsystem for a run that is judged while it runs.
+
+    A judged run has its series of scenes in the worker node's monitoring subsystem, so only a worker node that
+    runs one takes it, and it takes a monitoring slot there (fingerprints/components.py slot_job_types).
+    """
+    components = stack_components(payload.vessel_stacks())
+    if payload.root.monitor == SimulationMonitor.LIVE:
+        return ordered((*components, MONITORING))
+    return components
 
 
 _logger = logging.getLogger(__name__)

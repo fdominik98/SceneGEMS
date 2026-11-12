@@ -68,6 +68,17 @@ def test_the_components_are_every_layer_of_every_vessels_stack():
     assert components(ardupilot_payload("gazebo")) == ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo")
 
 
+def test_a_run_that_is_judged_while_it_runs_also_needs_the_monitoring_subsystem():
+    """Its series of scenes is judged by the worker node's monitoring pool, so only a worker node that runs one takes it."""
+
+    def components(payload):
+        return required_components(SimulationPayload.model_validate(payload))
+
+    assert components(valid_payload(JobType.SIMULATION, monitor="live")) == KINEMATIC + ("monitoring",)
+    assert components(valid_payload(JobType.SIMULATION, monitor="none")) == KINEMATIC
+    assert components({**ardupilot_payload("gazebo"), "monitor": "live"}) == ("asv_system/replay", "control_layer/ardupilot", "simulation_layer/gazebo", "monitoring")
+
+
 def test_every_payload_stack_is_one_its_runner_declares():
     payloads = [valid_payload(JobType.SIMULATION), valid_payload(JobType.SIMULATION, mode="usv_navigation"), ardupilot_payload("ardupilot_sim"), ardupilot_payload("gazebo")]
     for payload in payloads:

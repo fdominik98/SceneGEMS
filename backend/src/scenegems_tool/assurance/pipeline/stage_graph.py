@@ -53,7 +53,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from scenegems_tool.assurance.campaign.campaign_config import ArdupilotStackConfig, CampaignConfig, CampaignStep, CustomStackConfig, RunConfig, StackConfig
-from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, ComponentId, stack_components
+from scenegems_tool.cluster.fingerprints.components import JOB_TYPE_COMPONENTS, MONITORING, ComponentId, ordered, stack_components
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind
 from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID
@@ -257,8 +257,11 @@ class StageGraph:
         return needs
 
     def run_components(self, run_index: int) -> Tuple[ComponentId, ...]:
-        """The components the run's simulation job needs, which decide its images."""
-        return run_stack_components(self.runs[run_index].stack)
+        """The components the run's simulation job needs, which decide its images: the layers of its vessels' stacks, and the monitoring subsystem when the run is judged while it runs (as the job computes them from its payload, simulation_job.required_components)."""
+        components = run_stack_components(self.runs[run_index].stack)
+        if self.runs[run_index].monitor == MonitorImplementation.LIVE:
+            return ordered((*components, MONITORING))
+        return components
 
     def run_tier(self, run_index: int) -> Optional[str]:
         """The repeatability tier of a run's stack when its result names none: bounded on ArduPilot (the lockstep MAVLink adapters) and on the custom controller (gz_transport_actuator), unknown on the kinematic layer."""

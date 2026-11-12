@@ -5,7 +5,7 @@ from typing import List
 
 import pytest
 
-from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
+from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobRequirements, JobType
 from scenegems_tool.cluster.protocol.messages import (
     Cancel,
     Drain,
@@ -307,3 +307,47 @@ def test_the_operators_start_reaches_the_jobs_observation(manager, sender, jobs)
     assert manager.handle(StartJob(job_id="job-a", attempt=1))
     assert observation.started and observation.control.revision == 1
     jobs.finish("job-a")
+
+
+# A simulation judged while it runs takes a monitoring slot beside its simulation slot
+
+MONITORING = JobType.MONITORING_POST_HOC
+JUDGED = JobRequirements(components=["asv_system/replay", "control_layer/none", "simulation_layer/kinematic", "monitoring"])
+
+
+class MonitoringWorkerNode(FakeWorkerNode):
+    components = FakeWorkerNode.components | {"monitoring"}
+
+
+def judged_offer(lease_id: str):
+    return make_offer(lease_id, make_job(f"job-{lease_id}").model_copy(update={"requirements": JUDGED}))
+
+
+def test_a_judged_simulation_takes_and_gives_back_a_monitoring_slot_with_its_own(sender, clock, jobs):
+    manager = LeaseManager(SlotTable({KINEMATIC: 2, MONITORING: 1}), MonitoringWorkerNode(clock), sender, run=jobs, clock=clock)
+    manager.set_lease_timeout(9.0)
+    try:
+        manager.on_offer(judged_offer("a"))
+        assert jobs.wait_started() == "job-a" and manager.slots.in_use() == {KINEMATIC: 1, MONITORING: 1}
+        manager.on_offer(judged_offer("b"))
+        [reject] = sender.of(LeaseReject)
+        assert (reject.lease_id, reject.reason) == ("b", "all 1 monitoring.post_hoc slots are in use")
+        assert manager.slots.in_use() == {KINEMATIC: 1, MONITORING: 1}, "the refused run holds no simulation slot"
+        manager.on_offer(make_offer("c", make_job("job-c")))
+        assert jobs.wait_started() == "job-c", "a run that is not judged needs no monitoring slot"
+        jobs.finish("job-a", {"ok": True})
+        wait_for(lambda: manager.slots.in_use() == {KINEMATIC: 1})
+        manager.on_offer(judged_offer("d"))
+        assert jobs.wait_started() == "job-d" and manager.slots.in_use() == {KINEMATIC: 2, MONITORING: 1}
+    finally:
+        manager.shutdown("test over", timeout_s=5.0)
+
+
+def test_a_judged_simulation_is_refused_by_a_worker_node_without_monitoring_slots(sender, clock, jobs):
+    manager = LeaseManager(SlotTable({KINEMATIC: 2}), MonitoringWorkerNode(clock), sender, run=jobs, clock=clock)
+    try:
+        manager.on_offer(judged_offer("a"))
+        [reject] = sender.of(LeaseReject)
+        assert reject.reason == "this worker node offers no monitoring.post_hoc slots" and manager.slots.in_use() == {}
+    finally:
+        manager.shutdown("test over", timeout_s=5.0)

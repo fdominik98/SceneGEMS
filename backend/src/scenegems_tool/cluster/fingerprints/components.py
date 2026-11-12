@@ -82,6 +82,18 @@ JOB_TYPE_COMPONENTS: Dict[JobType, ComponentId] = {
 }
 
 
+# A subsystem whose pool also runs tasks for jobs of another type: such a job requires the subsystem's component and
+# takes one of its slots for as long as it runs, next to the slot of its own type. A simulation that is judged while
+# it runs has its series in the monitoring subsystem, so it takes a monitoring slot.
+SHARED_SLOT_COMPONENTS: Dict[ComponentId, JobType] = {MONITORING: JobType.MONITORING_POST_HOC}
+
+
+def slot_job_types(job_type: JobType, components: Iterable[ComponentId]) -> Tuple[JobType, ...]:
+    """The job types whose slots a job takes: its own, and that of every subsystem it runs a task in beside it (SHARED_SLOT_COMPONENTS)."""
+    required = set(components)
+    return (job_type, *(slot_type for component, slot_type in SHARED_SLOT_COMPONENTS.items() if component in required and slot_type != job_type))
+
+
 def layer_component(layer: LayerImplementationId) -> ComponentId:
     """The component of a vessel stack layer: its LayerRef name, such as control_layer/ardupilot."""
     return str(LayerRef.of(layer))

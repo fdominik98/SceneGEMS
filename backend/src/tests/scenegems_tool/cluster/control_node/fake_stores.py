@@ -13,6 +13,7 @@ from typing import Any, Collection, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from scenegems_tool.cluster.fingerprints.comparison import with_legacy_names
+from scenegems_tool.cluster.fingerprints.components import SHARED_SLOT_COMPONENTS
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import Heartbeat, Hello, JobResult
 from scenegems_tool.cluster.protocol.worker_node_description import WorkerNodeResources
@@ -32,7 +33,7 @@ from scenegems_tool.persistence.stores import (
     UnknownWorkerNode,
     WorkerNodeRecord,
 )
-from scenegems_tool.persistence.stores.job_claim import free_job_types
+from scenegems_tool.persistence.stores.job_claim import free_job_types, full_shared_components, slot_usage
 from scenegems_tool.persistence.stores.job_lifecycle import ACTIVE_STATES, lease_is_current, result_status, retry_backoff_s, state_after_failed_attempt
 from scenegems_tool.persistence.stores.job_store import DEFAULT_RETRY_BACKOFF_BASE_S, DEFAULT_RETRY_BACKOFF_CAP_S, UNFINISHED_STATES
 
@@ -277,10 +278,16 @@ class InMemoryJobStore:
             if worker_node.status != WorkerNodeStatus.ONLINE:
                 return None
             active: Dict[JobType, int] = {}
+            sharing: Dict[str, int] = {}
             for job in self._jobs.values():
                 if job.lease_owner == worker_node_id and job.state in ACTIVE_STATES:
                     active[job.job_type] = active.get(job.job_type, 0) + 1
-            types = free_job_types(worker_node.slots, active, job_types)
+                    for component, slot_type in SHARED_SLOT_COMPONENTS.items():
+                        if job.job_type != slot_type and component in job.required_components:
+                            sharing[component] = sharing.get(component, 0) + 1
+            usage = slot_usage(active, sharing)
+            types = free_job_types(worker_node.slots, usage, job_types)
+            full = set(full_shared_components(worker_node.slots, usage))
             offered = set(worker_node.components if components is None else components)
             candidates = [
                 job
@@ -290,6 +297,7 @@ class InMemoryJobStore:
                 and job.job_type in types
                 and job.required_labels.items() <= worker_node.labels.items()
                 and set(job.required_components) <= offered
+                and not full & set(job.required_components)
                 and job.required_fingerprints.items() <= with_legacy_names(worker_node.fingerprints).items()
                 and job.min_memory_mb <= worker_node.resources.free_memory_mb
                 and job.min_cpus <= worker_node.resources.cpus

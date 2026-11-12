@@ -163,3 +163,15 @@ def test_the_custom_controller_needs_no_sitl():
     assert components == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
     assert images_of(components) == {GAZEBO_IMAGE, SIMULATION_IMAGE, USV_NAVIGATION_IMAGE}
     assert SITL_IMAGE not in images_of(components)
+
+
+def test_a_job_takes_a_slot_of_its_type_and_of_every_subsystem_it_runs_a_task_in():
+    from scenegems_tool.cluster.fingerprints.components import SHARED_SLOT_COMPONENTS, slot_job_types
+    from scenegems_tool.cluster.protocol.jobs import JobType
+
+    stack = ["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"]
+    assert SHARED_SLOT_COMPONENTS == {"monitoring": JobType.MONITORING_POST_HOC}
+    assert slot_job_types(JobType.SIMULATION, stack) == (JobType.SIMULATION,)
+    assert slot_job_types(JobType.SIMULATION, stack + ["monitoring"]) == (JobType.SIMULATION, JobType.MONITORING_POST_HOC), "judged while it runs"
+    assert slot_job_types(JobType.MONITORING_POST_HOC, ["monitoring"]) == (JobType.MONITORING_POST_HOC,), "its own slot, once"
+    assert slot_job_types(JobType.SCENE_GENERATION, []) == (JobType.SCENE_GENERATION,)

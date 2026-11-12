@@ -7,7 +7,7 @@ import pytest
 from scenegems_tool.assurance.campaign import campaign_config_from_dict, validate_campaign_config
 from scenegems_tool.assurance.pipeline.pipeline_engine import WorkerNodeAvailability
 from scenegems_tool.cluster.fingerprints.comparison import by_repository, repositories
-from scenegems_tool.cluster.fingerprints.components import SIMULATION_IMAGE
+from scenegems_tool.cluster.fingerprints.components import MONITORING_IMAGE, SIMULATION_IMAGE
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import CampaignActualState, CampaignDesiredState, CampaignEventKind, MonitorImplementation, PipelineStage, VerdictState
 from tests.scenegems_tool.assurance.pipeline.checks import assert_consistent
@@ -44,11 +44,12 @@ def test_each_run_is_simulated_by_a_job_needing_its_stacks_components_with_their
     jobs = _jobs(harness, case)
     kinematic, sitl, world = (jobs[(SIMULATE, run, 0)] for run in range(3))
     assert [job.job_type for job in (kinematic, sitl, world)] == [JobType.SIMULATION] * 3
-    assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO]
+    # The Gazebo run is judged while it runs, so it also needs the monitoring subsystem
+    assert [job.requirements.components for job in (kinematic, sitl, world)] == [["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"], ON_SITL, ON_GAZEBO + ["monitoring"]]
     assert (kinematic.payload["runner"], sitl.payload["runner"], world.payload["runner"]) == ("kinematic", "ardupilot", "ardupilot")
     assert set(kinematic.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE]))
     assert set(sitl.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE, SITL_IMAGE]))
-    assert set(world.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE]))
+    assert set(world.requirements.fingerprints) == set(repositories([SIMULATION_IMAGE, SITL_IMAGE, GAZEBO_IMAGE, MONITORING_IMAGE])), "judged live: the monitor's image counts too"
     assert (sitl.payload["simulation_layer"], sitl.payload["include_trajectories"], "monitor" not in sitl.payload) == ("ardupilot_sim", True, True)
     assert (world.payload["monitor"], world.payload["speedup"], world.payload["seed"]) == ("live", 2, harness.stores.results.list_run_records(campaign.campaign_id)[2].seed)
     assert {job.priority for job in (kinematic, sitl, world)} == {7}
@@ -119,7 +120,7 @@ def test_a_simulation_campaign_over_items_runs_on_ardupilot(make_harness):
     assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     (case,) = _cases(harness, campaign)
     job = _jobs(harness, case)[(SIMULATE, 0, 0)]
-    assert job.requirements.components == ON_GAZEBO and job.payload["trajectories"]["sha256"] == ref["sha256"]
+    assert job.requirements.components == ON_GAZEBO + ["monitoring"] and job.payload["trajectories"]["sha256"] == ref["sha256"]
     (record,) = harness.stores.results.list_run_records(campaign.campaign_id)
     assert (record.repeatability_tier, record.trajectory_generator, record.artifacts["trajectories"]) == ("bounded", None, ref["sha256"])
 

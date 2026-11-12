@@ -20,9 +20,10 @@ observation is closed.
 import logging
 import threading
 import time
-from typing import Callable, Dict, List, Optional, Protocol
+from typing import Callable, Dict, List, Optional, Protocol, Tuple
 
-from scenegems_tool.cluster.protocol.jobs import JobSpec
+from scenegems_tool.cluster.fingerprints.components import slot_job_types
+from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.protocol.messages import (
     Cancel,
     ControlNodeMessage,
@@ -127,14 +128,16 @@ class LeaseManager:
                     self.sender.send(LeaseReject(lease_id=offer.lease_id, reason=f"the lease is {existing.phase.value} on this worker node"))
                 return
             reason = self._refusal(job)
-            if reason is None and not self.slots.try_take(job.job_type):
-                reason = f"all {self.slots.capacity[job.job_type]} {job.job_type.value} slots are in use"
+            if reason is None:
+                full = self.slots.take_all(self._slot_types(job))
+                if full is not None:
+                    reason = f"all {self.slots.capacity[full]} {full.value} slots are in use"
             if reason is not None:
                 _logger.info("Rejecting lease %s (job %s): %s", offer.lease_id, job.job_id, reason)
                 self.sender.send(LeaseReject(lease_id=offer.lease_id, reason=reason))
                 return
             if not self.sender.send(LeaseAccept(lease_id=offer.lease_id)):
-                self.slots.give_back(job.job_type)  # the control node never heard of the accept; its offer expires
+                self.slots.give_back_all(self._slot_types(job))  # the control node never heard of the accept; its offer expires
                 return
             lease = Lease(offer.lease_id, job, self._clock())
             batcher = self._new_batcher(offer.lease_id, job.job_id)
@@ -190,13 +193,19 @@ class LeaseManager:
             self.drain_reason = message.reason
         _logger.info("Draining: no new leases, %d running ones finish (%s)", len(self.running_lease_ids()), message.reason)
 
+    @staticmethod
+    def _slot_types(job: JobSpec) -> Tuple[JobType, ...]:
+        """The slots the job takes: its own type's, and a monitoring slot for a simulation judged while it runs."""
+        return slot_job_types(job.job_type, job.requirements.components)
+
     def _refusal(self, job: JobSpec) -> Optional[str]:
         if self.shutting_down:
             return "the worker node is shutting down"
         if self.draining:
             return f"the worker node is draining ({self.drain_reason})" if self.drain_reason else "the worker node is draining"
-        if not self.slots.offers(job.job_type):
-            return f"this worker node offers no {job.job_type.value} slots"
+        for job_type in self._slot_types(job):
+            if not self.slots.offers(job_type):
+                return f"this worker node offers no {job_type.value} slots"
         lacking = self.worker_node.lacks(job)
         if lacking:
             return f"this worker node does not offer the components {', '.join(lacking)}"
@@ -206,7 +215,7 @@ class LeaseManager:
 
     def _worker_stopped(self, lease: Lease, result: JobResult) -> None:
         with self._lock:
-            self.slots.give_back(lease.job.job_type)
+            self.slots.give_back_all(self._slot_types(lease.job))
             self._workers.pop(lease.lease_id, None)
             lease.worker_stopped(result)
             _logger.info("Lease %s stopped: %s", lease.lease_id, result.outcome.value if lease.phase == LeasePhase.FINISHED else lease.stop_reason or lease.phase.value)
