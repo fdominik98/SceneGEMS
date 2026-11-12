@@ -8,7 +8,7 @@ title: Application layout
 The interface is organized into persistent regions:
 
 **Left pane**
-: The navigation menu with the SceneGEMS brand, the hamburger toggle, the sections and their hints, the active cluster, the light or dark mode switch and the link to this documentation. Collapsed, it is a rail of icons with the names as tooltips. See [Left navigation menu](./navigation).
+: The navigation menu with the SceneGEMS brand, the hamburger toggle, the active cluster with its status line, the sections with their hints and state marks, the light or dark mode switch and the link to this documentation. Collapsed, it is a rail of icons with the names as tooltips and the cluster's status as a dot. See [Left navigation menu](./navigation).
 
 **Main area**
 : The section chosen in the menu. A section of the Cluster group fills it with one page under a header. The workbench's Connections page does too, and its Design Space Exploration, Scene Generation, Trajectory Generation and Simulation pages divide it into the panes below.

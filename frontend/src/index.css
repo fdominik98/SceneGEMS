@@ -153,25 +153,27 @@ body,
   max-width: 720px;
 }
 
+/* The Connections page is laid out as the cluster sections are: a header card and cards under it, on the page's own background. */
 .center-pane:has(.mqtt-broker-view) {
   min-height: 0;
   overflow: hidden;
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
-.mqtt-broker-view {
+.load-scenario-layout.mqtt-broker-view {
   flex: 1;
   min-height: 0;
   overflow: auto;
   -webkit-overflow-scrolling: touch;
-  padding: var(--space-3);
+  padding: 0;
 }
 
 .mqtt-broker-layout {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  max-width: 880px;
-  margin: 0 auto;
+  gap: var(--space-3);
 }
 
 .mqtt-broker-panel h3,
@@ -199,7 +201,7 @@ body,
 .mqtt-broker-panel input:not([type="checkbox"]),
 .mqtt-broker-panel select {
   width: 100%;
-  max-width: 100%;
+  max-width: 480px;
 }
 
 .mqtt-broker-options {

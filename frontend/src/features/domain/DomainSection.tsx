@@ -1,3 +1,4 @@
+import { formatIsoDateTime } from "../../domain/localDateTime";
 import { EmptyState } from "../../components/EmptyState";
 import { LoadingSpinner } from "../../components/LoadingSpinner";
 import { saveBlob } from "../../components/saveBlob";
@@ -21,11 +22,7 @@ function exportText(content: string, fileName: string) {
 }
 
 function formatSavedAt(iso: string | null): string {
-  if (iso === null) {
-    return "";
-  }
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? iso : at.toLocaleString();
+  return formatIsoDateTime(iso, "");
 }
 
 /**

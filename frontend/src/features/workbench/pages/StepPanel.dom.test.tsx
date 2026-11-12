@@ -2,11 +2,24 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { NumberSetting, StepPanel, StepRow } from "./StepPanel";
+import { describeWhere, NO_INPUT_STATUS, readyStatus } from "./stepWords";
+
+describe("the words every step panel shares", () => {
+  it("names a page without input and a page that waits for its run button the same way on every page", () => {
+    expect(NO_INPUT_STATUS).toEqual({ label: "No input yet", tone: "idle" });
+    expect(readyStatus("plan")).toEqual({ label: "Ready to plan", tone: "idle" });
+    expect(readyStatus("explore").label).toBe("Ready to explore");
+  });
+
+  it("says where a run happens and that it is kept", () => {
+    expect(describeWhere("1 slot on 1 machine, 1 free")).toBe("Runs as a job on the cluster: 1 slot on 1 machine, 1 free. Every run is kept in Campaign History.");
+  });
+});
 
 describe("StepPanel", () => {
   it("shows the step, its status, where it runs and its run button", () => {
     render(
-      <StepPanel page="trajectoryGeneration" title="Trajectory Generation" status={{ label: "Trajectory ready", tone: "ok" }} where="Plans as a job on the cluster." actions={<button type="button">Generate trajectories</button>}>
+      <StepPanel page="trajectoryGeneration" title="Trajectory Generation" status={{ label: "Trajectory ready", tone: "ok" }} where="Runs as a job on the cluster." actions={<button type="button">Generate trajectories</button>}>
         <StepRow label="Input">scene</StepRow>
       </StepPanel>
     );
@@ -15,7 +28,7 @@ describe("StepPanel", () => {
     expect(within(panel).getByRole("heading", { name: "Trajectory Generation" })).toBeInTheDocument();
     expect(within(panel).getByRole("status")).toHaveTextContent("Trajectory ready");
     expect(within(panel).getByRole("status")).toHaveClass("step-chip--ok");
-    expect(within(panel).getByText("Plans as a job on the cluster.")).toBeInTheDocument();
+    expect(within(panel).getByText("Runs as a job on the cluster.")).toBeInTheDocument();
     expect(within(panel).getByRole("button", { name: "Generate trajectories" })).toBeInTheDocument();
     expect(within(panel).getByRole("group", { name: "Input" })).toHaveTextContent("scene");
   });
@@ -42,7 +55,7 @@ describe("StepPanel", () => {
 
   it("has no notice list when nothing is missing", () => {
     render(
-      <StepPanel page="sceneGeneration" title="Scene Generation" status={{ label: "Idle", tone: "idle" }} actions={null}>
+      <StepPanel page="sceneGeneration" title="Scene Generation" status={{ label: "No input yet", tone: "idle" }} actions={null}>
         {null}
       </StepPanel>
     );

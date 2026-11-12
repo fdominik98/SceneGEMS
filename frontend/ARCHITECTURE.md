@@ -29,8 +29,8 @@ Colors are tokens too, in `theme.css`: one per role, `:root` is dark mode and `d
 root element overrides every one of them. Stylesheets and components hold no colors of their own
 (`app/themeTokens.test.ts` fails on a literal color in a stylesheet, on a token one mode lacks and on a light
 text token that cannot be read on its surface). A tint keeps its alpha where it is used:
-`rgb(var(--danger-rgb) / 0.1)`. `app/theme.ts` keeps the mode per browser (`scenegems:theme`, dark by default)
-and the left pane's footer switches it; an inline script in `index.html` sets it before the first paint. Most
+`rgb(var(--danger-rgb) / 0.1)`. `app/theme.ts` keeps the mode per browser (`scenegems:theme`, light by default: `index.html` carries `data-theme="light"`)
+and the left pane's footer switches it; an inline script in `index.html` sets a stored dark choice before the first paint. Most
 things follow a token by themselves, also in SVG attributes and in React Flow's markers. `useTheme()` is for
 the few that cannot: React Flow's `colorMode`, CodeMirror's themes (`controls/editorTheme.ts`, one extension
 list per mode) and the ship colors, which are literals in both modes because the simulation stream's darker
@@ -42,6 +42,40 @@ open with `forceOpen` while it holds an error), `PopoverMenu` for small groups o
 canvas, and native `details` (given the same chevron and row size globally) in the monitor panels.
 A screen has one primary action (`primary-btn accent`), shown in its `PageHeader` or at the top of its
 control panel.
+
+Things that mean the same look the same:
+
+- A point in time is written by `domain/localDateTime.ts` everywhere (`2026-11-12 13:08:05`, local, 24 hours;
+  `formatDateTime` of the campaigns and `formatTime` of the results both use it, and so do the entry names of
+  the workbench runs). A table that is short of room cuts it to the minute.
+- A job type's name comes from `domain/cluster/jobTypeLabels.ts` (the Cluster page's slots, the wizard's
+  resources, the workbench's notices).
+- An entry's kind and state are `ToneBadge` and `StateBadge` of `features/history/campaignParts.tsx`, in
+  Campaign History and in Results alike.
+- The parts of a page, one shown at a time, are underlined tabs (`cap-tab`, `results-step`, `history-tab`
+  styled together in `components.css`; `scene-gen-tab` and `ce-tab` are the same look). Two views of the same
+  content are a joined switch (`pg-switch`, `wiz-switch`, `cap-views`), a filter is a pill (`camp-chip`).
+- The four step panels share their words (`pages/stepWords.ts`): `NO_INPUT_STATUS` ("No input yet"),
+  `readyStatus(verb)` ("Ready to plan") and `describeWhere(resources)`; a disabled run button always says in
+  its tooltip what it waits for, the input first and then the first notice.
+
+## The state of the system in the left pane
+
+The left pane tells the state of the system on every page (`app/systemStatus.ts`, pure, and
+`app/useSystemStatus.ts`, which `AppShell` calls and passes to `LeftPane` as `system`):
+
+- Above the navigation, the active cluster's select and a status line (`describeClusterStatus`): a dot and
+  "Connected" with the worker nodes online and the slots in use, or "Connecting", "Cannot reach the control
+  node" and the warnings. It reads the worker nodes store, whose feed the hook keeps running, and opens the
+  Cluster section. On the rail only the dot is left.
+- A mark on a workbench page (`describeStep`, from the page store's `status`, `output` and `loaded`): busy
+  while it runs, follows or loads, bad after a failure, info while it shows a result.
+- The number of running entries on Campaign History: the total of a one-row `listHistory` for the states
+  `running` and `draining`, read again only when the `campaigns` topic pushes an entry that is new, deleted
+  or in another state, and polled every 10 s while the topic is not live.
+
+The pane's brand, cluster and footer keep their place and only the navigation scrolls; below 880px of height
+the hints are left out so that every destination stays in view.
 
 A button that only acts and tells nothing by itself (fit the view, hide or show a panel, export, switch
 to the map) is an `IconButton` (`components/IconButton.tsx`, icons in `components/icons.tsx`): the icon
@@ -104,7 +138,7 @@ builds its format 3 config; `WorkbenchJobDriver` creates it with `kind: "workben
 as origin, follows its case with `entryFollower.ts`, then loads its output). `entryLoader.ts` fetches
 a target's output from the control node; a 404 clears the page. The shown page takes queued targets with
 `useTargetConsumer`, and every page fetches its loaded entry again on start (`useLoadedRefresh`). The left
-pane is 280px with a plain-language hint per destination, an icon rail of 72px when collapsed (the
+pane is 280px with a plain-language hint per destination (one line, also the item's tooltip), an icon rail of 72px when collapsed (the
 choice is kept per browser) and a bar at the top below 800px. Below 1100px the workbench panes stack
 and scroll as one page.
 

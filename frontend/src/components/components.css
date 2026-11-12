@@ -296,3 +296,54 @@
 .popover-menu-panel[data-align="end"] {
   right: 0;
 }
+
+/*
+ * Tabs: the parts of a page, one shown at a time, look the same everywhere: a row on a line, the shown
+ * one underlined in the accent. (The right panes' `scene-gen-tab` and the editor's `ce-tab` are the same
+ * look with their own widths.) A switch between two views of the same content is a joined pair of
+ * buttons instead (`pg-switch`, `wiz-switch`, `cap-views`), and a filter is a pill (`camp-chip`).
+ */
+
+.cap-tabs,
+.results-steps,
+.history-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.cap-tab,
+.results-step,
+.history-tab {
+  min-height: var(--hit-target);
+  margin-bottom: -1px;
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cap-tab:hover:not(:disabled),
+.results-step:hover:not(:disabled),
+.history-tab:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--border-strong);
+  color: var(--text);
+}
+
+.cap-tab.active,
+.results-step.active,
+.history-tab--on,
+.cap-tab.active:hover:not(:disabled),
+.results-step.active:hover:not(:disabled),
+.history-tab--on:hover:not(:disabled) {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}

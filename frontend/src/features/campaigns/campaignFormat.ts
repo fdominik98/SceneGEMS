@@ -1,17 +1,11 @@
 import { stringify } from "yaml";
+import { formatIsoDateTime } from "../../domain/localDateTime";
 
 /** Readable text for the Campaigns section's values. */
 
-/** An ISO time as local date and time ("26 Oct 2026, 09:58:05"), or a dash when there is none. */
+/** An ISO time as local date and time ("2026-10-26 09:58:05"), or "none" when there is none. */
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) {
-    return "none";
-  }
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) {
-    return iso;
-  }
-  return at.toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return formatIsoDateTime(iso, "none");
 }
 
 /** The time of day of an ISO time, for a feed ("09:58:05"). */

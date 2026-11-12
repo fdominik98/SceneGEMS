@@ -4,6 +4,7 @@ import "../components/components.css";
 import { LeftPane } from "./LeftPane";
 import { useUiStore } from "./uiStore";
 import { usePersistedState } from "./usePersistedState";
+import { useSystemStatus } from "./useSystemStatus";
 import { WorkbenchSection } from "./WorkbenchSection";
 import { usePlaybackStore } from "../domain/playback/playbackStore";
 import { ClusterSection } from "../features/cluster/ClusterSection";
@@ -46,6 +47,7 @@ export function AppShell() {
     }
   };
   const [errorSlot, setErrorSlot] = useState<HTMLDivElement | null>(null);
+  const system = useSystemStatus();
 
   return (
     <div className="app-shell">
@@ -59,6 +61,7 @@ export function AppShell() {
             closeMenuWhenNarrow();
           }}
           workbenchView={workbenchView}
+          system={system}
           onWorkbenchViewSelect={(view) => {
             if (view === "simulation") {
               usePlaybackStore.getState().requestAutoFit();

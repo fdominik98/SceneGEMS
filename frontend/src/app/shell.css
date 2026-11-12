@@ -8,7 +8,11 @@
   display: contents;
 }
 
-/* Left pane: the main navigation. Expanded 280px, collapsed to a 72px icon rail, a top bar on narrow screens. */
+/*
+ * Left pane: the main navigation and the state of the system. Expanded 280px, collapsed to a 72px icon rail,
+ * a top bar on narrow screens. The brand, the cluster and the footer keep their place; only the navigation
+ * scrolls when the window is short.
+ */
 
 .app-body {
   grid-template-columns: 280px minmax(0, 1fr);
@@ -21,16 +25,17 @@
 .left-pane {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-height: 0;
   padding: var(--space-3);
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--bg-pane);
   border-right: 1px solid var(--border);
 }
 
 .left-pane-top {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
@@ -62,19 +67,162 @@
   padding: 0;
 }
 
-.left-pane-about {
-  margin-top: calc(-1 * var(--space-2));
+/* A state as a dot: the cluster's line, a navigation mark. */
+
+.status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgb(var(--neutral-rgb) / 0.6);
 }
+
+.status-dot--ok {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px rgb(var(--ok-rgb) / 0.18);
+}
+
+.status-dot--info {
+  background: var(--accent);
+}
+
+.status-dot--warn {
+  background: var(--warn);
+  box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / 0.2);
+}
+
+.status-dot--bad {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgb(var(--danger-rgb) / 0.2);
+}
+
+.status-dot--busy {
+  background: var(--warn);
+  animation: status-dot-busy 1.4s ease-in-out infinite;
+}
+
+@keyframes status-dot-busy {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(var(--warn-rgb) / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(var(--warn-rgb) / 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--busy {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(var(--warn-rgb) / 0.25);
+  }
+}
+
+/* The selected cluster and how it is doing. */
+
+.left-pane-cluster {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  padding: var(--space-2);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.left-pane-cluster-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.left-pane-cluster-label {
+  padding: 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.left-pane-cluster select {
+  width: 100%;
+  font-weight: 600;
+}
+
+.left-pane-status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: var(--hit-target);
+  margin-top: var(--space-1);
+  padding: var(--space-1);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.left-pane-status:hover {
+  background: var(--bg-control-hover);
+  border-color: var(--border-strong);
+}
+
+.left-pane-status .status-dot {
+  margin-top: 5px;
+}
+
+.left-pane-status-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.left-pane-status-label {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.left-pane-status-detail {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.left-pane-status--rail {
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  margin-top: 0;
+  padding: 0;
+}
+
+.left-pane-status--rail .status-dot {
+  width: 12px;
+  height: 12px;
+  margin-top: 0;
+}
+
+/* The destinations. */
 
 .left-nav {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .left-nav-heading {
-  margin: var(--space-3) 0 var(--space-1);
+  margin: var(--space-2) 0 2px;
   padding: 0 var(--space-3);
   color: var(--text-muted);
   font-size: var(--font-size-xs);
@@ -90,24 +238,26 @@
 .left-nav-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
 }
 
 .left-nav-icon {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   opacity: 0.85;
 }
 
 .left-nav-item {
+  position: relative;
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-3);
   width: 100%;
-  min-height: 52px;
-  padding: var(--space-2) var(--space-3);
+  min-height: 44px;
+  padding: 3px var(--space-3);
   background: transparent;
   border: 1px solid transparent;
   border-left: 3px solid transparent;
@@ -137,20 +287,48 @@
 
 .left-nav-text {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   min-width: 0;
 }
 
 .left-nav-label {
+  font-size: var(--font-size-sm);
   font-weight: 600;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .left-nav-hint {
+  overflow: hidden;
   color: var(--text-muted);
   font-size: var(--font-size-xs);
   font-weight: 400;
   line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* What a destination has to tell now: a dot for a state, a number for a count. */
+
+.left-nav-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+}
+
+.left-nav-mark-count {
+  min-width: 22px;
+  padding: 0 6px;
+  border: 1px solid rgb(var(--warn-yellow-rgb) / 0.4);
+  border-radius: 999px;
+  background: rgb(var(--warn-yellow-rgb) / 0.16);
+  color: var(--warn-yellow-text);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
 }
 
 .left-nav-link {
@@ -158,27 +336,40 @@
 }
 
 .left-pane-footer {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
+  display: grid;
+  flex-shrink: 0;
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+  gap: 2px var(--space-1);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--border);
 }
 
-.left-pane-cluster {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+.left-pane-footer .left-pane-about {
+  grid-column: 1 / -1;
 }
 
-.left-pane-cluster-label {
-  color: var(--text-muted);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+.left-pane-footer .left-nav-item {
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-left-width: 1px;
+  white-space: nowrap;
 }
 
-.left-pane-cluster select {
-  width: 100%;
+.left-pane-footer .left-nav-label {
+  font-size: var(--font-size-xs);
+}
+
+/* Short windows: the hints go first, so every destination stays in view. */
+
+@media (max-height: 880px) {
+  .left-nav-hint {
+    display: none;
+  }
+
+  .left-nav-item {
+    min-height: var(--hit-target);
+  }
 }
 
 /* Icon rail */
@@ -204,17 +395,45 @@
   align-items: center;
 }
 
+.left-pane.collapsed .left-nav {
+  width: 100%;
+}
+
 .left-pane.collapsed .left-nav-group + .left-nav-group,
 .left-pane.collapsed .left-nav-heading + .left-nav-group {
   width: auto;
 }
 
+.left-pane.collapsed .left-nav-group + .left-nav-heading + .left-nav-group {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
 .left-pane.collapsed .left-nav-item {
   justify-content: center;
   width: 52px;
-  min-height: 48px;
+  min-height: 44px;
   padding: var(--space-2);
   border-left-width: 1px;
+}
+
+.left-pane.collapsed .left-nav-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 0;
+}
+
+.left-pane.collapsed .left-nav-mark-count {
+  min-width: 18px;
+  padding: 0 4px;
+  line-height: 16px;
+}
+
+.left-pane.collapsed .left-pane-footer {
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 800px) {
@@ -238,6 +457,23 @@
 
   .left-pane.collapsed .left-pane-brand-title {
     display: inline;
+  }
+
+  /* The bar keeps the cluster's dot beside the menu button. */
+  .left-pane.collapsed {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .left-pane.collapsed .left-pane-top {
+    flex: 1 1 auto;
+    order: 0;
+  }
+
+  .left-pane.collapsed .left-pane-status--rail {
+    order: -1;
+    width: var(--hit-target);
   }
 
   .left-pane.collapsed .left-nav,

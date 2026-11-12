@@ -1,3 +1,4 @@
+import { formatIsoDateTime } from "../../domain/localDateTime";
 /** Formatting helpers of the Results section. */
 
 /** Seconds as `12.5 s`, or `1 min 05 s` from a minute on; a dash for no value. */
@@ -39,15 +40,7 @@ export function shortHash(value: string | null | undefined, length = 10): string
 
 /** An ISO time as `2026-10-26 09:00:05` in the browser's zone. */
 export function formatTime(iso: string | null | undefined): string {
-  if (!iso) {
-    return "-";
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatIsoDateTime(iso, "-");
 }
 
 /** A pipeline stage as the page names it; the API calls the last stage, where the case has its monitor result summaries, `verdict`. */

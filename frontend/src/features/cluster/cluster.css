@@ -250,16 +250,14 @@
 
 .worker-node-capability {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px 44px;
+  grid-template-columns: minmax(0, 1fr) 72px 36px;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   font-size: var(--font-size-sm);
 }
 
 .worker-node-capability-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .worker-node-capability-count {

@@ -24,9 +24,18 @@
   color: var(--text-muted);
 }
 
+/* Every field reads the same way: its name, then its control, on one line. */
+.results-picker label {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* A fixed width: one that depends on the label's own width leaves the select wider than its label. */
 .results-picker select {
-  min-width: min(280px, 100%);
-  max-width: 460px;
+  width: 280px;
+  max-width: 100%;
 }
 
 /* An entry name carries its kind, state and time: the entry list takes a row of its own */
@@ -37,6 +46,7 @@
 
 .results-picker .results-picker-entry select {
   flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   max-width: 100%;
 }
@@ -907,38 +917,7 @@
   overflow-wrap: anywhere;
 }
 
-.results-steps {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-self: flex-start;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--bg-pane);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.results-step {
-  min-height: calc(var(--control-height) - 8px);
-  padding: 0 var(--space-4);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--text-muted);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.results-step:hover {
-  color: var(--text);
-  background: var(--bg-control);
-}
-
-.results-step.active {
-  color: var(--bg);
-  background: var(--accent);
-}
+/* The step tabs are the tabs of components.css. */
 
 .results-picker input[type="search"] {
   width: 14ch;

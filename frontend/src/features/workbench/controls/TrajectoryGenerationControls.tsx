@@ -30,6 +30,7 @@ import { PageInputPanel } from "../pages/PageInputPanel";
 import { inputOfFile, sceneOfDocument, sceneOfScenePage, setTrajectoryInput, trajectoriesOfTrajectoryPage } from "../pages/pageHandoff";
 import { useScenePageStore, useTrajectoryPageStore } from "../pages/pageStore";
 import { NumberSetting, Setting, StepPanel, StepRow, type StepNotice, type StepStatus } from "../pages/StepPanel";
+import { describeWhere, NO_INPUT_STATUS, readyStatus } from "../pages/stepWords";
 
 interface TrajectoryGenerationControlsProps {
   streamControls: ReturnType<typeof useSimulationWorkflow>;
@@ -199,7 +200,9 @@ export function TrajectoryGenerationControls({
         : { label: "No usable trajectory", tone: "error" }
       : status === "error"
         ? { label: "Failed", tone: "error" }
-        : { label: hasInput ? "Ready to plan" : "Idle", tone: "idle" };
+        : hasInput
+          ? readyStatus("plan")
+          : NO_INPUT_STATUS;
 
   const notices: StepNotice[] = [];
   if (trajectoryResources.blocker !== null) {
@@ -209,6 +212,9 @@ export function TrajectoryGenerationControls({
     notices.push({ text: "The straight generator needs a timespan above 0 s." });
   }
 
+  // A disabled button says what it waits for: the input first, then what blocks the run elsewhere.
+  const disabledReason = hasInput ? notices[0]?.text : "Take an input scene first";
+
   const runError = localError ?? errorMessage;
 
   return (
@@ -216,7 +222,7 @@ export function TrajectoryGenerationControls({
       page="trajectoryGeneration"
       title="Trajectory Generation"
       status={panelStatus}
-      where={`Plans as a job on the cluster: ${describeResources(trajectoryResources)}.`}
+      where={describeWhere(describeResources(trajectoryResources))}
       notices={notices}
       actions={
         running ? (
@@ -228,7 +234,7 @@ export function TrajectoryGenerationControls({
             className="primary-btn accent"
             type="button"
             disabled={!canGenerate}
-            title={hasInput ? undefined : "Take an input scene first"}
+            title={canGenerate ? undefined : disabledReason}
             onClick={handleGenerate}
           >
             Generate trajectories

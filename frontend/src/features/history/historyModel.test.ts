@@ -26,6 +26,7 @@ import {
   isOutputRunning,
   liveNeedsRefetch,
   madeByLabel,
+  rowOriginNote,
   matchesListView,
   mergeLiveRows,
   monitorSummary,
@@ -146,6 +147,10 @@ describe("entries", () => {
     expect(originLabel(workbench.origin)).toBe("the trajectory generation page");
     expect(madeByLabel(workbench.origin)).toBe("from the trajectory generation page");
     expect(madeByLabel(old.origin)).toBe("origin not recorded");
+    // a workbench run's page is the step its row already names; a campaign's origin is not said elsewhere
+    expect(rowOriginNote(workbench)).toBeNull();
+    expect(rowOriginNote({ kind: "campaign", origin: "wizard" })).toBe("from the wizard");
+    expect(rowOriginNote(old)).toBe("origin not recorded");
     expect(entrySteps(row(sampleCampaignRow({ steps: ["trajectory_generation", "scene_generation"] })))).toEqual(["scene_generation", "trajectory_generation"]);
     expect(stepsLabel(["scene_generation", "trajectory_generation"])).toBe("Scene generation, trajectory generation");
   });

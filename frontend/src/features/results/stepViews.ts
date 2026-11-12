@@ -12,6 +12,7 @@ import {
   type VerdictStep,
 } from "../../domain/cluster/schemas";
 import { encounterTypeLabel } from "../../domain/simulation/encounterTypes";
+import { ACTUAL_STATE_LABELS } from "../history/campaignModel";
 import { formatSeconds, formatTime } from "./resultsFormat";
 
 /**
@@ -82,22 +83,10 @@ export function describeOrigin(origin: CampaignOrigin | null | undefined): strin
 
 export type KindFilter = CampaignKind | "any";
 
-const STATE_TONE: Partial<Record<CampaignSummary["actual_state"], string>> = {
-  running: "ok",
-  completed: "ok",
-  stalled: "bad",
-  draining: "warn",
-  paused: "warn",
-};
-
-export function stateBadgeClass(state: CampaignSummary["actual_state"]): string {
-  return `section-badge${STATE_TONE[state] ? ` section-badge--${STATE_TONE[state]}` : ""}`;
-}
-
 /** The option text of an entry: `name (Campaign, completed, 2026-10-28 10:00)`. */
 export function entryOption(entry: CampaignSummary): string {
   const kind = entry.kind ? `${KIND_LABEL[entry.kind]}, ` : "";
-  return `${entry.name} (${kind}${entry.actual_state}, ${formatTime(entry.created_at).slice(0, 16)})`;
+  return `${entry.name} (${kind}${ACTUAL_STATE_LABELS[entry.actual_state].toLowerCase()}, ${formatTime(entry.created_at).slice(0, 16)})`;
 }
 
 interface EntryLike {

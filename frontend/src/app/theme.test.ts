@@ -14,7 +14,12 @@ describe("theme", () => {
     vi.unstubAllGlobals();
   });
 
-  it("starts dark without a stored choice", () => {
+  it("starts light without a stored choice", () => {
+    expect(readStoredTheme()).toBe("light");
+  });
+
+  it("reads a stored dark choice", () => {
+    localStorage.setItem(THEME_STORAGE_KEY, "dark");
     expect(readStoredTheme()).toBe("dark");
   });
 
@@ -23,18 +28,18 @@ describe("theme", () => {
     expect(readStoredTheme()).toBe("light");
   });
 
-  it("treats an unknown stored value as dark", () => {
+  it("treats an unknown stored value as light", () => {
     localStorage.setItem(THEME_STORAGE_KEY, "sepia");
-    expect(readStoredTheme()).toBe("dark");
+    expect(readStoredTheme()).toBe("light");
   });
 
-  it("stays dark when the storage cannot be read", () => {
+  it("stays light when the storage cannot be read", () => {
     vi.stubGlobal("localStorage", {
       getItem: () => {
         throw new Error("denied");
       },
     });
-    expect(readStoredTheme()).toBe("dark");
+    expect(readStoredTheme()).toBe("light");
   });
 
   it("toggles and remembers the choice", () => {
@@ -57,8 +62,9 @@ describe("theme", () => {
     expect(useThemeStore.getState().theme).toBe("light");
   });
 
-  it("has the inline script of index.html read the same key", () => {
+  it("has index.html start light and its inline script read the same key for dark", () => {
     const html = readFileSync(resolve(__dirname, "../../index.html"), "utf8");
-    expect(html).toContain(`localStorage.getItem("${THEME_STORAGE_KEY}") === "light"`);
+    expect(html).toContain('<html lang="en" data-theme="light">');
+    expect(html).toContain(`localStorage.getItem("${THEME_STORAGE_KEY}") === "dark"`);
   });
 });
