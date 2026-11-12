@@ -115,7 +115,7 @@ def _worker_node_container(cluster, tmp_path_factory):
         **{variable: _image(subsystem) for subsystem, variable in IMAGE_ENVIRONMENT_VARIABLES.items()},
     }
     env_file.write_text("".join(f"{key}={value}\n" for key, value in values.items()))
-    container = WorkerNodeContainer(env_file, f"scenegems-worker-node-{cluster.control_node_id}-{worker_node_name}")
+    container = WorkerNodeContainer(env_file, f"scenegems-{cluster.control_node_id}-{worker_node_name}-daemon")  # as the compose file names it
     container.compose("up", "-d")
     try:
         yield container
@@ -162,6 +162,11 @@ class RunnerWatch:
         self._thread.join(timeout=5)
 
 
+def _kinematic_job_id(index: int) -> str:
+    """Ids that differ from their first character on: a run's containers are named by the start of its job id."""
+    return f"{index}-kinematic"
+
+
 def _answers(connection, count: int) -> dict:
     answers = {}
     while len(answers) < count:
@@ -179,7 +184,7 @@ def _results(connection, count: int, payload: dict) -> dict:
         if isinstance(frame, JobResult):
             results[frame.lease_id] = frame
         if not offered_again and any(lease.startswith("kinematic") for lease in results):
-            connection.send(make_offer("kinematic-2", make_job("kinematic-2", payload=payload)))
+            connection.send(make_offer("kinematic-2", make_job(_kinematic_job_id(2), payload=payload)))
             offered_again = True
     return results
 
@@ -191,7 +196,8 @@ def test_the_worker_node_container_connects_without_pairing_and_runs_jobs_within
         pytest.fail(f"The worker node never connected:\n{worker_node.logs()}")
     hello = connection.expect(Hello)
     control_node_id, worker_node_id = cluster.control_node_id, hello.worker_node_id
-    assert hello.worker_node_name == worker_node.name.rsplit(f"{control_node_id}-", 1)[1] == worker_node_id and hello.labels == {"test": "docker"}  # the worker node id is its name
+    assert hello.worker_node_name == worker_node_id and hello.labels == {"test": "docker"}  # the worker node id is its name
+    assert worker_node.name == f"scenegems-{control_node_id}-{worker_node_id}-daemon"
     assert hello.software_revision == "docker-test" and hello.resources.cpus >= 1 and hello.resources.memory_mb > 0
     assert {offer.job_type: offer.slots for offer in hello.slots} == {JobType.SIMULATION: 2, JobType.SCENE_GENERATION: 1}
 
@@ -202,7 +208,7 @@ def test_the_worker_node_container_connects_without_pairing_and_runs_jobs_within
     with RunnerWatch(control_node_id, worker_node_id) as runners:
         try:
             for index in range(3):
-                connection.send(make_offer(f"kinematic-{index}", make_job(f"kinematic-{index}", payload=payload)))
+                connection.send(make_offer(f"kinematic-{index}", make_job(_kinematic_job_id(index), payload=payload)))
             connection.send(make_offer("scene-0", make_job("scene-0", job_type=JobType.SCENE_GENERATION, payload=_scene_generation_payload())))
             answers = _answers(connection, 4)
             assert {lease for lease, frame in answers.items() if isinstance(frame, LeaseAccept)} == {"kinematic-0", "kinematic-1", "scene-0"}
@@ -215,7 +221,7 @@ def test_the_worker_node_container_connects_without_pairing_and_runs_jobs_within
     for lease in ("kinematic-0", "kinematic-1", "kinematic-2"):
         assert results[lease].outcome == JobOutcome.SUCCEEDED, results[lease].error
         assert results[lease].result["state_digest"] == expected_digest
-        assert results[lease].idempotency_key == f"{lease}/key"
+        assert results[lease].idempotency_key == f"{_kinematic_job_id(int(lease[-1]))}/key"
     scene = results["scene-0"]
     assert scene.outcome == JobOutcome.SUCCEEDED, scene.error
     assert scene.result["request_id"] == "scene-0-1" and isinstance(scene.result["valid"], bool)
@@ -232,7 +238,7 @@ def test_the_worker_node_container_connects_without_pairing_and_runs_jobs_within
     # Stopping the worker node removes its pool and leaves nothing of its instances behind.
     worker_node.compose("stop", "--timeout", "60")
     remaining = [name for name in _docker("ps", "-a", "--format", "{{.Names}}").stdout.split() if name.startswith(f"scenegems-{control_node_id}-{worker_node_id}-")]
-    assert remaining == []
+    assert remaining == [worker_node.name], "only the stopped daemon's own container"
     assert not connection.received(LeaseRelease)  # nothing was running at the stop
 
 

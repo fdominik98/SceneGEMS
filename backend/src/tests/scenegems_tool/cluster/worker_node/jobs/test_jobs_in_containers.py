@@ -116,12 +116,15 @@ def test_kinematic_simulation_runs_in_a_container(broker, control_node_id, make_
     worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 1})
     job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False})
     report = RecordingReport()
-    result = run_job(job, worker_node, report)
+    try:
+        result = run_job(job, worker_node, report)
+        scope = worker_node.job_scope(job)
+        assert not container_ids_for_instance(scope.compose_project, scope.key)
+    finally:
+        worker_node.shutdown()  # its pool would answer the next test's requests on the shared broker
     assert result["state_digest"] == run_kinematic_replay(head_on_trajectories).state_digest()
     messages = [text for _, text, _ in report.statuses]
     assert "running the kinematic replay run" in messages and "run finished" in messages
-    scope = worker_node.job_scope(job)
-    assert not container_ids_for_instance(scope.compose_project, scope.key)
 
 
 def test_two_kinematic_jobs_run_side_by_side(broker, control_node_id, make_job, head_on_trajectories):
@@ -137,10 +140,13 @@ def test_two_kinematic_jobs_run_side_by_side(broker, control_node_id, make_job, 
         results[index] = run_job(jobs[index], worker_node, reports[index])
 
     threads = [threading.Thread(target=run, args=(index,)) for index in range(2)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=300)
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=300)
+    finally:
+        worker_node.shutdown()
     assert results[0] is not None and results[1] is not None
     assert results[0]["state_digest"] == results[1]["state_digest"]
     # Both runner containers were up at once: each started before the other finished.

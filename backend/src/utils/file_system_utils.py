@@ -28,6 +28,7 @@ VESSEL_DYNAMICS_FOLDER = f"{CONFIG_FOLDER}/vessel_dynamics"
 CAMPAIGN_PRESETS_FOLDER = f"{ASSET_FOLDER}/campaign_presets"
 
 RUNTIME_ASSETS_VOLUME = os.environ.get("SCENEGEMS_RUNTIME_VOLUME", "scenegems_runtime_assets")
+IMAGE_RUNTIME_ASSETS_FOLDER = "/app/assets/runtime_assets"  # RUNTIME_ASSETS_FOLDER as every SceneGEMS image has it, whatever the path is where a launcher runs
 GAZEBO_GEN_MOUNT = f"{RUNTIME_ASSETS_FOLDER}/simulation/gen_tmp"
 SITL_ENTRYPOINT_CONTAINER_PATH = "/scripts/sitl_entrypoint.sh"
 GAZEBO_ENTRYPOINT_CONTAINER_PATH = "/scripts/entrypoint.sh"

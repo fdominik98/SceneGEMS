@@ -95,7 +95,7 @@ class PooledService:
         service = {
             "image": subsystem_image(self.subsystem),
             "container_name": self.names.container_name,
-            "hostname": self.names.container_name,
+            "hostname": self.names.service_key,  # the subsystem's name: Docker takes no hostname over 64 bytes, and the container name grows with the cluster's names
             "environment": {**subsystem_environment(self.mqtt_connection, self.reference_geofence, self.workers), **self.service_name_environment()},
             "cpus": self.cpus,
             "networks": [self.names.network_key],

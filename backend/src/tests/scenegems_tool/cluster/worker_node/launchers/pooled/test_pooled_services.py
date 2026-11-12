@@ -19,7 +19,7 @@ def test_scoped_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqtt_connec
     pool = SceneGenerationPool.for_scope(scope, cluster_broker, geofence, workers=3, broker_network="worker_node_broker_net", service_name="scene-generation-subsystem-2")
     compose = pool.labelled(pool.build_compose())
     service = compose["services"]["scene-generation-subsystem"]
-    assert service["container_name"] == service["hostname"] == "scenegems-m1-n1-scene-generation-subsystem"
+    assert (service["container_name"], service["hostname"]) == ("scenegems-m1-n1-scene-generation-subsystem", "scene-generation-subsystem")
     assert service["labels"] == {INSTANCE_LABEL: "scene-generation-subsystem"}, "what the pool is removed by in the worker node's project"
     assert service["cpus"] == 4
     assert service["environment"]["WORKER_COUNT"] == "3"
@@ -53,6 +53,25 @@ def test_two_scoped_pools_share_no_docker_name(no_docker, mqtt_connection, geofe
     assert not names(first) & names(second)
 
 
+@pytest.mark.parametrize(
+    "pool_class, subsystem",
+    [
+        (DesignSpaceExplorationPool, "design_space_exploration"),
+        (SceneGenerationPool, "scene_generation"),
+        (TrajectoryGenerationPool, "trajectory_generation"),
+        (MonitoringPool, "monitoring"),
+        (SimulationPool, "simulation"),
+    ],
+)
+def test_a_pool_s_hostname_fits_docker_s_limit_whatever_the_cluster_is_called(no_docker, mqtt_connection, geofence, pool_class, subsystem):
+    """Docker refuses a hostname over 64 bytes: with the container name as hostname, a cluster called local-cluster lost two of its pools."""
+    scope = InstanceScope.pooled("a-cluster-with-quite-a-long-name", "worker-node-12", subsystem)
+    pool = pool_class.for_scope(scope, mqtt_connection, geofence, workers=1)
+    service = pool.build_compose()["services"][scope.instance_id]
+    assert len(service["container_name"]) > 64, "the case: a container name that is no hostname"
+    assert service["hostname"] == scope.instance_id and len(service["hostname"]) <= 63
+
+
 def test_image_override_applies_to_pools(no_docker, monkeypatch, mqtt_connection, geofence):
     monkeypatch.setenv("SCENE_GENERATION_IMAGE", "scenegems-scene-generation-subsystem:branch")
     pool = SceneGenerationPool.for_scope(InstanceScope.pooled("m1", "n1", "scene_generation"), mqtt_connection, geofence, workers=1, broker_network="worker_node_broker_net")
@@ -63,7 +82,7 @@ def test_the_monitoring_pool_is_sized_by_slots_and_named_by_scope(no_docker, mqt
     scope = InstanceScope.pooled("m1", "n1", "monitoring")
     pool = MonitoringPool.for_scope(scope, mqtt_connection.with_topic_root("scenegems"), geofence, workers=2, broker_network="worker_node_broker_net", service_name="monitoring-subsystem-2")
     service = pool.labelled(pool.build_compose())["services"]["monitoring-subsystem"]
-    assert service["container_name"] == service["hostname"] == "scenegems-m1-n1-monitoring-subsystem"
+    assert (service["container_name"], service["hostname"]) == ("scenegems-m1-n1-monitoring-subsystem", "monitoring-subsystem")
     assert service["labels"] == {INSTANCE_LABEL: "monitoring-subsystem"} and service["cpus"] == 3, "a core per series it judges at once, and one for the service"
     environment = service["environment"]
     assert (environment["WORKER_COUNT"], environment["MQTT_SERVICE_NAME"], environment["MQTT_TOPIC_ROOT"]) == ("2", "monitoring-subsystem-2", "scenegems")
@@ -104,7 +123,8 @@ def test_the_simulation_pool_gets_what_it_needs_to_start_the_stacks_of_its_tasks
     assert service["image"].startswith("scenegems-simulation-subsystem:") and "command" not in service, "the image's own service"
     assert service["volumes"][0] == "/var/run/docker.sock:/var/run/docker.sock"
     volume, _, mounted_at = service["volumes"][1].partition(":")
-    assert volume in compose["volumes"] and compose["volumes"][volume] == {"external": True} and mounted_at.replace("\\", "/").endswith("assets/runtime_assets")
+    assert volume in compose["volumes"] and compose["volumes"][volume] == {"external": True}
+    assert mounted_at == "/app/assets/runtime_assets", "where the image has the folder, also when the launcher runs from a Windows checkout"
     environment = service["environment"]
     assert (environment["SCENEGEMS_CONTROL_NODE_ID"], environment["SCENEGEMS_WORKER_NODE_ID"]) == ("m1", "n1"), "its stacks are named after the worker node, as the daemon named them"
     assert (environment["SCENEGEMS_DOCKER_NETWORK"], environment["SCENEGEMS_RUNTIME_VOLUME"]) == ("scenegems-m1-n1", volume)

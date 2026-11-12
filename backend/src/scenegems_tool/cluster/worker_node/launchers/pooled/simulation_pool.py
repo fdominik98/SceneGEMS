@@ -17,7 +17,7 @@ from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.subsystems.simulation.simulation_types import BROKER_NETWORK_VARIABLE, CONTROL_NODE_VARIABLE, SIMULATION_SERVICE_NAME, WORKER_NODE_VARIABLE
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from utils.docker_compose_network import scenegems_broker_network_name
-from utils.file_system_utils import RUNTIME_ASSETS_VOLUME, runtime_assets_volume_mount
+from utils.file_system_utils import IMAGE_RUNTIME_ASSETS_FOLDER, RUNTIME_ASSETS_VOLUME
 from utils.image_names import IMAGE_TAG_VARIABLE
 
 _SERVICE_KEY = "simulation"
@@ -78,5 +78,6 @@ class SimulationPool(PooledService):
             BROKER_NETWORK_VARIABLE: self.broker_network or scenegems_broker_network_name(),
             RUNTIME_VOLUME_VARIABLE: RUNTIME_ASSETS_VOLUME,
         }
-        service["volumes"] = [f"{DOCKER_SOCKET}:{DOCKER_SOCKET}", runtime_assets_volume_mount()]
+        # At the folder's path in the image: the daemon's own path on a worker node, and not the checkout's when a test starts the pool from a host
+        service["volumes"] = [f"{DOCKER_SOCKET}:{DOCKER_SOCKET}", f"{RUNTIME_ASSETS_VOLUME}:{IMAGE_RUNTIME_ASSETS_FOLDER}"]
         return compose
