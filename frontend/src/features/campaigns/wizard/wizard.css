@@ -354,10 +354,12 @@
   border-color: var(--danger) !important;
 }
 
+/* A number is a few digits: its box does not stretch over the page with the row it is in. */
 .wiz-number {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
+  max-width: 240px;
 }
 
 .wiz-number input {
@@ -605,8 +607,16 @@
   min-height: var(--hit-target);
   min-width: var(--hit-target);
   padding: 0 var(--space-2);
+  border-color: transparent;
   border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
   line-height: 1;
+}
+
+.wiz-chip button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .wiz-plan,
@@ -626,13 +636,7 @@
   background: var(--bg-pane);
 }
 
-.wiz-catalog {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.wiz-catalog > .meta {
+.wiz-scope-catalog > .meta {
   margin: 0;
 }
 

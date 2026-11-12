@@ -37,7 +37,7 @@ export function ScenesStep({ draft, update, reasons }: StepProps) {
         <Field label="Enforce low TCPA" htmlFor="wiz-low-tcpa" hint="Scenes are generated with the low time to the closest point of approach enforced." issues={own.byField.get("enforce_low_tcpa")}>
           <label className="wiz-check">
             <input id="wiz-low-tcpa" type="checkbox" checked={domain.enforceLowTcpa} onChange={(event) => update((next) => void (next.domain.enforceLowTcpa = event.target.checked))} />
-            enforce_low_tcpa
+            Generate with low TCPA
           </label>
         </Field>
       </div>

@@ -73,6 +73,15 @@ describe("Input for a start with scene generation", () => {
     expect(latest().input.scenarios).toEqual([]);
   });
 
+  it("opens the file picker from a button, as the other pages do, and keeps the browser's own file field hidden", async () => {
+    const { user } = setup(() => undefined);
+    const picker = screen.getByLabelText("Add scenario files") as HTMLInputElement;
+    expect(picker).not.toBeVisible();
+    const opened = vi.spyOn(picker, "click");
+    await user.click(screen.getByRole("button", { name: "Add scenario files..." }));
+    expect(opened).toHaveBeenCalledTimes(1);
+  });
+
   it("says that uploaded files expire after 24 hours", () => {
     setup(() => undefined);
     expect(screen.getAllByText(/kept for 24 hours/).length).toBeGreaterThan(0);

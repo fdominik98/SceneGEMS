@@ -163,7 +163,7 @@ function RunCard({
               disabled={!monitor?.supports_early_stop || stack?.supports_early_stop === false}
               onChange={(event) => onChange((item) => void (item.earlyStop = event.target.checked))}
             />
-            early_stop
+            Stop the run early
           </label>
         </Field>
       </div>

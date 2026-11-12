@@ -36,7 +36,7 @@ export function PolicyStep({ draft, update, reasons }: StepProps) {
         <Field label="Monitor frames" htmlFor="wiz-frames" hint="Store the monitor's frames of each case as artifacts. They are large; without them a recorded run's frames are computed on demand." issues={own.byField.get("keep_frames")}>
           <label className="wiz-check">
             <input id="wiz-frames" type="checkbox" checked={policy.keepFrames} onChange={(event) => update((next) => void (next.policy.keepFrames = event.target.checked))} />
-            keep_frames
+            Keep the frames
           </label>
         </Field>
         <Field

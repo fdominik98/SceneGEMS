@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalogClassSchema } from "../../../domain/cluster/campaignApi";
 import { sampleCatalogClasses } from "../../../test/fixtures/campaignCatalog";
-import { expandPattern, globToRegExp, planScope, summarizeFolders } from "./scopePlan";
+import { countsLabel, expandPattern, globToRegExp, planScope, summarizeFolders } from "./scopePlan";
 import type { ScopeEntryDraft } from "./wizardState";
 
 const catalog = sampleCatalogClasses.map((entry) => catalogClassSchema.parse(entry));
@@ -77,6 +77,20 @@ describe("planScope", () => {
     expect(plan.entries[0].unknownClasses).toEqual(["x/y"]);
     expect(plan.entries[0].emptyPatterns).toEqual(["9vessel_*"]);
     expect(plan.casesPlanned).toBe(0);
+  });
+});
+
+describe("countsLabel", () => {
+  it("writes one in the singular and every other count in the plural", () => {
+    expect(countsLabel([1], "vessel")).toBe("1 vessel");
+    expect(countsLabel([0], "obstacle")).toBe("0 obstacles");
+    expect(countsLabel([2], "vessel")).toBe("2 vessels");
+  });
+
+  it("joins the counts a folder mixes, and says when it holds none", () => {
+    expect(countsLabel([2, 3], "vessel")).toBe("2 or 3 vessels");
+    expect(countsLabel([0, 1], "obstacle")).toBe("0 or 1 obstacles");
+    expect(countsLabel([], "vessel")).toBe("no vessels");
   });
 });
 

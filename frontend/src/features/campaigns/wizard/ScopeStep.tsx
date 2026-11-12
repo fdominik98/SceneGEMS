@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
+import { CloseIcon } from "../../../components/icons";
 import { describeOperatorError } from "../../../domain/cluster/operatorApi";
 import { plural, splitClassId } from "../campaignFormat";
 import { FailureBudgetField, Field, FieldIssues, NumberField } from "./fields";
 import { reasonsOfEntry, splitByField, type Reason } from "./reasons";
-import { expandPattern, planScope, summarizeFolders, type ScopeEntryPlan } from "./scopePlan";
+import { countsLabel, expandPattern, planScope, summarizeFolders, type ScopeEntryPlan } from "./scopePlan";
 import type { CatalogState, StepProps } from "./stepTypes";
 import { emptyScopeEntry, type ScopeEntryDraft } from "./wizardState";
 
@@ -53,16 +54,16 @@ function EntryCard({
             <li key={`p-${pattern}`} className="wiz-chip wiz-chip--pattern" title="A pattern: it selects every FEC it matches">
               <code>{pattern}</code>
               <span className="wiz-chip-note">{plan && plan.emptyPatterns.includes(pattern) ? "matches nothing" : "pattern"}</span>
-              <button type="button" aria-label={`Remove pattern ${pattern}`} onClick={() => onChange((item) => void (item.patterns = item.patterns.filter((value) => value !== pattern)))}>
-                x
+              <button type="button" aria-label={`Remove pattern ${pattern}`} title="Remove" onClick={() => onChange((item) => void (item.patterns = item.patterns.filter((value) => value !== pattern)))}>
+                <CloseIcon size={14} />
               </button>
             </li>
           ))}
           {entry.classes.map((classId) => (
             <li key={`c-${classId}`} className="wiz-chip" title={classId}>
               <code>{classId}</code>
-              <button type="button" aria-label={`Remove FEC ${classId}`} onClick={() => onChange((item) => void (item.classes = item.classes.filter((value) => value !== classId)))}>
-                x
+              <button type="button" aria-label={`Remove FEC ${classId}`} title="Remove" onClick={() => onChange((item) => void (item.classes = item.classes.filter((value) => value !== classId)))}>
+                <CloseIcon size={14} />
               </button>
             </li>
           ))}
@@ -116,8 +117,9 @@ function CatalogBrowser({ catalog, onPickPattern, onPickClasses, picked }: { cat
     );
   }
 
+  // A card, as the scope entries beside it are. (Not `wiz-catalog`: that is the dialog of `CatalogDialog`.)
   return (
-    <div className="wiz-catalog">
+    <div className="wiz-card wiz-scope-catalog">
       <p className="meta">
         {plural(classes.length, "FEC")} in {plural(folders.length, "folder")}.
         <span className="wiz-explain"> A folder pattern selects every FEC of the folders it matches, so FECs added to the catalog later are not included: the campaign pins the FECs found when it is created.</span>
@@ -142,7 +144,7 @@ function CatalogBrowser({ catalog, onPickPattern, onPickClasses, picked }: { cat
               {summary.folder}
             </button>
             <span className="wiz-folder-counts">
-              {plural(summary.classes, "FEC")}; {summary.vessels.join(" or ")} vessels; {summary.obstacles.join(" or ")} obstacles
+              {plural(summary.classes, "FEC")}, {countsLabel(summary.vessels, "vessel")}, {countsLabel(summary.obstacles, "obstacle")}
             </span>
             <button type="button" onClick={() => onPickPattern(summary.folder)} title="Select the folder as a pattern">
               Add folder
@@ -251,7 +253,7 @@ export function ScopeStep({ draft, update, reasons, catalog }: StepProps & { cat
           )}
         </div>
         <div className="wiz-column">
-          <h4 className="wiz-subhead">Catalog</h4>
+          <h4 className="wiz-subhead">Pick from the catalog</h4>
           <CatalogBrowser
             catalog={catalog}
             picked={picked}
