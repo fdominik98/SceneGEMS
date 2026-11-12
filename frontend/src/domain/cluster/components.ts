@@ -102,6 +102,23 @@ export function runStackComponents(stack: unknown): string[] {
   return layerComponents(controlLayer, simulationLayer, field(stack, "mode"));
 }
 
+/** The component of the monitoring subsystem, which also judges a run that is judged while it runs. */
+const MONITORING = "monitoring";
+
+/**
+ * The components with the monitoring subsystem's when the run is judged while it runs (monitor live): its scenes are
+ * judged by the worker node's monitoring subsystem, so only a worker node that runs one takes it
+ * (`simulation_job.required_components`, `stage_graph.StageGraph.run_components`).
+ */
+function withLiveMonitor(components: string[], monitor: unknown): string[] {
+  return monitor === "live" ? orderedComponents([...components, MONITORING]) : components;
+}
+
+/** The components a campaign run needs: those of its stack section, and the monitoring subsystem when its monitor is live (`stage_graph.StageGraph.run_components`). */
+export function runComponents(run: unknown): string[] {
+  return withLiveMonitor(runStackComponents(field(run, "stack")), field(run, "monitor"));
+}
+
 /** The simulation layer of the workbench's simulator names (`workbench_stack_mapping.simulation_layer_from_simulator_type`). */
 const SIMULATOR_LAYERS: Record<string, string> = { kinematic: "kinematic", "ardupilot sim": "ardupilot_sim", gazebo: "gazebo" };
 
@@ -127,8 +144,12 @@ export function attendedSetupComponents(simulation: unknown): string[] {
   return orderedComponents(components);
 }
 
-/** The components a simulation job payload needs, by its runner (`simulation_job.required_components`). */
+/** The components a simulation job payload needs: its stack's by its runner, and the monitoring subsystem when its monitor is live (`simulation_job.required_components`). */
 export function simulationPayloadComponents(payload: unknown): string[] {
+  return withLiveMonitor(stackComponentsOfPayload(payload), field(payload, "monitor"));
+}
+
+function stackComponentsOfPayload(payload: unknown): string[] {
   const runner = field(payload, "runner");
   if (runner === "attended") {
     return attendedSetupComponents(field(payload, "simulation"));

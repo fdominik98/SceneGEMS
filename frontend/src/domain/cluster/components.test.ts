@@ -10,6 +10,7 @@ import {
   offersJob,
   orderedComponents,
   attendedSetupComponents,
+  runComponents,
   runStackComponents,
   simulationPayloadComponents,
   staleComponents,
@@ -72,6 +73,13 @@ describe("the component catalog", () => {
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", mode: "usv_navigation" }));
     expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
     expect(jobComponents("monitoring.post_hoc")).toEqual(["monitoring"]);
+    // A run that is judged while it runs is judged by the worker node's monitoring subsystem, so it needs that too
+    expect(simulationPayloadComponents({ runner: "kinematic", mode: "replay", monitor: "live" })).toEqual([...runStackComponents({}), "monitoring"]);
+    expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", monitor: "live" })).toEqual([...GAZEBO, "monitoring"]);
+    expect(simulationPayloadComponents({ runner: "kinematic", monitor: "none" })).toEqual(runStackComponents({}));
+    expect(runComponents({ stack: { simulation_layer: "gazebo" }, monitor: "live" })).toEqual([...GAZEBO, "monitoring"]);
+    expect(runComponents({ stack: { simulation_layer: "gazebo" }, monitor: "post_hoc" })).toEqual(GAZEBO);
+    expect(runComponents({})).toEqual(runStackComponents({}));
     expect(jobComponents("calibration.deviation")).toEqual(["calibration"]);
     expect(jobComponents("future.kind")).toEqual([]);
   });
