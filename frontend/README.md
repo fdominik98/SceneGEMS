@@ -16,7 +16,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173. The console has no backend of its own: the workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on the control node's operator URL), and the cluster's worker nodes run its jobs.
+Open http://localhost:5173. The console has no backend of its own: the workbench connects to the gateway of the cluster selected in the left pane (`/ws/scenegems_backend_service` on the control node's operator URL), which reads scenario files, generates vessel models and lists the stack options. Everything that computes, a simulation included, is a job that a subsystem on one of the cluster's worker nodes runs.
 
 ### Typical demo flow
 

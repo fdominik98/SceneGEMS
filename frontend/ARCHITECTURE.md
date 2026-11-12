@@ -258,7 +258,7 @@ generator or step declared in the backend specs appears after the control node r
 
 - `capabilitiesModel.ts`: pure helpers (fact tones and formatting, path highlighting, the matrix, the
   `cluster_job` fact of an available stack: the job and runner that run it on a worker node ("simulation,
-  runner kinematic"), or none for a stack the workbench runs only as a live session; `chainOf`: the step
+  runner kinematic"), the attended runner for a stack that needs an operator beside it; `chainOf`: the step
   parts numbered in the control node's order and the supporting parts; `describePartOffer`: what the cluster
   offers of a part, or why that is not known).
 - `graphLayout.ts`: lanes as columns, card order by barycenter sweeps, lane bands.
@@ -291,12 +291,16 @@ flowchart LR
 3. **Load scenario**: `load_scenario_file` -> `preview_trajectory_chunk`(s), then the cluster's post-hoc monitor replaces the preview with monitored frames
    A bare scene loads as its initial scene only (`initial_state` with trajectory length 0); trajectories come from the trajectory generator, and the simulation refuses to run without them.
 4. **Run on the cluster**: a kinematic setup runs as one `simulation` job with runner `kinematic`, a replay on ArduPilot SITL or Gazebo as one with runner `ardupilot` and its `simulation_layer` (`simulationJobs.ts`; a plan names the components its job needs, and `workbenchResources.ts` counts the worker nodes that have them up to date), each as a workbench entry whose run is the matching stack of the campaign config (`pages/entryConfig.ts` `simulationStack`); the frames are observed on `instance:<worker node>/job-<id>-<attempt>`
-5. **Live session**: `connect_to_mqtt_broker` (the control node's broker by default), `initialize_simulation` -> `initial_state`, `start_simulation` -> `simulation_trajectory_chunk`(s) and live `frame` pushes
+5. **Attended run**: a setup no unattended runner takes (a real vessel, Mission Planner, USV Navigation on a target ship, vessels on different control layers) runs as one `simulation` job with runner `attended` (`simulationJobs.ts` `planSimulationRun`, which says why it is attended). The job brings the vessels up on a worker node and waits: the run's status detail carries its phase, what each vessel still lacks (`clusterRunStore.vesselStates`, `vesselReadinessLabels`) and the ports a ground control station connects to. **Start** is `startJob` on the operator API. A run with a real vessel takes its broker from the Connections page (`connectionStore.attendedBroker`); nothing connects to a broker from the browser.
+
+The gateway socket carries no simulation: there is no session on the control node. A control node of an earlier release still sends the messages of its former live session, which the console ignores (`wireTypes.ts` `RETIRED_GATEWAY_MESSAGES`).
+
+The console computes the components a job needs as the control node does (`domain/cluster/components.ts`), to say which worker nodes can take it: the layers of every vessel's stack, and the `monitoring` component for a run that is judged while it runs (`runComponents`, `simulationPayloadComponents`), since the worker node's monitoring subsystem judges it.
 
 `playbackStore.ts` makes one store per page (`createPlaybackStore`): `useScenePlaybackStore` (the
 scene page's scene), `useTrajectoryPlaybackStore` (the planned trajectories) and `usePlaybackStore`
-(the simulation page's preview and simulation streams, plus the gateway session: stream, broker,
-monitor and simulation status, stack options, errors). `WorkbenchSection` provides the shown page's
+(the simulation page's preview and simulation streams, plus what the gateway says: the stream's
+status, the preview monitor's state, the stack options and errors). `WorkbenchSection` provides the shown page's
 store through `PlaybackStoreContext` (`playbackContext.ts`); the canvas, the playback bar and the
 monitor panels read it with `useShownPlayback`, so each page renders its own frames. The monitoring
 panel shows one stream at a time.

@@ -28,7 +28,7 @@ In dark mode the chart is a night chart: a dark sea, with the map's tiles darken
 On the Simulation page, two independent streams may be drawn at once:
 
 - **Preview**: The planned trajectories of the page's input
-- **Simulation**: Frames of the simulation, from a cluster job or a live session's agents
+- **Simulation**: Frames of the simulation, from its job on the cluster
 
 While both are drawn, the simulation's vessels take a darker shade of the same hue.
 

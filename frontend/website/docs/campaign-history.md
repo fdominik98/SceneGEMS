@@ -5,7 +5,7 @@ title: Campaign History
 
 # Campaign History
 
-Campaign History lists every entry of the selected cluster, ongoing and finished: the campaigns made in the wizard or on the command line, and every run of the workbench (design space exploration, scene generation, trajectory generation, simulation, recorded live sessions). Each entry runs one or more consecutive steps of the chain design space exploration, scene generation, trajectory generation, simulation, and every step's outputs can be opened on the workbench page of its subsystem.
+Campaign History lists every entry of the selected cluster, ongoing and finished: the campaigns made in the wizard or on the command line, and every run of the workbench (design space exploration, scene generation, trajectory generation, simulation). Each entry runs one or more consecutive steps of the chain design space exploration, scene generation, trajectory generation, simulation, and every step's outputs can be opened on the workbench page of its subsystem.
 
 ## The list
 
@@ -13,7 +13,7 @@ Each row shows:
 
 | Column | Description |
 |--------|-------------|
-| Entry | The name, the kind (campaign or workbench run) and where it was made (the wizard, the command line, a workbench page or a live session; entries made before Campaign History existed say "not recorded") |
+| Entry | The name, the kind (campaign or workbench run) and where it was made (the wizard, the command line or a workbench page; an entry an earlier release recorded from a live session on the control node says "live session", and entries made before Campaign History existed say "not recorded") |
 | Steps | The steps the entry runs, in chain order |
 | State | Created, running, paused, draining, stalled, stopped or completed, with what it is asked to become when that differs |
 | Made from | Links to the entries whose outputs this one took as its input; "its own input" when it started from catalog FECs, scenarios or files |

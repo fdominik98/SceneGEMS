@@ -9,7 +9,7 @@ The Simulation view is the primary operations console after a scenario is loaded
 
 - **Scene canvas**: The encounter canvas or the nautical map (see [Scene canvas](./scene-canvas))
 - **Playback bar and rule timeline**: under the canvas, for the preview and the simulation
-- **Bottom control panel**: where the run happens and its setup (see [Control panel](./control-panel))
+- **Bottom control panel**: the run's setup, and how it runs: as a job on a worker node, unattended or attended (see [Control panel](./control-panel))
 - **Right monitoring panel**: one stream at a time (Preview or Simulation): vessel pairs, frame data and charts (see [Monitoring panel](./monitoring))
 
 When the monitoring panel is hidden, **Show monitoring panel** in the canvas toolbar restores it.
