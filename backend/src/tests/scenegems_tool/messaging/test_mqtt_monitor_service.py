@@ -108,7 +108,8 @@ def test_a_series_is_judged_from_its_signals_and_published_batch_by_batch_then_t
     service.pool.step()
 
     first, second = published(service, "sensor/monitored-scene")
-    assert set(first) == {"stamp", "task_sender", "task-uuid", "request-id", "scenario-id", "index", "monitored-scenes", "monitored-frames", "final"}
+    assert set(first) == {"stamp", "task_sender", "task-uuid", "request-id", "scenario-id", "index", "monitored-scenes", "every-rule-decided", "monitored-frames", "final"}
+    assert first["every-rule-decided"] is False
     assert (first["request-id"], first["scenario-id"], first["index"], first["monitored-scenes"], first["final"]) == ("r1", "case-1#run0", 0, 3, False)
     assert [frame["timestamp"] for frame in first["monitored-frames"] + second["monitored-frames"]] == list(range(STEPS))
     assert {frame["scenarioId"] for frame in second["monitored-frames"]} == {"case-1#run0"}
@@ -170,3 +171,31 @@ def test_the_heartbeat_names_the_task_its_signals_and_its_streams():
     info = by_topic[service.direct_execution_topic]
     assert info["tasks-available"] == [{"name": "monitor-scenario", "signals": ["cancel", "scenes", "close"]}]
     assert info["tasks-executing"] == [{"name": "monitor-scenario", "uuid": "u-r1"}] and info["pool-size"] == 2
+
+
+def test_a_batch_may_ask_for_its_frames_whatever_the_request_said():
+    """A run that is judged while it runs asks only for the batches somebody watches."""
+    service = service_of()
+    start(service, "r1")  # the request asks for no frames
+    service.pool.step()
+    signal(service, "scenes", "r1", {"index": 0, "first-timestamp": 0, "scenes": scenes()[:2]})
+    signal(service, "scenes", "r1", {"index": 1, "first-timestamp": 2, "scenes": scenes()[2:4], "frames": True})
+    signal(service, "scenes", "r1", {"index": 2, "first-timestamp": 4, "scenes": scenes()[4:], "frames": False})
+    signal(service, "close", "r1", {"batches": 3})
+    service.processes["r1"].work()
+    service.pool.step()
+    batches = published(service, "sensor/monitored-scene")
+    assert [[frame["timestamp"] for frame in batch["monitored-frames"]] for batch in batches] == [[], [2, 3], []]
+
+
+def test_every_batch_says_whether_every_rule_is_decided(monkeypatch):
+    monkeypatch.setattr(RuleOutcomes, "every_rule_decided", lambda outcomes: outcomes.monitored_scenes >= 4)
+    service = service_of()
+    start(service, "r1")
+    service.pool.step()
+    signal(service, "scenes", "r1", {"index": 0, "first-timestamp": 0, "scenes": scenes()[:2]})
+    signal(service, "scenes", "r1", {"index": 1, "first-timestamp": 2, "scenes": scenes()[2:]})
+    signal(service, "close", "r1")
+    service.processes["r1"].work()
+    service.pool.step()
+    assert [batch["every-rule-decided"] for batch in published(service, "sensor/monitored-scene")] == [False, True]

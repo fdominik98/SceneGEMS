@@ -16,16 +16,26 @@ at that many times real time, or stopped watching) and start (the operator's Sta
 
 The run itself is subsystems/simulation/simulation_worker.py.
 
+A run that is judged while it runs has a series of its own in the worker node's monitoring subsystem, which its
+runner container requested (cluster/worker_node/jobs/pooled_series.py). When such a run's task ends, however
+it ends, the service cancels that series: a runner that was killed could not, and its series would hold a
+place of the monitoring pool until it idles out. For a series that is already closed the cancel changes nothing.
+
 The subsystem takes a second request, compare-repeats: how far the finished repeats of one run on one stack
 drift apart (cluster/worker_node/jobs/calibration_deviation_job.py). It is one task that starts no container,
 takes no signal but cancel, reports its progress and publishes its result on sensor/simulation_result too.
 """
 
-from typing import Any, Dict, List, Mapping
+import json
+import time
+import uuid
+from typing import Any, Dict, List, Mapping, Optional
 
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.cluster.worker_node.instance_scope import pooled_service_name
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, service_topic
 from scenegems_tool.messaging.mqtt_pool_service import PoolService
-from scenegems_tool.subsystems.pool.pool_task import PoolTask
+from scenegems_tool.subsystems.monitoring.monitoring_types import MONITORING_SERVICE_NAME, live_series_request_id
+from scenegems_tool.subsystems.pool.pool_task import PoolTask, TaskState
 from scenegems_tool.subsystems.simulation.simulation_types import (
     COMPARE_REPEATS_TASK,
     OBSERVE_SIGNAL,
@@ -38,7 +48,7 @@ from scenegems_tool.subsystems.simulation.simulation_types import (
     CompareRepeatsTask,
     RunSimulationTask,
 )
-from scenegems_tool.subsystems.simulation.simulation_worker import run_simulation_worker
+from scenegems_tool.subsystems.simulation.simulation_worker import run_simulation_worker, worker_node_number
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 
@@ -75,6 +85,31 @@ class MqttSimulationService(PoolService):
 
     def task_name_of(self, task: PoolTask) -> str:
         return COMPARE_REPEATS_TASK if isinstance(task, CompareRepeatsTask) else RUN_SIMULATION_TASK
+
+    @property
+    def monitoring_service(self) -> str:
+        """The name of the same worker node's monitoring subsystem: this subsystem's number, or the subsystem's own name beside a simulation subsystem on its own."""
+        numbered = self.name.rpartition("-")[2].isdigit()
+        return pooled_service_name("monitoring", worker_node_number(self.name)) if numbered else MONITORING_SERVICE_NAME
+
+    def _on_state(self, task: PoolTask, state: TaskState, reason: Optional[str]) -> None:
+        super()._on_state(task, state, reason)
+        if state.is_final and isinstance(task, RunSimulationTask) and task.payload.get("monitor") == "live":
+            self._cancel_series(task)
+
+    def _cancel_series(self, task: RunSimulationTask) -> None:
+        """Tell the monitoring subsystem to end the series of the run, in case its runner could not."""
+        service = self.monitoring_service
+        command = {
+            "stamp": time.time(),
+            "task_sender": self.name,
+            "task-uuid": str(uuid.uuid4()),
+            "command": "signal-task",
+            "execution-unit": service,
+            "signal": {"name": "cancel", "request-id": live_series_request_id(task.request_id)},
+        }
+        if self.is_connected:
+            self.client.publish(f"{service_topic(self.mqtt_connection.topic_root, service)}/exec/command", json.dumps(command), qos=1)
 
     def stream_message(self, task: PoolTask, stream: str, payload: Mapping[str, Any], final: bool) -> Dict[str, Any]:
         return {**payload, "final": bool(final)}

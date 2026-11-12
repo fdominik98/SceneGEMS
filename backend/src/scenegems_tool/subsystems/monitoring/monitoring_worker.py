@@ -3,7 +3,9 @@
 A monitor-scenario request names the scenario, its time step and its COLREGS constants; the scenes follow as
 scenes signals, batch by batch in time order, and a close signal ends the series (monitoring_types.py). The
 worker keeps the series' monitor and its rule outcomes from the first scene to the last, so a rule is judged
-over the whole series. For every batch it emits how far the series is (and the monitored frames, on request);
+over the whole series. For every batch it emits how far the series is, whether every rule has its final
+outcome, and the monitored frames when the request or the batch itself asks for them (a batch's own "frames"
+wins: a run that is judged while it runs asks only for the batches somebody watches);
 once every rule has its final outcome it says so in its progress, so a requester that produces the scenes may
 stop; at the close it emits the verdict.
 
@@ -56,15 +58,16 @@ class SeriesMonitor:
     def every_rule_decided(self) -> bool:
         return self._outcomes.every_rule_decided()
 
-    def add(self, scenes: Sequence[ConcreteScene]) -> List[Dict[str, Any]]:
-        """Judge the next scenes of the series; returns their monitored frames when the series was asked for frames."""
+    def add(self, scenes: Sequence[ConcreteScene], frames_wanted: Optional[bool] = None) -> List[Dict[str, Any]]:
+        """Judge the next scenes of the series; returns their monitored frames when they are wanted: frames_wanted, or what the series was asked for when None."""
+        include_frames = self.include_frames if frames_wanted is None else frames_wanted
         frames: List[Dict[str, Any]] = []
         for scene in scenes:
             self._runtime.add_task(MonitoringTask(scene=scene, scene_timestamp=self.next_timestamp, time_step=self.time_step))
             self.scenes += 1
             for monitored_scene in self._runtime.monitor_current_tasks():
                 self._outcomes.add(monitored_scene)
-                if self.include_frames:
+                if include_frames:
                     frames.append(serialize_monitored_frame(scenario_id=self.scenario_id, monitored_scene=monitored_scene, timestamp=monitored_scene.timestamp, time_step=self.time_step))
         return frames
 
@@ -93,9 +96,11 @@ class _FollowedSeries:
         first_timestamp = int(data.get("first-timestamp", monitor.next_timestamp))
         if first_timestamp != monitor.next_timestamp:
             raise SeriesError(f"batch {index} starts at {first_timestamp}, but the series is at {monitor.next_timestamp}")
-        frames = monitor.add([ConcreteScene.from_dict(scene) for scene in data["scenes"]])
+        frames_wanted = data.get("frames")
+        frames = monitor.add([ConcreteScene.from_dict(scene) for scene in data["scenes"]], None if frames_wanted is None else bool(frames_wanted))
         self.batches += 1
-        self.channel.emit(MONITORED_SCENE_STREAM, {"index": index, "monitored-scenes": monitor.monitored_scenes, "monitored-frames": frames})
+        message = {"index": index, "monitored-scenes": monitor.monitored_scenes, "every-rule-decided": bool(monitor.every_rule_decided), "monitored-frames": frames}
+        self.channel.emit(MONITORED_SCENE_STREAM, message)
         if not self.stop_advised and monitor.every_rule_decided:
             self.stop_advised = True
             self.channel.progress("every rule is decided", None, {"stop-advised": True, "decided-at": monitor.next_timestamp - monitor.time_step})

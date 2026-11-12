@@ -184,6 +184,7 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, payload
         trajectories,
         payload.geofence.to_geofence(),
         attended=True,
+        monitored=payload.monitor == SimulationMonitor.LIVE,
         mqtt_connection=None if payload.broker is None else payload.broker.connection(),
         service_name=worker_node.job_scope(job).instance_id,  # simulation-subsystem-<job>: the runner's name on the broker
     )
@@ -329,17 +330,18 @@ def _run_attended(
 ) -> JobResultData:
     """Wait for the Start, run the driver and describe what it observed. readiness is that of a run with a real vessel, None for a lockstep run."""
     from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-    from scenegems_tool.gateway.serialization import serialize_frame, serialize_monitored_frame
+    from scenegems_tool.gateway.serialization import serialize_frame
 
     dt = float(trajectories.time_step)
     time_step = int(dt) if dt.is_integer() else dt
     steps = int(round(trajectories.timespan / dt))
     actors = tuple(trajectories.initial_scene.actors)
-    monitor = LiveMonitor(actors, int(dt), payload.colregs_constraints_content, early_stop=False) if payload.monitor == SimulationMonitor.LIVE else None
+    monitor = LiveMonitor(actors, int(dt), payload.colregs_constraints_content, early_stop=False, job=job) if payload.monitor == SimulationMonitor.LIVE else None
 
     def frame(index: int, scene) -> Dict[str, Any]:
-        if monitor is not None and monitor.last_monitored_index == index:
-            return serialize_monitored_frame(scenario_id=job.job_id, monitored_scene=monitor.last_monitored, timestamp=index * time_step, time_step=time_step)
+        judged = monitor.frame_of(index) if monitor is not None else None
+        if judged is not None:
+            return judged
         return serialize_frame(scenario_id=job.job_id, scene=scene, timestamp=index * time_step, time_step=time_step)
 
     # Before the Start an observer sees where the vessels are: the scene the run starts from, or where their agents report them

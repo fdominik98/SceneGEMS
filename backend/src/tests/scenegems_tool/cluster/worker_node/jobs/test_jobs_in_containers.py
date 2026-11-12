@@ -195,13 +195,24 @@ def test_the_design_space_exploration_pool_explores_and_refuses_what_does_not_pa
     assert any(text.startswith("finished") for text, _ in messages) and messages[-1][1] == 1.0
 
 
-def test_a_kinematic_run_with_the_live_monitor_runs_in_a_container(broker, control_node_id, make_job, head_on_trajectories):
-    """Needs the simulation subsystem image built from Phase 4 (P4.2) code."""
-    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 1})
+def test_a_kinematic_run_with_the_live_monitor_is_judged_by_the_monitoring_pool(broker, control_node_id, make_job, head_on_trajectories):
+    """Needs the simulation and monitoring subsystem images built from the pooled subsystems code.
+
+    The run's runner container asks the worker node's monitoring subsystem to judge its scenes, so that pool has to be
+    up, as the daemon has it up for a worker node with the monitoring component.
+    """
+    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 1, JobType.MONITORING_POST_HOC: 1})
     job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False, "monitor": "live"})
-    result = run_job(job, worker_node, RecordingReport())
+    in_process = SeriesMonitor("reference", head_on_trajectories.time_step)
+    in_process.add(head_on_trajectories.scene_list)
+    try:
+        worker_node.pools.start([Subsystem.MONITORING])
+        result = run_job(job, worker_node, RecordingReport())
+    finally:
+        worker_node.shutdown()
     assert result["state_digest"] == run_kinematic_replay(head_on_trajectories).state_digest()
     assert not result["monitor"]["passed"] and result["monitor"]["stopped_early_at"] is None
+    assert {key: result["monitor"][key] for key in ("rules", "failed_rules", "passed")} == json.loads(json.dumps({key: in_process.summary()[key] for key in ("rules", "failed_rules", "passed")}))
 
 
 def test_calibration_runs_on_the_simulation_pool(broker, control_node_id, make_job, head_on_trajectories):

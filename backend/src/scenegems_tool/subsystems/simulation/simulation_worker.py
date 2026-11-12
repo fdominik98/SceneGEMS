@@ -35,7 +35,7 @@ from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobResultData
 from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
+from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, service_name_from_environment
 from scenegems_tool.subsystems.simulation.simulation_types import (
     BROKER_NETWORK_VARIABLE,
     CONTROL_NODE_VARIABLE,
@@ -43,6 +43,7 @@ from scenegems_tool.subsystems.simulation.simulation_types import (
     SIMULATION_FRAMES_STREAM,
     SIMULATION_LOG_STREAM,
     SIMULATION_RESULT_STREAM,
+    SIMULATION_SERVICE_NAME,
     START_SIGNAL,
     WORKER_NODE_VARIABLE,
     CompareRepeatsTask,
@@ -55,14 +56,24 @@ LOG_BATCH_LINES = 200  # at most this many lines per log message
 RunStack = Callable[[JobSpec, WorkerNodeContext, Any, Any], JobResultData]
 
 
+def worker_node_number(service_name: str) -> int:
+    """The number the control node gave the worker node, from the name its simulation subsystem was started under (simulation-subsystem-3); 1 for a subsystem on its own."""
+    _, _, number = service_name.rpartition("-")
+    return int(number) if number.isdigit() and int(number) >= 1 else 1
+
+
 def context_from_environment() -> WorkerNodeContext:
-    """What a runner needs of the worker node, as the subsystem's launcher configured the container (launchers/pooled/simulation_pool.py)."""
+    """What a runner needs of the worker node, as the subsystem's launcher configured the container (launchers/pooled/simulation_pool.py).
+
+    The worker node's number names its other subsystems on the broker: a run that is judged while it runs is told the monitoring subsystem by it.
+    """
     return WorkerNodeContext(
         control_node_id=os.environ[CONTROL_NODE_VARIABLE],
         worker_node_id=os.environ[WORKER_NODE_VARIABLE],
         mqtt_connection=MQttConnectionInfo.from_environment(),
         reference_geofence=geofence_from_environment(),
         broker_network=os.environ.get(BROKER_NETWORK_VARIABLE, "").strip() or None,
+        instance_number=worker_node_number(service_name_from_environment(SIMULATION_SERVICE_NAME)),
     )
 
 

@@ -153,6 +153,12 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
         monkeypatch.setenv(variable, value)
     context = context_from_environment()
     assert (context.control_node_id, context.worker_node_id, context.broker_network) == ("lab", "bench", "scenegems-lab-bench")
+    assert context.instance_number == 1, "a subsystem started on its own"
+    monkeypatch.setenv("MQTT_SERVICE_NAME", "simulation-subsystem-3")
+    numbered = context_from_environment()
+    from scenegems_tool.cluster.worker_node.subsystem import Subsystem
+
+    assert numbered.instance_number == 3 and numbered.pools.service_name(Subsystem.MONITORING) == "monitoring-subsystem-3", "the worker node's other subsystems by its number"
     assert (context.mqtt_connection.agent_broker, context.mqtt_connection.topic_root, context.reference_geofence.radius_meters) == ("broker.lab", "scenegems", 2000.0)
     monkeypatch.setenv("SCENEGEMS_DOCKER_NETWORK", " ")
     assert context_from_environment().broker_network is None, "the default network of the stack builder"
@@ -225,3 +231,8 @@ def test_a_cancelled_comparison_emits_nothing():
     channel.cancelled = True
     simulation_worker.compare_repeats(comparison(valid_payload(JobType.CALIBRATION_DEVIATION)), channel)
     assert channel.emitted == []
+
+
+def test_the_worker_nodes_number_is_the_end_of_the_subsystems_name():
+    assert simulation_worker.worker_node_number("simulation-subsystem-3") == 3 and simulation_worker.worker_node_number("simulation-subsystem-12") == 12
+    assert simulation_worker.worker_node_number("simulation-subsystem") == 1 and simulation_worker.worker_node_number("simulation-subsystem-0") == 1

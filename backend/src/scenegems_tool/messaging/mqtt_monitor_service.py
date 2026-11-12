@@ -7,7 +7,8 @@ waits in the queue until the earlier is over; series of different scenarios run 
 pool has places.
 
 A task publishes on sensor/monitored-scene one message per judged batch: the batch's index, how many scenes
-of the series are judged, and the monitored frames when the request asked for them. Once every rule has its
+of the series are judged, whether every rule has its final outcome (every-rule-decided), and the monitored
+frames when the request, or that batch's scenes signal, asked for them. Once every rule has its
 final outcome it says so on exec/feedback (detail.stop-advised). At the close it publishes the verdict on
 sensor/monitor_result: the series' size and the rule outcomes (subsystems/monitoring/rule_outcomes.py).
 """

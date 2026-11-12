@@ -168,3 +168,30 @@ def test_the_pools_worker_judges_the_series_of_its_task(monkeypatch):
     monkeypatch.setattr(monitoring_worker, "monitor_series", lambda task, channel: seen.append((task.request_id, channel)))
     monitoring_worker.run_monitoring_worker(task(), "channel")
     assert seen == [("r1", "channel")]
+
+
+def test_a_batch_that_asks_for_its_frames_gets_them_and_one_that_declines_does_not():
+    asking = TaskSignal(SCENES_SIGNAL, {"index": 0, "first-timestamp": 0, "scenes": scenes()[:3], "frames": True})
+    channel = run([asking, batch(1, 3, STEPS), close(2)])
+    first, second = [payload for payload, _ in channel.of(MONITORED_SCENE_STREAM)]
+    assert [frame["timestamp"] for frame in first["monitored-frames"]] == [0, 1, 2] and second["monitored-frames"] == []
+    declining = TaskSignal(SCENES_SIGNAL, {"index": 0, "first-timestamp": 0, "scenes": scenes()[:3], "frames": False})
+    channel = run([declining, batch(1, 3, STEPS), close(2)], include_frames=True)
+    first, second = [payload for payload, _ in channel.of(MONITORED_SCENE_STREAM)]
+    assert first["monitored-frames"] == [] and len(second["monitored-frames"]) == STEPS - 3, "the request's choice holds for a batch that says nothing"
+
+
+def test_every_batch_message_says_whether_every_rule_is_decided(monkeypatch):
+    monkeypatch.setattr(RuleOutcomes, "every_rule_decided", lambda self: self.monitored_scenes >= 5)
+    channel = run([batch(0, 0, 3), batch(1, 3, 5), batch(2, 5, STEPS), close(3)])
+    assert [payload["every-rule-decided"] for payload, _ in channel.of(MONITORED_SCENE_STREAM)] == [False, True, True]
+
+
+def test_the_monitoring_subsystem_is_named_to_a_requester_in_one_variable():
+    from scenegems_tool.subsystems.monitoring.monitoring_types import live_series_request_id, monitoring_pool_environment, monitoring_pool_from_environment
+
+    environment = monitoring_pool_environment("monitoring-subsystem-3", {"MQTT_BROKER": "broker.lab", "MQTT_PORT": "1883"}, (57.7, 11.9, 2000.0))
+    assert set(environment) == {"SCENEGEMS_MONITORING_POOL"}
+    assert monitoring_pool_from_environment(environment) == ("monitoring-subsystem-3", {"MQTT_BROKER": "broker.lab", "MQTT_PORT": "1883"}, (57.7, 11.9, 2000.0))
+    assert monitoring_pool_from_environment({}) is None and monitoring_pool_from_environment({"SCENEGEMS_MONITORING_POOL": " "}) is None
+    assert live_series_request_id("job-1-2") == "job-1-2-live"

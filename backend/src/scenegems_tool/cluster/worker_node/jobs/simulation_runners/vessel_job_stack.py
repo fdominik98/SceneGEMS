@@ -12,6 +12,10 @@ an ArduAgent beside its SITL, and those and the runner are given the job's broke
 broker they join the network the worker node's pooled services reach it on; an external broker is
 dialled from the stack's own network.
 
+A run that is judged while it runs (monitor live) has its scenes judged by the worker node's monitoring
+subsystem: its runner is told which one and joins the network the cluster's broker is reached on, whatever
+broker its vessels use (jobs/pooled_series.py). The other containers of such a stack still reach nothing else.
+
 The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the
 runtime assets volume, so a stack is built where that volume is mounted at
 RUNTIME_ASSETS_FOLDER: the container of the worker node's simulation subsystem, whose tasks
@@ -75,6 +79,7 @@ def build_vessel_job_stack(
     geofence: "Geofence",
     *,
     attended: bool = False,
+    monitored: bool = False,
     mqtt_connection: Optional["MQttConnectionInfo"] = None,
     service_name: Optional[str] = None,
 ) -> JobStack:
@@ -83,11 +88,15 @@ def build_vessel_job_stack(
     attended: an operator is beside the run, so the stacks that need one are allowed (Mission Planner), and the ground
     control station port of each such vessel's MAVProxy stays published.
 
+    monitored: the run is judged while it runs, so its runner is a requester of the worker node's monitoring subsystem
+    on the cluster's broker.
+
     mqtt_connection: the broker of a run with a real vessel, when it is not the cluster's (an external one such as
     WARA-PS's). service_name: the name the runner has on that broker. Only an instance with a real vessel talks to a
     broker at all, so only its runner gets the connection.
     """
     from scenegems_tool.messaging.mqtt_client import SERVICE_NAME_VARIABLE, mqtt_container_environment
+    from scenegems_tool.subsystems.monitoring.monitoring_types import monitoring_pool_environment
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
     from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
     from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
@@ -108,14 +117,20 @@ def build_vessel_job_stack(
         environment = {"PYTHONUNBUFFERED": "1", **mqtt_container_environment(mqtt_connection or worker_node.mqtt_connection)}
         if service_name:
             environment[SERVICE_NAME_VARIABLE] = service_name
+    if monitored:
+        area = worker_node.reference_geofence
+        cluster_broker = mqtt_container_environment(worker_node.mqtt_connection)
+        environment = {"PYTHONUNBUFFERED": "1"} if environment is None else environment
+        environment.update(monitoring_pool_environment(worker_node.pools.service_name(Subsystem.MONITORING), cluster_broker, (area.latitude, area.longitude, area.radius_meters)))
     services = {
         **stack_compose["services"],
         RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SIMULATION), networks=[STACK_NETWORK], depends_on=stack_services, environment=environment),
     }
-    if on_broker and mqtt_connection is None:
-        # The cluster's broker is reached on the network the worker node's pooled services reach it on
+    # The cluster's broker is reached on the network the worker node's pooled services reach it on
+    on_cluster_broker = [RUNNER_SERVICE, *arduagent_services(instance)] if on_broker and mqtt_connection is None else [RUNNER_SERVICE] if monitored else []
+    if on_cluster_broker:
         networks.update(scenegems_broker_network_definition(worker_node.broker_network))
-        for name in (RUNNER_SERVICE, *arduagent_services(instance)):
+        for name in on_cluster_broker:
             attach_broker_network_to_service(services[name])
     published = [service for service, _ in ground_control_ports(instance).values()] if attended else []
     return JobStack(scope, services, networks=networks, volumes=stack_compose.get("volumes"), published=published)

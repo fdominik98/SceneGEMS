@@ -175,3 +175,47 @@ def test_a_comparison_without_its_repeats_is_refused(payload):
     compare(service, "r1", payload)
     [response] = published(service, "exec/response")
     assert response["response"] == "failed" and "lists the repeats' trajectories" in response["fail-reason"] and service.current_tasks == []
+
+
+# A run that is judged while it runs: its series in the monitoring subsystem ends with the run
+
+
+def monitoring_commands(service):
+    return [(topic, message) for topic, message in service.client.published if "monitoring-subsystem" in topic]
+
+
+@pytest.mark.parametrize("how", ["finished", "failed", "aborted"])
+def test_the_series_of_a_judged_run_is_cancelled_when_the_runs_task_ends_however_it_ends(how):
+    service = service_of()
+    start(service, "r1", payload={**PAYLOAD, "monitor": "live"})
+    service.pool.step()
+    assert monitoring_commands(service) == [], "not while the run runs"
+    if how == "aborted":
+        signal(service, "cancel", "r1")
+    if how == "failed":
+        service.processes["r1"].die()
+    else:
+        service.processes["r1"].work()
+    service.pool.step()
+    assert states(service) == {"r1": how}
+    [(topic, command)] = monitoring_commands(service)
+    assert topic == "waraps/service/virtual/real/monitoring-subsystem/exec/command"
+    assert (command["command"], command["execution-unit"], command["signal"]) == ("signal-task", "monitoring-subsystem", {"name": "cancel", "request-id": "r1-live"})
+
+
+def test_a_run_without_a_monitor_and_a_comparison_have_no_series_to_cancel():
+    service = service_of(max_workers=2)
+    start(service, "r1")
+    compare(service, "r2", {"trajectories": [{}, {}], "reference": "head_on", "monitor": "live"})
+    service.pool.step()
+    for request_id in ("r1", "r2"):
+        service.processes[request_id].die()
+    service.pool.step()
+    assert states(service) == {"r1": "failed", "r2": "failed"} and monitoring_commands(service) == []
+
+
+def test_the_monitoring_subsystem_of_a_numbered_worker_node_has_its_number():
+    from scenegems_tool.messaging.mqtt_simulation_service import MqttSimulationService as Service
+
+    numbered = offline(Service(CONNECTION, GEOFENCE, 1, name="simulation-subsystem-3", pool_factory=manual_pool_factory({})))
+    assert numbered.monitoring_service == "monitoring-subsystem-3" and service_of().monitoring_service == "monitoring-subsystem"

@@ -51,6 +51,30 @@ def test_the_stack_is_the_simulator_an_asv_system_container_per_vessel_and_the_r
     assert "volumes" not in stack.compose, "the runner sends every container what it needs"
 
 
+def test_the_runner_of_a_judged_run_is_told_the_monitoring_subsystem_and_reaches_the_clusters_broker(instances_folder, worker_node, make_job, head_on_trajectories):
+    """Its scenes are judged by the worker node's monitoring pool; the simulator and the ASV systems still reach nothing but the stack."""
+    from scenegems_tool.subsystems.monitoring.monitoring_types import monitoring_pool_from_environment
+
+    worker_node.set_instance_number(3)
+    worker_node.broker_network = "scenegems-m1-n1"
+    _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, monitor="live")
+    services = stack.compose["services"]
+    runner = services[RUNNER_SERVICE]
+    service, broker, geofence = monitoring_pool_from_environment(runner["environment"])
+    assert service == "monitoring-subsystem-3" and broker["MQTT_BROKER"] == "broker" and geofence == (57.7, 11.9, 2000.0)
+    assert runner["environment"]["PYTHONUNBUFFERED"] == "1"
+    assert runner["networks"] == [STACK_NETWORK, "scenegems_broker"]
+    assert stack.compose["networks"]["scenegems_broker"] == {"external": True, "name": "scenegems-m1-n1"}
+    for key, other in services.items():
+        if key != RUNNER_SERVICE:
+            assert other["networks"] == [STACK_NETWORK] and "SCENEGEMS_MONITORING_POOL" not in other.get("environment", {})
+
+
+def test_the_runner_of_a_run_without_a_monitor_is_told_of_none(instances_folder, worker_node, make_job, head_on_trajectories):
+    _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories)
+    assert "SCENEGEMS_MONITORING_POOL" not in stack.compose["services"][RUNNER_SERVICE]["environment"]
+
+
 def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1)
     services = stack.compose["services"]
