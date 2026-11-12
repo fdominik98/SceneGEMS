@@ -1,13 +1,14 @@
 # One worker node instance of one control node: the worker node daemon (scenegems_tool.cluster.worker_node.daemon) in its
-# container. It holds the Docker socket and starts every job in a subsystem container next to it, in this
-# compose project: Docker lists the daemon, the pooled services and the containers of every job as one group.
+# container. It holds the Docker socket and starts one long-lived container per subsystem the worker node offers
+# next to it, in this compose project; the simulation subsystem, which gets the socket too, starts the vessel stack
+# of each run there. Docker lists the daemon, the subsystems and the containers of every run as one group.
 # The deployment tool installs this file with .env into one folder per worker node
 # (scenegems_tool.cluster.release.roles) and runs `docker compose up -d` there.
 #
 # The values come from .env (template: deploy/worker_node/.env.example). The project and the network are named
 # scenegems-<control node id>-<worker node name>, and the daemon's container and the volumes start with that name, so one
 # machine can run worker nodes for several control nodes, and several worker nodes of one control node, side by side.
-# The containers the daemon starts are not in this file: `up --remove-orphans` would remove the containers of
+# The containers the daemon and the simulation subsystem start are not in this file: `up --remove-orphans` would remove the containers of
 # running jobs, and `down --remove-orphans` removes a worker node together with everything it started.
 # The worker node needs no control node to start: it dials SCENEGEMS_CONTROL_NODE_URL and retries until the control node is up.
 # Control node and worker nodes trust the VPN, so there is nothing to pair. The cache of downloaded artifacts
@@ -48,7 +49,7 @@ services:
       DESIGN_SPACE_EXPLORATION_IMAGE: ${DESIGN_SPACE_EXPLORATION_IMAGE:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # Generated compose files and stack files of the worker node's instances; SITL and Gazebo mount it too.
+      # Generated compose files and stack files of the worker node's instances; the simulation subsystem, SITL and Gazebo mount it too.
       - runtime:/app/assets/runtime_assets
       - state:/var/lib/scenegems-worker-node
     networks:
@@ -56,7 +57,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-# Pooled services join this network; it is removed with the worker node.
+# The subsystems join this network, and so do the runners of runs that reach the cluster's broker; it is removed with the worker node.
 networks:
   worker-node:
     name: scenegems-${SCENEGEMS_CONTROL_NODE_ID}-${SCENEGEMS_WORKER_NODE_NAME}

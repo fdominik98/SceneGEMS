@@ -75,9 +75,9 @@ _UNIT_BY_FIELD = {"exact_up_to_speedup": "x", "max_speedup": "x"}
 
 CLUSTER_JOB_FACT = "cluster_job"  # the job and runner that run an available combination on a worker node ("simulation, runner kinematic")
 _CLUSTER_JOB_NOTES = {
-    "job": "campaigns and workbench simulations run it as this job, with this runner, on a worker node",
-    "none": "no unattended runner runs it yet, so campaigns cannot use it; the workbench runs it as an attended simulation job, which waits for the operator's Start",
-    "workbench_only": "workbench only: an operator or a physical vessel is in the loop, so it runs as an attended simulation job, which waits for the operator's Start",
+    "job": "campaigns and workbench simulations run it as this job, with this runner: a run of the worker node's simulation subsystem",
+    "none": "no unattended runner runs it yet, so campaigns cannot use it; the workbench runs it as an attended simulation job: a run of the simulation subsystem that waits for the operator's Start",
+    "workbench_only": "workbench only: an operator or a physical vessel is in the loop, so it runs as an attended simulation job: a run of the simulation subsystem that waits for the operator's Start",
 }
 
 
@@ -382,6 +382,10 @@ def vessel_stack_document(registry: Optional[AdapterRegistry] = None, resolver: 
         notes=(
             "The capabilities of a path are the weakest link over its three layers and two adapters. Values marked measured come from vessel_stack/registry/measured_capabilities.yaml.",
             "A stack runs in campaigns only when an unattended runner of the simulation job runs it on a worker node (Cluster job); the other available stacks run from the workbench as attended simulation jobs, which wait for the operator's Start. Workbench only stacks (Mission Planner, real vessels) never run in a campaign: an operator or a physical vessel is in the loop.",
+            "How a run is delivered: a simulation job is one run-simulation request to the worker node's simulation subsystem, a long-lived container that runs as many runs at once as the "
+            "worker node has simulation slots. The request becomes one task, which builds the stack of this run, starts its containers (the simulator, per vessel a controller and an ASV system, and the runner that owns the clock), runs it and removes the stack. While it runs it takes the signals observe, start and cancel, and it publishes the frames of an observed run, its log lines, its status and at the end its result. The request's seed is the run seed.",
+            "A run that is judged while it runs sends its scenes to the worker node's monitoring subsystem and takes a monitoring slot beside its simulation slot (see Monitoring). "
+            "The comparison of a run's repeats (calibration) is a second kind of task of the simulation subsystem and starts no container.",
             "Ports that adapters connect: " + "; ".join(_port_members()) + ".",
         ),
         role=ROLE_STEP,

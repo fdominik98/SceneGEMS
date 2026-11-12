@@ -1,10 +1,11 @@
 # Runtime dependencies of scenegems-worker-node (see deploy/images/worker_node/Dockerfile): the worker node daemon
-# (scenegems_tool.cluster.worker_node.daemon) and the worker node side of every job type. Jobs themselves run
-# in the subsystem images, so simulation, generation and monitoring libraries are not needed here.
+# (scenegems_tool.cluster.worker_node.daemon) and the worker node side of every job type: a request to the
+# subsystem that runs it. The work itself runs in the subsystem images, so simulation, generation and
+# monitoring libraries are not needed here.
 # Cluster protocol, job payloads and the control WebSocket
 pydantic==2.13.4
 websockets==16.0
-# Broker clients of the pooled services
+# Broker clients of the subsystems' pools
 paho-mqtt==2.1.0
 pyyaml==6.0.3
 # Payload checks (trajectories, functional scenarios) and the generated SITL and Gazebo stacks

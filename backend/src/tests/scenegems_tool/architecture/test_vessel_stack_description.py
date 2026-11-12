@@ -127,6 +127,8 @@ def test_an_available_stack_names_the_cluster_job_that_runs_it(document):
     assert not any(item.key == CLUSTER_JOB_FACT for item in _combination(document, "replay", "custom", "kinematic").facts), "a stack that is not available names none"
     assert any("only when an unattended runner of the simulation job runs it" in note and "attended simulation jobs" in note for note in document.notes)
     assert not any("live session" in note for note in document.notes)
+    assert any("run-simulation request" in note and "simulation slots" in note and "observe, start and cancel" in note for note in document.notes), "how a run is delivered"
+    assert any("monitoring slot" in note and "calibration" in note for note in document.notes)
 
 
 def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
