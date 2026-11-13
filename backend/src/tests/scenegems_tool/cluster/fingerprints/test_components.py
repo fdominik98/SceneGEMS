@@ -37,6 +37,7 @@ from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 MAVPROXY_IMAGE = "scenegems-mavproxy:latest"
 ARDUAGENT_IMAGE = "scenegems-arduagent:latest"
 USV_NAVIGATION_IMAGE = "scenegems-usv-navigation:latest"
+MOOS_IVP_IMAGE = "scenegems-moos-ivp:latest"
 
 
 def _stack(asv_system: AsvSystemId, control_layer: ControlLayerId, simulation_layer: SimulationLayerId) -> VesselStackConfig:
@@ -51,6 +52,7 @@ def test_the_catalog_lists_the_campaign_layers_and_the_subsystems():
     assert COMPONENTS == (
         "asv_system/replay",
         "asv_system/usv_navigation",
+        "asv_system/moos_ivp",
         "asv_system/mission_planner",
         "asv_system/on_board",
         "control_layer/none",
@@ -89,6 +91,7 @@ def test_the_layer_images_come_from_the_container_specs():
     assert images["simulation_layer/kinematic"] == images["simulation_layer/ardupilot_sim"] == (SIMULATION_IMAGE,), "a simulation layer adds the runner"
     assert images["asv_system/replay"] == images["control_layer/custom"] == (SIMULATION_IMAGE,), "the replay and custom controller containers start from the simulation subsystem image"
     assert images["asv_system/usv_navigation"] == (USV_NAVIGATION_IMAGE,), "USV Navigation has an image of its own"
+    assert images["asv_system/moos_ivp"] == (MOOS_IVP_IMAGE,), "and so has MOOS-IvP"
     assert images["control_layer/none"] == (), "no controller, no container"
     assert images["asv_system/mission_planner"] == (MAVPROXY_IMAGE,), "the ground control station reaches the vessel through MAVProxy"
     attended_only = {"asv_system/mission_planner", "asv_system/on_board", "control_layer/real_vessel", "simulation_layer/real_vessel"}
@@ -157,11 +160,21 @@ def test_every_campaign_stack_has_a_runner():
     assert unrun_campaign_stacks() == ()
 
 
+def test_moos_ivp_has_the_runners_usv_navigation_has():
+    for control_layer, simulation_layer, runner in (
+        (ControlLayerId.NONE, SimulationLayerId.KINEMATIC, SimulationRunner.KINEMATIC),
+        (ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM, SimulationRunner.ARDUPILOT),
+        (ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO, SimulationRunner.ARDUPILOT),
+        (ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO, SimulationRunner.GAZEBO_CUSTOM),
+    ):
+        assert runner_of_stack(_stack(AsvSystemId.MOOS_IVP, control_layer, simulation_layer)) == runner == runner_of_stack(_stack(AsvSystemId.USV_NAVIGATION, control_layer, simulation_layer))
+
+
 def test_the_custom_controller_needs_no_sitl():
     """A worker node with the Gazebo layer and the custom control layer, and no SITL, runs every stack of the gazebo_custom runner."""
     components = stack_components(RUNNER_STACKS[SimulationRunner.GAZEBO_CUSTOM])
-    assert components == ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo")
-    assert images_of(components) == {GAZEBO_IMAGE, SIMULATION_IMAGE, USV_NAVIGATION_IMAGE}
+    assert components == ("asv_system/replay", "asv_system/usv_navigation", "asv_system/moos_ivp", "control_layer/custom", "simulation_layer/gazebo")
+    assert images_of(components) == {GAZEBO_IMAGE, SIMULATION_IMAGE, USV_NAVIGATION_IMAGE, MOOS_IVP_IMAGE}
     assert SITL_IMAGE not in images_of(components)
 
 

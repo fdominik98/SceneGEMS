@@ -40,6 +40,7 @@ Ticking several values of a filter shows the presets with any of them (Steps and
 | Simulate saved trajectories: kinematic and ArduPilot SITL | Simulation only; pick the trajectories on the Input page |
 | USV Navigation on straight trajectories with low TCPA | One case per two-vessel FEC without obstacles, low TCPA enforced and straight trajectories, USV Navigation steering the own ship, with the post hoc monitor after every step |
 | Design space exploration: every three-vessel FEC, one case each | Explores `TS = 2, StaticObstacle = 0` with the control node's default specification, then scene generation, trajectory generation and a kinematic replay with the post hoc monitor, one case of each FEC found |
+| MOOS-IvP against the planned trajectories | Two runs per two-vessel case: the planned trajectories replayed, and MOOS-IvP's helm steering the own ship with its COLREGS behaviour. Needs a worker node with the MOOS-IvP layer |
 
 **Save this draft as a preset** stores the current draft on the control node under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
@@ -67,7 +68,7 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Design space exploration | design space exploration is a step | The specification, the scope, the maximum number of FECs, the timeout and, when later steps run, the cases and the failure budget of each explored FEC |
 | Scene generation | scene generation is a step | The monitor after scene generation, the scene generation timeout and the low TCPA option |
 | Trajectory generation | trajectory generation is a step | The trajectory generator and its parameters, and the monitor after trajectory generation |
-| Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay or USV Navigation on the own ship), environment, seed, repeats and monitor |
+| Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay, or with USV Navigation or MOOS-IvP on the own ship), environment, seed, repeats and monitor |
 | Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
 | Policy | always | Retention, frames, the base seed and stop conditions |
 | Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the control node's check of it and the buttons that create the campaign |

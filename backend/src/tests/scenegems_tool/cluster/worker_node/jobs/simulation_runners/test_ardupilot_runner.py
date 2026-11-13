@@ -107,15 +107,42 @@ def test_the_payloads_mode_names_its_vessel_stacks(make_job, head_on_trajectorie
         "control_layer/ardupilot",
         f"simulation_layer/{layer}",
     )
+    assert payload_components(JobType.SIMULATION, {**payload_data, "mode": "moos_ivp"}) == (
+        "asv_system/replay",
+        "asv_system/moos_ivp",
+        "control_layer/ardupilot",
+        f"simulation_layer/{layer}",
+    )
 
 
-@pytest.mark.parametrize("fields", [{"own_ship_id": 1}, {"usv_navigation": {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}}])
-def test_closed_loop_options_need_mode_usv_navigation(make_job, head_on_trajectories, fields):
+@pytest.mark.parametrize(
+    "fields, message, mode",
+    [
+        ({"own_ship_id": 1}, "own_ship_id applies only to the modes usv_navigation and moos_ivp", "usv_navigation"),
+        ({"own_ship_id": 1}, "own_ship_id applies only to the modes usv_navigation and moos_ivp", "moos_ivp"),
+        ({"usv_navigation": {"goal": [3000.0, 0.0], "speed": 8.0, "safety_radius": 120.0, "control_horizon": 60.0}}, "usv_navigation parameters apply only to mode usv_navigation", "usv_navigation"),
+        ({"moos_ivp": {"avoidance": "cpa"}}, "moos_ivp parameters apply only to mode moos_ivp", "moos_ivp"),
+    ],
+)
+def test_closed_loop_options_need_their_mode(make_job, head_on_trajectories, fields, message, mode):
     payload_data = {"runner": "ardupilot", "simulation_layer": "gazebo", "trajectories": head_on_trajectories.to_dict(), "geofence": GEOFENCE, **fields}
     with pytest.raises(JobFailed) as failure:
         parse_payload(SimulationPayload, make_job(JobType.SIMULATION, payload_data))
-    assert "apply only to mode usv_navigation" in str(failure.value)
-    assert parse_payload(SimulationPayload, make_job(JobType.SIMULATION, {**payload_data, "mode": "usv_navigation"})).root.mode.value == "usv_navigation"
+    assert message in str(failure.value)
+    assert parse_payload(SimulationPayload, make_job(JobType.SIMULATION, {**payload_data, "mode": mode})).root.mode.value == mode
+
+
+def test_the_parameters_of_one_software_are_refused_in_the_mode_of_the_other(make_job, head_on_trajectories):
+    payload_data = {
+        "runner": "ardupilot",
+        "simulation_layer": "gazebo",
+        "trajectories": head_on_trajectories.to_dict(),
+        "geofence": GEOFENCE,
+        "mode": "usv_navigation",
+        "moos_ivp": {"avoidance": "cpa"},
+    }
+    with pytest.raises(JobFailed, match="moos_ivp parameters apply only to mode moos_ivp"):
+        parse_payload(SimulationPayload, make_job(JobType.SIMULATION, payload_data))
 
 
 def test_unavailable_stack_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -150,8 +177,8 @@ def fake_sitl(monkeypatch, head_on_trajectories):
     vessels = head_on_trajectories.initial_scene.vessels
     columns = FakeSitlColumns({vessel.id: head_on_trajectories.state_list(vessel) for vessel in vessels})
 
-    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None, usv_navigation_parameters=None, hosting=None):
-        columns.calls.append({"instance": instance, "usv_navigation_parameters": usv_navigation_parameters})
+    def replay(trajectories, instance, geofence, *, dt, steps, start_boot_s, on_step=None, usv_navigation_parameters=None, moos_ivp_parameters=None, hosting=None):
+        columns.calls.append({"instance": instance, "usv_navigation_parameters": usv_navigation_parameters, "moos_ivp_parameters": moos_ivp_parameters})
         recorded = []
         for index in range(len(columns[0])):
             samples = {vessel_id: StampedState(boot_ms=100_000 + index * 1000, state=column[index]) for vessel_id, column in columns.items()}
@@ -272,7 +299,7 @@ def test_replay_puts_every_vessel_on_the_replay_adapter(fake_sitl, make_job, hea
     execute(ardupilot_job(make_job, head_on_trajectories), _quiet)
     [call] = fake_sitl.calls
     assert _asv_adapters(call["instance"]) == {"0": ("replay", ("replay_mavlink_lockstep",)), "1": ("replay", ("replay_mavlink_lockstep",))}
-    assert call["usv_navigation_parameters"] is None
+    assert call["usv_navigation_parameters"] is None and call["moos_ivp_parameters"] is None
 
 
 def test_usv_navigation_steers_the_scenes_own_ship(fake_sitl, make_job, head_on_trajectories):
@@ -292,6 +319,32 @@ def test_usv_navigation_steers_the_named_vessel_with_the_given_parameters(fake_s
     [(vessel_id, parameters)] = call["usv_navigation_parameters"].items()
     assert vessel_id == 1
     assert (parameters.goal, parameters.speed, parameters.safety_radius, parameters.control_horizon, parameters.runtime_options) == ((0.0, 0.0), 6.0, 150.0, 40.0, (("K", 2.0),))
+
+
+def test_moos_ivp_steers_the_scenes_own_ship(fake_sitl, make_job, head_on_trajectories):
+    result = execute(ardupilot_job(make_job, head_on_trajectories, mode="moos_ivp"), _quiet)
+    [call] = fake_sitl.calls
+    assert _asv_adapters(call["instance"]) == {"0": ("moos_ivp", ("moos_ivp_mavlink_lockstep",)), "1": ("replay", ("replay_mavlink_lockstep",))}
+    assert call["moos_ivp_parameters"] is None and call["usv_navigation_parameters"] is None  # derived from the own ship's trajectory by run_mavlink_stack
+    assert result["steps"] == 120
+
+
+def test_moos_ivp_steers_the_named_vessel_with_the_given_values_in_the_place_of_the_scenes(fake_sitl, make_job, head_on_trajectories):
+    from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import MoosIvpParameters
+
+    execute(ardupilot_job(make_job, head_on_trajectories, mode="moos_ivp", own_ship_id=1, moos_ivp={"avoidance": "cpa", "goal": [10.0, 20.0], "behaviour_options": {"pwt_grade": "quasi"}}), _quiet)
+    [call] = fake_sitl.calls
+    assert _asv_adapters(call["instance"]) == {"0": ("replay", ("replay_mavlink_lockstep",)), "1": ("moos_ivp", ("moos_ivp_mavlink_lockstep",))}
+    [(vessel_id, parameters)] = call["moos_ivp_parameters"].items()
+    vessel = head_on_trajectories.initial_scene.vessels[1]
+    defaults = MoosIvpParameters.from_reference(vessel, head_on_trajectories.state_list(vessel), head_on_trajectories.initial_scene.actors, 1.0)
+    assert vessel_id == 1
+    assert (parameters.avoidance, parameters.goal, parameters.behaviour_options) == ("cpa", (10.0, 20.0), (("pwt_grade", "quasi"),))
+    assert (parameters.speed, parameters.pwt_outer_dist, parameters.min_util_cpa_dist) == (
+        defaults.speed,
+        defaults.pwt_outer_dist,
+        defaults.min_util_cpa_dist,
+    ), "what the payload leaves out is the scene's own"
 
 
 def test_the_live_monitor_judges_a_usv_navigation_run(fake_sitl, make_job, head_on_trajectories):

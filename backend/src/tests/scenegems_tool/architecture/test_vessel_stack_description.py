@@ -29,7 +29,7 @@ def test_every_registered_layer_and_adapter_is_a_node_or_an_edge(document):
 
 def test_the_rows_are_the_resolvers_matrix(document):
     matrix = default_resolver().availability_matrix()
-    assert len(document.combinations) == len(matrix) == 64
+    assert len(document.combinations) == len(matrix) == 80
     expected = {
         (f"asv_system/{chain.stack.asv_system.value}", f"control_layer/{chain.stack.control_layer.value}", f"simulation_layer/{chain.stack.simulation_layer.value}")
         for chain in matrix
@@ -146,5 +146,6 @@ def test_mavproxy_and_arduagent_sit_on_the_adapters_that_start_them(document):
     replay_container = {"${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}"}
     assert images(edges["replay_mavlink_lockstep"]) == images(edges["replay_state_follower"]) == replay_container, "the vessel's replay container, and no MAVProxy or ArduAgent"
     assert images(nodes["asv_system/usv_navigation"]) == {"${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"}
+    assert images(nodes["asv_system/moos_ivp"]) == {"${MOOS_IVP_IMAGE:-scenegems-moos-ivp:latest}"}
     assert images(nodes["control_layer/custom"]) == images(nodes["simulation_layer/kinematic"]) == replay_container, "they start from the simulation subsystem image too"
     assert images(nodes["control_layer/none"]) == set(), "no controller, no container"

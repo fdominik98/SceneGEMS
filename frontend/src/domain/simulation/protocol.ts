@@ -549,7 +549,7 @@ const simulationModelsSchema = z.object({
     .default({}),
 });
 
-const asvSystemSchema = z.enum(["replay", "usv_navigation", "mission_planner", "on_board"]);
+const asvSystemSchema = z.enum(["replay", "usv_navigation", "moos_ivp", "mission_planner", "on_board"]);
 const controlLayerSchema = z.enum(["ardupilot", "custom", "none", "real_vessel"]);
 const supportSchema = z.enum(["supported", "unmeasured", "unsupported"]).nullable();
 

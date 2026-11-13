@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.10)
+project(scenegems_moos_bridge CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(MOOS 10 REQUIRED)
+include_directories(${MOOS_INCLUDE_DIRS} ${MOOS_DEPEND_INCLUDE_DIRS})
+add_executable(scenegems_moos_bridge scenegems_moos_bridge.cpp)
+target_link_libraries(scenegems_moos_bridge ${MOOS_LIBRARIES} ${MOOS_DEPEND_LIBRARIES} pthread)

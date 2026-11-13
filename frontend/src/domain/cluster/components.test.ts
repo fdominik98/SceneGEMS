@@ -31,7 +31,9 @@ function workerNodeWith(components: [string, "usable" | "out_of_date"][], slots:
 
 describe("the component catalog", () => {
   it("lists the campaign layers and the subsystems in the backend's order", () => {
-    expect(COMPONENTS).toHaveLength(17);
+    expect(COMPONENTS).toHaveLength(18);
+    expect(COMPONENTS.slice(0, 3)).toEqual(["asv_system/replay", "asv_system/usv_navigation", "asv_system/moos_ivp"]);
+    expect(componentLabel("asv_system/moos_ivp")).toBe("MOOS-IvP");
     expect(componentLabel("control_layer/real_vessel")).toBe("Real vessel autopilot");
     expect(componentLabel("asv_system/mission_planner")).toBe("Mission Planner");
     expect(orderedComponents(["monitoring", "simulation_layer/gazebo", "asv_system/replay", "monitoring", "gpu"])).toEqual(["asv_system/replay", "simulation_layer/gazebo", "monitoring", "gpu"]);
@@ -72,6 +74,14 @@ describe("the component catalog", () => {
     expect(simulationPayloadComponents({ runner: "gazebo_custom", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", control_layer: "custom", mode: "usv_navigation" }));
     expect(simulationPayloadComponents({ runner: "ardupilot", simulation_layer: "gazebo", mode: "usv_navigation" })).toEqual(runStackComponents({ simulation_layer: "gazebo", mode: "usv_navigation" }));
     expect(jobComponents("simulation", { runner: "ardupilot", simulation_layer: "ardupilot_sim" })).toEqual(["asv_system/replay", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
+  });
+
+  it("adds MOOS-IvP for the own ship in mode moos_ivp, on every layer", () => {
+    expect(runStackComponents({ simulation_layer: "kinematic", mode: "moos_ivp" })).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/none", "simulation_layer/kinematic"]);
+    expect(runStackComponents({ simulation_layer: "ardupilot_sim", mode: "moos_ivp" })).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/ardupilot", "simulation_layer/ardupilot_sim"]);
+    expect(simulationPayloadComponents({ runner: "gazebo_custom", mode: "moos_ivp" })).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/custom", "simulation_layer/gazebo"]);
+    expect(simulationPayloadComponents({ runner: "kinematic", mode: "moos_ivp", monitor: "live" })).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/none", "simulation_layer/kinematic", "monitoring"]);
+    expect(runStackComponents({ simulation_layer: "kinematic", mode: "something_newer" })).toEqual(runStackComponents({}));
     expect(jobComponents("monitoring.post_hoc")).toEqual(["monitoring"]);
     // A run that is judged while it runs is judged by the worker node's monitoring subsystem, so it needs that too
     expect(simulationPayloadComponents({ runner: "kinematic", mode: "replay", monitor: "live" })).toEqual([...runStackComponents({}), "monitoring"]);
@@ -122,6 +132,11 @@ describe("the components of an attended run", () => {
     const kinematic = { simulatorType: "Kinematic", connectionsByAgentId: { "0": { asvSystem: "usv_navigation" } } };
     expect(attendedSetupComponents(kinematic)).toEqual(["asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
     expect(attendedSetupComponents(undefined)).toEqual(["simulation_layer/kinematic"]);
+  });
+
+  it("name MOOS-IvP for a vessel that runs it, so the job goes to a worker node that has its image", () => {
+    const gazebo = { simulatorType: "Gazebo", connectionsByAgentId: { "0": { asvSystem: "moos_ivp", controlLayer: "custom" }, "1": { asvSystem: "replay", controlLayer: "custom" } } };
+    expect(attendedSetupComponents(gazebo)).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/custom", "simulation_layer/gazebo"]);
   });
 });
 

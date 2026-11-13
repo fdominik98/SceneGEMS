@@ -43,7 +43,8 @@ function simulatedWhere(components: readonly string[]): string {
   const layer = components.find((component) => component.startsWith("simulation_layer/"));
   const layerWhere = (layer !== undefined ? LAYER_WHERE[layer] : undefined) ?? "on the kinematic layer";
   const where = components.includes("control_layer/custom") ? `on the custom controller with ${layerWhere.replace(/^on /, "")}` : layerWhere;
-  const stack = components.includes("asv_system/usv_navigation") ? `${where} with USV Navigation` : where;
+  const software = components.includes("asv_system/usv_navigation") ? "USV Navigation" : components.includes("asv_system/moos_ivp") ? "MOOS-IvP" : null;
+  const stack = software !== null ? `${where} with ${software}` : where;
   return components.includes("monitoring") ? `${stack}, judged by the monitoring subsystem as it runs` : stack;
 }
 

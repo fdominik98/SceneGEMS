@@ -127,6 +127,29 @@ def test_kinematic_simulation_runs_in_a_container(broker, control_node_id, make_
     assert "running the kinematic replay run" in messages and "run finished" in messages
 
 
+def test_a_moos_ivp_job_steps_the_helm_in_its_container(broker, control_node_id, make_job, head_on_trajectories):
+    """The kinematic runner in mode moos_ivp: the own ship's ASV system container is the MOOS-IvP image (./build.sh --simulation), stepped over the stack's network."""
+    worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 1})
+    payload = {"runner": "kinematic", "mode": "moos_ivp", "moos_ivp": {"avoidance": "cpa"}, "trajectories": head_on_trajectories.to_dict(), "include_trajectories": False}
+    results = []
+    try:
+        for index in range(2):
+            job = make_job(JobType.SIMULATION, payload, job_id=f"moos-ivp-{index}")
+            results.append(run_job(job, worker_node, RecordingReport()))
+            scope = worker_node.job_scope(job)
+            assert not container_ids_for_instance(scope.compose_project, scope.key)
+    finally:
+        worker_node.shutdown()
+    first, second = results
+    assert first["state_digest"] == second["state_digest"], "the helm runs one pass per step on the stepped clock, so a job repeats"
+    assert first["state_digest"] != run_kinematic_replay(head_on_trajectories).state_digest(), "the helm steers the own ship off its planned track"
+    record = first["run_record"]
+    assert record["stacks"] == {"0": "moos_ivp, none, kinematic", "1": "replay, none, kinematic"}
+    helm = record["moos_ivp"]
+    assert helm["vessel"] == 0 and helm["parameters"]["avoidance"] == "cpa" and helm["avoidance_behaviour"] == "BHV_AvoidCollision"
+    assert helm["no_decision_steps"] == 0 and helm["moos_ivp_commit"] and [0.0, "spawn", "avd_c1"] in helm["events"]
+
+
 def test_two_kinematic_jobs_run_side_by_side(broker, control_node_id, make_job, head_on_trajectories):
     worker_node = make_worker_node(broker, control_node_id, "n1", {JobType.SIMULATION: 2})
     jobs = [

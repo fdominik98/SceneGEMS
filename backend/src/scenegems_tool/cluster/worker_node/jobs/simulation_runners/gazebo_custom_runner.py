@@ -2,8 +2,8 @@
 
 Every vessel runs on the custom control layer (control_layers/custom/): replay through the
 line-of-sight waypoint follower, or in mode usv_navigation the own ship (the scene's OS unless
-own_ship_id names another vessel) on USV Navigation and the others on replay, as the kinematic
-runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
+own_ship_id names another vessel) on USV Navigation, or in mode moos_ivp on MOOS-IvP's helm, and the
+others on replay, as the kinematic runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
 simulation subsystem image on the stack network (vessel_job_stack.py). Every vessel has its ASV
 system container and its controller container. The stack has no SITL: the Gazebo service starts
@@ -25,7 +25,7 @@ runner does not stop early, so the live monitor has no early stop here.
 import threading
 from typing import TYPE_CHECKING, Any, Dict, Literal, Optional, Tuple
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
@@ -36,7 +36,16 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import EnvironmentPaylo
 from scenegems_tool.cluster.worker_node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback, job_document
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import frame_builder, observed_trajectories, step_observer
-from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload, check_closed_loop_options, own_ship
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import (
+    KinematicMode,
+    MoosIvpPayload,
+    UsvNavigationPayload,
+    check_closed_loop_options,
+    mode_stacks,
+    own_ship_asv_system,
+    own_ship_parameters,
+    without_absent_moos_ivp,
+)
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
@@ -53,19 +62,17 @@ ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories
 
 
 def vessel_stacks(mode: KinematicMode = KinematicMode.REPLAY) -> Tuple[StackTriple, ...]:
-    """The vessel stacks a run of the mode runs: replay on the custom controller, USV Navigation for the own ship in mode usv_navigation."""
-    replay = (AsvSystemId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
-    if mode == KinematicMode.REPLAY:
-        return (replay,)
-    return (replay, (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO))
+    """The vessel stacks a run of the mode runs: replay on the custom controller, USV Navigation or MOOS-IvP for the own ship in its mode."""
+    return mode_stacks(mode, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO)
 
 
 class GazeboCustomSimulationPayload(ProtocolModel):
     runner: Literal[SimulationRunner.GAZEBO_CUSTOM]
     mode: KinematicMode = KinematicMode.REPLAY
     trajectories: TrajectoriesInput
-    own_ship_id: Optional[int] = None  # usv_navigation only; the scene's own ship when None
+    own_ship_id: Optional[int] = None  # usv_navigation and moos_ivp only; the scene's own ship when None
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; from the own ship's trajectory when None
+    moos_ivp: Optional[MoosIvpPayload] = None  # moos_ivp only; left out of the JSON while absent
     environment: EnvironmentPayload = Field(default_factory=EnvironmentPayload)  # wind and waves of the world and of the hull dynamics
     geofence: Optional[GeofencePayload] = None  # places the world on the map; the worker node's reference geofence when None
     dt: Optional[float] = Field(default=None, gt=0.0)  # the trajectories' time step when None; whole control steps of 0.1 s
@@ -78,8 +85,12 @@ class GazeboCustomSimulationPayload(ProtocolModel):
 
     @model_validator(mode="after")
     def _closed_loop_options_need_closed_loop(self) -> "GazeboCustomSimulationPayload":
-        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation)
+        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation, self.moos_ivp)
         return self
+
+    @model_serializer(mode="wrap")
+    def _without_absent_moos_ivp(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        return without_absent_moos_ivp(self, handler)
 
     @model_validator(mode="after")
     def _monitor_options_need_the_live_monitor(self) -> "GazeboCustomSimulationPayload":
@@ -110,25 +121,19 @@ def plain_state(state: Any) -> Any:
 
 
 def _instance(payload: GazeboCustomSimulationPayload):
-    """The trajectories, the instance and the own ship's USV Navigation parameters (by vessel id, empty in replay); ValueError when own_ship_id names no vessel."""
+    """The trajectories and the instance of the payload's run; ValueError when own_ship_id names no vessel."""
     from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import gz_custom_instance
 
     trajectories = to_trajectories(payload.trajectories)
-    asv_system: Dict[int, AsvSystemId] = {}
-    parameters = {}
-    if payload.mode == KinematicMode.USV_NAVIGATION:
-        own = own_ship(trajectories.initial_scene, payload.own_ship_id)
-        asv_system[own.id] = AsvSystemId.USV_NAVIGATION
-        if payload.usv_navigation is not None:
-            parameters[own.id] = payload.usv_navigation.to_parameters()
-    instance = gz_custom_instance(trajectories, asv_system, environment=payload.environment.to_environment(payload.seed))
-    return trajectories, instance, parameters
+    instance = gz_custom_instance(trajectories, own_ship_asv_system(payload, trajectories.initial_scene), environment=payload.environment.to_environment(payload.seed))
+    return trajectories, instance
 
 
 def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: GazeboCustomSimulationPayload) -> JobStack:
     """The job's stack: the paused Gazebo service with the world and the vessel models, a controller and an ASV system container per vessel, and the runner."""
     try:
-        trajectories, instance, _ = _instance(payload)
+        trajectories, instance = _instance(payload)
+        own_ship_parameters(payload, trajectories, float(trajectories.time_step) if payload.dt is None else payload.dt)  # refused here, before the stack starts
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
     geofence = payload.geofence.to_geofence() if payload.geofence is not None else worker_node.reference_geofence
@@ -152,15 +157,24 @@ def execute(
     from scenegems_tool.vessel_stack.hosting import in_stack_hosting
     from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_runner import run_gz_custom
 
-    trajectories, instance, parameters = _instance(payload)
+    trajectories, instance = _instance(payload)
     dt = float(trajectories.time_step) if payload.dt is None else payload.dt
+    parameters = own_ship_parameters(payload, trajectories, dt)
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
     monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False, job=job) if payload.monitor == SimulationMonitor.LIVE else None
     observer = observation.observer(frame_builder(job.job_id, trajectories, dt, monitor, state_of=plain_state), dt, last_index=steps) if observation is not None else None
     on_step = step_observer(trajectories, monitor, observer, state_of=plain_state)
     status(f"connecting to the Gazebo actuator for the {payload.mode.value} run" + (" with the live monitor" if monitor is not None else ""))
     result = run_gz_custom(
-        trajectories, instance, host=GAZEBO_SERVICE, dt=payload.dt, steps=payload.steps, usv_navigation_parameters=parameters or None, on_step=on_step, hosting=hosting or in_stack_hosting()
+        trajectories,
+        instance,
+        host=GAZEBO_SERVICE,
+        dt=payload.dt,
+        steps=payload.steps,
+        usv_navigation_parameters=parameters.get(AsvSystemId.USV_NAVIGATION),
+        moos_ivp_parameters=parameters.get(AsvSystemId.MOOS_IVP),
+        on_step=on_step,
+        hosting=hosting or in_stack_hosting(),
     )
     status("run finished", 1.0)
     data: JobResultData = {

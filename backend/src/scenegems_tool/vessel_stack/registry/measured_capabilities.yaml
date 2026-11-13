@@ -199,6 +199,20 @@ custom_controller_waypoint_follower:
     runs at 5, 30 and 100 m; on the turning runs 1.12, 0.47 and 0.48 m on straight legs and 5.5,
     7.1 and 10.7 m anywhere, without orbits. Its pace is the actuator's.
 
+moos_ivp_heading_speed:
+  repeatability_tier: exact
+  max_speedup: .inf
+  evidence: >-
+    2026-11-13, MOOS-IvP fork commit 38c7eb1 (libMOOS on the clock the component's server steps),
+    image scenegems-moos-ivp: the own ship on pHelmIvP with BHV_AvdColregsV22 against a replaying
+    target on the kinematic layer, the helm in its container behind the wire protocol, dt 1 s.
+    Head-on (600 and 700 steps), crossing from starboard and overtaking (400 steps) are
+    bit-identical between repeats (same state digests and reports), with no step without a
+    decision. 97 to 111 steps per second with one helm on a 12-core Windows host with Docker
+    Desktop, limited only by the CPU: the helm runs one pass per step and the runner waits for
+    it. The stacks on the custom controller and on ArduPilot (moos_ivp_custom_controller_input,
+    moos_ivp_mavlink_lockstep) are not measured yet.
+
 custom_controller_heading_speed_input:
   repeatability_tier: exact
   max_speedup: .inf

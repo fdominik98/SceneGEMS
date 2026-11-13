@@ -70,7 +70,7 @@ export function setupRequestOf(run: LoadedRun) {
     simulatorType: arduPilot ? SIMULATOR_OF_LAYER[layer] : ("Kinematic" as const),
     controlLayer: custom ? ("custom" as const) : arduPilot ? ("ardupilot" as const) : ("none" as const),
     speedup: arduPilot && !custom ? run.setup.speedup : null,
-    mode: run.setup.mode === "usv_navigation" ? ("usv_navigation" as const) : ("replay" as const),
+    mode: run.setup.mode === "usv_navigation" ? ("usv_navigation" as const) : run.setup.mode === "moos_ivp" ? ("moos_ivp" as const) : ("replay" as const),
     windVector: run.setup.windVector,
     wave: waves === null ? null : { amplitude: waves.amplitude, period: waves.period, steepness: waves.steepness, east: waves.direction[0], north: waves.direction[1] },
   };

@@ -17,7 +17,7 @@ Present now:
         registry/               adapter registry, resolver, measured capability data
         simulation_layers/      kinematic/ (one simulator container per scenario), gazebo/ (generators), ardupilot_sim/
         control_layers/         ardupilot/ (SITL per vessel), custom/ (a controller container per vessel)
-        asv_system/           replay/ and usv_navigation/ (a container per vessel; USV Navigation in its own image),
+        asv_system/           replay/, usv_navigation/ and moos_ivp/ (a container per vessel; USV Navigation and MOOS-IvP each in an image of their own),
                                 mission_planner/ (specs)
         hosting.py              where a run's layers are: the stack's containers, or the caller's process (tests, calibration)
     cluster/        distributed integration layer

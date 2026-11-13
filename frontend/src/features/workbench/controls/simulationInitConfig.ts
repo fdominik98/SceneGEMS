@@ -19,7 +19,7 @@ export const GLOBAL_SIMULATOR_TYPES: readonly GlobalSimulatorType[] = [
 ];
 
 /** The ASV system SceneGEMS runs for a simulated vessel. */
-export const ASV_SYSTEM: readonly AsvSystem[] = ["replay", "usv_navigation", "mission_planner"];
+export const ASV_SYSTEM: readonly AsvSystem[] = ["replay", "usv_navigation", "moos_ivp", "mission_planner"];
 /** The control layers of a simulated vessel; a real vessel's is its own autopilot (real_vessel). */
 export const CONTROL_LAYERS: readonly ControlLayer[] = ["ardupilot", "custom", "none"];
 /** What may steer a real vessel: through its ArduAgent, or its own software on board. */
@@ -30,6 +30,7 @@ export const REAL_VESSEL_SIMULATOR = "Real vessel";
 export const ASV_SYSTEM_LABELS: Record<AsvSystem, string> = {
   replay: "Replay",
   usv_navigation: "USV Navigation",
+  moos_ivp: "MOOS-IvP",
   mission_planner: "Mission Planner",
   on_board: "On board (its own software)",
 };
@@ -40,7 +41,7 @@ export const CONTROL_LAYER_LABELS: Record<ControlLayer, string> = {
   real_vessel: "Its own autopilot",
 };
 
-/** ArduAgent's control mode for an ASV system, used when an instance has a real vessel; none for USV Navigation. */
+/** ArduAgent's control mode for an ASV system, used when an instance has a real vessel; none for USV Navigation and MOOS-IvP. */
 export function controlModeOf(asvSystem: AsvSystem): ControlMode | undefined {
   if (asvSystem === "replay") {
     return "autonomous";

@@ -38,9 +38,9 @@ Options:
   -5, --worker-node       Worker node daemon image only (scenegems-worker-node:latest);
                           a worker node also needs the images of the components it offers
 
-  --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy, USV Navigation
+  --simulation            Simulation runtime images only: Gazebo, SITL, MAVProxy, USV Navigation, MOOS-IvP
                           (scenegems-gazebo-harmonic, scenegems-ardupilot-sitl, scenegems-mavproxy,
-                          scenegems-usv-navigation)
+                          scenegems-usv-navigation, scenegems-moos-ivp)
 
   --all                   Build every image (same as no arguments)
 
@@ -137,6 +137,11 @@ build_simulation_images() {
     build_subsystem_if_stale "scenegems-usv-navigation:latest" "$SCRIPT_DIR/deploy/images/usv_navigation/Dockerfile" \
         "$SCRIPT_DIR/deploy/images/usv_navigation" \
         "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/asv_system/usv_navigation/usv_navigation_server.py" \
+        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py"
+    # MOOS-IvP is a component of its own too: the helm built from the pinned fork, the bridge, its server and the wire protocol.
+    build_subsystem_if_stale "scenegems-moos-ivp:latest" "$SCRIPT_DIR/deploy/images/moos_ivp/Dockerfile" \
+        "$SCRIPT_DIR/deploy/images/moos_ivp" \
+        "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/asv_system/moos_ivp/moos_ivp_server.py" \
         "$SCRIPT_DIR/backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py"
 }
 

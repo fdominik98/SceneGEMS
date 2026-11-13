@@ -22,6 +22,14 @@ describe("a loaded run's setup", () => {
     expect(applied.map((draft) => draft.asvSystem)).toEqual(["usv_navigation", "replay"]);
   });
 
+  it("steers the own ship with MOOS-IvP", () => {
+    const applied = applySetupRequestToDrafts(drafts, "moos_ivp", new Set(["0"]), "custom");
+    expect(applied.map((draft) => [draft.asvSystem, draft.controlLayer])).toEqual([
+      ["moos_ivp", "custom"],
+      ["replay", "custom"],
+    ]);
+  });
+
   it("replays every vessel on ArduPilot when the run was an ArduPilot run", () => {
     const applied = applySetupRequestToDrafts(drafts, "replay", new Set(["0"]), "ardupilot");
     expect(applied.map((draft) => [draft.asvSystem, draft.controlLayer, draft.context])).toEqual([

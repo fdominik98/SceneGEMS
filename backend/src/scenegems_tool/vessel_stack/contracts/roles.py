@@ -23,6 +23,7 @@ class Role(str, Enum):
 class AsvSystemId(str, Enum):
     REPLAY = "replay"  # follows the generated trajectory
     USV_NAVIGATION = "usv_navigation"
+    MOOS_IVP = "moos_ivp"  # MOOS-IvP's helm (pHelmIvP) with a waypoint and a collision avoidance behaviour
     MISSION_PLANNER = "mission_planner"  # an operator or external software on a MAVLink port
     ON_BOARD = "on_board"  # the vessel's own software, brought by the layer below (LayerSpec.on_board_asv_system)
 

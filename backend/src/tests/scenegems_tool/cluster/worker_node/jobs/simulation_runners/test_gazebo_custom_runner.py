@@ -42,6 +42,20 @@ def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, mak
     assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
 
+def test_moos_ivp_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
+    _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
+    services = stack.compose["services"]
+    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
+    assert "scenegems-moos-ivp" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server"
+    assert "scenegems-simulation-subsystem" in target["image"] and "os_controller" in services, "the other vessel replays, and the helm's heading and speed go to the own ship's controller"
+
+
+def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
+    with pytest.raises(JobFailed) as failure:
+        stack_for(worker_node, make_job, head_on_trajectories, mode="moos_ivp", moos_ivp={"pwt_outer_dist": 10.0})
+    assert not failure.value.retryable and "Simulation payload rejected" in str(failure.value) and "the distances must be ordered" in str(failure.value)
+
+
 def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_and_the_runner(instances_folder, worker_node, make_job, head_on_trajectories):
     """No SITL: Gazebo starts paused with the actuator listening, every vessel has its controller and its replay container, and the runner steps them."""
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
@@ -98,10 +112,11 @@ def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_
     [
         ({}, ("asv_system/replay", "control_layer/custom", "simulation_layer/gazebo"), set()),
         ({"mode": "usv_navigation"}, ("asv_system/replay", "asv_system/usv_navigation", "control_layer/custom", "simulation_layer/gazebo"), {"scenegems-usv-navigation:latest"}),
+        ({"mode": "moos_ivp"}, ("asv_system/replay", "asv_system/moos_ivp", "control_layer/custom", "simulation_layer/gazebo"), {"scenegems-moos-ivp:latest"}),
     ],
 )
 def test_a_gazebo_worker_node_without_sitl_runs_it(head_on_trajectories, fields, components, asv_images):
-    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the simulation subsystem image (runner, controllers, replay), plus USV Navigation's own: no SITL."""
+    """The job needs the custom control layer and the Gazebo layer, whose images are Gazebo and the simulation subsystem image (runner, controllers, replay), plus USV Navigation's or MOOS-IvP's own: no SITL."""
     assert payload_components(JobType.SIMULATION, custom_payload(head_on_trajectories, **fields)) == components
     assert images_of(components) == {"scenegems-gazebo-harmonic:latest", "scenegems-simulation-subsystem:latest"} | asv_images
 
@@ -109,7 +124,9 @@ def test_a_gazebo_worker_node_without_sitl_runs_it(head_on_trajectories, fields,
 @pytest.mark.parametrize(
     "fields, message",
     [
-        ({"own_ship_id": 1}, "apply only to mode usv_navigation"),
+        ({"own_ship_id": 1}, "own_ship_id applies only to the modes usv_navigation and moos_ivp"),
+        ({"moos_ivp": {"avoidance": "cpa"}}, "moos_ivp parameters apply only to mode moos_ivp"),
+        ({"mode": "moos_ivp", "moos_ivp": {"avoidance": "evasive"}}, "Input should be 'colregs' or 'cpa'"),
         ({"dt": 0.25}, "whole number of the custom controller's 0.1 s control steps"),
         ({"dt": 0.5, "monitor": "live"}, "whole number of seconds"),
         ({"colregs_constraints_content": "x: 1"}, "applies only to monitor live"),
@@ -199,6 +216,26 @@ def test_usv_navigation_takes_the_named_vessel_and_its_parameters(fake_actuator,
     result = execute(custom_job(make_job, head_on_trajectories, fake_actuator, mode="usv_navigation", own_ship_id=1, usv_navigation=usv_navigation), _quiet)
     parameters = result["run_record"]["usv_navigation"]
     assert set(parameters) == {"1"} and parameters["1"]["goal"] == [0.0, 0.0] and parameters["1"]["v"] == 6.0 and parameters["1"]["Cs"] == 150.0
+
+
+def test_moos_ivp_steers_the_own_ship_through_its_controller(fake_actuator, make_job, head_on_trajectories):
+    """The helm lives only in its container, so the run steps the layers' servers on the loopback interface, with the tests' helm in MOOS-IvP's place."""
+    from scenegems_tool.cluster.worker_node.jobs.simulation_runners.gazebo_custom_runner import GazeboCustomSimulationPayload, _instance
+    from tests.scenegems_tool.vessel_stack.asv_system.moos_ivp.fake_helm import FakeHelm
+    from tests.scenegems_tool.vessel_stack.loopback_stack import loopback_hosting
+
+    FakeHelm.started.clear()
+    job = custom_job(make_job, head_on_trajectories, fake_actuator, mode="moos_ivp", moos_ivp={"avoidance": "cpa"})
+    with loopback_hosting(_instance(GazeboCustomSimulationPayload.model_validate(job.payload))[1]) as hosting:
+        result = execute(job, _quiet, hosting=hosting)
+    record = result["run_record"]
+    assert "moos_ivp_custom_controller_input" in record["specs"] and "custom_controller_waypoint_follower" in record["specs"]
+    assert set(record["moos_ivp"]) == {"0"} and record["moos_ivp"]["0"]["avoidance"] == "cpa"
+    assert sorted(record["participant_seeds"]) == ["moos_ivp/0", "replay/1"]
+    (helm,) = FakeHelm.started
+    assert len(helm.passes) == result["steps"] == 20 and "Behavior = BHV_AvoidCollision" in helm.behaviours
+    with pytest.raises(RuntimeError, match="MOOS-IvP runs only in its container"):
+        execute(job, _quiet)
 
 
 def without_wall_clock(result):

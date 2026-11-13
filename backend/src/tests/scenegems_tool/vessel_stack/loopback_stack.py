@@ -8,6 +8,7 @@ gives a ContainerHosting whose endpoints point at them, so a lockstep runner ste
 from contextlib import ExitStack, contextmanager
 from typing import Dict, Iterator
 
+from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server import IMPLEMENTATION as MOOS_IVP
 from scenegems_tool.vessel_stack.asv_system.replay.replay_server import IMPLEMENTATION as REPLAY
 from scenegems_tool.vessel_stack.asv_system.replay.replay_server import ReplaySession
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server import IMPLEMENTATION as USV_NAVIGATION
@@ -21,9 +22,15 @@ from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server 
 from scenegems_tool.vessel_stack.hosting import ContainerHosting
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_server import IMPLEMENTATION as KINEMATIC
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_server import KinematicSimSession
+from tests.scenegems_tool.vessel_stack.asv_system.moos_ivp.fake_helm import FakeHelmSession
 
 LOOPBACK = "127.0.0.1"
-ASV_SYSTEM_SESSIONS = {AsvSystemId.REPLAY: (REPLAY, ReplaySession), AsvSystemId.USV_NAVIGATION: (USV_NAVIGATION, UsvNavigationSession)}
+# MOOS-IvP's helm exists only in its image, so its server runs here with the tests' helm in the place of MOOS-IvP's processes.
+ASV_SYSTEM_SESSIONS = {
+    AsvSystemId.REPLAY: (REPLAY, ReplaySession),
+    AsvSystemId.USV_NAVIGATION: (USV_NAVIGATION, UsvNavigationSession),
+    AsvSystemId.MOOS_IVP: (MOOS_IVP, FakeHelmSession),
+}
 
 
 def serve(servers: ExitStack, role: str, implementation: str, session_factory) -> Endpoint:

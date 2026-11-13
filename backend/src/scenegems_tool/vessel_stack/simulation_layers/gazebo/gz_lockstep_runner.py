@@ -1,7 +1,8 @@
 """Lockstep runner of the custom control layer on Gazebo: ASV system, autopilot and physics on one clock.
 
 Every vessel has an ASV participant (the line-of-sight waypoint follower for replay, USV
-Navigation for usv_navigation) and a TwinThrustAutopilot with gains from its generated hull.
+Navigation for usv_navigation, MOOS-IvP's helm for moos_ivp) and a TwinThrustAutopilot with gains
+from its generated hull.
 Both come from a hosting (vessel_stack/hosting.py): built in this process, or the vessel's ASV
 system and controller containers, which this runner then carries the messages between.
 The world is paused and advances only through the gz-transport actuator (gz_transport_actuator.py):
@@ -34,8 +35,9 @@ import numpy as np
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
-from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest, RunParameters
+from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import MoosIvpParameters
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
 from scenegems_tool.vessel_stack.contracts.clock import LockstepClock, LockstepParticipant, StepAck, derive_seed
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
@@ -230,6 +232,7 @@ def run_gz_custom(
     steps: Optional[int] = None,
     control_dt: float = CONTROL_DT_S,
     usv_navigation_parameters: Optional[Mapping[int, UsvNavigationParameters]] = None,
+    moos_ivp_parameters: Optional[Mapping[int, MoosIvpParameters]] = None,
     machine: Optional[str] = None,
     resolver: Optional[StackResolver] = None,
     connect_timeout_s: float = 600.0,
@@ -242,8 +245,8 @@ def run_gz_custom(
     hosting decides where each vessel's ASV system and autopilot run: in this process by default,
     in the vessel's ASV system and controller containers with ContainerHosting. Replay hands the
     controller its trajectory as a waypoint mission, which the controller's line-of-sight follower
-    steers; USV Navigation (parameters from its trajectory unless given) sets the autopilot's
-    heading and speed every step. host and port reach the gz-transport actuator in the Gazebo
+    steers; USV Navigation and MOOS-IvP (parameters from the vessel's trajectory unless given) set
+    the autopilot's heading and speed every step. host and port reach the gz-transport actuator in the Gazebo
     container. dt defaults to the trajectory time step and steps to its timespan. The run seed is
     environment.seed.
     """
@@ -260,7 +263,7 @@ def run_gz_custom(
     autopilots: Dict[int, TwinThrustAutopilot] = {}
     vessels: Dict[int, ConcreteVessel] = {}
     thrusters: Dict[int, Dict[str, float]] = {}
-    navigation_parameters: Dict[int, UsvNavigationParameters] = {}
+    parameters = RunParameters({AsvSystemId.USV_NAVIGATION: usv_navigation_parameters, AsvSystemId.MOOS_IVP: moos_ivp_parameters})
     link = GzLockstepLink(host, port)
     try:
         for agent_id, vessel_config in simulation.simulated_vessels.items():
@@ -268,8 +271,6 @@ def run_gz_custom(
             if not isinstance(vessel, ConcreteVessel):
                 raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
             software = vessel_config.stack.asv_system
-            if software == AsvSystemId.USV_NAVIGATION:
-                navigation_parameters[vessel.id] = parameters_for(vessel, trajectories, dt, usv_navigation_parameters)
             agent_name = vessel_config.require_connection().agent_name
             request = ParticipantRequest(
                 vessel=vessel,
@@ -278,7 +279,7 @@ def run_gz_custom(
                 adapter=resolution.chains[agent_id].asv_adapter,
                 trajectories=trajectories,
                 dt=dt,
-                parameters=navigation_parameters.get(vessel.id),
+                parameters=parameters.resolve(software, vessel, trajectories, dt),
             )
             dynamics = hull_dynamics(vessel, simulation.environment)
             participants[vessel.id], autopilots[vessel.id] = hosting.custom_control(request, AutopilotGains.from_dynamics(dynamics, vessel, control_dt))
@@ -310,6 +311,5 @@ def run_gz_custom(
         "environment": resolution.effective_environment(),
         "state_digest": result.state_digest(),
     }
-    if navigation_parameters:
-        run_record["usv_navigation"] = {str(vessel_id): parameters.as_dict() for vessel_id, parameters in sorted(navigation_parameters.items())}
+    run_record.update(parameters.record())  # usv_navigation and moos_ivp: each vessel's parameters, where a vessel runs one
     return dataclasses.replace(result, run_record=run_record)

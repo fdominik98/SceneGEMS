@@ -47,6 +47,7 @@ StackTriple = Tuple[AsvSystemId, ControlLayerId, SimulationLayerId]
 STACK_LAYERS: Tuple[LayerImplementationId, ...] = (
     AsvSystemId.REPLAY,
     AsvSystemId.USV_NAVIGATION,
+    AsvSystemId.MOOS_IVP,
     AsvSystemId.MISSION_PLANNER,
     AsvSystemId.ON_BOARD,
     ControlLayerId.NONE,
@@ -108,9 +109,9 @@ _ORDER = {component: index for index, component in enumerate(COMPONENTS)}
 class SimulationRunner(str, Enum):
     """The runners of the simulation job (cluster/worker_node/jobs/simulation_job.py), the value of its payload's runner."""
 
-    KINEMATIC = "kinematic"  # replay or USV Navigation closed loop, the runner stepping the kinematic simulator's container
-    ARDUPILOT = "ardupilot"  # replay or USV Navigation over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
-    GAZEBO_CUSTOM = "gazebo_custom"  # replay or USV Navigation on the custom controller, the runner stepping a Gazebo world per job (no SITL)
+    KINEMATIC = "kinematic"  # replay, or USV Navigation or MOOS-IvP closed loop, the runner stepping the kinematic simulator's container
+    ARDUPILOT = "ardupilot"  # replay, USV Navigation or MOOS-IvP over the lockstep MAVLink adapters on a SITL or Gazebo stack per job
+    GAZEBO_CUSTOM = "gazebo_custom"  # replay, USV Navigation or MOOS-IvP on the custom controller, the runner stepping a Gazebo world per job (no SITL)
     ATTENDED = "attended"  # the workbench's setup vessel by vessel, with an operator beside it: it waits for a Start, and Mission Planner may steer a vessel
 
 
@@ -120,16 +121,20 @@ RUNNER_STACKS: Dict[SimulationRunner, Tuple[StackTriple, ...]] = {
     SimulationRunner.KINEMATIC: (
         (AsvSystemId.REPLAY, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
         (AsvSystemId.USV_NAVIGATION, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
+        (AsvSystemId.MOOS_IVP, ControlLayerId.NONE, SimulationLayerId.KINEMATIC),
     ),
     SimulationRunner.ARDUPILOT: (
         (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
         (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
         (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
         (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
+        (AsvSystemId.MOOS_IVP, ControlLayerId.ARDUPILOT, SimulationLayerId.ARDUPILOT_SIM),
+        (AsvSystemId.MOOS_IVP, ControlLayerId.ARDUPILOT, SimulationLayerId.GAZEBO),
     ),
     SimulationRunner.GAZEBO_CUSTOM: (
         (AsvSystemId.REPLAY, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
         (AsvSystemId.USV_NAVIGATION, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
+        (AsvSystemId.MOOS_IVP, ControlLayerId.CUSTOM, SimulationLayerId.GAZEBO),
     ),
 }
 

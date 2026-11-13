@@ -68,7 +68,7 @@ from pydantic import (
 from scenegems_tool.assurance.campaign.domain_presets import DOMAIN_KEYS, default_preset_file, normalize_newlines, read_domain_file
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN
 from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import DEFAULT_REFERENCE_GEOFENCE
-from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode, MoosIvpPayload, UsvNavigationPayload
 from scenegems_tool.cluster.worker_node.jobs.trajectory_generation_job import PARAM_KEYS, without_retired_params
 from scenegems_tool.persistence.canonical_json import canonical_json_sha256
 from scenegems_tool.persistence.schema import MonitorImplementation, PipelineStage, StepKind, TrajectoryGeneratorImplementation
@@ -387,6 +387,19 @@ def _check_usv_navigation_mode(mode: KinematicMode, usv_navigation: Optional[Usv
         raise ValueError("usv_navigation parameters apply only to mode usv_navigation")
 
 
+def _check_moos_ivp_mode(mode: KinematicMode, moos_ivp: Optional[MoosIvpPayload]) -> None:
+    if moos_ivp is not None and mode != KinematicMode.MOOS_IVP:
+        raise ValueError("moos_ivp parameters apply only to mode moos_ivp")
+
+
+def _without_absent(data: Dict[str, Any], stack: Any, *names: str) -> Dict[str, Any]:
+    """A stack section's JSON without the named fields while they are absent, so a config written before a field existed keeps its JSON and its hash."""
+    for name in names:
+        if getattr(stack, name) is None:
+            data.pop(name, None)
+    return data
+
+
 def _check_whole_seconds(dt: Optional[float]) -> Optional[float]:
     if dt is not None and not float(dt).is_integer():
         raise ValueError("the observed trajectories and the live monitor need a whole number of seconds as dt")
@@ -394,22 +407,30 @@ def _check_whole_seconds(dt: Optional[float]) -> Optional[float]:
 
 
 class KinematicStackConfig(ConfigModel):
-    """A run on the kinematic layer: every vessel replays, or the own ship runs USV Navigation.
+    """A run on the kinematic layer: every vessel replays, or the own ship runs USV Navigation or MOOS-IvP.
 
     The stacks on the ArduPilot layers are ArdupilotStackConfig, the custom controller on Gazebo
-    CustomStackConfig; StackConfig is the union on simulation_layer and control_layer.
+    CustomStackConfig; StackConfig is the union on simulation_layer and control_layer. moos_ivp is
+    left out of the JSON while it is absent, so a config written before the mode existed keeps its
+    JSON and its hash.
     """
 
     simulation_layer: Literal["kinematic"] = "kinematic"
     mode: KinematicMode = KinematicMode.REPLAY
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
+    moos_ivp: Optional[MoosIvpPayload] = None  # moos_ivp only; the values it names replace the ones derived from each scene
     dt: Optional[float] = Field(default=None, gt=0)  # the trajectories' time step when absent
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
 
     @model_validator(mode="after")
-    def _usv_navigation_needs_its_mode(self) -> "KinematicStackConfig":
+    def _parameters_need_their_mode(self) -> "KinematicStackConfig":
         _check_usv_navigation_mode(self.mode, self.usv_navigation)
+        _check_moos_ivp_mode(self.mode, self.moos_ivp)
         return self
+
+    @model_serializer(mode="wrap")
+    def _without_absent_moos_ivp(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        return _without_absent(handler(self), self, "moos_ivp")
 
 
 ARDUPILOT_LAYERS = ("ardupilot_sim", "gazebo")  # the simulation layers of ArdupilotStackConfig, as ArduPilotSimulationLayer names them
@@ -429,17 +450,19 @@ class GeofenceSettings(ConfigModel):
 
 
 class ArdupilotStackConfig(ConfigModel):
-    """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays, or the own ship runs USV Navigation.
+    """A run on ArduPilot SITL (ardupilot_sim) or on SITL against a Gazebo world (gazebo): every vessel replays, or the own ship runs USV Navigation or MOOS-IvP.
 
-    Replay goes over the replay_mavlink_lockstep adapter and USV Navigation over usv_navigation_mavlink_lockstep,
-    in the bounded repeatability tier, as the simulation job's ardupilot runner runs them. The job applies no
-    environment, so a run on this stack is calm. usv_navigation is left out of the JSON while it is absent,
-    so a config written before the mode existed keeps its JSON, its hash and its calibration stack key.
+    Replay goes over the replay_mavlink_lockstep adapter, USV Navigation over usv_navigation_mavlink_lockstep
+    and MOOS-IvP over moos_ivp_mavlink_lockstep, in the bounded repeatability tier, as the simulation job's
+    ardupilot runner runs them. The job applies no environment, so a run on this stack is calm. usv_navigation
+    and moos_ivp are left out of the JSON while they are absent, so a config written before a mode existed
+    keeps its JSON, its hash and its calibration stack key.
     """
 
     simulation_layer: Literal["ardupilot_sim", "gazebo"]
     mode: KinematicMode = KinematicMode.REPLAY
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
+    moos_ivp: Optional[MoosIvpPayload] = None  # moos_ivp only; the values it names replace the ones derived from each scene
     speedup: int = Field(default=1, ge=1)  # SITL's requested pace, as the resolver checks it
     dt: Optional[float] = Field(default=None, gt=0)  # whole seconds; the trajectories' time step when absent, 1 s when Rover cannot take that (generated trajectories are 15 s)
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
@@ -451,32 +474,31 @@ class ArdupilotStackConfig(ConfigModel):
         return _check_whole_seconds(dt)
 
     @model_validator(mode="after")
-    def _usv_navigation_needs_its_mode(self) -> "ArdupilotStackConfig":
+    def _parameters_need_their_mode(self) -> "ArdupilotStackConfig":
         _check_usv_navigation_mode(self.mode, self.usv_navigation)
+        _check_moos_ivp_mode(self.mode, self.moos_ivp)
         return self
 
     @model_serializer(mode="wrap")
-    def _without_absent_usv_navigation(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
-        data = handler(self)
-        if self.usv_navigation is None:
-            data.pop("usv_navigation", None)
-        return data
+    def _without_absent_parameters(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        return _without_absent(handler(self), self, "usv_navigation", "moos_ivp")
 
 
 class CustomStackConfig(ConfigModel):
-    """A run on the custom controller on Gazebo: every vessel replays through the line-of-sight follower, or the own ship runs USV Navigation.
+    """A run on the custom controller on Gazebo: every vessel replays through the line-of-sight follower, or the own ship runs USV Navigation or MOOS-IvP.
 
     The simulation job's gazebo_custom runner steps the Gazebo world itself, with no SITL, in the bounded
     repeatability tier (a thrust can reach gz sim an iteration late). The run applies its environment: the
     generated world and the hull dynamics of the controller take the same wind and waves, as far as the
     resolver supports them. The section names its control layer (control_layer: custom), which tells it
-    from ArduPilot on the same layer.
+    from ArduPilot on the same layer. moos_ivp is left out of the JSON while it is absent.
     """
 
     simulation_layer: Literal["gazebo"]
     control_layer: Literal["custom"]
     mode: KinematicMode = KinematicMode.REPLAY
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; derived from each scene when absent
+    moos_ivp: Optional[MoosIvpPayload] = None  # moos_ivp only; the values it names replace the ones derived from each scene
     dt: Optional[float] = Field(default=None, gt=0)  # the trajectories' time step when absent; whole seconds
     steps: Optional[int] = Field(default=None, ge=1)  # the trajectories' timespan when absent
 
@@ -486,9 +508,14 @@ class CustomStackConfig(ConfigModel):
         return _check_whole_seconds(dt)
 
     @model_validator(mode="after")
-    def _usv_navigation_needs_its_mode(self) -> "CustomStackConfig":
+    def _parameters_need_their_mode(self) -> "CustomStackConfig":
         _check_usv_navigation_mode(self.mode, self.usv_navigation)
+        _check_moos_ivp_mode(self.mode, self.moos_ivp)
         return self
+
+    @model_serializer(mode="wrap")
+    def _without_absent_moos_ivp(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        return _without_absent(handler(self), self, "moos_ivp")
 
 
 class BrokerConfig(ConfigModel):

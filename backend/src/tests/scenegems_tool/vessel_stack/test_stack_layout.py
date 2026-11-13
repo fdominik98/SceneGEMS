@@ -26,6 +26,7 @@ from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_traj
 
 SIMULATION = "${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}"
 USV_NAVIGATION = "${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"
+MOOS_IVP = "${MOOS_IVP_IMAGE:-scenegems-moos-ivp:latest}"
 SITL = "${SITL_IMAGE:-scenegems-ardupilot-sitl:latest}"
 GAZEBO = "${GAZEBO_IMAGE:-scenegems-gazebo-harmonic:latest}"
 TRAJECTORIES = encounter_trajectories("head_on", 20)
@@ -56,6 +57,15 @@ class TestEveryLayerHasItsContainer:
             "ts1_asv_system": SIMULATION,
             "kinematic_sim": SIMULATION,
         }
+
+    def test_kinematic_with_moos_ivp_on_the_own_ship(self):
+        services = services_of(kinematic_instance(TRAJECTORIES, {0: AsvSystemId.MOOS_IVP}))
+        assert {name: service["image"] for name, service in services.items()} == {
+            "os_asv_system": MOOS_IVP,
+            "ts1_asv_system": SIMULATION,
+            "kinematic_sim": SIMULATION,
+        }
+        assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "11410"]
 
     def test_gazebo_with_the_custom_controller(self):
         instance = stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM)
@@ -120,6 +130,9 @@ class TestRegistryBindings:
             "usv_navigation_in_process": DockerAsvSystem,
             "usv_navigation_mavlink_lockstep": DockerAsvSystem,
             "custom_controller_heading_speed_input": DockerAsvSystem,
+            "moos_ivp_heading_speed": DockerAsvSystem,
+            "moos_ivp_custom_controller_input": DockerAsvSystem,
+            "moos_ivp_mavlink_lockstep": DockerAsvSystem,
         }
         for spec_id, kind in kinds.items():
             assert isinstance(registry.docker(spec_id)(), kind), spec_id
@@ -139,6 +152,17 @@ class TestRegistryBindings:
             "backend/src/scenegems_tool/vessel_stack/asv_system/usv_navigation/usv_navigation_server.py",
             "backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py",
         ), "the image copies exactly these two source files"
+
+    def test_the_moos_ivp_image_is_stamped_by_its_folder_the_pinned_fork_and_the_two_files_it_copies(self):
+        chain = default_resolver().resolve(VesselStackConfig(AsvSystemId.MOOS_IVP, ControlLayerId.NONE, SimulationLayerId.KINEMATIC))
+        (moos_ivp,) = chain.specs[0].containers
+        assert moos_ivp.image == MOOS_IVP
+        assert moos_ivp.build_fingerprint_sources == (
+            "deploy/images/moos_ivp",
+            "deploy/images/upstream_pins.env",
+            "backend/src/scenegems_tool/vessel_stack/asv_system/moos_ivp/moos_ivp_server.py",
+            "backend/src/scenegems_tool/vessel_stack/contracts/lockstep_wire.py",
+        )
 
 
 class TestHosting:

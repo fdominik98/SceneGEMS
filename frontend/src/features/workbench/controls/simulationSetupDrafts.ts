@@ -10,19 +10,19 @@ export function applySimulationModels(drafts: VesselInitConnectionDraft[], model
 
 /**
  * A loaded run's stack on the vessel table: every vessel simulated and replaying, on the kinematic
- * layer (control layer none) or on ArduPilot, and with USV Navigation the own ship steered by it
+ * layer (control layer none) or on ArduPilot, and with USV Navigation or MOOS-IvP the own ship steered by it
  * (as `planSimulationRun` plans such a run).
  */
 export function applySetupRequestToDrafts(
   drafts: VesselInitConnectionDraft[],
-  mode: "replay" | "usv_navigation",
+  mode: "replay" | "usv_navigation" | "moos_ivp",
   ownShipIds: ReadonlySet<string>,
   controlLayer: "none" | "ardupilot" | "custom" = "none"
 ): VesselInitConnectionDraft[] {
   return drafts.map((draft) => ({
     ...draft,
     context: "simulation",
-    asvSystem: mode === "usv_navigation" && ownShipIds.has(draft.vesselId) ? "usv_navigation" : "replay",
+    asvSystem: mode !== "replay" && ownShipIds.has(draft.vesselId) ? mode : "replay",
     controlLayer,
   }));
 }

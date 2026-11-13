@@ -65,7 +65,7 @@ class TestStack:
     @pytest.mark.parametrize(
         "asv,control,message",
         [
-            ("pilot", None, "Unknown asvSystem 'pilot'; expected one of replay, usv_navigation, mission_planner"),
+            ("pilot", None, "Unknown asvSystem 'pilot'; expected one of replay, usv_navigation, moos_ivp, mission_planner"),
             ("replay", "pid", "Unknown controlLayer 'pid'"),
             (None, None, "needs an asvSystem"),
         ],

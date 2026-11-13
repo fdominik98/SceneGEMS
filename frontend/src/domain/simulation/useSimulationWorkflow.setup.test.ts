@@ -19,6 +19,12 @@ describe("the setup a loaded run fills", () => {
     expect(setupRequestOf(run({ mode: "usv_navigation" }))).toMatchObject({ simulatorType: "Kinematic", controlLayer: "none", speedup: null, mode: "usv_navigation" });
   });
 
+  it("keeps MOOS-IvP on the own ship for a run in mode moos_ivp, and replays for a mode it does not know", () => {
+    expect(setupRequestOf(run({ mode: "moos_ivp" }))).toMatchObject({ simulatorType: "Kinematic", controlLayer: "none", mode: "moos_ivp" });
+    expect(setupRequestOf(run({ simulationLayer: "gazebo", controlLayer: "custom", mode: "moos_ivp" }))).toMatchObject({ simulatorType: "Gazebo", controlLayer: "custom", mode: "moos_ivp" });
+    expect(setupRequestOf(run({ mode: "something_newer" }))).toMatchObject({ mode: "replay" });
+  });
+
   it("is ArduPilot Sim with replay on ArduPilot and SITL's pace for a SITL run", () => {
     expect(setupRequestOf(run({ simulationLayer: "ardupilot_sim", mode: "replay", speedup: 4 }))).toMatchObject({
       simulatorType: "ArduPilot Sim",

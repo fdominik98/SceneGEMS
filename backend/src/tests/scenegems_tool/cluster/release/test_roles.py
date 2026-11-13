@@ -63,6 +63,7 @@ def test_component_items_are_the_catalog_with_its_images():
     assert images["simulation_layer/gazebo"] == sorted([SIMULATION_IMAGE, GAZEBO_IMAGE])
     assert images["asv_system/replay"] == images["control_layer/custom"] == [SIMULATION_IMAGE], "their containers start from the simulation subsystem image"
     assert images["asv_system/usv_navigation"] == ["scenegems-usv-navigation:latest"], "a worker node that offers USV Navigation gets its image"
+    assert images["asv_system/moos_ivp"] == ["scenegems-moos-ivp:latest"], "and one that offers MOOS-IvP gets that one"
     assert images["control_layer/none"] == []
 
 

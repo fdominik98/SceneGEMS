@@ -12,6 +12,7 @@ from functools import lru_cache
 from typing import Mapping, Optional
 
 from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT, MISSION_PLANNER_LAYER, MISSION_PLANNER_MAVLINK_PORT
+from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_specs import MOOS_IVP_CUSTOM_CONTROLLER_INPUT, MOOS_IVP_HEADING_SPEED, MOOS_IVP_LAYER, MOOS_IVP_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.asv_system.on_board.on_board_specs import ON_BOARD_LAYER
 from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_ARDUAGENT_FOLLOWER, REPLAY_LAYER, REPLAY_MAVLINK_LOCKSTEP, REPLAY_STATE_FOLLOWER, mavlink_link_runtime
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import (
@@ -40,6 +41,7 @@ from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_specs imp
 from scenegems_tool.vessel_stack.simulation_layers.real_vessel.real_vessel_specs import REAL_VESSEL_AUTOPILOT, REAL_VESSEL_SIMULATION_LAYER
 
 _USV_NAVIGATION = LayerRef.of(AsvSystemId.USV_NAVIGATION)
+_MOOS_IVP = LayerRef.of(AsvSystemId.MOOS_IVP)
 _MISSION_PLANNER = LayerRef.of(AsvSystemId.MISSION_PLANNER)
 _ON_BOARD = LayerRef.of(AsvSystemId.ON_BOARD)
 _ARDUPILOT = LayerRef.of(ControlLayerId.ARDUPILOT)
@@ -67,6 +69,7 @@ UNSUPPORTED_CONNECTIONS = (
     UnsupportedConnection(_CUSTOM, _KINEMATIC, "the kinematic sim integrates control internally"),
     # A real vessel is reached only through its ArduAgent, and covers the control and simulation roles itself.
     UnsupportedConnection(_USV_NAVIGATION, _REAL_VESSEL_CONTROL, "a real vessel is reached only through ArduAgent, which has no command for USV Navigation's heading and speed references"),
+    UnsupportedConnection(_MOOS_IVP, _REAL_VESSEL_CONTROL, "a real vessel is reached only through ArduAgent, which has no command for MOOS-IvP's heading and speed decisions"),
     *(UnsupportedConnection(_ON_BOARD, control, "this control layer brings no ASV system of its own") for control in (_ARDUPILOT, _CUSTOM, _NONE)),
     *(UnsupportedConnection(_REAL_VESSEL_CONTROL, simulation, "a real vessel's autopilot drives only its own hull") for simulation in (_KINEMATIC, _GAZEBO, _ARDUPILOT_SIM)),
     *(UnsupportedConnection(control, _REAL_VESSEL_SIMULATION, "a real vessel is moved only by its own autopilot (control layer real_vessel)") for control in (_ARDUPILOT, _CUSTOM, _NONE)),
@@ -106,6 +109,12 @@ def _usv_navigation_container():
     return UsvNavigationAsvSystem
 
 
+def _moos_ivp_container():
+    from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_service_generator import MoosIvpAsvSystem
+
+    return MoosIvpAsvSystem
+
+
 def _ardupilot_control_layer():
     from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_control_layer import ArduPilotControlLayer
 
@@ -135,6 +144,7 @@ def build_registry(measurements: Optional[Mapping[str, CapabilityMeasurement]] =
 
     registry.register_layer(REPLAY_LAYER)
     registry.register_layer(USV_NAVIGATION_LAYER)
+    registry.register_layer(MOOS_IVP_LAYER)
     registry.register_layer(MISSION_PLANNER_LAYER)
     registry.register_layer(ON_BOARD_LAYER)
     # A control or simulation layer brings its own containers. Control layer none is the absence of a controller and brings none.
@@ -163,6 +173,11 @@ def build_registry(measurements: Optional[Mapping[str, CapabilityMeasurement]] =
     registry.register_adapter(GZ_TRANSPORT_ACTUATOR, runtime=gz_lockstep_link_runtime)
     registry.register_adapter(CUSTOM_CONTROLLER_HEADING_SPEED_INPUT, runtime=usv_navigation_participant_runtime, docker=_usv_navigation_container)
     registry.register_adapter(USV_NAVIGATION_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime, docker=_usv_navigation_container)
+    # MOOS-IvP's helm lives only in its image, so its adapters into the kinematic layer and the custom controller have no
+    # runtime in the caller's process; over MAVLink the runner's link is the same as for the other lockstep adapters.
+    registry.register_adapter(MOOS_IVP_HEADING_SPEED, docker=_moos_ivp_container)
+    registry.register_adapter(MOOS_IVP_CUSTOM_CONTROLLER_INPUT, docker=_moos_ivp_container)
+    registry.register_adapter(MOOS_IVP_MAVLINK_LOCKSTEP, runtime=mavlink_link_runtime, docker=_moos_ivp_container)
     # A real vessel: ArduAgent's modes into its autopilot, and the autopilot's built-in link to its hull.
     registry.register_adapter(REPLAY_ARDUAGENT_REAL_VESSEL)
     registry.register_adapter(MISSION_PLANNER_ARDUAGENT_REAL_VESSEL)

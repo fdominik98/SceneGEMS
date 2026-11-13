@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StackOptionsPayload, StackOptionWire } from "../../../domain/simulation/wireTypes";
-import { asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, vesselReadinessLabels, vesselTopic, withVesselName, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
+import { ASV_SYSTEM, ASV_SYSTEM_LABELS, REAL_VESSEL_ASV_SYSTEM, controlModeOf, asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, vesselReadinessLabels, vesselTopic, withVesselName, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
 
 const vessels: VesselDescriptor[] = [
   { id: "os", isOwnShip: true },
@@ -225,6 +225,16 @@ describe("stack choices from the resolver's options", () => {
     expect(missionPlanner.reason).toBe(
       "the kinematic sim integrates control internally; the custom controller has no MAVLink; control layer none has no MAVLink endpoint"
     );
+  });
+
+  it("offers MOOS-IvP among the ASV systems of a simulated vessel, where the resolver has a stack for it", () => {
+    expect(ASV_SYSTEM).toEqual(["replay", "usv_navigation", "moos_ivp", "mission_planner"]);
+    expect(ASV_SYSTEM_LABELS.moos_ivp).toBe("MOOS-IvP");
+    expect(REAL_VESSEL_ASV_SYSTEM).not.toContain("moos_ivp");
+    expect(controlModeOf("moos_ivp")).toBeUndefined();
+    const withMoosIvp = { ...OPTIONS, combinations: [...OPTIONS.combinations, option("Kinematic", "moos_ivp", "none"), option("Kinematic", "moos_ivp", "custom", "the kinematic sim integrates control internally")] };
+    expect(asvSystemChoice(withMoosIvp, "Kinematic", "moos_ivp")).toEqual({ available: true, reason: "" });
+    expect(controlLayerChoice(withMoosIvp, "Kinematic", "moos_ivp", "custom").available).toBe(false);
   });
 
   it("offers everything until the backend has sent its options", () => {

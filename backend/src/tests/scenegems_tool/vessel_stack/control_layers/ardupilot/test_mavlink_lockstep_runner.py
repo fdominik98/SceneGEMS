@@ -334,7 +334,7 @@ class TestRunMavlinkReplay:
         instance = mavlink_replay_instance(straight, SimulationLayerId.ARDUPILOT_SIM)
         for vessel in instance.vessels.values():
             vessel.adapter_ids = ("replay_arduagent_follower",)
-        with pytest.raises(StackUnavailableError, match="run_mavlink_stack needs replay_mavlink_lockstep or usv_navigation_mavlink_lockstep for every simulated vessel"):
+        with pytest.raises(StackUnavailableError, match="run_mavlink_stack needs moos_ivp_mavlink_lockstep or replay_mavlink_lockstep or usv_navigation_mavlink_lockstep for every simulated vessel"):
             run_mavlink_stack(straight, instance, GEOFENCE, resolver=resolver)
 
     def test_speedup_above_the_measured_limit_is_rejected(self, resolver, straight):

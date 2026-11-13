@@ -125,7 +125,7 @@ def test_a_format_1_config_without_ardupilot_keeps_its_hash():
     "run, reason",
     [
         ({"stack": {"simulation_layer": "mars"}}, "execution.runs.0.stack: Value error, unknown simulation_layer 'mars'; a stack runs on kinematic, ardupilot_sim, gazebo"),
-        (_run(stack={"mode": "pilot"}), "execution.runs.0.stack.mode: Input should be 'replay' or 'usv_navigation'"),
+        (_run(stack={"mode": "pilot"}), "execution.runs.0.stack.mode: Input should be 'replay', 'usv_navigation' or 'moos_ivp'"),
         (_run(stack={"usv_navigation": USV_NAVIGATION}), "execution.runs.0.stack: Value error, usv_navigation parameters apply only to mode usv_navigation"),
         (_run(stack={"control_layer": "none"}), "execution.runs.0.stack: Value error, control_layer 'none' does not run on ardupilot_sim; it takes ardupilot"),
         (_run(stack={"control_layer": "custom"}), "execution.runs.0.stack: Value error, the custom control layer drives gazebo only, not 'ardupilot_sim'"),

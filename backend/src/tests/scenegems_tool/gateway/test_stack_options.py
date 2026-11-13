@@ -18,9 +18,9 @@ def entry(options, simulator, asv, control):
 
 
 def test_every_triple_is_listed_once_with_the_choices(options):
-    assert len(options["combinations"]) == 64
+    assert len(options["combinations"]) == 80
     assert options["simulatorTypes"] == ["Kinematic", "Gazebo", "ArduPilot Sim"]
-    assert options["asvSystem"] == ["replay", "usv_navigation", "mission_planner", "on_board"]
+    assert options["asvSystem"] == ["replay", "usv_navigation", "moos_ivp", "mission_planner", "on_board"]
     assert options["controlLayers"] == ["ardupilot", "custom", "none", "real_vessel"]
 
 
@@ -28,13 +28,19 @@ def test_a_real_vessel_offers_replay_mission_planner_and_on_board_software(optio
     real = {item["asvSystem"]: item for item in options["combinations"] if item["simulatorType"] == "Real vessel" and item["controlLayer"] == "real_vessel"}
     assert sorted(software for software, item in real.items() if item["available"]) == ["mission_planner", "on_board", "replay"]
     assert all(real[software]["interactiveOnly"] for software in ("mission_planner", "on_board", "replay"))
-    assert "ArduAgent" in real["usv_navigation"]["reason"]
+    assert "ArduAgent" in real["usv_navigation"]["reason"] and "ArduAgent" in real["moos_ivp"]["reason"]
 
 
 def test_an_available_combination_carries_its_capabilities(options):
     item = entry(options, "Gazebo", "usv_navigation", "custom")
     assert item["available"] and item["status"] == "available" and item["reason"] == ""
     assert item["repeatabilityTier"] in ("exact", "bounded")
+
+
+def test_moos_ivp_is_offered_where_usv_navigation_is(options):
+    for simulator, control in (("Kinematic", "none"), ("Gazebo", "custom"), ("Gazebo", "ardupilot"), ("ArduPilot Sim", "ardupilot")):
+        item = entry(options, simulator, "moos_ivp", control)
+        assert item["available"] and not item["interactiveOnly"], (simulator, control)
 
 
 def test_a_ruled_out_combination_carries_the_resolver_reason(options):

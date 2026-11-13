@@ -1,6 +1,7 @@
-"""The availability matrix: all 64 (ASV system, control layer, simulation layer) triples against design section 3.3.
+"""The availability matrix: all 80 (ASV system, control layer, simulation layer) triples against design section 3.3.
 
-The 27 triples of the three simulators and the three ASV system SceneGEMS runs are the design's table. The
+The 27 triples of the three simulators and the three ASV system SceneGEMS ran first are the design's table;
+MOOS-IvP has the rows of USV Navigation, the other ASV system that decides a heading and a speed. The
 real vessel (its own control and simulation layer) and on_board ASV system add the rest: only the real
 vessel's own stacks exist, every other row names why not.
 """
@@ -27,6 +28,7 @@ RULED_OUT = {
     "custom_ardupilot_sim": "SITL physics only accepts ArduPilot control",
     "kinematic": "the kinematic sim integrates control internally",
     "usv_navigation_real_vessel": "has no command for USV Navigation's heading and speed references",
+    "moos_ivp_real_vessel": "has no command for MOOS-IvP's heading and speed decisions",
     "on_board": "this control layer brings no ASV system of its own",
     "real_vessel_control": "a real vessel's autopilot drives only its own hull",
     "real_vessel_simulation": "a real vessel is moved only by its own autopilot",
@@ -57,6 +59,15 @@ EXPECTED: Dict[Tuple[str, str, str], Tuple[str, str, List[str]]] = {
     ("usv_navigation", "ardupilot", "gazebo"): ("yes", AVAILABLE, []),
     ("usv_navigation", "custom", "gazebo"): ("yes", AVAILABLE, []),
     ("usv_navigation", "none", "gazebo"): ("no", UNAVAILABLE, [RULED_OUT["none_gazebo"]]),
+    ("moos_ivp", "none", "kinematic"): ("yes", AVAILABLE, []),
+    ("moos_ivp", "ardupilot", "kinematic"): ("no", UNAVAILABLE, [RULED_OUT["kinematic"]]),
+    ("moos_ivp", "custom", "kinematic"): ("no", UNAVAILABLE, [RULED_OUT["kinematic"]]),
+    ("moos_ivp", "ardupilot", "ardupilot_sim"): ("yes", AVAILABLE, []),
+    ("moos_ivp", "none", "ardupilot_sim"): ("no", UNAVAILABLE, [RULED_OUT["none_ardupilot_sim"]]),
+    ("moos_ivp", "custom", "ardupilot_sim"): ("no", UNAVAILABLE, [RULED_OUT["custom_ardupilot_sim"]]),
+    ("moos_ivp", "ardupilot", "gazebo"): ("yes", AVAILABLE, []),
+    ("moos_ivp", "custom", "gazebo"): ("yes", AVAILABLE, []),
+    ("moos_ivp", "none", "gazebo"): ("no", UNAVAILABLE, [RULED_OUT["none_gazebo"]]),
     ("mission_planner", "none", "kinematic"): ("no", UNAVAILABLE, [RULED_OUT["mission_planner_none"]]),
     ("mission_planner", "ardupilot", "kinematic"): ("no", UNAVAILABLE, [RULED_OUT["kinematic"]]),
     ("mission_planner", "custom", "kinematic"): ("no", UNAVAILABLE, [RULED_OUT["mission_planner_custom"], RULED_OUT["kinematic"]]),
@@ -71,6 +82,7 @@ EXPECTED: Dict[Tuple[str, str, str], Tuple[str, str, List[str]]] = {
     ("mission_planner", "real_vessel", "real_vessel"): ("yes, interactive only", AVAILABLE, []),
     ("on_board", "real_vessel", "real_vessel"): ("yes, interactive only", AVAILABLE, []),
     ("usv_navigation", "real_vessel", "real_vessel"): ("no", UNAVAILABLE, [RULED_OUT["usv_navigation_real_vessel"]]),
+    ("moos_ivp", "real_vessel", "real_vessel"): ("no", UNAVAILABLE, [RULED_OUT["moos_ivp_real_vessel"]]),
 }
 
 
@@ -86,10 +98,12 @@ def _ruled_out_by_the_new_layers(asv: str, control: str, simulation: str) -> Lis
         reasons.append(RULED_OUT["real_vessel_simulation"])
     if asv == "usv_navigation" and control == "real_vessel":
         reasons.append(RULED_OUT["usv_navigation_real_vessel"])
+    if asv == "moos_ivp" and control == "real_vessel":
+        reasons.append(RULED_OUT["moos_ivp_real_vessel"])
     return reasons
 
 
-for _asv in ("replay", "usv_navigation", "mission_planner", "on_board"):
+for _asv in ("replay", "usv_navigation", "moos_ivp", "mission_planner", "on_board"):
     for _control in (*SCENEGEMS_CONTROL_LAYERS, "real_vessel"):
         for _simulation in (*SIMULATORS, "real_vessel"):
             EXPECTED.setdefault((_asv, _control, _simulation), ("no", UNAVAILABLE, _ruled_out_by_the_new_layers(_asv, _control, _simulation)))
@@ -106,14 +120,14 @@ def matrix():
 
 def test_expected_table_covers_every_role_combination():
     every_triple = {(asv.value, control.value, simulation.value) for asv in AsvSystemId for control in ControlLayerId for simulation in SimulationLayerId}
-    assert len(every_triple) == 64
+    assert len(every_triple) == 80
     assert set(EXPECTED) == every_triple
 
 
 def test_availability_matrix_lists_each_triple_once():
     chains = default_resolver().availability_matrix()
-    assert len(chains) == 64
-    assert len({triple(chain) for chain in chains}) == 64
+    assert len(chains) == 80
+    assert len({triple(chain) for chain in chains}) == 80
 
 
 def test_availability_matrix_orders_by_asv_then_simulation_then_control():
@@ -135,11 +149,11 @@ def test_triple_matches_design_table(matrix, key):
         assert chain.reasons == ()
 
 
-def test_matrix_counts_are_thirteen_available_none_planned_fifty_one_unavailable(matrix):
+def test_matrix_counts_are_seventeen_available_none_planned_sixty_three_unavailable(matrix):
     statuses = [chain.status for chain in matrix.values()]
-    assert statuses.count(AVAILABLE) == 13
+    assert statuses.count(AVAILABLE) == 17
     assert statuses.count(PLANNED) == 0
-    assert statuses.count(UNAVAILABLE) == 51
+    assert statuses.count(UNAVAILABLE) == 63
 
 
 def test_design_yes_rows_are_exactly_the_complete_chains(matrix):
@@ -225,6 +239,21 @@ def test_usv_navigation_on_ardupilot_runs_through_the_lockstep_mavlink_link(matr
 def test_usv_navigation_on_the_custom_controller_runs_through_its_heading_speed_input_and_the_gz_actuator(matrix):
     chain = matrix[("usv_navigation", "custom", "gazebo")]
     assert [adapter.id for adapter in chain.adapters] == ["custom_controller_heading_speed_input", "gz_transport_actuator"]
+
+
+def test_moos_ivp_reaches_each_control_layer_through_an_adapter_of_its_own(matrix):
+    assert [adapter.id for adapter in matrix[("moos_ivp", "none", "kinematic")].adapters] == ["moos_ivp_heading_speed", "kinematic_command_input"]
+    assert [adapter.id for adapter in matrix[("moos_ivp", "custom", "gazebo")].adapters] == ["moos_ivp_custom_controller_input", "gz_transport_actuator"]
+    for simulation in ("ardupilot_sim", "gazebo"):
+        chain = matrix[("moos_ivp", "ardupilot", simulation)]
+        assert chain.asv_adapter.id == "moos_ivp_mavlink_lockstep"
+        assert chain.capabilities.lockstep
+
+
+def test_moos_ivp_stacks_are_not_workbench_only(matrix):
+    """No operator is needed for them: they wait for an unattended runner, and until then the workbench runs them as attended jobs."""
+    for key in (("moos_ivp", "none", "kinematic"), ("moos_ivp", "custom", "gazebo"), ("moos_ivp", "ardupilot", "ardupilot_sim"), ("moos_ivp", "ardupilot", "gazebo")):
+        assert not matrix[key].capabilities.interactive_only
 
 
 def test_replay_on_the_custom_controller_runs_through_the_waypoint_follower_and_the_gz_actuator(matrix):

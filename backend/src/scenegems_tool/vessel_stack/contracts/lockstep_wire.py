@@ -36,7 +36,7 @@ implementation (simulation_layers/kinematic/kinematic_sim_server.py, and the gz-
 of the Gazebo image, which had this shape first).
 
 This file imports only the standard library: an image that holds one component and no SceneGEMS
-backend copies it next to the component's server (deploy/images/usv_navigation).
+backend copies it next to the component's server (deploy/images/usv_navigation, deploy/images/moos_ivp).
 """
 
 import json
@@ -86,6 +86,9 @@ class Session:
         if handler is None:
             raise WireError(f"unknown op {request.get('op')!r}")
         return handler(request)
+
+    def close(self) -> None:
+        """Called once when the runner's connection ends, however it ends: release what the session holds (the processes of MOOS-IvP's helm)."""
 
 
 class LineServer:
@@ -140,6 +143,8 @@ class LineServer:
                 _send(writer, reply)
         except (OSError, ValueError):
             return  # the runner went away mid-line
+        finally:
+            session.close()
 
     def _hello(self) -> Message:
         return {"op": "hello", "protocol": PROTOCOL_VERSION, "role": self.role, "implementation": self.implementation}

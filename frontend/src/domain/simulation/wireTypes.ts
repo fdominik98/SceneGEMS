@@ -1,6 +1,6 @@
 /** ASV system of a vessel stack (backend `AsvSystemId`). */
 /** on_board: the vessel's own software steers it (a real vessel); SceneGEMS runs none. */
-export type AsvSystemWire = "replay" | "usv_navigation" | "mission_planner" | "on_board";
+export type AsvSystemWire = "replay" | "usv_navigation" | "moos_ivp" | "mission_planner" | "on_board";
 /** Control layer of a vessel stack (backend `ControlLayerId`). */
 /** real_vessel: a real vessel's own autopilot, which is also its simulation layer ("Real vessel"). */
 export type ControlLayerWire = "ardupilot" | "custom" | "none" | "real_vessel";
@@ -8,7 +8,7 @@ export type ControlLayerWire = "ardupilot" | "custom" | "none" | "real_vessel";
 /**
  * Per-agent connection info of a simulation setup (matches server TypedDict `SimulationConnectionInfo`).
  * `asvSystem` and `controlLayer` choose the vessel's stack; `controlMode` is ArduAgent's mode
- * for the same ASV system (absent for USV Navigation, which ArduAgent cannot drive).
+ * for the same ASV system (absent for USV Navigation and MOOS-IvP, which ArduAgent cannot drive).
  */
 export type SimulationConnectionInfo =
   | {

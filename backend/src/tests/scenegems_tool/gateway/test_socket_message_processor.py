@@ -95,7 +95,7 @@ class TestDispatch:
         await send(processor, {"type": "query_stack_options"})
         ((name, payload),) = session.calls
         assert name == "send_payload" and payload["type"] == "stack_options"
-        assert len(payload["combinations"]) == 64
+        assert len(payload["combinations"]) == 80
         assert "Real vessel" not in payload["simulatorTypes"]
 
     async def test_messages_are_handled_in_order(self, setup):

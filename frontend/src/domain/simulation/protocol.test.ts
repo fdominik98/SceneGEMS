@@ -224,14 +224,15 @@ describe("parseServerMessage", () => {
     const msg = parseServerMessage({
       type: "stack_options",
       simulatorTypes: ["Kinematic", "Gazebo", "ArduPilot Sim"],
-      asvSystem: ["replay", "usv_navigation", "mission_planner"],
+      asvSystem: ["replay", "usv_navigation", "moos_ivp", "mission_planner", "on_board"],
       controlLayers: ["ardupilot", "custom", "none"],
-      combinations: [combination],
+      combinations: [combination, { ...combination, asvSystem: "moos_ivp" }],
     });
     expect(msg.kind).toBe("stack_options");
     if (msg.kind === "stack_options") {
       expect(msg.options.simulatorTypes).toEqual(["Kinematic", "Gazebo", "ArduPilot Sim"]);
-      expect(msg.options.combinations).toEqual([combination]);
+      expect(msg.options.asvSystem).toEqual(["replay", "usv_navigation", "moos_ivp", "mission_planner", "on_board"]);
+      expect(msg.options.combinations).toEqual([combination, { ...combination, asvSystem: "moos_ivp" }]);
     }
   });
 

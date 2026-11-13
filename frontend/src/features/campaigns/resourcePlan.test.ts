@@ -80,6 +80,9 @@ describe("requiredCapabilities of a campaign with several stacks", () => {
     const navigation = requiredCapabilities(config([{ stack: { simulation_layer: "kinematic", mode: "usv_navigation" } }]))[2];
     expect(navigation.components).toEqual(["asv_system/replay", "asv_system/usv_navigation", "control_layer/none", "simulation_layer/kinematic"]);
     expect(navigation.reason).toBe("The run is simulated on the kinematic layer with USV Navigation.");
+    const helm = requiredCapabilities(config([{ stack: { simulation_layer: "gazebo", control_layer: "custom", mode: "moos_ivp" } }]))[2];
+    expect(helm.components).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/custom", "simulation_layer/gazebo"]);
+    expect(helm.reason).toBe("The run is simulated on the custom controller with Gazebo with MOOS-IvP.");
   });
 
   it("needs one simulation per distinct set of components, naming the runs of each", () => {

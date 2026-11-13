@@ -37,9 +37,12 @@ the control node, the worker node or the instance.
 Version 11: attended simulations. The simulation job has a runner that brings its stack up and waits for the
 operator: StartJob from the control node starts its run, and JobStatus may carry a detail (the phase of the run,
 the ports the stack published for a ground control station).
+
+Version 12: MOOS-IvP is an ASV system (the component asv_system/moos_ivp), and the simulation job's kinematic,
+ardupilot and gazebo_custom runners have the mode moos_ivp, with a moos_ivp block of helm parameters in their payloads.
 """
 
-PROTOCOL_VERSION = 11
+PROTOCOL_VERSION = 12
 
 
 class ProtocolVersionMismatch(ValueError):

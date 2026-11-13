@@ -82,6 +82,68 @@ def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instance
     assert "scenegems-simulation-subsystem" in services["os_asv_system"]["image"]
 
 
+def test_in_mode_moos_ivp_the_own_ship_runs_the_moos_ivp_image(instances_folder, worker_node, make_job, head_on_trajectories):
+    _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
+    services = stack.compose["services"]
+    assert "scenegems-moos-ivp" in services["os_asv_system"]["image"]
+    assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "11410"]
+    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
+
+
+def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
+    with pytest.raises(JobFailed) as failure:
+        kinematic_stack(worker_node, make_job, head_on_trajectories, mode="moos_ivp", moos_ivp={"speed": 500.0})
+    assert not failure.value.retryable and "Simulation payload rejected" in str(failure.value) and "at most max_speed" in str(failure.value)
+
+
+def test_a_moos_ivp_run_steps_the_helms_container_and_records_what_it_reported(make_job, head_on_trajectories):
+    """The helm lives only in its container: the job's execute steps the layers' servers on the loopback interface, with the tests' helm in MOOS-IvP's place."""
+    from tests.scenegems_tool.vessel_stack.asv_system.moos_ivp.fake_helm import FakeHelm
+
+    FakeHelm.started.clear()
+    job = make_job(JobType.SIMULATION, {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), "mode": "moos_ivp", "moos_ivp": {"avoidance": "cpa", "capture_radius": 75.0}})
+    instance = kinematic_run_instance(KinematicSimulationPayload.model_validate(job.payload))[1]
+    results = []
+    for _ in range(2):
+        with loopback_hosting(instance) as hosting:
+            results.append(simulation_job.execute(job, _quiet, hosting=hosting))
+    assert results[0] == results[1], "the same payload gives the same run"
+    record = results[0]["run_record"]
+    assert record["stacks"] == {"0": "moos_ivp, none, kinematic", "1": "replay, none, kinematic"} and "moos_ivp_heading_speed" in record["specs"]
+    helm_block = record["moos_ivp"]
+    assert helm_block["vessel"] == 0 and helm_block["parameters"]["avoidance"] == "cpa" and helm_block["parameters"]["capture_radius"] == 75.0
+    assert helm_block["avoidance_behaviour"] == "BHV_AvoidCollision" and helm_block["no_decision_steps"] == 0 and [0.0, "spawn", "avd_c1"] in helm_block["events"]
+    assert "usv_navigation" not in record
+    assert "capture_radius = 75.0" in FakeHelm.started[0].behaviours
+    with pytest.raises(RuntimeError, match="MOOS-IvP runs only in its container"):
+        simulation_job.execute(job, _quiet)
+
+
+@pytest.mark.parametrize(
+    "fields, message",
+    [
+        ({"own_ship_id": 1}, "own_ship_id applies only to the modes usv_navigation and moos_ivp"),
+        ({"moos_ivp": {"avoidance": "cpa"}}, "moos_ivp parameters apply only to mode moos_ivp"),
+        ({"mode": "usv_navigation", "moos_ivp": {"avoidance": "cpa"}}, "moos_ivp parameters apply only to mode moos_ivp"),
+        ({"mode": "moos_ivp", "usv_navigation": {"goal": [1.0, 2.0], "speed": 1.0, "safety_radius": 1.0, "control_horizon": 1.0}}, "usv_navigation parameters apply only to mode usv_navigation"),
+        ({"mode": "moos_ivp", "moos_ivp": {"pwt_inner_dist": 500.0, "pwt_outer_dist": 100.0}}, "pwt_inner_dist must not exceed pwt_outer_dist"),
+        ({"mode": "moos_ivp", "moos_ivp": {"colour": "red"}}, "Extra inputs are not permitted"),
+    ],
+)
+def test_the_options_of_the_own_ships_software_are_checked(head_on_trajectories, fields, message):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match=message):
+        KinematicSimulationPayload.model_validate({"runner": "kinematic", "trajectories": head_on_trajectories.to_dict(), **fields})
+
+
+def test_a_payload_without_moos_ivp_keeps_the_json_it_had_before_the_mode(head_on_trajectories):
+    data = {"runner": "kinematic", "trajectories": head_on_trajectories.to_dict()}
+    assert "moos_ivp" not in KinematicSimulationPayload.model_validate(data).model_dump(mode="json")
+    given = KinematicSimulationPayload.model_validate({**data, "mode": "moos_ivp", "moos_ivp": {"avoidance": "cpa"}}).model_dump(mode="json")
+    assert given["moos_ivp"] == {"avoidance": "cpa"}, "and the values a payload leaves out stay out"
+
+
 def test_an_unknown_own_ship_fails_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
     with pytest.raises(JobFailed) as failure:
         kinematic_stack(worker_node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=9)

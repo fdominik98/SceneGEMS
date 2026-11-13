@@ -140,6 +140,10 @@ def test_the_stack_options_are_the_ones_the_campaign_config_accepts(stacks):
         assert option["environment"] == {"wind": "unsupported", "waves": "unsupported", "interactive_only": False}
 
 
+# The parameter group of the ASV system each mode puts on the own ship
+OWN_SHIP_GROUPS = {KinematicMode.REPLAY: [], KinematicMode.USV_NAVIGATION: ["usv_navigation"], KinematicMode.MOOS_IVP: ["moos_ivp"]}
+
+
 @pytest.mark.parametrize("mode", KinematicMode)
 def test_the_ardupilot_stacks_are_offered_with_the_parameters_of_the_config_model(stacks, mode):
     options = by_id(stacks["stacks"])
@@ -152,7 +156,7 @@ def test_the_ardupilot_stacks_are_offered_with_the_parameters_of_the_config_mode
         replay = {"asv_system": "replay", "control_layer": "ardupilot", "simulation_layer": layer}
         own_ship = {**replay, "asv_system": mode.value}
         assert option["vessels"] == {"own_ship": own_ship, "target_ship": replay}
-        assert [group["key"] for group in option["groups"]] == (["usv_navigation"] if mode == KinematicMode.USV_NAVIGATION else []) + ["geofence"]
+        assert [group["key"] for group in option["groups"]] == OWN_SHIP_GROUPS[mode] + ["geofence"]
         parameters = by_id(option["parameters"], "key")
         assert set(parameters) == {"speedup", "dt", "steps"} <= set(ArdupilotStackConfig.model_fields)
         assert parameters["speedup"]["default"] == ArdupilotStackConfig.model_fields["speedup"].default == 1 and parameters["speedup"]["minimum"] == 1
@@ -164,7 +168,7 @@ def test_the_ardupilot_stacks_are_offered_with_the_parameters_of_the_config_mode
             key: field.default for key, field in GeofenceSettings.model_fields.items()
         }
         assert fields["radius_meters"]["unit"] == "m" and fields["latitude"]["maximum"] == 90.0
-        assert set(ArdupilotStackConfig.model_fields) == {"simulation_layer", "mode", "usv_navigation", *parameters, group["key"]}
+        assert set(ArdupilotStackConfig.model_fields) == {"simulation_layer", "mode", "usv_navigation", "moos_ivp", *parameters, group["key"]}
 
 
 @pytest.mark.parametrize("mode", KinematicMode)
@@ -179,8 +183,8 @@ def test_the_custom_controller_is_offered_with_wind_and_waves(stacks, mode):
     parameters = by_id(option["parameters"], "key")
     assert set(parameters) == {"dt", "steps"}
     groups = [group["key"] for group in option["groups"]]
-    assert groups == (["usv_navigation"] if mode == KinematicMode.USV_NAVIGATION else [])
-    assert set(CustomStackConfig.model_fields) == {"simulation_layer", "control_layer", "mode", "usv_navigation", *parameters}
+    assert groups == OWN_SHIP_GROUPS[mode]
+    assert set(CustomStackConfig.model_fields) == {"simulation_layer", "control_layer", "mode", "usv_navigation", "moos_ivp", *parameters}
 
 
 def test_the_ids_are_their_stack_sections(stacks):
@@ -260,13 +264,35 @@ def test_the_run_fields_name_the_defaults_of_the_run_config(stacks):
     assert {"name", "seed", "repeats", "early_stop", "environment.wind_vector", "environment.waves"} == set(fields)
 
 
+def test_moos_ivp_has_its_parameters_all_optional(stacks):
+    """A value of the group replaces the scene's own, so none is required and none has a default: the form leaves out what the operator leaves empty."""
+    from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import MoosIvpPayload
+
+    options = by_id(stacks["stacks"])
+    replay = {"asv_system": "replay", "control_layer": "none", "simulation_layer": "kinematic"}
+    option = options["kinematic.moos_ivp"]
+    assert option["available"] is True and option["repeatability_tier"] == "exact" and option["supports_early_stop"] is True
+    assert option["vessels"] == {"own_ship": {**replay, "asv_system": "moos_ivp"}, "target_ship": replay}
+    assert option["stack_section"] == {"simulation_layer": "kinematic", "mode": "moos_ivp"}
+    (group,) = option["groups"]
+    assert group["key"] == "moos_ivp" and group["label"] == "MOOS-IvP parameters" and group["optional"] is True
+    assert "visibility distance" in group["derived_when_absent"] and "safety radius" in group["derived_when_absent"]
+    parameters = by_id(group["parameters"], "key")
+    assert set(parameters) == set(MoosIvpPayload.model_fields) - {"behaviour_options"}, "no form type takes a map of strings, so behaviour_options is a field of the config only"
+    assert not any(parameter["required"] for parameter in parameters.values()) and all(parameter["default"] is None for parameter in parameters.values())
+    assert parameters["avoidance"]["choices"] == ["colregs", "cpa"] and parameters["avoidance"]["type"] == "string"
+    assert parameters["goal"]["type"] == "number_pair" and parameters["pwt_outer_dist"]["unit"] == "m" and parameters["speed"]["exclusive_minimum"] == 0.0
+    for option_id in ("ardupilot_sim.moos_ivp", "gazebo.moos_ivp", "gazebo_custom.moos_ivp"):
+        assert options[option_id]["groups"][0] == group, option_id
+
+
 def test_every_other_stack_of_the_resolver_is_listed_as_unavailable_with_its_reasons(stacks):
     resolver = default_resolver()
     matrix = resolver.availability_matrix()
     unavailable = stacks["unavailable_stacks"]
     offered = {
         (software, control, layer)
-        for software in ("replay", "usv_navigation")
+        for software in ("replay", "usv_navigation", "moos_ivp")
         for control, layer in (("none", "kinematic"), ("ardupilot", "ardupilot_sim"), ("ardupilot", "gazebo"), ("custom", "gazebo"))
     }
     listed = {(entry["asv_system"], entry["control_layer"], entry["simulation_layer"]) for entry in unavailable}
@@ -280,6 +306,7 @@ def test_the_reasons_tell_why_a_resolver_stack_is_not_a_campaign_stack(stacks):
     entries = {(entry["asv_system"], entry["control_layer"], entry["simulation_layer"]): entry for entry in stacks["unavailable_stacks"]}
     assert ("replay", "ardupilot", "gazebo") not in entries and ("replay", "ardupilot", "ardupilot_sim") not in entries  # offered since P6.6
     assert ("usv_navigation", "ardupilot", "ardupilot_sim") not in entries and ("usv_navigation", "custom", "gazebo") not in entries  # offered since P7.5
+    assert ("moos_ivp", "none", "kinematic") not in entries and ("moos_ivp", "ardupilot", "gazebo") not in entries  # offered with the mode moos_ivp
     assert not [entry for entry in entries.values() if entry["available_in_resolver"] and "workbench only" not in entry["reasons"][0]], "every available campaign stack is offered"
     impossible = entries[("replay", "ardupilot", "kinematic")]
     assert impossible["status"] == "unavailable" and impossible["design_status"] == "no" and "integrates control internally" in impossible["reasons"][0]

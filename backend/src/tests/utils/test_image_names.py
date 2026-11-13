@@ -65,9 +65,10 @@ def test_scenegems_image_tag_names_every_image_scenegems_builds():
     completed = subprocess.run([sys.executable, "-c", SCRIPT], capture_output=True, text=True, env=environ, cwd=SRC, check=True)
     found = json.loads(completed.stdout.strip().splitlines()[-1])
     assert (
-        len(found["images"]) == 10
+        len(found["images"]) == 11
         and "scenegems-design-space-exploration-subsystem:rev9" in found["images"]
         and "scenegems-usv-navigation:rev9" in found["images"]
+        and "scenegems-moos-ivp:rev9" in found["images"]
         and all(image.startswith("scenegems-") and image.endswith(":rev9") for image in found["images"])
     ), found
     assert found["sitl"] == "${SITL_IMAGE:-scenegems-ardupilot-sitl:rev9}", "a variable still overrides the image"

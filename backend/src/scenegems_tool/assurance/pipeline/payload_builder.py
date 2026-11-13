@@ -228,8 +228,7 @@ class PayloadBuilder:
             return self._attended_simulation(run, run.stack, run.seed_for(case_seed), trajectories)
         stack = run.stack
         payload: Dict[str, Any] = {"runner": SimulationRunner.KINEMATIC.value, "mode": stack.mode.value, "trajectories": trajectories, "seed": run.seed_for(case_seed)}
-        if stack.usv_navigation is not None:
-            payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
+        self._asv_system_parameters(stack, payload)
         if stack.dt is not None:
             payload["dt"] = stack.dt
         if stack.steps is not None:
@@ -286,9 +285,8 @@ class PayloadBuilder:
         return self._lockstep_options(run, stack, payload)
 
     def _lockstep_options(self, run: RunConfig, stack: Any, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """The fields the ardupilot and gazebo_custom payloads share: the USV Navigation parameters, dt, steps and the live monitor's options."""
-        if stack.usv_navigation is not None:
-            payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
+        """The fields the ardupilot and gazebo_custom payloads share: the parameters of the own ship's ASV system, dt, steps and the live monitor's options."""
+        self._asv_system_parameters(stack, payload)
         if stack.dt is not None:
             payload["dt"] = stack.dt
         if stack.steps is not None:
@@ -296,6 +294,14 @@ class PayloadBuilder:
         if run.monitor == MonitorImplementation.LIVE:
             payload.update(monitor="live", colregs_constraints_content=self.config.domain.colregs_constants)
         return payload
+
+    @staticmethod
+    def _asv_system_parameters(stack: Any, payload: Dict[str, Any]) -> None:
+        """The parameters a stack section gives for the own ship's ASV system (USV Navigation's, MOOS-IvP's), as the runner's payload takes them."""
+        if stack.usv_navigation is not None:
+            payload["usv_navigation"] = stack.usv_navigation.model_dump(mode="json")
+        if stack.moos_ivp is not None:
+            payload["moos_ivp"] = stack.moos_ivp.model_dump(mode="json")
 
     def post_hoc_monitoring(self, scenario_id: str, simulation_result: Mapping[str, Any]) -> Dict[str, Any]:
         return self._monitoring(scenario_id, trajectories=trajectories_of_simulation_result(simulation_result))

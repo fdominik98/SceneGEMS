@@ -1,5 +1,5 @@
 """Lockstep runner for the kinematic layer, with a replay run of generated trajectories and a
-closed-loop run of USV Navigation against replaying targets.
+closed-loop run of USV Navigation or MOOS-IvP against replaying targets.
 
 The runner owns no time of its own: every step it takes the simulation's step request,
 collects one command and one acknowledgement per participant, and lets the simulation
@@ -24,8 +24,9 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
 from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
-from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
-from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters, parameters_for
+from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest, RunParameters
+from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import MoosIvpParameters
+from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import COLAV_AUTOMATON_COMMIT
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant, StepAck, derive_seed
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
@@ -38,7 +39,8 @@ from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulatio
 
 KINEMATIC_REPLAY_STACK = VesselStackConfig(asv_system=AsvSystemId.REPLAY, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
 KINEMATIC_USV_NAVIGATION_STACK = VesselStackConfig(asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
-_KINEMATIC_STACKS = {AsvSystemId.REPLAY: KINEMATIC_REPLAY_STACK, AsvSystemId.USV_NAVIGATION: KINEMATIC_USV_NAVIGATION_STACK}
+KINEMATIC_MOOS_IVP_STACK = VesselStackConfig(asv_system=AsvSystemId.MOOS_IVP, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
+_KINEMATIC_STACKS = {AsvSystemId.REPLAY: KINEMATIC_REPLAY_STACK, AsvSystemId.USV_NAVIGATION: KINEMATIC_USV_NAVIGATION_STACK, AsvSystemId.MOOS_IVP: KINEMATIC_MOOS_IVP_STACK}
 
 # Called with the step index (0 for the initial states) and the states in actor order after
 # that step; returning True ends the run after the step.
@@ -81,7 +83,7 @@ class KinematicInstanceRun:
 
     result: KinematicRunResult
     resolution: InstanceResolution
-    parameters: Mapping[int, UsvNavigationParameters]  # of the vessels on USV Navigation, by vessel id
+    parameters: Mapping[int, Any]  # of the vessels whose ASV system has parameters (UsvNavigationParameters, MoosIvpParameters), by vessel id
     reports: Mapping[int, Mapping[str, Any]]  # what each ASV system reported, by vessel id
 
     @property
@@ -162,6 +164,7 @@ def run_kinematic_instance(
     dt: Optional[float] = None,
     steps: Optional[int] = None,
     usv_navigation_parameters: Optional[Mapping[int, UsvNavigationParameters]] = None,
+    moos_ivp_parameters: Optional[Mapping[int, MoosIvpParameters]] = None,
     hosting: Optional[StackHosting] = None,
     resolver: Optional[StackResolver] = None,
     attended: bool = False,
@@ -171,17 +174,18 @@ def run_kinematic_instance(
 
     The instance and its environment are validated by the resolver first, so wind or waves are
     rejected with a reason. hosting decides where the simulator and the ASV system run: in this
-    process by default, in the stack's containers with ContainerHosting. A vessel on USV Navigation
-    takes its parameters from usv_navigation_parameters (by vessel id), else from its generated
-    trajectory. dt defaults to the trajectory time step and steps to its timespan. The run seed is
-    the environment's. on_step observes every step and may end the run early.
+    process by default, in the stack's containers with ContainerHosting (MOOS-IvP runs only there).
+    A vessel on USV Navigation takes its parameters from usv_navigation_parameters (by vessel id),
+    one on MOOS-IvP from moos_ivp_parameters, else from its generated trajectory. dt defaults to the
+    trajectory time step and steps to its timespan. The run seed is the environment's. on_step
+    observes every step and may end the run early.
     """
     resolver = resolver or default_resolver()
     resolution = resolver.require_instance(instance, attended=attended)
     hosting = hosting or InProcessHosting()
     dt = float(trajectories.time_step) if dt is None else dt
     scene = trajectories.initial_scene
-    parameters: Dict[int, UsvNavigationParameters] = {}
+    parameters = RunParameters({AsvSystemId.USV_NAVIGATION: usv_navigation_parameters, AsvSystemId.MOOS_IVP: moos_ivp_parameters})
     participants: Dict[int, LockstepParticipant] = {}
     try:
         for agent_id, vessel_config in instance.simulated_vessels.items():
@@ -189,8 +193,6 @@ def run_kinematic_instance(
             if not isinstance(vessel, ConcreteVessel):
                 raise ValueError(f"Vessel {vessel} is not a ConcreteVessel.")
             software = vessel_config.stack.asv_system
-            if software == AsvSystemId.USV_NAVIGATION:
-                parameters[vessel.id] = parameters_for(vessel, trajectories, dt, usv_navigation_parameters)
             participants[vessel.id] = hosting.asv_system(
                 ParticipantRequest(
                     vessel=vessel,
@@ -199,7 +201,7 @@ def run_kinematic_instance(
                     adapter=resolution.chains[agent_id].asv_adapter,
                     trajectories=trajectories,
                     dt=dt,
-                    parameters=parameters.get(vessel.id),
+                    parameters=parameters.resolve(software, vessel, trajectories, dt),
                 )
             )
         simulation = hosting.kinematic_simulation(scene, dt, [participant.participant_id for participant in participants.values()])
@@ -207,7 +209,7 @@ def run_kinematic_instance(
         reports = participant_reports(participants)
     finally:
         hosting.close()
-    return KinematicInstanceRun(result=result, resolution=resolution, parameters=parameters, reports=reports)
+    return KinematicInstanceRun(result=result, resolution=resolution, parameters=parameters.by_vessel, reports=reports)
 
 
 def run_kinematic_replay(
@@ -240,36 +242,47 @@ def run_kinematic_closed_loop(
     resolver: Optional[StackResolver] = None,
     on_step: Optional[StepObserver] = None,
     hosting: Optional[StackHosting] = None,
+    asv_system: AsvSystemId = AsvSystemId.USV_NAVIGATION,
+    moos_ivp_parameters: Optional[MoosIvpParameters] = None,
 ) -> KinematicRunResult:
-    """Close the loop around USV Navigation on the own ship while every other vessel replays its trajectory.
+    """Close the loop around an ASV system on the own ship while every other vessel replays its trajectory.
 
-    The own ship (the scene's OS unless own_ship_id names another vessel) runs (usv_navigation,
-    none, kinematic) and the other vessels run (replay, none, kinematic), all in one simulation
-    and clock. The USV Navigation parameters default to UsvNavigationParameters.from_reference on
-    the own ship's generated trajectory. See run_kinematic_instance for the other arguments.
+    The own ship (the scene's OS unless own_ship_id names another vessel) runs (asv_system, none,
+    kinematic), USV Navigation unless asv_system names MOOS-IvP, and the other vessels run (replay,
+    none, kinematic), all in one simulation and clock. The software's parameters default to its
+    from_reference on the own ship's generated trajectory. The run record has a block named after
+    the software: its parameters and what it reported. See run_kinematic_instance for the other arguments.
     """
+    if asv_system not in (AsvSystemId.USV_NAVIGATION, AsvSystemId.MOOS_IVP):
+        raise ValueError(f"the closed loop runs USV Navigation or MOOS-IvP on the own ship, not {asv_system.value}")
     dt = float(trajectories.time_step) if dt is None else dt
     scene = trajectories.initial_scene
     own = scene.os if own_ship_id is None else next((vessel for vessel in scene.vessels if vessel.id == own_ship_id), None)
     if own is None:
         raise ValueError(f"No vessel with id {own_ship_id} in the scene")
-    instance = kinematic_instance(trajectories, {own.id: AsvSystemId.USV_NAVIGATION}, environment=environment)
-    given = {own.id: usv_navigation_parameters} if usv_navigation_parameters is not None else None
-    run = run_kinematic_instance(trajectories, instance, dt=dt, steps=steps, usv_navigation_parameters=given, hosting=hosting, resolver=resolver, on_step=on_step)
-    navigation = run.reports.get(own.id, {})
-    record = run.record(
-        dt,
-        stacks=run.stacks,
-        specs=run.spec_ids,
-        usv_navigation={
-            "vessel": own.id,
-            "colav_automaton_commit": COLAV_AUTOMATON_COMMIT,
-            "parameters": run.parameters[own.id].as_dict(),
-            "transitions": [list(transition) for transition in navigation.get("transitions", [])],
-            "goal_reached_at": navigation.get("goal_reached_at"),
-        },
+    instance = kinematic_instance(trajectories, {own.id: asv_system}, environment=environment)
+    run = run_kinematic_instance(
+        trajectories,
+        instance,
+        dt=dt,
+        steps=steps,
+        usv_navigation_parameters={own.id: usv_navigation_parameters} if usv_navigation_parameters is not None else None,
+        moos_ivp_parameters={own.id: moos_ivp_parameters} if moos_ivp_parameters is not None else None,
+        hosting=hosting,
+        resolver=resolver,
+        on_step=on_step,
     )
-    return dataclasses.replace(run.result, run_record=record)
+    navigation = run.reports.get(own.id, {})
+    software: Dict[str, Any] = {"vessel": own.id, "parameters": run.parameters[own.id].as_dict()}
+    if asv_system == AsvSystemId.USV_NAVIGATION:
+        software.update(
+            colav_automaton_commit=COLAV_AUTOMATON_COMMIT,
+            transitions=[list(transition) for transition in navigation.get("transitions", [])],
+            goal_reached_at=navigation.get("goal_reached_at"),
+        )
+    else:
+        software.update(navigation)  # what the helm's container reported: the commit of its image, its behaviours' events, when it arrived
+    return dataclasses.replace(run.result, run_record=run.record(dt, stacks=run.stacks, specs=run.spec_ids, **{asv_system.value: software}))
 
 
 def _unique_ids(ids: Iterable[str]) -> List[str]:

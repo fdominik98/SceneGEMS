@@ -75,7 +75,7 @@ describe("the job a simulation runs as", () => {
     expect(where([vessel("0", { controlLayer: "ardupilot" }), vessel("1", { controlLayer: "ardupilot", asvSystem: "usv_navigation" })])).toMatchObject({
       where: "cluster",
       runner: "attended",
-      reason: expect.stringContaining("USV Navigation on the own ship only"),
+      reason: expect.stringContaining("USV Navigation or MOOS-IvP on the own ship only"),
     });
     expect(where(onArduPilot({ controlLayer: "custom" }))).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("replay on ArduPilot") });
     expect(where(onArduPilot({ controlLayer: "custom" }), { simulatorType: "Gazebo" })).toMatchObject({ where: "cluster", runner: "attended", reason: expect.stringContaining("custom controller") });
@@ -133,6 +133,17 @@ describe("the job a simulation runs as", () => {
       runner: "attended",
       reason: expect.stringContaining("only the own ship may run USV Navigation"),
     });
+  });
+
+  it("runs MOOS-IvP on the own ship unattended on every layer, and leaves it on a target ship to an attended job", () => {
+    const kinematic = clusterPlan(planSimulationRun(setup([vessel("0", { asvSystem: "moos_ivp" }), vessel("1")])));
+    expect(kinematic).toMatchObject({ runner: "kinematic", mode: "moos_ivp", ownShipId: 0 });
+    expect(kinematic.components).toEqual(["asv_system/replay", "asv_system/moos_ivp", "control_layer/none", "simulation_layer/kinematic", "monitoring"]);
+    const onArduPilot = [vessel("0", { controlLayer: "ardupilot", asvSystem: "moos_ivp" }), vessel("1", { controlLayer: "ardupilot" })];
+    expect(planSimulationRun(setup(onArduPilot, { simulatorType: "ArduPilot Sim" }))).toMatchObject({ runner: "ardupilot", mode: "moos_ivp", ownShipId: 0 });
+    const onCustom = [vessel("0", { controlLayer: "custom", asvSystem: "moos_ivp" }), vessel("1", { controlLayer: "custom" })];
+    expect(planSimulationRun(setup(onCustom, { simulatorType: "Gazebo" }))).toMatchObject({ runner: "gazebo_custom", mode: "moos_ivp", ownShipId: 0 });
+    expect(planSimulationRun(setup([vessel("0"), vessel("1", { asvSystem: "moos_ivp" })]))).toMatchObject({ runner: "attended", reason: expect.stringContaining("only the own ship") });
   });
 
   it("builds the kinematic job with the live monitor", () => {

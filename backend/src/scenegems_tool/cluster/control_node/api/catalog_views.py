@@ -15,7 +15,7 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 CAMPAIGN_STACKS_NOTE = (
-    "Campaign configs offer every campaign stack of the resolver, each with replay or USV Navigation on the own ship: the kinematic layer "
+    "Campaign configs offer every campaign stack of the resolver, each with replay, or with USV Navigation or MOOS-IvP on the own ship: the kinematic layer "
     "(the simulation job's kinematic runner), ArduPilot on SITL or Gazebo (its ardupilot runner) and the custom controller on Gazebo "
     "(its gazebo_custom runner). Workbench only stacks (Mission Planner, real vessels) never run in a campaign."
 )
@@ -99,6 +99,41 @@ def _derived_usv_navigation() -> str:
     )
 
 
+def _moos_ivp_parameters() -> List[Dict[str, Any]]:
+    """The fields of MoosIvpPayload a form can take: every one optional. behaviour_options (further lines of the avoidance behaviour, by name) is a config field only."""
+    from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import AVOIDANCE_BEHAVIOURS
+
+    return [
+        parameter(
+            "avoidance",
+            "string",
+            "the collision avoidance behaviour of a contact: colregs (BHV_AvdColregsV22, the give-way and stand-on modes of rules 13 to 17) or cpa (BHV_AvoidCollision, no rule)",
+            choices=list(AVOIDANCE_BEHAVIOURS),
+        ),
+        parameter("goal", "number_pair", "waypoint [x, y] in the scene's local frame", unit="m"),
+        parameter("speed", "number", "transit speed of the waypoint behaviour", exclusive_minimum=0.0, unit="m/s"),
+        parameter("max_speed", "number", "upper end of the speed the helm may decide", exclusive_minimum=0.0, unit="m/s"),
+        parameter("min_util_cpa_dist", "number", "a closest point of approach at this distance or less has no utility: the helm avoids it", minimum=0.0, unit="m"),
+        parameter("max_util_cpa_dist", "number", "a closest point of approach at this distance or more has full utility", minimum=0.0, unit="m"),
+        parameter("pwt_outer_dist", "number", "the avoidance behaviour has no say beyond this range to its contact", exclusive_minimum=0.0, unit="m"),
+        parameter("pwt_inner_dist", "number", "the avoidance behaviour has its full priority weight within this range", exclusive_minimum=0.0, unit="m"),
+        parameter("completed_dist", "number", "a contact gets its avoidance behaviour within this range, and the behaviour ends beyond 1.1 times it", exclusive_minimum=0.0, unit="m"),
+        parameter("capture_radius", "number", "the goal is reached within this distance", exclusive_minimum=0.0, unit="m"),
+    ]
+
+
+def _derived_moos_ivp() -> str:
+    from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import CAPTURE_RADIUS_LENGTHS, COMPLETED_DISTANCE_FACTOR, MAX_UTILITY_CPA_RADII
+
+    return (
+        "Every value left out is each scene's own: avoidance is colregs, goal the end of the generated trajectory, speed the own ship's reference speed at the start "
+        "(capped at its maximum speed, which is max_speed), min_util_cpa_dist the largest safety radius in the scene, "
+        f"max_util_cpa_dist {MAX_UTILITY_CPA_RADII:g} times that, pwt_outer_dist the largest visibility distance between the own ship and another actor "
+        f"(at least twice max_util_cpa_dist), pwt_inner_dist half of pwt_outer_dist, completed_dist {COMPLETED_DISTANCE_FACTOR:g} times pwt_outer_dist "
+        f"and capture_radius {CAPTURE_RADIUS_LENGTHS:g} vessel lengths. A value that is given replaces the scene's and applies to every case."
+    )
+
+
 def _run_stack_parameters() -> List[Dict[str, Any]]:
     return [
         parameter("dt", "number", "time step of the run; the trajectories' time step when absent", unit="s", exclusive_minimum=0.0),
@@ -157,6 +192,17 @@ def _usv_navigation_group() -> Dict[str, Any]:
     return {"key": "usv_navigation", "label": "USV Navigation parameters", "optional": True, "derived_when_absent": _derived_usv_navigation(), "parameters": _usv_navigation_parameters()}
 
 
+def _moos_ivp_group() -> Dict[str, Any]:
+    return {"key": "moos_ivp", "label": "MOOS-IvP parameters", "optional": True, "derived_when_absent": _derived_moos_ivp(), "parameters": _moos_ivp_parameters()}
+
+
+def _mode_groups(mode: Any) -> List[Dict[str, Any]]:
+    """The parameter group of the ASV system a mode puts on the own ship; none for replay."""
+    from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
+
+    return {KinematicMode.USV_NAVIGATION: [_usv_navigation_group()], KinematicMode.MOOS_IVP: [_moos_ivp_group()]}.get(mode, [])
+
+
 def _offered(resolver: Any, option_id: str, config: Any, label: str, description: str, **fields: Any) -> Dict[str, Any]:
     """An option of the config's stack section: its id, its vessels' triples and whether the resolver accepts it; fields add the parameters, groups, environment and early stop."""
     from scenegems_tool.assurance.campaign.campaign_config import RunConfig
@@ -196,6 +242,10 @@ def _ardupilot_stacks(resolver: Any) -> List[Dict[str, Any]]:
             "USV Navigation on {layer}",
             "The own ship runs USV Navigation closed loop, its heading and speed sent to {through} as GUIDED targets over MAVLink in lockstep; the other vessels replay.",
         ),
+        KinematicMode.MOOS_IVP: (
+            "MOOS-IvP on {layer}",
+            "The own ship runs MOOS-IvP's helm closed loop, its heading and speed sent to {through} as GUIDED targets over MAVLink in lockstep; the other vessels replay.",
+        ),
     }
     stacks = []
     for mode in KinematicMode:
@@ -203,9 +253,7 @@ def _ardupilot_stacks(resolver: Any) -> List[Dict[str, Any]]:
             config = ArdupilotStackConfig(simulation_layer=layer, mode=mode)
             layer_label, through = layers[layer]
             label, description = modes[mode]
-            groups = [{"key": "geofence", "label": "Reference area", "optional": True, "derived_when_absent": _derived_geofence(), "parameters": _geofence_parameters()}]
-            if mode == KinematicMode.USV_NAVIGATION:
-                groups.insert(0, _usv_navigation_group())
+            groups = [*_mode_groups(mode), {"key": "geofence", "label": "Reference area", "optional": True, "derived_when_absent": _derived_geofence(), "parameters": _geofence_parameters()}]
             stacks.append(
                 _offered(
                     resolver,
@@ -231,6 +279,7 @@ def _custom_stacks(resolver: Any) -> List[Dict[str, Any]]:
     described = {
         KinematicMode.REPLAY: ("Replay on the custom controller with Gazebo", "Every vessel follows its generated trajectory with the line-of-sight follower of the custom controller"),
         KinematicMode.USV_NAVIGATION: ("USV Navigation on the custom controller with Gazebo", "The own ship runs USV Navigation closed loop through the custom controller; the other vessels replay"),
+        KinematicMode.MOOS_IVP: ("MOOS-IvP on the custom controller with Gazebo", "The own ship runs MOOS-IvP's helm closed loop through the custom controller; the other vessels replay"),
     }
     stacks = []
     for mode in KinematicMode:
@@ -246,7 +295,7 @@ def _custom_stacks(resolver: Any) -> List[Dict[str, Any]]:
                 supports_early_stop=False,
                 environment=_environment_support(resolver, vessel_stacks(config)),
                 parameters=_lockstep_parameters(),
-                groups=[_usv_navigation_group()] if mode == KinematicMode.USV_NAVIGATION else [],
+                groups=_mode_groups(mode),
             )
         )
     return stacks
@@ -271,6 +320,7 @@ def _kinematic_stacks(resolver: Any) -> List[Dict[str, Any]]:
     labels = {
         KinematicMode.REPLAY: ("Replay on the kinematic layer", "Every vessel replays its generated trajectory; the scene is judged as it was generated."),
         KinematicMode.USV_NAVIGATION: ("USV Navigation on the kinematic layer", "The own ship runs USV Navigation closed loop; the other vessels replay."),
+        KinematicMode.MOOS_IVP: ("MOOS-IvP on the kinematic layer", "The own ship runs MOOS-IvP's helm closed loop, one helm pass per step; the other vessels replay."),
     }
     stacks = []
     for mode in KinematicMode:
@@ -286,7 +336,7 @@ def _kinematic_stacks(resolver: Any) -> List[Dict[str, Any]]:
                 supports_early_stop=True,
                 environment=_environment_support(resolver, vessel_stacks(config)),
                 parameters=_run_stack_parameters(),
-                groups=[_usv_navigation_group()] if mode == KinematicMode.USV_NAVIGATION else [],
+                groups=_mode_groups(mode),
             )
         )
     return stacks

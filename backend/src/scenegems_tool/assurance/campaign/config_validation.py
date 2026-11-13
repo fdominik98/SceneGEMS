@@ -35,8 +35,9 @@ from scenegems_tool.assurance.campaign.campaign_config import (
 )
 from scenegems_tool.assurance.campaign.campaign_inputs import InputContentError, exploration_class_spec, item_class_spec, scenario_class_spec
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
-from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import OWN_SHIP_ASV_SYSTEMS
 from scenegems_tool.persistence.stores import ClassSpec
+from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_specs import MOOS_IVP_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_specs import USV_NAVIGATION_MAVLINK_LOCKSTEP
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
@@ -85,7 +86,11 @@ class ValidatedCampaign:
 
 
 # The lockstep MAVLink adapter of each ASV system on ArduPilot, as the ardupilot runner's instance names them (mavlink_lockstep_runner.mavlink_instance)
-ARDUPILOT_ADAPTERS = {AsvSystemId.REPLAY: REPLAY_MAVLINK_LOCKSTEP.id, AsvSystemId.USV_NAVIGATION: USV_NAVIGATION_MAVLINK_LOCKSTEP.id}
+ARDUPILOT_ADAPTERS = {
+    AsvSystemId.REPLAY: REPLAY_MAVLINK_LOCKSTEP.id,
+    AsvSystemId.USV_NAVIGATION: USV_NAVIGATION_MAVLINK_LOCKSTEP.id,
+    AsvSystemId.MOOS_IVP: MOOS_IVP_MAVLINK_LOCKSTEP.id,
+}
 
 
 def _layers(stack: StackConfig) -> Tuple[ControlLayerId, SimulationLayerId]:
@@ -97,15 +102,16 @@ def _layers(stack: StackConfig) -> Tuple[ControlLayerId, SimulationLayerId]:
 
 
 def vessel_stacks(stack: StackConfig) -> Dict[str, VesselStackConfig]:
-    """The triple of the own ship and of the target ships for a run's stack: every vessel replays, and in mode usv_navigation the own ship runs USV Navigation.
+    """The triple of the own ship and of the target ships for a run's stack: every vessel replays, and in the modes usv_navigation and moos_ivp the own ship runs that software.
 
     An attended stack names each vessel's triple itself, so its stacks are by agent id."""
     if isinstance(stack, AttendedStackConfig):
         return {agent_id: vessel.stack for agent_id, vessel in stack.instance().vessels.items()}
     control_layer, simulation_layer = _layers(stack)
     replay = VesselStackConfig(AsvSystemId.REPLAY, control_layer, simulation_layer)
-    if stack.mode == KinematicMode.USV_NAVIGATION:
-        return {OWN_SHIP: VesselStackConfig(AsvSystemId.USV_NAVIGATION, control_layer, simulation_layer), TARGET_SHIP: replay}
+    own_ship_asv_system = OWN_SHIP_ASV_SYSTEMS.get(stack.mode)
+    if own_ship_asv_system is not None:
+        return {OWN_SHIP: VesselStackConfig(own_ship_asv_system, control_layer, simulation_layer), TARGET_SHIP: replay}
     return {OWN_SHIP: replay, TARGET_SHIP: replay}
 
 

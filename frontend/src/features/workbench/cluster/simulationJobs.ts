@@ -9,8 +9,8 @@ import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } 
  * setup an unattended runner takes is judged live by the COLREGS monitor in the job: on the kinematic layer (runner
  * kinematic), on ArduPilot SITL or Gazebo over the lockstep MAVLink adapters (runner ardupilot), or
  * on the custom controller in a Gazebo world the runner steps (runner gazebo_custom). Each runs
- * every vessel on replay, or USV Navigation on the own ship and replay on the others. A setup none
- * of them takes (Mission Planner, USV Navigation on a target ship, mixed control layers, the weather
+ * every vessel on replay, or USV Navigation or MOOS-IvP on the own ship and replay on the others. A setup none
+ * of them takes (Mission Planner, USV Navigation or MOOS-IvP on a target ship, mixed control layers, the weather
  * a job does not apply, a real vessel) runs as an attended job (runner attended): the job brings the
  * stack up and waits for the operator's Start. With a real vessel every vessel runs through its
  * ArduAgent on the MQTT broker: the control node's own, or the one the plan names. A plan names the
@@ -24,8 +24,8 @@ import type { AsvSystem, ControlLayer, GlobalSimulatorType, SimulationContext } 
 /** The simulation job type, as every cluster plan submits it. */
 export { SIMULATION_JOB };
 export type ArduPilotSimulationLayer = "ardupilot_sim" | "gazebo";
-/** What a cluster run runs on the vessels: every one replays, or the own ship runs USV Navigation. */
-export type RunMode = "replay" | "usv_navigation";
+/** What a cluster run runs on the vessels: every one replays, or the own ship runs USV Navigation or MOOS-IvP (backend `KinematicMode`). */
+export type RunMode = "replay" | "usv_navigation" | "moos_ivp";
 
 export interface SimulationVesselSetup {
   vesselId: string;
@@ -55,7 +55,7 @@ export type KinematicRunPlan = {
   jobType: typeof SIMULATION_JOB;
   runner: "kinematic";
   mode: RunMode;
-  /** The vessel that runs USV Navigation; null for replay, or for the scene's own ship. */
+  /** The vessel that runs the mode's ASV system; null for replay, or for the scene's own ship. */
   ownShipId: number | null;
   /** The components the job needs, every layer of every vessel's stack. */
   components: string[];
@@ -118,16 +118,16 @@ const ARDUPILOT_LAYERS: Partial<Record<GlobalSimulatorType, ArduPilotSimulationL
 
 type ControlLayerOfPlan = "none" | "ardupilot" | "custom";
 
-/** The run mode of vessels that all sit on one control layer: replay, or USV Navigation on the own ship alone; null when no runner takes it. */
+/** The run mode of vessels that all sit on one control layer: replay, or USV Navigation or MOOS-IvP on the own ship alone; null when no runner takes it. */
 function modeOf(vessels: readonly SimulationVesselSetup[]): Pick<KinematicRunPlan, "mode" | "ownShipId"> | null {
   const navigators = vessels.filter((vessel) => vessel.asvSystem !== "replay");
   if (navigators.length === 0) {
     return { mode: "replay", ownShipId: null };
   }
   const ownShip = navigators[0];
-  if (navigators.length === 1 && ownShip.isOwnShip && ownShip.asvSystem === "usv_navigation") {
+  if (navigators.length === 1 && ownShip.isOwnShip && (ownShip.asvSystem === "usv_navigation" || ownShip.asvSystem === "moos_ivp")) {
     const ownShipId = Number.parseInt(ownShip.vesselId, 10);
-    return { mode: "usv_navigation", ownShipId: Number.isFinite(ownShipId) ? ownShipId : null };
+    return { mode: ownShip.asvSystem, ownShipId: Number.isFinite(ownShipId) ? ownShipId : null };
   }
   return null;
 }
@@ -137,12 +137,20 @@ function onControlLayer(vessels: readonly SimulationVesselSetup[], controlLayer:
 }
 
 const SUMMARIES: Record<ControlLayerOfPlan, Record<RunMode, string>> = {
-  none: { replay: "every vessel replays its trajectory", usv_navigation: "USV Navigation steers the own ship, the others replay" },
-  ardupilot: { replay: "every vessel replays its trajectory through ArduPilot", usv_navigation: "USV Navigation steers the own ship through ArduPilot, the others replay" },
-  custom: { replay: "every vessel follows its trajectory with the custom controller", usv_navigation: "USV Navigation steers the own ship through the custom controller, the others replay" },
+  none: { replay: "every vessel replays its trajectory", usv_navigation: "USV Navigation steers the own ship, the others replay", moos_ivp: "MOOS-IvP steers the own ship, the others replay" },
+  ardupilot: {
+    replay: "every vessel replays its trajectory through ArduPilot",
+    usv_navigation: "USV Navigation steers the own ship through ArduPilot, the others replay",
+    moos_ivp: "MOOS-IvP steers the own ship through ArduPilot, the others replay",
+  },
+  custom: {
+    replay: "every vessel follows its trajectory with the custom controller",
+    usv_navigation: "USV Navigation steers the own ship through the custom controller, the others replay",
+    moos_ivp: "MOOS-IvP steers the own ship through the custom controller, the others replay",
+  },
 };
 
-const MODE_ONLY = "Unattended, only the own ship may run USV Navigation.";
+const MODE_ONLY = "Unattended, only the own ship may run USV Navigation or MOOS-IvP.";
 
 /** Every run of the workbench is judged while it runs, so its job needs the monitoring subsystem beside the layers of its stack. */
 const LIVE_MONITOR = "live";
@@ -204,13 +212,13 @@ export function planSimulationRun(setup: SimulationSetup): SimulationRunPlan {
   return plan.where === "cluster" ? plan : attended(setup, plan.reason);
 }
 
-/** Replay or USV Navigation on SITL or Gazebo runs as one job; the job's stack runs in calm weather. */
+/** Replay, USV Navigation or MOOS-IvP on SITL or Gazebo runs as one job; the job's stack runs in calm weather. */
 function planArduPilotRun(setup: SimulationSetup, simulationLayer: ArduPilotSimulationLayer): UnattendedRunPlan | NeedsAnOperator {
   const mode = onControlLayer(setup.vessels, "ardupilot") ? modeOf(setup.vessels) : null;
   if (mode === null) {
     return {
       where: "attended",
-      reason: `Unattended, ${setup.simulatorType} runs replay on ArduPilot, with USV Navigation on the own ship only${setup.simulatorType === "Gazebo" ? ", or every vessel on the custom controller" : ""}.`,
+      reason: `Unattended, ${setup.simulatorType} runs replay on ArduPilot, with USV Navigation or MOOS-IvP on the own ship only${setup.simulatorType === "Gazebo" ? ", or every vessel on the custom controller" : ""}.`,
     };
   }
   if (setup.windVector.some((component) => component !== 0) || setup.waveAmplitude > 0) {
@@ -312,7 +320,7 @@ export function gazeboCustomSimulationSubmission(
 }
 
 function withOwnShip(payload: Record<string, unknown>, plan: UnattendedRunPlan): void {
-  if (plan.mode === "usv_navigation" && plan.ownShipId !== null) {
+  if (plan.mode !== "replay" && plan.ownShipId !== null) {
     payload.own_ship_id = plan.ownShipId;
   }
 }

@@ -14,6 +14,7 @@ export const SIMULATION_JOB = "simulation";
 export const COMPONENTS = [
   "asv_system/replay",
   "asv_system/usv_navigation",
+  "asv_system/moos_ivp",
   "asv_system/mission_planner",
   "asv_system/on_board",
   "control_layer/none",
@@ -34,6 +35,7 @@ export const COMPONENTS = [
 const COMPONENT_LABELS: Record<string, string> = {
   "asv_system/replay": "Replay",
   "asv_system/usv_navigation": "USV Navigation",
+  "asv_system/moos_ivp": "MOOS-IvP",
   "asv_system/mission_planner": "Mission Planner",
   "asv_system/on_board": "On-board software",
   "control_layer/none": "No control layer",
@@ -81,10 +83,14 @@ function field(value: unknown, key: string): unknown {
 /** The control layer a stack section's simulation layer implies when it names none (`campaign_config.IMPLIED_CONTROL_LAYERS`). */
 const IMPLIED_CONTROL_LAYERS: Record<string, string> = { kinematic: "none", ardupilot_sim: "ardupilot", gazebo: "ardupilot" };
 
-/** Replay on the layers for every vessel, and USV Navigation for the own ship in mode usv_navigation. */
+/** The ASV system the own ship runs in each mode but replay (`kinematic_runner.OWN_SHIP_ASV_SYSTEMS`). */
+const OWN_SHIP_ASV_SYSTEMS: Record<string, string> = { usv_navigation: "asv_system/usv_navigation", moos_ivp: "asv_system/moos_ivp" };
+
+/** Replay on the layers for every vessel, and the mode's ASV system for the own ship in the modes usv_navigation and moos_ivp. */
 function layerComponents(controlLayer: string, simulationLayer: string, mode: unknown): string[] {
   const replay = ["asv_system/replay", `control_layer/${controlLayer}`, `simulation_layer/${simulationLayer}`];
-  return orderedComponents(mode === "usv_navigation" ? [...replay, "asv_system/usv_navigation"] : replay);
+  const ownShip = typeof mode === "string" ? OWN_SHIP_ASV_SYSTEMS[mode] : undefined;
+  return orderedComponents(ownShip !== undefined ? [...replay, ownShip] : replay);
 }
 
 /**

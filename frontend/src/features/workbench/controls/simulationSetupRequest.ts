@@ -11,8 +11,8 @@ export interface SimulationSetupRequest {
   /** Bumped for every request, so the same setup asked twice applies twice. */
   token: number;
   simulatorType: GlobalSimulatorType;
-  /** replay: every vessel replays; usv_navigation: USV Navigation steers the own ship, the others replay. */
-  mode: "replay" | "usv_navigation";
+  /** replay: every vessel replays; usv_navigation or moos_ivp: that software steers the own ship, the others replay. */
+  mode: "replay" | "usv_navigation" | "moos_ivp";
   /** The control layer every vessel runs on: none on the kinematic layer, ardupilot on ArduPilot SITL and Gazebo, or custom on Gazebo. */
   controlLayer: "none" | "ardupilot" | "custom";
   /** SITL's pace of an ArduPilot run, the setup's real-time factor; null keeps the current one. */

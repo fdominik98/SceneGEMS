@@ -1,11 +1,11 @@
-"""The simulation job's ardupilot runner: replay or USV Navigation over the lockstep MAVLink adapters, on a SITL or Gazebo stack per job.
+"""The simulation job's ardupilot runner: replay, USV Navigation or MOOS-IvP over the lockstep MAVLink adapters, on a SITL or Gazebo stack per job.
 
 The payload's simulation_layer decides the layer: ardupilot_sim runs SITL's own physics, gazebo
 SITL's JSON backend against a Gazebo world. Its mode decides the ASV system, as the kinematic
 runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv_navigation puts
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
-replay. The worker node resolves the instance, generates the vessel stack into the job's folder and adds
+replay, and moos_ivp does the same with MOOS-IvP's helm (moos_ivp_mavlink_lockstep). The worker node resolves the instance, generates the vessel stack into the job's folder and adds
 a runner from the simulation subsystem image on the stack network (vessel_job_stack.py). Every
 vessel has its SITL and its ASV system container; the runner steps the ASV system, sends its
 commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
@@ -29,7 +29,7 @@ import threading
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, Literal, Mapping, Optional, Tuple
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from scenegems_tool.cluster.fingerprints.components import SimulationRunner, StackTriple
 from scenegems_tool.cluster.protocol.artifacts import ArtifactField, ArtifactKind
@@ -39,7 +39,16 @@ from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobReport, 
 from scenegems_tool.cluster.worker_node.jobs.job_payload import GeofencePayload, TrajectoriesInput, to_trajectories
 from scenegems_tool.cluster.worker_node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback, job_document
-from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import KinematicMode, UsvNavigationPayload, check_closed_loop_options, own_ship
+from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner import (
+    KinematicMode,
+    MoosIvpPayload,
+    UsvNavigationPayload,
+    check_closed_loop_options,
+    mode_stacks,
+    own_ship_asv_system,
+    own_ship_parameters,
+    without_absent_moos_ivp,
+)
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
@@ -63,12 +72,8 @@ class ArduPilotSimulationLayer(str, Enum):
 
 
 def vessel_stacks(simulation_layer: ArduPilotSimulationLayer, mode: KinematicMode = KinematicMode.REPLAY) -> Tuple[StackTriple, ...]:
-    """The vessel stacks a run on the layer runs: replay on ArduPilot for the vessels that replay, USV Navigation for the own ship in mode usv_navigation."""
-    layer = SimulationLayerId(simulation_layer.value)
-    replay = (AsvSystemId.REPLAY, ControlLayerId.ARDUPILOT, layer)
-    if mode == KinematicMode.REPLAY:
-        return (replay,)
-    return (replay, (AsvSystemId.USV_NAVIGATION, ControlLayerId.ARDUPILOT, layer))
+    """The vessel stacks a run on the layer runs: replay on ArduPilot for the vessels that replay, USV Navigation or MOOS-IvP for the own ship in its mode."""
+    return mode_stacks(mode, ControlLayerId.ARDUPILOT, SimulationLayerId(simulation_layer.value))
 
 
 class ArduPilotSimulationPayload(ProtocolModel):
@@ -76,8 +81,9 @@ class ArduPilotSimulationPayload(ProtocolModel):
     simulation_layer: ArduPilotSimulationLayer
     mode: KinematicMode = KinematicMode.REPLAY
     trajectories: TrajectoriesInput
-    own_ship_id: Optional[int] = None  # usv_navigation only; the scene's own ship when None
+    own_ship_id: Optional[int] = None  # usv_navigation and moos_ivp only; the scene's own ship when None
     usv_navigation: Optional[UsvNavigationPayload] = None  # usv_navigation only; from the own ship's trajectory when None
+    moos_ivp: Optional[MoosIvpPayload] = None  # moos_ivp only; left out of the JSON while absent
     geofence: GeofencePayload  # maps the local frame to SITL's home positions
     speedup: int = Field(default=1, ge=1)  # requested SITL pace
     dt: Optional[float] = Field(default=None, gt=0.0)  # the trajectories' time step when None, 1 s when Rover cannot take that (lockstep_dt)
@@ -92,8 +98,12 @@ class ArduPilotSimulationPayload(ProtocolModel):
 
     @model_validator(mode="after")
     def _closed_loop_options_need_closed_loop(self) -> "ArduPilotSimulationPayload":
-        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation)
+        check_closed_loop_options(self.mode, self.own_ship_id, self.usv_navigation, self.moos_ivp)
         return self
+
+    @model_serializer(mode="wrap")
+    def _without_absent_moos_ivp(self, handler: SerializerFunctionWrapHandler) -> Dict[str, Any]:
+        return without_absent_moos_ivp(self, handler)
 
     @model_validator(mode="after")
     def _monitor_options_need_the_live_monitor(self) -> "ArduPilotSimulationPayload":
@@ -111,26 +121,23 @@ PAYLOAD_MODEL = ArduPilotSimulationPayload
 
 
 def _instance(payload: ArduPilotSimulationPayload):
-    """The trajectories, the instance and the own ship's USV Navigation parameters (by vessel id, empty in replay); ValueError when own_ship_id names no vessel."""
+    """The trajectories and the instance of the payload's run; ValueError when own_ship_id names no vessel."""
     from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import mavlink_instance
 
     trajectories = to_trajectories(payload.trajectories)
-    asv_system: Dict[int, AsvSystemId] = {}
-    parameters = {}
-    if payload.mode == KinematicMode.USV_NAVIGATION:
-        own = own_ship(trajectories.initial_scene, payload.own_ship_id)
-        asv_system[own.id] = AsvSystemId.USV_NAVIGATION
-        if payload.usv_navigation is not None:
-            parameters[own.id] = payload.usv_navigation.to_parameters()
+    asv_system = own_ship_asv_system(payload, trajectories.initial_scene)
     instance = mavlink_instance(trajectories, SimulationLayerId(payload.simulation_layer.value), asv_system, environment=EnvironmentConfig.calm(seed=payload.seed), speedup=payload.speedup)
-    return trajectories, instance, parameters
+    return trajectories, instance
 
 
 def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: ArduPilotSimulationPayload) -> JobStack:
     """The job's stack: SITL and an ASV system container per vessel, Gazebo on the gazebo layer, and the runner."""
+    from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt
+
     try:
-        trajectories, instance, _ = _instance(payload)
+        trajectories, instance = _instance(payload)
+        own_ship_parameters(payload, trajectories, lockstep_dt(trajectories.time_step) if payload.dt is None else payload.dt)  # refused here, before the stack starts
     except ValueError as error:
         raise JobFailed(f"Simulation payload rejected: {error}", retryable=False) from error
     return build_vessel_job_stack(job, worker_node, instance, trajectories, payload.geofence.to_geofence(), monitored=payload.monitor == SimulationMonitor.LIVE)
@@ -220,8 +227,9 @@ def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCal
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt, run_mavlink_stack
     from scenegems_tool.vessel_stack.hosting import in_stack_hosting
 
-    trajectories, instance, parameters = _instance(payload)
+    trajectories, instance = _instance(payload)
     dt = lockstep_dt(trajectories.time_step) if payload.dt is None else payload.dt
+    parameters = own_ship_parameters(payload, trajectories, dt)
     steps = payload.steps if payload.steps is not None else int(round(trajectories.timespan / dt))
     monitor = LiveMonitor(trajectories.initial_scene.actors, int(dt), payload.colregs_constraints_content, early_stop=False, job=job) if payload.monitor == SimulationMonitor.LIVE else None
     observer = None
@@ -237,7 +245,8 @@ def execute(job: JobSpec, payload: ArduPilotSimulationPayload, status: StatusCal
         steps=payload.steps,
         start_boot_s=payload.start_boot_s,
         on_step=on_step,
-        usv_navigation_parameters=parameters or None,
+        usv_navigation_parameters=parameters.get(AsvSystemId.USV_NAVIGATION),
+        moos_ivp_parameters=parameters.get(AsvSystemId.MOOS_IVP),
         hosting=hosting or in_stack_hosting(),
     )
     status("run finished", 1.0)
