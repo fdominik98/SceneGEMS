@@ -68,7 +68,7 @@ interface ScalarControlProps {
   showUnits: boolean;
 }
 
-/** The input of one scalar: a checkbox, a number with its unit and its converted twin, or text. */
+/** The input of one scalar: a checkbox, a number with its unit and its converted twin, a choice list, or text. */
 export function ScalarControl({ field, onEdit, ariaLabel, showUnits }: ScalarControlProps) {
   const { path, kind, value } = field;
   const flagged = field.issues.some((issue) => issue.severity === "error");
@@ -116,6 +116,28 @@ export function ScalarControl({ field, onEdit, ariaLabel, showUnits }: ScalarCon
           </span>
         ) : null}
       </span>
+    );
+  }
+
+  if (kind === "string" && field.choices) {
+    // A value the list does not hold stays selectable, so the form never changes what the YAML says.
+    const current = String(value);
+    const options = field.choices.includes(current) ? field.choices : [current, ...field.choices];
+    return (
+      <select
+        className={`ce-input ce-choice${flagged ? " ce-flagged" : ""}`}
+        value={current}
+        aria-label={ariaLabel}
+        aria-invalid={flagged}
+        title={issueTitle || undefined}
+        onChange={(event) => onEdit({ kind: "set", path, value: event.target.value })}
+      >
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
     );
   }
 

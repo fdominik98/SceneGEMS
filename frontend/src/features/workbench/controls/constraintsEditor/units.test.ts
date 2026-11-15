@@ -68,6 +68,15 @@ describe("parseFieldComment", () => {
     expect(parseFieldComment("Minimum persistence").unit).toBeNull();
   });
 
+  it("reads no unit from the comments of a choice and of the dimensionless hull ratios", () => {
+    const steering = parseFieldComment(" How the vessel turns: rudder, skid (two propellers, thrust difference) or vectored_thrust (one turnable engine)");
+    expect(steering.unit).toBeNull();
+    expect(steering.description).toBe("How the vessel turns: rudder, skid (two propellers, thrust difference) or vectored_thrust (one turnable engine)");
+    expect(parseFieldComment(" Hull fullness: displaced volume over length * beam * draft").unit).toBeNull();
+    expect(parseFieldComment(" Length over beam; the beam of a vessel follows from its length, within the beam range").unit).toBeNull();
+    expect(parseFieldComment(" Beam over draft")).toMatchObject({ unit: null, description: "Beam over draft" });
+  });
+
   it("handles no comment", () => {
     expect(parseFieldComment(undefined)).toMatchObject({ description: "", unit: null, hint: null });
   });

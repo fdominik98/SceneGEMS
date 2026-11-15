@@ -1,13 +1,14 @@
 /**
  * The field model of a constraints YAML text: what the form shows, built generically from whatever the
- * document holds. Nothing here knows a key by name. Scalars become typed fields, maps become groups
+ * document holds. Nothing here knows a key by name (the few keys the backend checks by name are listed in
+ * validation.ts, which gives a field its choices). Scalars become typed fields, maps become groups
  * (comment lines above a key start a new section with that title), maps of similar maps become tables,
  * lists become lists, and anything else is shown as read-only raw text, so no data is ever dropped.
  */
 
 import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument, type Document, type Pair, type Scalar, type YAMLMap, type YAMLSeq } from "yaml";
 import { parseFieldComment, type UnitId } from "./units";
-import { validateFieldValue, validateMinMaxPairs, validateTableColumn, type FieldIssue } from "./validation";
+import { choicesOf, validateFieldValue, validateMinMaxPairs, validateTableColumn, type FieldIssue } from "./validation";
 
 export type YamlPath = ReadonlyArray<string | number>;
 
@@ -29,6 +30,8 @@ export interface ScalarFieldModel {
   /** The comment as written, without the leading hash. */
   comment: string;
   unit: UnitId | null;
+  /** The values the backend accepts, for a key it reads as a fixed choice (validation.ts); null otherwise. */
+  choices: readonly string[] | null;
   issues: FieldIssue[];
 }
 
@@ -224,6 +227,7 @@ function buildScalar(ctx: BuildContext, node: Scalar | null, path: YamlPath, key
     hint: parsed.hint,
     comment: parsed.raw,
     unit: parsed.unit,
+    choices: choicesOf(key),
     issues: [],
   };
   field.issues = validateFieldValue(field);

@@ -38,6 +38,26 @@ describe("ConstraintsForm", () => {
     expect(html).toContain("rad/s");
   });
 
+  it("renders the steering type of a vessel type as a choice list and the hull ratios as numbers", () => {
+    const html = render(VESSEL_TYPES, { protectedRows: ["UnspecifiedVesselType"], tableMinRows: 1 });
+    expect(html).toContain("Steering type");
+    expect(html).toContain("Block coefficient");
+    expect(html).toContain("Length to beam");
+    expect(html).toContain("Beam to draft");
+    const select = /<select[^>]*aria-label="MiniUSV steering_type"[^>]*>(.*?)<\/select>/.exec(html);
+    expect(select).not.toBeNull();
+    expect(select?.[1]).toBe('<option value="rudder">rudder</option><option value="skid" selected="">skid</option><option value="vectored_thrust">vectored_thrust</option>');
+    expect(html).toMatch(/<input[^>]*aria-label="MiniUSV block_coefficient"[^>]*value="0.45"/);
+  });
+
+  it("keeps a steering type the backend does not know selectable, and flags it", () => {
+    const html = render("A:\n  steering_type: paddle\nB:\n  steering_type: skid\n");
+    const select = /<select[^>]*aria-label="A steering_type"[^>]*>(.*?)<\/select>/.exec(html);
+    expect(select?.[1]).toContain('<option value="paddle" selected="">paddle</option>');
+    expect(select?.[1]).toContain('<option value="vectored_thrust">vectored_thrust</option>');
+    expect(html).toContain("The backend accepts only rudder, skid or vectored_thrust as steering_type.");
+  });
+
   it("renders the obstacle types", () => {
     const html = render(OBSTACLE_TYPES, { protectedRows: ["UnspecifiedObstacleType"] });
     expect(html).toContain("TinyObstacleType");

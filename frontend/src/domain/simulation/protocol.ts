@@ -34,6 +34,8 @@ const actorSchema = z
     propellerDiameter: z.number().optional(),
     thrusterMass: z.number().optional(),
     motorLength: z.number().optional(),
+    steeringType: z.string().optional(),
+    blockCoefficient: z.number().optional(),
   })
   .passthrough();
 

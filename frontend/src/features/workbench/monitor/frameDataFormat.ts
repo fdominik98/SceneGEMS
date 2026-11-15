@@ -23,11 +23,13 @@ export const ACTOR_FIELD_PRIORITY = [
   "breadth",
   "height",
   "draft",
+  "blockCoefficient",
   "mass",
   "safetyRadius",
   "maxSpeed",
   "maxAngularSpeed",
   "maxAcceleration",
+  "steeringType",
   "rudderMass",
   "rudderLength",
   "rudderWidth",
@@ -38,6 +40,15 @@ export const ACTOR_FIELD_PRIORITY = [
 ] as const;
 
 export const KINEMATIC_FIELD_PRIORITY = ["x", "y", "speed", "heading"] as const;
+
+/** An actor's static fields as the panel shows them: the steering type in words ("vectored thrust"). */
+export function actorDisplayFields(actor: Record<string, unknown>): Record<string, unknown> {
+  const steeringType = actor.steeringType;
+  if (typeof steeringType !== "string") {
+    return actor;
+  }
+  return { ...actor, steeringType: steeringType.replace(/_/g, " ") };
+}
 
 export function asRecord(value: unknown): Record<string, unknown> | null {
   if (value && typeof value === "object" && !Array.isArray(value)) {

@@ -40,6 +40,24 @@ describe("parseFrame", () => {
     expect(parsed.actors[0]?.thrusterMass).toBe(42);
   });
 
+  it("reads the steering type and the block coefficient of a vessel, and leaves them off an actor without them", () => {
+    const base = sampleFrames[0];
+    const parsed = parseFrame({
+      ...base,
+      actors: base.actors.map((a, i) => (i === 0 ? { ...a, steeringType: "vectored_thrust", blockCoefficient: 0.72 } : a)),
+    });
+    expect(parsed.actors[0]).toMatchObject({ steeringType: "vectored_thrust", blockCoefficient: 0.72 });
+    expect(parsed.actors[1]).not.toHaveProperty("steeringType");
+    expect(parsed.actors[1]).not.toHaveProperty("blockCoefficient");
+  });
+
+  it("rejects a steering type or a block coefficient of the wrong kind", () => {
+    const base = sampleFrames[0];
+    const withActor = (extra: Record<string, unknown>) => ({ ...base, actors: [{ ...base.actors[0], ...extra }] });
+    expect(() => parseFrame(withActor({ steeringType: 2 }))).toThrow();
+    expect(() => parseFrame(withActor({ blockCoefficient: "0.6" }))).toThrow();
+  });
+
   it("throws for invalid payload", () => {
     expect(() => parseFrame({ hello: "world" })).toThrow();
   });

@@ -1,6 +1,7 @@
 /**
  * Checks on the values of the field model. They flag problems (an issue on the field) and never block an
- * edit: the YAML always keeps what the user wrote.
+ * edit: the YAML always keeps what the user wrote. Most checks go by the words of a key, its comment or
+ * its unit; the few keys the backend checks by name have their choices and ranges listed here.
  */
 
 import type { ScalarFieldModel, TableColumn } from "./fieldModel";
@@ -62,13 +63,65 @@ export function impliesNonNegative(field: Pick<ScalarFieldModel, "key" | "commen
   return NON_NEGATIVE_COMMENT_WORDS.test(field.comment);
 }
 
+/**
+ * What the backend accepts for the few keys it checks by name when it loads the vessel types
+ * (`backend/src/logical_level/mapping/vessel_type.py`); it rejects the file otherwise. Keys are
+ * matched by their words, so `steering_type` and `steeringType` are the same key.
+ */
+const CHOICES_BY_KEY: Readonly<Record<string, readonly string[]>> = {
+  steering_type: ["rudder", "skid", "vectored_thrust"],
+};
+
+interface KeyRange {
+  /** The value is greater than this. */
+  above: number;
+  /** The value is at most this; null for no upper limit. */
+  upTo: number | null;
+}
+
+// Dimensionless hull ratios: they carry no unit, only a range.
+const RANGES_BY_KEY: Readonly<Record<string, KeyRange>> = {
+  block_coefficient: { above: 0, upTo: 1 },
+  length_to_beam: { above: 0, upTo: null },
+  beam_to_draft: { above: 0, upTo: null },
+};
+
+function knownKey(key: string): string {
+  return keyWords(key).join("_");
+}
+
+/** The values a key can take, for the keys the backend reads as a fixed choice; null for any other key. */
+export function choicesOf(key: string): readonly string[] | null {
+  return CHOICES_BY_KEY[knownKey(key)] ?? null;
+}
+
+function listInWords(items: readonly string[]): string {
+  return items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items[items.length - 1]}`;
+}
+
+function rangeIssue(key: string, value: number): FieldIssue | null {
+  const range = RANGES_BY_KEY[knownKey(key)];
+  if (!range || (value > range.above && (range.upTo === null || value <= range.upTo))) {
+    return null;
+  }
+  const limits = range.upTo === null ? `greater than ${range.above}` : `greater than ${range.above} and at most ${range.upTo}`;
+  return { severity: "error", message: `The backend accepts only a ${key} ${limits}.` };
+}
+
 /** Issues of one value on its own. */
 export function validateFieldValue(field: ScalarFieldModel): FieldIssue[] {
   const issues: FieldIssue[] = [];
+  const choices = choicesOf(field.key);
+  if (choices && field.kind !== "null" && !choices.includes(String(field.value))) {
+    issues.push({ severity: "error", message: `The backend accepts only ${listInWords(choices)} as ${field.key}.` });
+  }
   if (field.kind === "number" || field.kind === "integer") {
     const value = field.value as number;
+    const outOfRange = Number.isFinite(value) ? rangeIssue(field.key, value) : null;
     if (!Number.isFinite(value)) {
       issues.push({ severity: "error", message: "The value is not a finite number." });
+    } else if (outOfRange) {
+      issues.push(outOfRange);
     } else if (value < 0 && impliesNonNegative(field)) {
       issues.push({ severity: "warning", message: "The name, comment or unit says this cannot be negative." });
     }
