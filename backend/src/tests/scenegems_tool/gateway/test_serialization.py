@@ -12,6 +12,8 @@ import pytest
 
 from concrete_level.colregs_monitoring.colregs_monitor_runtime import ColregsMonitorRuntime, MonitoringTask
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import COLREGSRule
+from concrete_level.models.actor_state import ActorState
+from concrete_level.models.concrete_actors import ConcreteStaticObstacle
 from concrete_level.models.relation import Relation
 from scenegems_tool.gateway.serialization import _safety_domain_payload, _to_json_safe, rule_display_order, serialize_frame, serialize_monitored_frame
 from tests.concrete_level.colregs_monitoring.monitor_runs import OWN_SHIP
@@ -75,6 +77,20 @@ class TestFrame:
         assert own["maxSpeed"] == pytest.approx(20.57778)
         assert {"rudderMass", "propellerDiameter", "motorLength"} <= set(own)
         assert sum(actor["isOwnShip"] for actor in frame["actors"]) == 1
+
+    def test_a_vessel_states_its_steering_type_and_block_coefficient(self, scene):
+        own = next(actor for actor in serialize_frame("s1", scene, 0, 1)["actors"] if actor["isOwnShip"])
+        vessel = scene.get_by_id(0)
+        assert own["steeringType"] == vessel.steering_type.value
+        assert own["blockCoefficient"] == vessel.block_coefficient
+
+    def test_a_static_obstacle_has_no_vessel_fields_wherever_it_is_listed(self, scene):
+        obstacle = ConcreteStaticObstacle(id=7, type="Rock", length=20.0, breadth=20.0, height=2.0, draft=0.8, mass=100.0, safety_radius=40.0)
+        data = dict(scene._data)
+        data[obstacle] = ActorState(x=500.0, y=500.0, speed=0.0, heading=0.0)
+        frame = serialize_frame("s1", dataclasses.replace(scene, _data=data), 0, 1)
+        listed = next(actor for actor in frame["actors"] if actor["id"] == "7")
+        assert not {"steeringType", "rudderMass", "propellerDiameter"} & set(listed)
 
     def test_states_are_keyed_by_actor_id(self, scene):
         states = serialize_frame("s1", scene, 0, 1)["statesByActorId"]

@@ -8,7 +8,7 @@ import numpy as np
 from concrete_level.models.actor_state import ActorState
 from functional_level.models.object_generator import obstacle_name, vessel_name
 from logical_level.mapping.static_obstacle import StaticObstacleType
-from logical_level.mapping.vessel_type import VesselType
+from logical_level.mapping.vessel_type import DEFAULT_BLOCK_COEFFICIENT, DEFAULT_STEERING_TYPE, SteeringType, VesselType
 from logical_level.models.actor_variable import ActorVariable, OSVariable, StaticObstacleVariable, TSVariable, VesselVariable
 from utils.global_constants import EPSILON, PHANTOM_SHIP_ANGLE
 from utils.math_utils import calculate_heading, distance, heading_diff, rotate_heading
@@ -22,8 +22,10 @@ def migrate_legacy_actor_fields(data: Dict[str, Any], is_vessel: bool) -> Dict[s
 
     Legacy scene files (before the hull and propulsion attributes were added) store a single
     "radius" and none of the height, draft, mass, rudder, propeller or thruster fields. Those
-    values are all derived from length and breadth, so they are recomputed here with exactly
-    the formulas SceneBuilder.build_from_assignments uses when it constructs a fresh actor.
+    values are all derived from length and breadth, so they are recomputed here with the
+    formulas the scene builder used when those files were written (breadth 0.4 L, height 0.15 L,
+    draft 0.06 L, block coefficient 0.6). A dict without a steering type or a block coefficient
+    gets ConcreteVessel's defaults, the skid steered hull of that time.
     Dicts that already carry the current fields are returned unchanged.
     """
     migrated = dict(data)
@@ -241,8 +243,14 @@ class ConcreteVessel(ConcreteActor):
     _thruster_mass: float
     _motor_length: float
 
+    # How the vessel turns and how full its hull is, from the vessel type. The defaults are what a
+    # scene file from before these fields describes: the skid steered hull of block coefficient 0.6.
+    _steering_type: str = DEFAULT_STEERING_TYPE
+    _block_coefficient: float = DEFAULT_BLOCK_COEFFICIENT
+
     def __post_init__(self):
         object.__setattr__(self, "is_vessel", True)
+        object.__setattr__(self, "_steering_type", SteeringType(self._steering_type).value)
 
     @property
     def name(self) -> str:
@@ -251,6 +259,14 @@ class ConcreteVessel(ConcreteActor):
     @property
     def is_os(self) -> bool:
         return self._is_os
+
+    @property
+    def steering_type(self) -> SteeringType:
+        return SteeringType(self._steering_type)
+
+    @property
+    def block_coefficient(self) -> float:
+        return self._block_coefficient
 
     @property
     def propeller_diameter(self) -> float:
@@ -421,6 +437,10 @@ class ConcreteVessel(ConcreteActor):
             max_speed=self.max_speed,
             max_angular_speed=self.max_angular_speed,
             max_acceleration=self.max_acceleration,
+            steering_type=self._steering_type,
+            block_coefficient=self.block_coefficient,
+            length_to_beam=self.length / self.breadth,
+            beam_to_draft=self.breadth / self.draft,
         )
 
     @property

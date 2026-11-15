@@ -4,6 +4,7 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteActor, ConcreteStaticObstacle, ConcreteVessel
 from concrete_level.models.concrete_scene import ConcreteScene
 from logical_level.constraint_satisfaction.assignments import Assignments
+from logical_level.mapping.vessel_type import HEIGHT_TO_DRAFT
 from logical_level.models.actor_variable import StaticObstacleVariable, VesselVariable
 from logical_level.models.values import ObstacleValues, VesselValues
 
@@ -77,9 +78,11 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
         for actor_var, values in assignments.items():
             if isinstance(actor_var, VesselVariable) and isinstance(values, VesselValues):
                 vessel_type = actor_var.vessel_type
-                breadth = values.l * 0.4
-                height = values.l * 0.15
-                draft = height * 0.4
+                # The hull follows the vessel type: breadth from its length to beam ratio (within its
+                # beam range), draft from its beam to draft ratio, and the height from the draft.
+                breadth = vessel_type.breadth_of(values.l)
+                draft = vessel_type.draft_of(breadth)
+                height = draft * HEIGHT_TO_DRAFT
 
                 """
                 A rough naval architecture estimate is:
@@ -93,7 +96,7 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
                 B = breadth (m)
                 T = draft (m)
                 """
-                block_coefficient = 0.6
+                block_coefficient = vessel_type.block_coefficient
                 total_mass = 1025 * block_coefficient * values.l * breadth * draft
                 # rudder_mass = mass * 0.01
                 rudder_mass = 0.0
@@ -123,6 +126,8 @@ class SceneBuilder(Dict[ConcreteActor, ActorState]):
                         _max_speed=vessel_type.max_speed,
                         _max_angular_speed=vessel_type.max_angular_speed,
                         _max_acceleration=vessel_type.max_acceleration,
+                        _steering_type=vessel_type.steering_type,
+                        _block_coefficient=block_coefficient,
                         mass=mass,
                     ),
                     ActorState(x=values.x, y=values.y, speed=values.sp, heading=values.h),

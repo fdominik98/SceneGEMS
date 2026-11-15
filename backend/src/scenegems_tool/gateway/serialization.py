@@ -374,8 +374,11 @@ def serialize_frame(scenario_id: str, scene: ConcreteScene, timestamp: int, time
 
     for actor, state in scene.sorted_actor_states:
         actor_id = str(actor.id)
+        vessel_data: Dict[str, Any] = {}  # a static obstacle has none of the vessel fields
         if isinstance(actor, ConcreteVessel):
             vessel_data = {
+                "steeringType": actor.steering_type.value,
+                "blockCoefficient": actor.block_coefficient,
                 "rudderMass": actor.rudder_mass,
                 "rudderLength": actor.rudder_length,
                 "rudderWidth": actor.rudder_width,

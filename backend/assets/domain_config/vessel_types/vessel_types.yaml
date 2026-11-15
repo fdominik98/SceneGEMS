@@ -6,6 +6,10 @@ UnspecifiedVesselType:
     max_speed: 25.722235 # Maximum vessel speed: 50.0 knots in m/s
     max_angular_speed: 0.03   # ~1.7 deg/s. Maximum angular speed in radians per second
     max_acceleration: 0.3  # generic upper bound. Maximum acceleration in meters per second squared
+    steering_type: rudder # How the vessel turns: rudder, skid (two propellers, thrust difference) or vectored_thrust (one turnable engine)
+    block_coefficient: 0.65 # Hull fullness: displaced volume over length * beam * draft
+    length_to_beam: 6.5 # Length over beam; the beam of a vessel follows from its length, within the beam range
+    beam_to_draft: 3.0 # Beam over draft
 
 
 OSPassengerShip:
@@ -16,6 +20,10 @@ OSPassengerShip:
     max_beam: 10.0
     max_angular_speed: 0.05      # ~2.9 deg/s
     max_acceleration: 0.4
+    steering_type: rudder
+    block_coefficient: 0.5
+    length_to_beam: 3.0
+    beam_to_draft: 4.0
 
 
 MiniUSV:
@@ -26,6 +34,10 @@ MiniUSV:
     max_beam: 0.5
     max_angular_speed: 1.2       # ~69 deg/s
     max_acceleration: 1.5
+    steering_type: skid
+    block_coefficient: 0.45
+    length_to_beam: 2.0
+    beam_to_draft: 4.0
 
 
 CargoShip:
@@ -36,6 +48,10 @@ CargoShip:
     max_beam: 60
     max_angular_speed: 0.008     # ~0.46 deg/s
     max_acceleration: 0.05
+    steering_type: rudder
+    block_coefficient: 0.72
+    length_to_beam: 6.5
+    beam_to_draft: 2.6
 
 
 Tanker:
@@ -46,6 +62,10 @@ Tanker:
     max_beam: 60
     max_angular_speed: 0.006     # ~0.34 deg/s
     max_acceleration: 0.04
+    steering_type: rudder
+    block_coefficient: 0.82
+    length_to_beam: 6.0
+    beam_to_draft: 2.5
 
 
 ContainerShip:
@@ -56,6 +76,10 @@ ContainerShip:
     max_beam: 65
     max_angular_speed: 0.007     # ~0.40 deg/s
     max_acceleration: 0.06
+    steering_type: rudder
+    block_coefficient: 0.65
+    length_to_beam: 7.5
+    beam_to_draft: 2.9
 
 PassengerShip:
     min_length: 20
@@ -65,6 +89,10 @@ PassengerShip:
     max_beam: 50
     max_angular_speed: 0.03      # ~1.7 deg/s
     max_acceleration: 0.3
+    steering_type: rudder
+    block_coefficient: 0.6
+    length_to_beam: 7.0
+    beam_to_draft: 4.0
 
 
 FishingShip:
@@ -75,6 +103,10 @@ FishingShip:
     max_beam: 20
     max_angular_speed: 0.08      # ~4.6 deg/s
     max_acceleration: 0.5
+    steering_type: rudder
+    block_coefficient: 0.55
+    length_to_beam: 4.0
+    beam_to_draft: 2.5
 
 
 MotorVessel:
@@ -85,6 +117,10 @@ MotorVessel:
     max_beam: 80
     max_angular_speed: 0.04      # ~2.3 deg/s
     max_acceleration: 0.35
+    steering_type: rudder
+    block_coefficient: 0.5
+    length_to_beam: 5.0
+    beam_to_draft: 3.5
 
 
 SailingVessel:
@@ -95,6 +131,10 @@ SailingVessel:
     max_beam: 12
     max_angular_speed: 0.06 # ~3.4 deg/s
     max_acceleration: 0.2
+    steering_type: rudder
+    block_coefficient: 0.4
+    length_to_beam: 3.5
+    beam_to_draft: 2.5
 
 
 MilitaryVessel:
@@ -105,3 +145,7 @@ MilitaryVessel:
     max_beam: 40
     max_angular_speed: 0.10  # ~5.7 deg/s
     max_acceleration: 0.8
+    steering_type: rudder
+    block_coefficient: 0.5
+    length_to_beam: 8.5
+    beam_to_draft: 3.2

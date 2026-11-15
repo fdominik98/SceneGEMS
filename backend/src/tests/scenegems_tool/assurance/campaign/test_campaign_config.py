@@ -288,11 +288,11 @@ def test_the_model_is_immutable():
 # Format 2: steps, input, step monitors
 
 # A config that leaves its domain out takes the default presets, whose content is hashed: these are the hashes with the
-# presets of 2026-11-09 (READILY_APPARENT_COURSE_CHANGE_TIME and HEADING_PERSISTENCE_TIME 70 s). Campaigns stored before
+# presets of 2026-11-15 (the vessel types state their steering type and hull ratios). Campaigns stored before
 # keep their own hashes: the control node stored them with the domain content filled in.
-EXIT_CAMPAIGN_HASH = "e4a01a35ebb9f7caebb5c7c60901b5cc473522faaa39078f9fca8546722bfec7"
+EXIT_CAMPAIGN_HASH = "bca64a00d4a866f11133d1e5e0619d7287ae9a540708c9fc7cd4ea6add1d4000"
 STORED_MINIMAL = {"name": "lab", "scope": [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 2}]}  # with the FEC id it was stored with
-MINIMAL_HASH = "b493ab3ac1ceb0431555b64851f5685d979496e52b88f9f096383ce3f59004c4"
+MINIMAL_HASH = "8ef5cf91e417a02dc7acaaa4ebe6a45a79e9c6c272838405a0565dffeedfd204"
 SHA = "ab" * 32
 SCENARIO_REF = {"sha256": SHA, "size_bytes": 120, "kind": "functional_scenario", "media_type": "text/plain; charset=utf-8"}
 SCENE_ITEM = {"name": "case 12 scene", "ref": {"sha256": SHA, "size_bytes": 900, "kind": "scene"}, "source": {"campaign_id": "c-1", "case_id": 12, "step": "scene_generation"}}

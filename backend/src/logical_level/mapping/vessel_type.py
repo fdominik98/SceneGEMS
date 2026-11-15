@@ -25,11 +25,34 @@ Passenger ship, MMSI: 477995293 : 30 x 8 m
 
 import os
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional
 
 import yaml
 
 from utils.file_system_utils import VESSEL_TYPES_FOLDER
+
+
+class SteeringType(str, Enum):
+    """How a vessel turns.
+
+    - rudder: a fixed propeller and a rudder behind it; the turning force grows with the speed.
+    - skid: two fixed propellers side by side, steered by their thrust difference.
+    - vectored_thrust: one propeller that turns with the helm (an outboard engine or an azimuth thruster).
+    """
+
+    RUDDER = "rudder"
+    SKID = "skid"
+    VECTORED_THRUST = "vectored_thrust"
+
+
+# What a vessel type or a scene file without these columns gets: the hull every vessel had
+# before the columns existed (skid steered, 0.4 L wide, 0.06 L deep, block coefficient 0.6).
+DEFAULT_STEERING_TYPE = SteeringType.SKID.value
+DEFAULT_BLOCK_COEFFICIENT = 0.6
+DEFAULT_LENGTH_TO_BEAM = 2.5
+DEFAULT_BEAM_TO_DRAFT = 0.4 / 0.06
+HEIGHT_TO_DRAFT = 2.5  # hull height (keel to deck) over the draft
 
 
 @dataclass(frozen=True, repr=False)
@@ -42,6 +65,24 @@ class VesselType:
     max_speed: float
     max_angular_speed: float
     max_acceleration: float
+    steering_type: str = DEFAULT_STEERING_TYPE
+    block_coefficient: float = DEFAULT_BLOCK_COEFFICIENT  # displaced volume over length * breadth * draft
+    length_to_beam: float = DEFAULT_LENGTH_TO_BEAM  # length over breadth
+    beam_to_draft: float = DEFAULT_BEAM_TO_DRAFT  # breadth over draft
+
+    def __post_init__(self):
+        object.__setattr__(self, "steering_type", SteeringType(self.steering_type).value)
+        if not 0.0 < self.block_coefficient <= 1.0:
+            raise ValueError(f"vessel type {self.name}: block_coefficient must be in (0, 1], got {self.block_coefficient}")
+        if self.length_to_beam <= 0 or self.beam_to_draft <= 0:
+            raise ValueError(f"vessel type {self.name}: length_to_beam and beam_to_draft must be positive, got {self.length_to_beam} and {self.beam_to_draft}")
+
+    def breadth_of(self, length: float) -> float:
+        """Breadth of a vessel of this type and length: its hull ratio, within the type's beam range."""
+        return min(max(length / self.length_to_beam, self.min_beam), self.max_beam)
+
+    def draft_of(self, breadth: float) -> float:
+        return breadth / self.beam_to_draft
 
     def __repr__(self):
         return self.name
