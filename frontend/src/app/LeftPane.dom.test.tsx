@@ -96,3 +96,18 @@ describe("LeftPane theme toggle", () => {
     expect(screen.getByRole("button", { name: "Light mode" })).toBeVisible();
   });
 });
+
+describe("LeftPane documentation link", () => {
+  it("opens the documentation in a tab of its own, so the console stays where it is", () => {
+    renderPane();
+    const link = screen.getByRole("link", { name: "Documentation" });
+    expect(link).toHaveAttribute("href", "/docs/");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("stays reachable on the collapsed icon rail", () => {
+    renderPane(true);
+    expect(screen.getByRole("link", { name: "Documentation" })).toHaveAttribute("target", "_blank");
+  });
+});

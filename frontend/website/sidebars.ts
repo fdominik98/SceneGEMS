@@ -56,6 +56,28 @@ const sidebars: SidebarsConfig = {
       ],
     },
   ],
+  mqttApiSidebar: [
+    'mqtt-api/index',
+    'mqtt-api/subsystem-channels',
+    {
+      type: 'category',
+      label: 'Subsystems',
+      collapsed: false,
+      items: [
+        'mqtt-api/design-space-exploration',
+        'mqtt-api/scene-generation',
+        'mqtt-api/trajectory-generation',
+        'mqtt-api/monitoring',
+        'mqtt-api/simulation',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Vessels',
+      collapsed: false,
+      items: ['mqtt-api/vessels'],
+    },
+  ],
 };
 
 export default sidebars;

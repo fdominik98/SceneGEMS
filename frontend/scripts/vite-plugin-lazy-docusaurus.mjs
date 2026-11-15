@@ -44,7 +44,8 @@ function ensureDocsServer() {
   }
 
   console.log('[docs] Starting Docusaurus (opened from Documentation link)…')
-  docsProcess = spawn('npm', ['run', 'docs:dev'], {
+  // --no-open: the Documentation link opens the tab; Docusaurus would open a second one when it starts
+  docsProcess = spawn('npm', ['run', 'start', '--prefix', 'website', '--', '--no-open'], {
     cwd: frontendRoot,
     shell: true,
     stdio: 'inherit',

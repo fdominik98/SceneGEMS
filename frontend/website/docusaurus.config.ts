@@ -60,6 +60,12 @@ const config: Config = {
           label: 'User interface',
         },
         {
+          type: 'docSidebar',
+          sidebarId: 'mqttApiSidebar',
+          position: 'left',
+          label: 'MQTT API',
+        },
+        {
           type: 'html',
           position: 'right',
           value:
@@ -85,6 +91,10 @@ const config: Config = {
             {
               label: 'Typical workflow',
               to: '/workflow',
+            },
+            {
+              label: 'MQTT API',
+              to: '/mqtt-api',
             },
           ],
         },

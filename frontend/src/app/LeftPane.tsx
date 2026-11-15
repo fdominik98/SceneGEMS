@@ -400,7 +400,8 @@ export function LeftPane({
           </Disclosure>
         )}
         <ThemeToggle />
-        <a href="/docs/" className="left-nav-item left-nav-link" title="Documentation" aria-label="Documentation">
+        {/* A tab of its own: the console stays where it is */}
+        <a href="/docs/" target="_blank" rel="noopener noreferrer" className="left-nav-item left-nav-link" title="Documentation" aria-label="Documentation">
           <DocumentationIcon />
           <span className="left-nav-text">
             <span className="left-nav-label">Documentation</span>
