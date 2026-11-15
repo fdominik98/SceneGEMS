@@ -19,15 +19,20 @@ import {
   asvSystemChoice,
   buildInitializeSimulationConnectionsByAgentIdMap,
   buildInitialVesselConnectionDrafts,
+  chooseVesselModelPreset,
   CONTROL_LAYER_LABELS,
   CONTROL_LAYERS,
   controlLayerChoice,
+  describeVesselModelPreset,
+  dropUnavailableVesselModelPresets,
   mergePersistedVesselSettings,
   normalizeDraftStack,
+  normalizeDraftVesselModel,
   REAL_VESSEL_ASV_SYSTEM,
   realVesselSoftwareChoice,
   round2,
   toPersistedVesselDrafts,
+  vesselModelPresetsOf,
   vesselTopic,
   type AsvSystem,
   type ControlLayer,
@@ -189,11 +194,20 @@ export function SimulationInitControls({ streamControls, onSetupChange, attended
   }));
   const receivedSimulationModels = usePlaybackStore((s) => s.receivedSimulationModels);
   const stackOptions = usePlaybackStore((s) => s.stackOptions);
+  // The presets each vessel of the loaded scenario can take; null until the gateway listed them for it.
+  const presetsByAgentId = usePlaybackStore((s) => s.vesselModelPresets?.presetsByAgentId ?? null);
+  // Once they are listed, a preset its vessel cannot take (saved for another scenario's vessel) is the
+  // automatic model again. Applied while rendering: the drafts come back unchanged once every choice holds.
+  const availableDrafts = presetsByAgentId === null ? vesselConnectionDrafts : dropUnavailableVesselModelPresets(vesselConnectionDrafts, presetsByAgentId);
+  if (availableDrafts !== vesselConnectionDrafts) {
+    setVesselConnectionDrafts(availableDrafts);
+  }
   // The drafts as shown and sent: a simulator that does not run a vessel's control layer gets one
-  // that runs its ASV system. The stored drafts keep the user's choice for the other simulators.
+  // that runs its ASV system, and a preset counts only where a Gazebo model is generated and the
+  // gateway lists it for the vessel. The stored drafts keep the user's choice for the other simulators.
   const stackDrafts = useMemo(
-    () => vesselConnectionDrafts.map((draft) => normalizeDraftStack(draft, simulatorType, stackOptions)),
-    [vesselConnectionDrafts, simulatorType, stackOptions]
+    () => vesselConnectionDrafts.map((draft) => normalizeDraftVesselModel(normalizeDraftStack(draft, simulatorType, stackOptions), simulatorType, presetsByAgentId)),
+    [vesselConnectionDrafts, simulatorType, stackOptions, presetsByAgentId]
   );
   // Per-instance guard against re-applying the same server `simulation_models` payload, and the
   // same loaded run's setup. Component state (not a module global) so navigating away and back
@@ -204,7 +218,7 @@ export function SimulationInitControls({ streamControls, onSetupChange, attended
   if (modelsToken !== appliedModelsToken && (modelsToken === null || vesselConnectionDrafts.length > 0)) {
     setAppliedModelsToken(modelsToken);
     if (receivedSimulationModels) {
-      setVesselConnectionDrafts(applySimulationModels(vesselConnectionDrafts, receivedSimulationModels.vesselModelsByAgentId));
+      setVesselConnectionDrafts(applySimulationModels(vesselConnectionDrafts, receivedSimulationModels.vesselModelsByAgentId, receivedSimulationModels.vesselModelPresetByAgentId));
     }
   }
   const setupRequest = useSimulationSetupRequestStore((s) => s.request);
@@ -336,9 +350,16 @@ export function SimulationInitControls({ streamControls, onSetupChange, attended
     updateConnection(vesselId, "context", context);
   };
 
+  // A preset's id, or "" for the automatic model. The vessel's SDF goes with the change.
+  const chooseVesselModel = (vesselId: string, presetId: string) => {
+    setVesselConnectionDrafts((drafts) => drafts.map((draft) => (draft.vesselId === vesselId ? chooseVesselModelPreset(draft, presetId === "" ? undefined : presetId) : draft)));
+  };
+
   const vesselsWithKind = stackDrafts.length > 0;
   const simulatedDrafts = stackDrafts.filter((draft) => draft.context === "simulation");
   const loadedModels = simulatedDrafts.filter((draft) => (draft.gazeboVesselModel ?? "").length > 0).length;
+  const presetModels = simulatedDrafts.filter((draft) => draft.vesselModelPreset !== undefined).length;
+  const modelsHint = [presetModels > 0 ? `${presetModels} from a preset` : null, loadedModels > 0 ? `${loadedModels} from a file` : null].filter(Boolean).join(", ");
   const windy = windEast !== 0 || windNorth !== 0 || windUp !== 0;
   const environmentHint = windy || wave.amplitude > 0 ? [windy ? `wind ${round2(Math.hypot(windEast, windNorth, windUp))} m/s` : null, wave.amplitude > 0 ? `waves ${round2(wave.amplitude)} m` : null].filter(Boolean).join(", ") : "calm";
 
@@ -514,30 +535,72 @@ export function SimulationInitControls({ streamControls, onSetupChange, attended
           headingLevel={null}
           title="Gazebo models"
           openTitle="Hide the Gazebo models"
-          hint={loadedModels > 0 ? `${loadedModels} from a file` : undefined}
+          hint={modelsHint.length > 0 ? modelsHint : undefined}
           className="step-more"
         >
           <div className="step-more-body">
-            <table className="step-table sim-model-table step-row-full">
-              <tbody>
-                {simulatedDrafts.map((draft) => (
-                  <tr key={draft.vesselId}>
-                    <td className="sim-vessel-name">
-                      <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
-                    </td>
-                    <td>
-                      <ModelFileControls
-                        vesselId={vesselText(draft.vesselId, ownShipIds.has(draft.vesselId))}
-                        content={draft.gazeboVesselModel}
-                        exportFileName={`${draft.agentName || draft.vesselId}.sdf`}
-                        onLoad={(text) => updateConnection(draft.vesselId, "gazeboVesselModel", text)}
-                        onClear={() => updateConnection(draft.vesselId, "gazeboVesselModel", undefined)}
-                      />
-                    </td>
+            <div className="step-row-full step-table-scroll">
+              <table className="step-table sim-model-table">
+                <thead>
+                  <tr>
+                    <th>Vessel</th>
+                    <th>Vessel model</th>
+                    <th>Gazebo model</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {simulatedDrafts.map((draft) => {
+                    const name = vesselText(draft.vesselId, ownShipIds.has(draft.vesselId));
+                    const presets = vesselModelPresetsOf(presetsByAgentId, draft.vesselId);
+                    const chosen = presets.find((preset) => preset.id === draft.vesselModelPreset);
+                    return (
+                      <tr key={draft.vesselId}>
+                        <td className="sim-vessel-name">
+                          <VesselLabel id={draft.vesselId} ownShip={ownShipIds.has(draft.vesselId)} />
+                        </td>
+                        <td>
+                          {presets.length > 0 ? (
+                            <select aria-label={`Vessel model of ${name}`} value={chosen?.id ?? ""} disabled={disabled} onChange={(e) => chooseVesselModel(draft.vesselId, e.target.value)}>
+                              <option value="">Automatic</option>
+                              {presets.map((preset) => (
+                                <option key={preset.id} value={preset.id}>
+                                  {preset.name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span
+                              className="step-value-note"
+                              title={
+                                presetsByAgentId === null
+                                  ? "The server has not listed the preset vessel models of this scenario"
+                                  : "No preset vessel model has this vessel's steering type and takes its size"
+                              }
+                            >
+                              Automatic
+                            </span>
+                          )}
+                          {chosen ? <p className="step-line sim-model-preset-note">{describeVesselModelPreset(chosen)}</p> : null}
+                        </td>
+                        <td>
+                          <ModelFileControls
+                            vesselId={name}
+                            content={draft.gazeboVesselModel}
+                            exportFileName={`${draft.agentName || draft.vesselId}.sdf`}
+                            onLoad={(text) => updateConnection(draft.vesselId, "gazeboVesselModel", text)}
+                            onClear={() => updateConnection(draft.vesselId, "gazeboVesselModel", undefined)}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="step-line step-row-full">
+              The server makes a vessel's Gazebo model from its vessel model: the automatic one, or a preset of a documented ship that has the vessel's steering type and takes its size. A
+              loaded or generated Gazebo model is used as it is, so choosing a vessel model clears it.
+            </p>
             <button
               type="button"
               disabled={disabled || simulatedDrafts.length === 0}

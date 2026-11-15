@@ -81,6 +81,20 @@
   width: 70%;
 }
 
+/* The Gazebo models: per vessel its vessel model (the chosen preset's source under the choice), then its SDF. */
+.sim-model-table {
+  min-width: 600px;
+}
+
+.sim-model-table td select {
+  min-width: 24ch;
+}
+
+.sim-model-preset-note {
+  max-width: 64ch;
+  margin-top: var(--space-1);
+}
+
 .sim-model-file {
   display: inline-flex;
   flex-wrap: wrap;

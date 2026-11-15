@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { StackOptionsPayload, StackOptionWire } from "../../../domain/simulation/wireTypes";
-import { ASV_SYSTEM, ASV_SYSTEM_LABELS, REAL_VESSEL_ASV_SYSTEM, controlModeOf, asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, vesselReadinessLabels, vesselTopic, withVesselName, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
+import type { StackOptionsPayload, StackOptionWire, VesselModelPresetWire } from "../../../domain/simulation/wireTypes";
+import { ASV_SYSTEM, ASV_SYSTEM_LABELS, REAL_VESSEL_ASV_SYSTEM, chooseVesselModelPreset, describeVesselModelPreset, dropUnavailableVesselModelPresets, hasGeneratedGazeboModel, normalizeDraftVesselModel, vesselModelPresetsOf, controlModeOf, asvSystemChoice, buildInitializeSimulationConnectionsByAgentIdMap, buildInitialVesselConnectionDrafts, controlLayerChoice, groundControlEndpointLabels, mergePersistedVesselSettings, vesselReadinessLabels, vesselTopic, withVesselName, normalizeDraftStack, realVesselSoftwareChoice, toPersistedVesselDrafts, toTopicSegment, type PersistedVesselConnectionDraft, type VesselDescriptor, type VesselInitConnectionDraft } from "./simulationInitConfig";
 
 const vessels: VesselDescriptor[] = [
   { id: "os", isOwnShip: true },
@@ -289,6 +289,112 @@ describe("real vessel choices", () => {
     const onBoard = { ...real, asvSystem: "on_board" as const };
     expect(normalizeDraftStack(onBoard, "Gazebo", REAL_OPTIONS)).toBe(onBoard);
     expect(normalizeDraftStack({ ...onBoard, context: "simulation" }, "Kinematic", REAL_OPTIONS)).toMatchObject({ asvSystem: "replay", controlLayer: "none" });
+  });
+});
+
+describe("a vessel's model preset", () => {
+  const preset = (id: string, name: string): VesselModelPresetWire => ({ id, name, source: "MSS", steeringType: "rudder", bounds: { length: [100, 300] }, particulars: { length: 200 }, notes: "" });
+  const hanjin = preset("hanjin_pretoria", "Hanjin Pretoria, Panamax container ship");
+  const mariner = preset("mariner", "Mariner class cargo ship");
+  /** The own ship can take both presets, ts-1 the Mariner only, ts-2 none. */
+  const presetsByAgentId = { os: [hanjin, mariner], "ts-1": [mariner], "ts-2": [] };
+  const [os, ts1, ts2] = buildInitialVesselConnectionDrafts(vessels) as [VesselInitConnectionDraft, VesselInitConnectionDraft, VesselInitConnectionDraft];
+
+  it("is listed per vessel, and not at all while the gateway has not answered", () => {
+    expect(vesselModelPresetsOf(presetsByAgentId, "os")).toEqual([hanjin, mariner]);
+    expect(vesselModelPresetsOf(presetsByAgentId, "ts-2")).toEqual([]);
+    expect(vesselModelPresetsOf(presetsByAgentId, "unknown")).toEqual([]);
+    expect(vesselModelPresetsOf(null, "os")).toEqual([]);
+  });
+
+  it("applies where the server generates a Gazebo model: a simulated vessel in a Gazebo world", () => {
+    expect(hasGeneratedGazeboModel(os, "Gazebo")).toBe(true);
+    expect(hasGeneratedGazeboModel(os, "ArduPilot Sim")).toBe(false);
+    expect(hasGeneratedGazeboModel(os, "Kinematic")).toBe(false);
+    expect(hasGeneratedGazeboModel({ ...os, context: "real" }, "Gazebo")).toBe(false);
+  });
+
+  it("is the automatic model by default: a new draft has none and sends none", () => {
+    expect(os).not.toHaveProperty("vesselModelPreset");
+    expect(buildInitializeSimulationConnectionsByAgentIdMap([os]).os).not.toHaveProperty("vesselModelPreset");
+  });
+
+  it("clears the vessel's SDF when it is chosen, and when the choice goes back to automatic", () => {
+    const withModel = { ...os, gazeboVesselModel: "<sdf/>" };
+    const chosen = chooseVesselModelPreset(withModel, "hanjin_pretoria");
+    expect(chosen.vesselModelPreset).toBe("hanjin_pretoria");
+    expect(chosen).not.toHaveProperty("gazeboVesselModel");
+    expect(withModel.gazeboVesselModel).toBe("<sdf/>");
+
+    const automatic = chooseVesselModelPreset({ ...chosen, gazeboVesselModel: "<sdf>of the preset</sdf>" }, undefined);
+    expect(automatic).not.toHaveProperty("vesselModelPreset");
+    expect(automatic).not.toHaveProperty("gazeboVesselModel");
+    expect(chooseVesselModelPreset(chosen, "")).not.toHaveProperty("vesselModelPreset");
+    expect(automatic).toMatchObject({ vesselId: "os", asvSystem: os.asvSystem, topic: os.topic });
+  });
+
+  it("goes on the wire only when one is chosen, and never for a real vessel", () => {
+    const chosen = chooseVesselModelPreset(os, "hanjin_pretoria");
+    const map = buildInitializeSimulationConnectionsByAgentIdMap([chosen, ts1]);
+    expect(map.os).toMatchObject({ vesselModelPreset: "hanjin_pretoria" });
+    expect(map.os).not.toHaveProperty("gazeboVesselModel");
+    expect(map["ts-1"]).not.toHaveProperty("vesselModelPreset");
+    expect(buildInitializeSimulationConnectionsByAgentIdMap([{ ...chosen, vesselModelPreset: "" }]).os).not.toHaveProperty("vesselModelPreset");
+    expect(buildInitializeSimulationConnectionsByAgentIdMap([{ ...chosen, context: "real" }]).os).not.toHaveProperty("vesselModelPreset");
+  });
+
+  it("is shown and sent only where it applies and the gateway lists it for the vessel", () => {
+    const chosen = chooseVesselModelPreset(os, "hanjin_pretoria");
+    expect(normalizeDraftVesselModel(chosen, "Gazebo", presetsByAgentId)).toBe(chosen);
+    expect(normalizeDraftVesselModel(os, "Gazebo", presetsByAgentId)).toBe(os);
+    // Not on another simulator, not for a real vessel, not while the presets are not known.
+    expect(normalizeDraftVesselModel(chosen, "ArduPilot Sim", presetsByAgentId)).not.toHaveProperty("vesselModelPreset");
+    expect(normalizeDraftVesselModel(chosen, "Kinematic", presetsByAgentId)).not.toHaveProperty("vesselModelPreset");
+    expect(normalizeDraftVesselModel({ ...chosen, context: "real" }, "Gazebo", presetsByAgentId)).not.toHaveProperty("vesselModelPreset");
+    expect(normalizeDraftVesselModel(chosen, "Gazebo", null)).not.toHaveProperty("vesselModelPreset");
+    // Not a preset another vessel can take but this one cannot.
+    const notForTs1 = chooseVesselModelPreset(ts1, "hanjin_pretoria");
+    expect(normalizeDraftVesselModel(notForTs1, "Gazebo", presetsByAgentId)).toEqual(ts1);
+    // The stored draft keeps the choice.
+    expect(chosen.vesselModelPreset).toBe("hanjin_pretoria");
+  });
+
+  it("is persisted with the vessel's settings, without the SDF", () => {
+    const chosen = { ...chooseVesselModelPreset(os, "mariner"), gazeboVesselModel: "<sdf>of the Mariner</sdf>" };
+    const persisted = toPersistedVesselDrafts([chosen, ts1]);
+    expect(persisted[0]).toMatchObject({ vesselId: "os", vesselModelPreset: "mariner" });
+    expect(persisted[0]).not.toHaveProperty("gazeboVesselModel");
+    expect(persisted[1]).not.toHaveProperty("vesselModelPreset");
+
+    const restored = mergePersistedVesselSettings(persisted, buildInitialVesselConnectionDrafts(vessels));
+    expect(restored[0]?.vesselModelPreset).toBe("mariner");
+    expect(restored[1]).not.toHaveProperty("vesselModelPreset");
+  });
+
+  it("falls back to automatic when a persisted one is not among the vessel's presets any more", () => {
+    const saved = [chooseVesselModelPreset(os, "mariner"), chooseVesselModelPreset(ts1, "hanjin_pretoria"), chooseVesselModelPreset(ts2, "mariner")];
+    const restored = mergePersistedVesselSettings(toPersistedVesselDrafts(saved), buildInitialVesselConnectionDrafts(vessels));
+    const kept = dropUnavailableVesselModelPresets(restored, presetsByAgentId);
+    expect(kept.map((draft) => draft.vesselModelPreset)).toEqual(["mariner", undefined, undefined]);
+    expect(kept[0]).toBe(restored[0]);
+    expect(kept[1]).not.toHaveProperty("vesselModelPreset");
+    // A scenario whose vessels the catalog has nothing for: every choice goes.
+    expect(dropUnavailableVesselModelPresets(restored, {}).map((draft) => draft.vesselModelPreset)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("leaves the drafts as they are when every choice holds", () => {
+    const drafts = [chooseVesselModelPreset(os, "hanjin_pretoria"), ts1, ts2];
+    expect(dropUnavailableVesselModelPresets(drafts, presetsByAgentId)).toBe(drafts);
+    expect(dropUnavailableVesselModelPresets([os, ts1], {})).toEqual([os, ts1]);
+  });
+
+  it("is described by its source and its notes", () => {
+    expect(describeVesselModelPreset({ source: "MSS CRAFT/SHIP/models/mariner.m", notes: "The hull fullness stays the vessel's own." })).toBe(
+      "Source: MSS CRAFT/SHIP/models/mariner.m. The hull fullness stays the vessel's own."
+    );
+    expect(describeVesselModelPreset({ source: " dataPretoria.m (A. D. Pipchenko, 2007) ", notes: "" })).toBe("Source: dataPretoria.m (A. D. Pipchenko, 2007).");
+    expect(describeVesselModelPreset({ source: "", notes: "No speed is given" })).toBe("No speed is given.");
+    expect(describeVesselModelPreset({ source: "", notes: " " })).toBe("");
   });
 });
 

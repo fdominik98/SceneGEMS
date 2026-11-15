@@ -37,6 +37,14 @@ export function isRetiredGatewayMessage(raw: unknown): boolean {
   return typeof type === "string" && RETIRED_GATEWAY_MESSAGES.includes(type);
 }
 
+/**
+ * Whether a gateway error is a control node of an earlier release refusing `query_vessel_model_presets`, which it
+ * does not know: it has no presets, so every vessel keeps the automatic model and there is nothing to tell.
+ */
+export function isUnknownVesselModelPresetsQuery(message: string): boolean {
+  return message.trim() === "Unknown message type: query_vessel_model_presets";
+}
+
 function trajectoryChunkMatchesActiveScenario(
   activeScenarioId: string | null,
   chunkScenarioId: string | null
@@ -80,7 +88,8 @@ export function setupRequestOf(run: LoadedRun) {
  * The workbench's backend: design space exploration, scene generation, trajectory generation,
  * simulation and monitoring run as jobs on the active cluster's worker nodes (`WorkbenchJobDriver`).
  * The gateway WebSocket of the cluster's control node only loads scenario files, generates vessel
- * models and lists the stack options: it runs no simulation and connects to no broker.
+ * models and lists the stack options and the vessel model presets of the loaded scenario: it runs
+ * no simulation and connects to no broker.
  */
 export function useSimulationWorkflow() {
   const ingestFrames = usePlaybackStore((s) => s.ingestFrames);
@@ -138,6 +147,9 @@ export function useSimulationWorkflow() {
           if (message.totalTrajectoryLength !== null) {
             setLatestTimestamp(message.totalTrajectoryLength);
           }
+          // The gateway holds the scenario now: which preset vessel models each of its vessels can take.
+          // The reset above dropped the former scenario's list; the answer names this one.
+          clientRef.current?.send({ type: "query_vessel_model_presets" });
           const replay = pendingReplayRef.current;
           if (replay !== null && replay.scenarioId === usePlaybackStore.getState().activeScenarioId) {
             pendingReplayRef.current = null;
@@ -262,7 +274,9 @@ export function useSimulationWorkflow() {
           break;
         }
         case "error":
-          setError(message.message);
+          if (!isUnknownVesselModelPresetsQuery(message.message)) {
+            setError(message.message);
+          }
           break;
         case "ack":
           setError(null);
@@ -274,8 +288,13 @@ export function useSimulationWorkflow() {
           simulationModelsToken += 1;
           setReceivedSimulationModels({
             vesselModelsByAgentId: message.vesselModelsByAgentId,
+            vesselModelPresetByAgentId: message.vesselModelPresetByAgentId,
             receivedToken: simulationModelsToken,
           });
+          break;
+        case "vessel_model_presets":
+          // Kept only when it is for the active scenario: the answer to a load that another one replaced is dropped.
+          usePlaybackStore.getState().setVesselModelPresets(message.presets);
           break;
         case "unknown":
           // A control node of an earlier release still sends the statuses of its live session: they mean nothing here.

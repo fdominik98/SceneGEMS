@@ -1,10 +1,27 @@
 import type { VesselInitConnectionDraft } from "./simulationInitConfig";
 
-/** The server's Gazebo vessel models (`simulation_models`) on the vessels they were made for. */
-export function applySimulationModels(drafts: VesselInitConnectionDraft[], modelsByVesselId: Record<string, string | null>): VesselInitConnectionDraft[] {
+/**
+ * The server's Gazebo vessel models (`simulation_models`) on the vessels they were made for. A vessel
+ * that gets a model also takes the preset the answer names for it (none: the automatic model), so
+ * the draft says what its model was made from.
+ */
+export function applySimulationModels(
+  drafts: VesselInitConnectionDraft[],
+  modelsByVesselId: Record<string, string | null>,
+  presetByVesselId: Record<string, string | null> = {}
+): VesselInitConnectionDraft[] {
   return drafts.map((draft) => {
     const model = modelsByVesselId[draft.vesselId];
-    return model != null ? { ...draft, gazeboVesselModel: model } : draft;
+    if (model == null) {
+      return draft;
+    }
+    const withModel: VesselInitConnectionDraft = { ...draft, gazeboVesselModel: model };
+    const preset = presetByVesselId[draft.vesselId];
+    if (preset != null && preset.length > 0) {
+      return { ...withModel, vesselModelPreset: preset };
+    }
+    delete withModel.vesselModelPreset;
+    return withModel;
   });
 }
 

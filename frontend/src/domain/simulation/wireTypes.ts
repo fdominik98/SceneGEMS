@@ -23,6 +23,11 @@ export type SimulationConnectionInfo =
        * server generates a model automatically.
        */
       gazeboVesselModel?: string;
+      /**
+       * Id of the preset of the vessel model catalog chosen for this vessel; absent or null
+       * means the automatic model. A `gazeboVesselModel` is used instead of either.
+       */
+      vesselModelPreset?: string | null;
     }
   | {
       context: "real";
@@ -36,6 +41,11 @@ export type SimulationConnectionInfo =
        * server generates a model automatically.
        */
       gazeboVesselModel?: string;
+      /**
+       * Id of the preset of the vessel model catalog chosen for this vessel; absent or null
+       * means the automatic model. A `gazeboVesselModel` is used instead of either.
+       */
+      vesselModelPreset?: string | null;
     };
 
 export interface WaveInfoWire {
@@ -94,6 +104,32 @@ export interface StackOptionsPayload {
   combinations: StackOptionWire[];
 }
 
+/** One preset of the vessel model catalog, as the console shows it (backend `VesselModelPresetInfo`). */
+export interface VesselModelPresetWire {
+  id: string;
+  name: string;
+  /** Where the preset's numbers come from. */
+  source: string;
+  /** The steering type a vessel must have to take the preset (rudder, skid, vectored_thrust). */
+  steeringType: string;
+  /** [low, high] per bounded vessel property (length, breadth, draft, ...). */
+  bounds: Record<string, [number, number]>;
+  /** The source ship's own numbers. */
+  particulars: Record<string, number>;
+  /** What the preset does not take from its source. */
+  notes: string;
+}
+
+/**
+ * The presets each vessel of the loaded scenario can take (the `vessel_model_presets` answer to
+ * `query_vessel_model_presets`). Every vessel has an entry; an empty list means only the automatic model.
+ */
+export interface VesselModelPresetsPayload {
+  /** The scenario the gateway answered for (the id of its `load_scenario_file`). */
+  scenarioId: string;
+  presetsByAgentId: Record<string, VesselModelPresetWire[]>;
+}
+
 /** The trajectory generators a pipeline chooses from (backend `TrajectoryGeneratorId`). */
 export type TrajectoryGeneratorWire = "monitor_driven_rrt" | "straight";
 
@@ -126,6 +162,8 @@ export type ClientToServerMessage =
       fileContent: string;
     }
   | { type: "query_stack_options" }
+  /** Answered for the scenario loaded with `load_scenario_file`; an `error` without one. */
+  | { type: "query_vessel_model_presets" }
   | ({ type: "generate_simulation_models" } & SimulationModelsPayload);
 /*
  * Nothing else is a gateway message. Scene generation, trajectory generation, monitoring and

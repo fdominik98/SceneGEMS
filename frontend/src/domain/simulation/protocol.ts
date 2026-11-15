@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { EvaluationData, SimulationFrame } from "./types";
-import type { StackOptionsPayload } from "./wireTypes";
+import type { StackOptionsPayload, VesselModelPresetsPayload } from "./wireTypes";
 
 const stateSchema = z
   .object({
@@ -501,7 +501,10 @@ export type ParsedServerMessage =
       kind: "simulation_models";
       /** Per-vessel SDF model content keyed by the same id used in connectionsByAgentId. */
       vesselModelsByAgentId: Record<string, string | null>;
+      /** Per vessel, the preset its model was made from; null for the automatic model. */
+      vesselModelPresetByAgentId: Record<string, string | null>;
     }
+  | { kind: "vessel_model_presets"; presets: VesselModelPresetsPayload }
   | { kind: "unknown"; raw: unknown };
 
 const initialStateSchema = z.object({
@@ -540,6 +543,7 @@ const ackSchema = z.object({
 const simulationModelsConnectionSchema = z
   .object({
     gazeboVesselModel: z.string().optional().nullable(),
+    vesselModelPreset: z.string().optional().nullable(),
   })
   .passthrough();
 
@@ -576,6 +580,22 @@ const stackOptionsSchema = z.object({
       waves: supportSchema,
     })
   ),
+});
+
+const vesselModelPresetSchema = z.object({
+  id: z.string().min(1),
+  name: z.string(),
+  source: z.string(),
+  steeringType: z.string(),
+  bounds: z.record(z.string(), z.tuple([z.number(), z.number()])),
+  particulars: z.record(z.string(), z.number()),
+  notes: z.string(),
+});
+
+const vesselModelPresetsSchema = z.object({
+  type: z.literal("vessel_model_presets"),
+  scenarioId: z.string(),
+  presetsByAgentId: z.record(z.string(), z.array(vesselModelPresetSchema)),
 });
 
 /**
@@ -701,6 +721,7 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
         payload.connectionsByAgentId ?? payload.connections_by_agent_id ?? {},
     });
     const vesselModelsByAgentId: Record<string, string | null> = {};
+    const vesselModelPresetByAgentId: Record<string, string | null> = {};
     for (const [agentId, connection] of Object.entries(parsed.connectionsByAgentId)) {
       const c = connection as Record<string, unknown>;
       const model =
@@ -710,16 +731,24 @@ export function parseServerMessage(raw: unknown): ParsedServerMessage {
             ? (c.gazebo_vessel_model as string)
             : null;
       vesselModelsByAgentId[agentId] = model;
+      // Left out by the backend while the model is automatic.
+      vesselModelPresetByAgentId[agentId] = typeof c.vesselModelPreset === "string" && c.vesselModelPreset.length > 0 ? c.vesselModelPreset : null;
     }
     return {
       kind: "simulation_models",
       vesselModelsByAgentId,
+      vesselModelPresetByAgentId,
     };
   }
   if (msgType === "stack_options") {
     const { type: _type, ...options } = stackOptionsSchema.parse(raw);
     void _type;
     return { kind: "stack_options", options };
+  }
+  if (msgType === "vessel_model_presets") {
+    const { type: _type, ...presets } = vesselModelPresetsSchema.parse(raw);
+    void _type;
+    return { kind: "vessel_model_presets", presets };
   }
 
   return { kind: "unknown", raw };

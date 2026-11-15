@@ -269,6 +269,67 @@ describe("parseServerMessage", () => {
     }
   });
 
+  it("reads the preset a vessel's model was made from, and none for the automatic model", () => {
+    const msg = parseServerMessage({
+      type: "simulation_models",
+      connectionsByAgentId: {
+        os: { context: "simulation", gazeboVesselModel: "<sdf><os/></sdf>", vesselModelPreset: "hanjin_pretoria" },
+        ts1: { context: "simulation", gazeboVesselModel: "<sdf><ts1/></sdf>" },
+        ts2: { context: "simulation", gazeboVesselModel: "<sdf><ts2/></sdf>", vesselModelPreset: null },
+      },
+    });
+    expect(msg.kind).toBe("simulation_models");
+    if (msg.kind === "simulation_models") {
+      expect(msg.vesselModelPresetByAgentId).toEqual({ os: "hanjin_pretoria", ts1: null, ts2: null });
+      expect(msg.vesselModelsByAgentId.os).toBe("<sdf><os/></sdf>");
+    }
+  });
+
+  it("rejects simulation_models whose preset is not an id", () => {
+    expect(() => parseServerMessage({ type: "simulation_models", connectionsByAgentId: { os: { vesselModelPreset: 7 } } })).toThrow();
+  });
+
+  describe("vessel_model_presets", () => {
+    const hanjin = {
+      id: "hanjin_pretoria",
+      name: "Hanjin Pretoria, Panamax container ship",
+      source: "MSS CRAFT/SHIP/models/shipModels/dataPretoria.m (A. D. Pipchenko, 2007)",
+      steeringType: "rudder",
+      bounds: { length: [226.0, 306.0], breadth: [27.4, 37.0] },
+      particulars: { length: 266.0, breadth: 32.2 },
+      notes: "The source gives no speed.",
+    };
+    const message = { type: "vessel_model_presets", scenarioId: "scenario-1", presetsByAgentId: { "0": [hanjin], "1": [] } };
+
+    it("parses the presets per vessel with the scenario they are for", () => {
+      const msg = parseServerMessage(message);
+      expect(msg.kind).toBe("vessel_model_presets");
+      if (msg.kind === "vessel_model_presets") {
+        expect(msg.presets).toEqual({ scenarioId: "scenario-1", presetsByAgentId: { "0": [hanjin], "1": [] } });
+        expect(msg.presets).not.toHaveProperty("type");
+      }
+    });
+
+    it("parses an answer for a scenario without vessels", () => {
+      const msg = parseServerMessage({ type: "vessel_model_presets", scenarioId: "scenario-1", presetsByAgentId: {} });
+      expect(msg).toEqual({ kind: "vessel_model_presets", presets: { scenarioId: "scenario-1", presetsByAgentId: {} } });
+    });
+
+    it.each([
+      ["no scenario id", { ...message, scenarioId: undefined }],
+      ["no presets", { type: "vessel_model_presets", scenarioId: "scenario-1" }],
+      ["presets as a list", { ...message, presetsByAgentId: [hanjin] }],
+      ["a vessel's presets as one preset", { ...message, presetsByAgentId: { "0": hanjin } }],
+      ["a preset without a name", { ...message, presetsByAgentId: { "0": [{ ...hanjin, name: undefined }] } }],
+      ["a preset with an empty id", { ...message, presetsByAgentId: { "0": [{ ...hanjin, id: "" }] } }],
+      ["a bound that is not a pair", { ...message, presetsByAgentId: { "0": [{ ...hanjin, bounds: { length: [226.0] } }] } }],
+      ["a bound that is not numbers", { ...message, presetsByAgentId: { "0": [{ ...hanjin, bounds: { length: ["226", "306"] } }] } }],
+      ["a particular that is not a number", { ...message, presetsByAgentId: { "0": [{ ...hanjin, particulars: { length: "266" } }] } }],
+    ])("rejects %s", (_what, raw) => {
+      expect(() => parseServerMessage(raw)).toThrow();
+    });
+  });
+
   it("parses generated_scene message", () => {
     const msg = parseServerMessage({
       type: "generated_scene",
