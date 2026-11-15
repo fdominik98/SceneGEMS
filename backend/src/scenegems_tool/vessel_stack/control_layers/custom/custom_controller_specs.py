@@ -1,10 +1,12 @@
 """Specs of the custom control layer and of the replay route into it.
 
-The custom controller is SceneGEMS's own heading and speed autopilot for a twin
-differential-thrust hull (twin_thrust_autopilot.py), for Gazebo only. Every vessel has its own
-controller container (custom_controller_server.py). The runner carries its thrusts to the hull
-through the gz-transport actuator adapter (simulation_layers/gazebo/gz_transport_actuator.py),
-which steps the paused world, so controller and physics share one clock.
+The custom controller is SceneGEMS's own heading and speed autopilot for the generated hull
+(twin_thrust_autopilot.py), for Gazebo only: it steers a skid steered hull by its two thrusts and
+a hull with a rudder or vectored thrust by its thrust and helm angle (actuator_allocation.py).
+Every vessel has its own controller container (custom_controller_server.py). The runner carries
+its commands to the hull through the gz-transport actuator adapter
+(simulation_layers/gazebo/gz_transport_actuator.py), which steps the paused world, so controller
+and physics share one clock.
 """
 
 from scenegems_tool.vessel_stack.asv_system.replay.replay_specs import REPLAY_CONTAINER
@@ -18,8 +20,9 @@ CUSTOM_CONTROLLER_CONTAINER = backend_component_container("scenegems_tool.vessel
 CUSTOM_CONTROL_LAYER = LayerSpec(
     layer=LayerRef.of(ControlLayerId.CUSTOM),
     description=(
-        "Own heading and speed autopilot for twin differential thrust: a surge loop sets the common thrust and a yaw loop the differential thrust, "
-        "with gains from the generated hull model. One container per vessel. Gazebo only."
+        "Own heading and speed autopilot for the generated hull: a surge loop asks for a force and a yaw loop for a moment, with gains from the hull model, "
+        "and the hull's steering type decides the command (two thrusts for skid steering, a thrust and a helm angle for a rudder or vectored thrust). "
+        "One container per vessel. Gazebo only."
     ),
     provides_ports=frozenset({Port.ACTUATOR_CMD}),
     requires_ports=frozenset({Port.HEADING_SPEED_CMD, Port.WAYPOINT_MISSION}),

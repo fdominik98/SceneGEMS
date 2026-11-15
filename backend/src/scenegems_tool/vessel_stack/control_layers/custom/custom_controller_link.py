@@ -14,7 +14,8 @@ from scenegems_tool.vessel_stack.asv_system.asv_system_link import AsvSystemLink
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_CONTROLLER, Endpoint, LineClient, WireError, state_row
 from scenegems_tool.vessel_stack.contracts.ports import HeadingSpeedCommand, VesselStateObservation
-from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, HullObservation, ThrustCommand
+from scenegems_tool.vessel_stack.control_layers.custom.actuator_allocation import ActuatorCommand
+from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, HullObservation
 
 
 class CustomControllerLink:
@@ -43,16 +44,23 @@ class CustomControllerLink:
         reply = self._client.request({"op": "guide", "index": request.index, "time": request.time, "target_time": request.target_time, "own": state_row(observation.own_state)})
         return HeadingSpeedCommand(heading=float(reply["heading"]), speed=float(reply["speed"]))
 
-    def command(self, desired_heading: float, desired_speed: float, observation: HullObservation, dt: float) -> ThrustCommand:
+    def command(self, desired_heading: float, desired_speed: float, observation: HullObservation, dt: float) -> ActuatorCommand:
         reply = self._client.request(
             {
                 "op": "step",
                 "dt": float(dt),
-                "hull": [float(observation.heading), float(observation.surge), float(observation.yaw_rate)],
+                "hull": [float(observation.heading), float(observation.surge), float(observation.yaw_rate), float(observation.sway)],
                 "setpoint": [float(desired_heading), float(desired_speed)],
             }
         )
-        return ThrustCommand(port=float(reply["port"]), starboard=float(reply["starboard"]), yaw_saturated=bool(reply["yaw_saturated"]), surge_saturated=bool(reply["surge_saturated"]))
+        return ActuatorCommand(
+            thrusts=tuple(float(thrust) for thrust in reply["thrusts"]),
+            helm_angle=None if reply["helm_angle"] is None else float(reply["helm_angle"]),
+            force=float(reply["force"]),
+            moment=float(reply["moment"]),
+            yaw_saturated=bool(reply["yaw_saturated"]),
+            surge_saturated=bool(reply["surge_saturated"]),
+        )
 
     def close(self) -> None:
         self._client.close()

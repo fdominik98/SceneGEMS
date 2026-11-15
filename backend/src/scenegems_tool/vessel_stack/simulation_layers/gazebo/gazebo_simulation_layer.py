@@ -16,7 +16,8 @@ from scenegems_tool.vessel_stack.contracts.vessel_stack_config import Simulation
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gazebo_specs import GAZEBO_LAYER, wave_forces_enabled
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.gazebo_service_generator import generate_gazebo_service
-from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_generator import generate_vessel_model
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_catalog import vessel_dynamics_overrides
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_generator import generate_hull_mesh, generate_vessel_model, hull_mesh_filename
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.world_generator import generate_world
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_transport_actuator import DEFAULT_PORT as ACTUATOR_PORT
 
@@ -40,12 +41,17 @@ class GazeboWorldFiles:
 
     def add_vessel_model(self, artifacts: DockerStackArtifacts, request: DockerStackRequest, vessel_config: VesselConfig, vessel: ConcreteVessel, state: ActorState) -> None:
         agent_name = vessel_config.require_connection().agent_name
+        # The hull and steering values of the vessel's preset of the vessel model catalog, when it has one.
+        overrides = vessel_dynamics_overrides(vessel, vessel_config.vessel_model_preset)
         if vessel_config.gazebo_vessel_model is not None:
             vessel_model = vessel_config.gazebo_vessel_model
         else:
-            vessel_model = generate_vessel_model(vessel, agent_name, vessel_config.stack.control_layer, request.simulation.environment)
+            vessel_model = generate_vessel_model(vessel, agent_name, vessel_config.stack.control_layer, request.simulation.environment, overrides)
         vessel_model_filename = f"{agent_name}_model.sdf"
         artifacts.pending_writes.append((f"{request.gen_folder}/{vessel_model_filename}", vessel_model))
+        # The hull surface a generated model shows, next to it. A vessel that brings its own model
+        # gets the file too: a model the console generated and sent back refers to it.
+        artifacts.pending_writes.append((f"{request.gen_folder}/{hull_mesh_filename(agent_name)}", generate_hull_mesh(vessel, agent_name, overrides)))
         self._vessel_includes.append((f"{request.mounted_gen_folder}/{vessel_model_filename}", state))
 
     def add_world(self, artifacts: DockerStackArtifacts, request: DockerStackRequest) -> str:

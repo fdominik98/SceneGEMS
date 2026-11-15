@@ -1,11 +1,13 @@
-"""A fake gz-transport and gz sim for the actuator tests: thrust topics, odometry, propeller feedback and world control.
+"""A fake gz-transport and gz sim for the actuator tests: thrust and helm topics, odometry, propeller feedback and world control.
 
 FakeWorld advances only on a world control request, like a paused gz sim stepped by multi_step.
 Every iteration, each Thruster publishes the propeller speed of the thrust it applies on its
 ang_vel topic, and the odometry is published every ODOMETRY_PERIOD_NS of simulated time. The
 hull moves 1 m per second per kN of total thrust, just enough to tell steps apart.
-A thrust can be delivered late (late_iterations), as a real message travelling to gz sim can.
-With reception_rounds, thrust messages queue like gz sim's gz-transport reception thread takes
+A model has the thrusters port and stbd unless `thrusters` names others, and a helm when it is in
+`helms`: the helm angle it was last commanded is in `applied` under its steering topic, like a thrust.
+A command can be delivered late (late_iterations), as a real message travelling to gz sim can.
+With reception_rounds, command messages queue like gz sim's gz-transport reception thread takes
 them: each round handles one topic message and then a waiting service request, and the thread
 drains the rest of the queue after answering a request without iterations, but only while a
 request with iterations is already stepping the world.
@@ -61,6 +63,9 @@ class Odometry:
 
 MESSAGES = {"Boolean": Boolean, "Double": Double, "Odometry": Odometry, "WorldControl": WorldControl, "WorldStatistics": WorldStatistics}
 THRUSTER = {"thrust_coefficient": 0.0076, "propeller_diameter": 0.18, "fluid_density": 1025.0, "max_thrust": 300.0}
+SKID_MODEL = {"steering_type": "skid", "thrusters": ["port", "stbd"], "helm": False, **THRUSTER}  # a model's entry of the start request
+HELM_MODEL = {"steering_type": "rudder", "thrusters": ["center"], "helm": True, **THRUSTER}
+DEFAULT_THRUSTERS = ("port", "stbd")
 
 
 @dataclass
@@ -71,9 +76,11 @@ class FakeWorld:
     late_iterations: int = 0  # iterations a new thrust takes to reach the Thruster system
     refuse_requests: int = 0  # world control requests left unanswered first (discovery)
     reception_rounds: bool = False
-    queue: List[Tuple[str, float]] = field(default_factory=list)  # thrust messages not yet handled (reception_rounds)
+    thrusters: Dict[str, Tuple[str, ...]] = field(default_factory=dict)  # per model, where not port and stbd
+    helms: Tuple[str, ...] = ()  # the models with a helm
+    queue: List[Tuple[str, float]] = field(default_factory=list)  # command messages not yet handled (reception_rounds)
     subscribers: Dict[str, List[Callable]] = field(default_factory=dict)
-    applied: Dict[str, float] = field(default_factory=dict)  # thrust in effect per topic
+    applied: Dict[str, float] = field(default_factory=dict)  # thrust (or helm angle) in effect per topic
     pending: Dict[str, Tuple[int, float]] = field(default_factory=dict)  # topic: (iterations to wait, thrust)
     x: Dict[str, float] = field(default_factory=dict)
     requests: List[int] = field(default_factory=list)
@@ -119,12 +126,12 @@ class FakeWorld:
             else:
                 self.pending[topic] = (wait - 1, value)
         for model in self.models:
-            for side in ("port", "stbd"):
-                thrust = self.applied.get(f"/model/{model}/joint/motor_{side}_joint/cmd_thrust", 0.0)
-                self.deliver(f"/model/{model}/joint/motor_{side}_joint/ang_vel", Double(propeller_speed(thrust, **THRUSTER)))
+            for thruster in self.thrusters.get(model, DEFAULT_THRUSTERS):
+                thrust = self.applied.get(f"/model/{model}/joint/motor_{thruster}_joint/cmd_thrust", 0.0)
+                self.deliver(f"/model/{model}/joint/motor_{thruster}_joint/ang_vel", Double(propeller_speed(thrust, **THRUSTER)))
         self.sim_time_ns += self.step_ns
         for model in self.models:
-            total = sum(self.applied.get(f"/model/{model}/joint/motor_{side}_joint/cmd_thrust", 0.0) for side in ("port", "stbd"))
+            total = sum(self.applied.get(f"/model/{model}/joint/motor_{thruster}_joint/cmd_thrust", 0.0) for thruster in self.thrusters.get(model, DEFAULT_THRUSTERS))
             self.x[model] = self.x.get(model, 0.0) + total / 1000.0 * self.step_ns / 1e9
             if self.sim_time_ns % ODOMETRY_PERIOD_NS == 0:
                 self.deliver(f"/model/{model}/odometry", Odometry(self.sim_time_ns, self.x[model]))
@@ -138,7 +145,11 @@ class FakePublisher:
         self.world.on_thrust(self.topic, float(message.data))
 
     def has_connections(self) -> bool:
-        return True
+        """Whether the model has a system listening on the topic: one of its thrusters, or its helm."""
+        _, _, model, _, joint, _ = self.topic.split("/")
+        if joint == "steering_joint":
+            return model in self.world.helms
+        return joint in {f"motor_{thruster}_joint" for thruster in self.world.thrusters.get(model, DEFAULT_THRUSTERS)}
 
 
 class FakeNode:

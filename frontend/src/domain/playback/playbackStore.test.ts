@@ -295,6 +295,59 @@ describe("playback over both streams", () => {
   });
 });
 
+describe("the vessel model presets of the loaded scenario", () => {
+  const mariner = { id: "mariner", name: "Mariner class cargo ship", source: "MSS", steeringType: "rudder", bounds: { length: [137, 185] as [number, number] }, particulars: { length: 160.93 }, notes: "" };
+  const presetsOf = (scenarioId: string) => ({ scenarioId, presetsByAgentId: { "0": [mariner], "1": [] } });
+
+  it("are unknown until the gateway answered", () => {
+    expect(createPlaybackStore().getState().vesselModelPresets).toBeNull();
+  });
+
+  it("are kept with their scenario when the answer is for the active one", () => {
+    const store = createPlaybackStore();
+    store.getState().setActiveScenarioId("scenario-1");
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    expect(store.getState().vesselModelPresets).toEqual(presetsOf("scenario-1"));
+  });
+
+  it("are dropped when the answer is for another load, or comes with no scenario loaded", () => {
+    const store = createPlaybackStore();
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    expect(store.getState().vesselModelPresets).toBeNull();
+    store.getState().setActiveScenarioId("scenario-2");
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    expect(store.getState().vesselModelPresets).toBeNull();
+    // A late answer leaves the list of the active scenario as it is.
+    store.getState().setVesselModelPresets(presetsOf("scenario-2"));
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    expect(store.getState().vesselModelPresets?.scenarioId).toBe("scenario-2");
+  });
+
+  it("go when another scenario becomes the active one, and stay when the same one is named again", () => {
+    const store = createPlaybackStore();
+    store.getState().setActiveScenarioId("scenario-1");
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    store.getState().setActiveScenarioId("scenario-1");
+    expect(store.getState().vesselModelPresets?.scenarioId).toBe("scenario-1");
+    store.getState().setActiveScenarioId("scenario-2");
+    expect(store.getState().vesselModelPresets).toBeNull();
+  });
+
+  it("go when the gateway's scenario is gone, and with a reset for a new scene", () => {
+    const store = createPlaybackStore();
+    store.getState().setActiveScenarioId("scenario-1");
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    store.getState().setActiveScenarioId(null);
+    expect(store.getState().vesselModelPresets).toBeNull();
+
+    store.getState().setActiveScenarioId("scenario-1");
+    store.getState().setVesselModelPresets(presetsOf("scenario-1"));
+    store.getState().resetForNewScene();
+    expect(store.getState().vesselModelPresets).toBeNull();
+    expect(store.getState().activeScenarioId).toBeNull();
+  });
+});
+
 describe("mergeSortedUnique", () => {
   const at = (timestamp: number, tag = "") => ({ ...sampleFrames[0]!, timestamp, timeStep: tag.length });
   const times = (frames: { timestamp: number }[]) => frames.map((frame) => frame.timestamp);

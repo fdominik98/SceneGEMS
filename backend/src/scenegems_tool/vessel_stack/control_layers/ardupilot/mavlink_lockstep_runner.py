@@ -48,7 +48,7 @@ from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConne
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import GUIDED_TARGET_TIMEOUT_S, MavlinkLink, MavlinkLinkError, StampedState, sitl_mavlink_endpoint
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
+from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError, vessel_steering_types
 
 START_QUANTUM_S = 5.0  # scenario time 0 is put on a multiple of this SITL time, so repeats share it
 START_MARGIN_S = 1.0  # at least this much SITL time between arming and scenario time 0
@@ -245,7 +245,7 @@ def run_mavlink_stack(
     and leaves to the operator.
     """
     resolver = resolver or default_resolver()
-    resolution = resolver.require_instance(simulation, attended=attended, host=host)
+    resolution = resolver.require_instance(simulation, attended=attended, host=host, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
     lockstep_ids = set(MAVLINK_LOCKSTEP_ADAPTERS.values())
     passive_ids = {MISSION_PLANNER_GCS_PORT.id} if attended else set()
     wrong = [

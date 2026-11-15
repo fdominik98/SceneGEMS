@@ -18,6 +18,13 @@
 #                          applies when the resolver is told the host, otherwise it warns
 #   lockstep, faster_than_real_time   true | false, when a measurement overrides the declaration
 #   wind, waves            supported | unmeasured | unsupported
+#   steering_types         the steering types of the vessels the spec runs, a list of rudder, skid
+#                          and vectored_thrust, when a measurement narrows what the spec declares.
+#                          A spec that declares none runs all three, and a vessel whose steering
+#                          type is missing from a spec of its stack is refused. What a simulator
+#                          models is structural and stays in its spec: ardupilot_sim declares
+#                          rudder and skid (simulation_layers/ardupilot_sim/ardupilot_sim_specs.py),
+#                          so no entry here repeats it
 #   notes                  {capability field: reason shown when that field rejects a request}
 #   deviation_bounds_m     {speedup: max trajectory deviation in meters} behind a bounded tier
 #   deviation_bounds_m_by_layer   {simulation layer spec id: {speedup: max deviation in meters}} for

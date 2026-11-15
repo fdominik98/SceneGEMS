@@ -5,7 +5,7 @@ services:
     environment:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
-    - SITL_FRAME=motorboat
+    - SITL_FRAME=motorboat-skid
     - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_0.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
@@ -53,8 +53,8 @@ services:
     - SIM_PORT=5760
     - SPEEDUP=1
     - VEHICLE=Rover
-    - MODEL=motorboat
-    - VEHICLE_PARAMS=motorboat
+    - MODEL=motorboat-skid
+    - VEHICLE_PARAMS=motorboat-skid
     - MAVPROXY=tcpin:agent_0_mavproxy:14551
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position
     networks:
@@ -83,7 +83,7 @@ services:
     environment:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
-    - SITL_FRAME=motorboat
+    - SITL_FRAME=motorboat-skid
     - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_1.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
@@ -131,8 +131,8 @@ services:
     - SIM_PORT=5770
     - SPEEDUP=1
     - VEHICLE=Rover
-    - MODEL=motorboat
-    - VEHICLE_PARAMS=motorboat
+    - MODEL=motorboat-skid
+    - VEHICLE_PARAMS=motorboat-skid
     - MAVPROXY=tcpin:agent_1_mavproxy:14551
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position
     networks:

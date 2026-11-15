@@ -88,7 +88,7 @@ describe("the domain configuration files", () => {
     }
   });
 
-  it("vessel types are a table with eleven rows and seven columns", () => {
+  it("vessel types are a table with eleven rows and eleven columns", () => {
     const table = rootOf(VESSEL_TYPES) as TableModel;
     expect(table.nodeType).toBe("table");
     expect(table.rows).toHaveLength(11);
@@ -101,7 +101,35 @@ describe("the domain configuration files", () => {
       "max_speed",
       "max_angular_speed",
       "max_acceleration",
+      "steering_type",
+      "block_coefficient",
+      "length_to_beam",
+      "beam_to_draft",
     ]);
+    expect(table.rows.every((row) => row.cells.every((cell) => cell !== null))).toBe(true);
+  });
+
+  it("the steering type is a text column with the choices the backend accepts", () => {
+    const table = rootOf(VESSEL_TYPES) as TableModel;
+    const index = table.columns.findIndex((column) => column.key === "steering_type");
+    expect(table.columns[index]).toMatchObject({ kind: "string", unit: null, label: "Steering type" });
+    expect(table.columns[index].description).toContain("How the vessel turns");
+    const byRow = Object.fromEntries(table.rows.map((row) => [row.key, row.cells[index]]));
+    expect(byRow.MiniUSV).toMatchObject({ kind: "string", value: "skid", choices: ["rudder", "skid", "vectored_thrust"] });
+    expect(byRow.CargoShip).toMatchObject({ kind: "string", value: "rudder" });
+    expect(table.rows.map((row) => row.cells[index]?.value)).toEqual(["rudder", "rudder", "skid", ...Array<string>(8).fill("rudder")]);
+  });
+
+  it("the hull ratios are number columns without a unit", () => {
+    const table = rootOf(VESSEL_TYPES) as TableModel;
+    const byKey = Object.fromEntries(table.columns.map((column) => [column.key, column]));
+    expect(byKey.block_coefficient).toMatchObject({ kind: "number", unit: null, label: "Block coefficient" });
+    expect(byKey.block_coefficient.description).toBe("Hull fullness: displaced volume over length * beam * draft");
+    expect(byKey.length_to_beam).toMatchObject({ kind: "number", unit: null });
+    expect(byKey.beam_to_draft).toMatchObject({ kind: "number", unit: null, description: "Beam over draft" });
+    const tanker = table.rows.find((row) => row.key === "Tanker");
+    expect(tanker?.cells.slice(8).map((cell) => cell?.value)).toEqual([0.82, 6.0, 2.5]);
+    expect(tanker?.cells[8]).toMatchObject({ choices: null, unit: null });
   });
 
   it("table columns take their unit and description from the commented row", () => {

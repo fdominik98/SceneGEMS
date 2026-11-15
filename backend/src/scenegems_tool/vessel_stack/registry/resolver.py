@@ -8,7 +8,9 @@ unavailable, with the reason of the ruled-out connection when the design declare
 When the chain exists, its capabilities are the weakest link over its three layers and two
 adapters. A request (environment, speedup, attended or not) is then checked against them:
 unsupported wind or waves, and a speedup the chain cannot run, are rejected with a reason
-and never dropped silently.
+and never dropped silently. So is a simulated vessel whose steering type (rudder, skid,
+vectored thrust) a spec of its chain does not run, when the caller says how the vessels steer
+(vessel_steering_types of the scene).
 
 A real vessel of an instance is resolved too, on its own layers (real_vessel control and
 simulation): it is outside the shared simulation layer and the requested environment, but its
@@ -18,10 +20,11 @@ limits (real time, no lockstep, workbench only) are part of the instance's weake
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, AnySpec, SpecStatus
-from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier, weakest_link
+from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier, steering_type_text, weakest_link
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, Role, SimulationLayerId
-from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselStackConfig
+from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 
 _REAL_VESSEL_LAYERS = (ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
@@ -161,26 +164,33 @@ class StackResolver:
                     reasons.append(f"{spec.id} is planned{phase} and not implemented yet")
         return ChainResolution(stack=stack, specs=specs, complete=complete, reasons=tuple(reasons))
 
-    def resolve_instance(self, instance: SimulationInstanceConfig, *, attended: bool = True, host: Optional[str] = None) -> InstanceResolution:
+    def resolve_instance(
+        self, instance: SimulationInstanceConfig, *, attended: bool = True, host: Optional[str] = None, steering_types: Optional[Mapping[str, SteeringType]] = None
+    ) -> InstanceResolution:
         """Validate a whole simulation instance.
 
         attended=False is an unattended campaign run. host names the machine that will run it,
         so a per-host max_speedup applies; without it a per-host value only warns.
+        steering_types says how the vessels steer, by agent id (vessel_steering_types of the
+        scene): a simulated vessel whose steering type a spec of its chain does not run is
+        rejected. A vessel it does not name is not checked, since the instance alone does not
+        say how its vessels steer.
         """
         errors: List[str] = []
         warnings: List[str] = []
         chains: Dict[str, ChainResolution] = {}
+        steering_types = steering_types or {}
         if instance.simulation_layer == SimulationLayerId.REAL_VESSEL:
             errors.append("an instance runs on a simulation layer; real_vessel is the layer of a real vessel only")
         for agent_id, vessel in instance.vessels.items():
-            if not vessel.is_simulated and (vessel.stack.control_layer, vessel.stack.simulation_layer) != _REAL_VESSEL_LAYERS:
-                errors.append(f"vessel {agent_id} is a real vessel, so its control and simulation layers are real_vessel, not ({vessel.stack})")
-            elif vessel.is_simulated and vessel.stack.simulation_layer != instance.simulation_layer:
-                errors.append(f"vessel {agent_id} uses simulation layer {vessel.stack.simulation_layer.value}, but all vessels of one instance share {instance.simulation_layer.value}")
+            errors.extend(_layer_errors(agent_id, vessel, instance))
             chain = self.resolve(vessel.stack, vessel.adapter_ids)
             chains[agent_id] = chain
             if not chain.available:
                 errors.append(f"vessel {agent_id} ({vessel.stack}): {chain.reason}")
+            elif vessel.is_simulated and agent_id in steering_types:
+                # A real vessel steers itself, whatever the scene says about it.
+                _check_steering(agent_id, SteeringType(steering_types[agent_id]), chain.specs, errors)
         if errors or not chains:
             return InstanceResolution(instance=instance, chains=chains, capabilities=None, errors=tuple(errors), warnings=tuple(warnings))
 
@@ -196,8 +206,10 @@ class StackResolver:
                     errors.append(_with_note(f"{spec.id} is interactive only and is rejected for unattended runs", spec, "interactive_only"))
         return InstanceResolution(instance=instance, chains=chains, capabilities=capabilities, errors=tuple(errors), warnings=tuple(warnings))
 
-    def require_instance(self, instance: SimulationInstanceConfig, *, attended: bool = True, host: Optional[str] = None) -> InstanceResolution:
-        return self.resolve_instance(instance, attended=attended, host=host).require()
+    def require_instance(
+        self, instance: SimulationInstanceConfig, *, attended: bool = True, host: Optional[str] = None, steering_types: Optional[Mapping[str, SteeringType]] = None
+    ) -> InstanceResolution:
+        return self.resolve_instance(instance, attended=attended, host=host, steering_types=steering_types).require()
 
     def _check_speedup(self, specs: Iterable[AnySpec], speedup: float, host: Optional[str], errors: List[str], warnings: List[str]) -> None:
         if speedup < 1:
@@ -246,6 +258,28 @@ def _unique(specs: Iterable[AnySpec]) -> Tuple[AnySpec, ...]:
 def _with_note(message: str, spec: AnySpec, capability: str) -> str:
     note = spec.note_for(capability)
     return f"{message}: {note}" if note else message
+
+
+def _layer_errors(agent_id: str, vessel: VesselConfig, instance: SimulationInstanceConfig) -> List[str]:
+    """Why the vessel's layers do not fit the instance: a real vessel on its own layers, a simulated one on the instance's simulation layer."""
+    if not vessel.is_simulated and (vessel.stack.control_layer, vessel.stack.simulation_layer) != _REAL_VESSEL_LAYERS:
+        return [f"vessel {agent_id} is a real vessel, so its control and simulation layers are real_vessel, not ({vessel.stack})"]
+    if vessel.is_simulated and vessel.stack.simulation_layer != instance.simulation_layer:
+        return [f"vessel {agent_id} uses simulation layer {vessel.stack.simulation_layer.value}, but all vessels of one instance share {instance.simulation_layer.value}"]
+    return []
+
+
+def vessel_steering_types(vessels: Iterable[Any]) -> Dict[str, SteeringType]:
+    """By agent id, how each vessel of a scene steers (ConcreteVessel.steering_type): the steering_types of resolve_instance."""
+    return {str(vessel.id): SteeringType(vessel.steering_type) for vessel in vessels}
+
+
+def _check_steering(agent_id: str, steering: SteeringType, specs: Iterable[AnySpec], errors: List[str]) -> None:
+    for spec in specs:
+        supported = spec.capabilities.steering_types
+        if steering not in supported:
+            message = f"vessel {agent_id} has {steering_type_text([steering])} steering, which {spec.id} does not simulate (it has {steering_type_text(supported)})"
+            errors.append(_with_note(message, spec, "steering_types"))
 
 
 def _check_environment(specs: Iterable[AnySpec], environment: EnvironmentConfig, errors: List[str], warnings: List[str]) -> None:

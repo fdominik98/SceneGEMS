@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { EvaluationData, GeneratedSceneData, SimulationFrame } from "../simulation/types";
-import type { StackOptionsPayload } from "../simulation/wireTypes";
+import type { StackOptionsPayload, VesselModelPresetsPayload } from "../simulation/wireTypes";
 import { timestampAtOrBefore } from "./playbackFrameResolve";
 import { loadPersistedScene, savePersistedScene } from "./persistedScene";
 import { evaluationTimeBaseline } from "../sceneGeneration/evaluationTime";
@@ -94,6 +94,8 @@ const clearedLoadedPlaybackState = {
   simulationFrameIndexByTimestamp: {} as Record<number, number>,
   activeScenarioId: null as string | null,
   receivedSimulationModels: null,
+  // The presets belong to the scenario that goes.
+  vesselModelPresets: null,
 };
 
 /**
@@ -140,6 +142,8 @@ export function mergeSortedUnique(existing: SimulationFrame[], incoming: Simulat
 export interface ReceivedSimulationModels {
   /** Per-vessel SDF model content keyed by the same id used in connectionsByAgentId. */
   vesselModelsByAgentId: Record<string, string | null>;
+  /** Per vessel, the preset of the vessel model catalog its model was made from; null for the automatic model. */
+  vesselModelPresetByAgentId: Record<string, string | null>;
   /** Monotonic token so consumers can react even to identical repeated payloads. */
   receivedToken: number;
 }
@@ -201,6 +205,13 @@ export interface PlaybackState {
   /** The backend resolver's stack combinations (from `stack_options`); null until received. */
   stackOptions: StackOptionsPayload | null;
   setStackOptions: (options: StackOptionsPayload | null) => void;
+  /**
+   * The vessel model presets each vessel of the active scenario can take (from `vessel_model_presets`);
+   * null until the gateway answered for that scenario, and again once another scenario is loaded.
+   */
+  vesselModelPresets: VesselModelPresetsPayload | null;
+  /** Keeps the gateway's answer when it is for the active scenario; an answer for another load is dropped. */
+  setVesselModelPresets: (presets: VesselModelPresetsPayload | null) => void;
   setStreamStatus: (status: PlaybackState["streamStatus"]) => void;
   previewMonitor: PreviewMonitorState;
   setPreviewMonitor: (state: PreviewMonitorState) => void;
@@ -253,7 +264,8 @@ export interface PlaybackStoreOptions {
 /**
  * A playback store: one per workbench page, so each page renders its own scene, trajectories or
  * run (design doc 6.6). `usePlaybackStore` is the simulation page's and also holds what the
- * gateway socket gives the workbench (its status, the stack options, errors);
+ * gateway socket gives the workbench (its status, the stack options, the vessel model presets of the
+ * loaded scenario, errors);
  * `useScenePlaybackStore` holds the scene generation page's scene, `useTrajectoryPlaybackStore`
  * the trajectory generation page's planned trajectories. Components of a page read the page's
  * store through `PlaybackStoreContext` (`playbackContext.ts`).
@@ -292,6 +304,9 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     receivedSimulationModels: null,
     stackOptions: null,
     setStackOptions: (options) => set({ stackOptions: options }),
+    vesselModelPresets: null,
+    setVesselModelPresets: (presets) =>
+      set((state) => (presets !== null && presets.scenarioId !== state.activeScenarioId ? state : { vesselModelPresets: presets })),
     setStreamStatus: (status) => set({ streamStatus: status }),
     setError: (message) => set({ errorMessage: message }),
     setFollowLatestPush: (value) => set({ followLatestPush: value }),
@@ -311,7 +326,9 @@ export function createPlaybackStore(options: PlaybackStoreOptions = {}) {
     setLatestTimestamp: (value) =>
       set((state) => ({ latestTimestamp: Math.max(state.latestTimestamp, value) })),
     setScenarioTrajectoryLength: (value) => set({ scenarioTrajectoryLength: value }),
-    setActiveScenarioId: (id) => set({ activeScenarioId: id }),
+    // The presets of another scenario's vessels go with it, so a stale list is never shown.
+    setActiveScenarioId: (id) =>
+      set((state) => ({ activeScenarioId: id, vesselModelPresets: state.vesselModelPresets?.scenarioId === id ? state.vesselModelPresets : null })),
     resetForNewScene: () => set(clearedLoadedPlaybackState),
     requestAutoFit: () => set({ autoFitPending: true }),
     consumeAutoFit: () => set({ autoFitPending: false }),

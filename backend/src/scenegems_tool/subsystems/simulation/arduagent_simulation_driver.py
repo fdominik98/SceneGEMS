@@ -43,7 +43,7 @@ from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS, arduagent_control_mode
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
+from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError, vessel_steering_types
 
 SceneObserver = Callable[[float, ConcreteScene], None]  # (scenario time in s, the scene at that time)
 
@@ -137,7 +137,7 @@ class ArduAgentSimulationDriver:
         self.reference_geofence = reference_geofence
         self.mqtt_connection = mqtt_connection
         self.service_name = service_name
-        self.resolution = (resolver or default_resolver()).require_instance(simulation)
+        self.resolution = (resolver or default_resolver()).require_instance(simulation, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
         not_arduagent = [
             f"vessel {agent_id} uses {chain.asv_adapter.id if chain.asv_adapter else 'no adapter'}"
             for agent_id, chain in self.resolution.chains.items()

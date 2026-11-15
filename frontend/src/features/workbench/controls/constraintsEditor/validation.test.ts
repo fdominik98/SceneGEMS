@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildConstraintsModel, flattenScalarFields, type ScalarFieldModel, type TableModel } from "./fieldModel";
 import { VESSEL_TYPES } from "./domainFiles.fixture";
 import { applyEdit } from "./yamlEdit";
-import { impliesNonNegative, keyWords } from "./validation";
+import { choicesOf, impliesNonNegative, keyWords } from "./validation";
 
 function fieldsOf(text: string): Record<string, ScalarFieldModel> {
   const model = buildConstraintsModel(text);
@@ -109,6 +109,52 @@ describe("types in a table column", () => {
     const model = buildConstraintsModel(text);
     const table = (model.ok ? model.root : null) as TableModel;
     expect(table.rows.every((row) => row.cells[0]?.issues.length === 0)).toBe(true);
+  });
+});
+
+describe("keys the backend checks by name", () => {
+  it("knows the choices of a steering type in any spelling of the key, and of no other key", () => {
+    expect(choicesOf("steering_type")).toEqual(["rudder", "skid", "vectored_thrust"]);
+    expect(choicesOf("steeringType")).toEqual(["rudder", "skid", "vectored_thrust"]);
+    expect(choicesOf("STEERING_TYPE")).toEqual(["rudder", "skid", "vectored_thrust"]);
+    expect(choicesOf("type")).toBeNull();
+    expect(choicesOf("name")).toBeNull();
+  });
+
+  it("accepts each steering type and flags any other value", () => {
+    for (const value of ["rudder", "skid", "vectored_thrust"]) {
+      expect(fieldsOf(`steering_type: ${value}\n`).steering_type.issues).toEqual([]);
+    }
+    const wrong = fieldsOf("steering_type: paddle\n").steering_type;
+    expect(wrong.issues).toEqual([{ severity: "error", message: "The backend accepts only rudder, skid or vectored_thrust as steering_type." }]);
+    expect(fieldsOf("steering_type: 3\n").steering_type.issues[0].severity).toBe("error");
+    expect(fieldsOf("steering_type:\n").steering_type.issues).toEqual([]);
+  });
+
+  it("flags a block coefficient that is not above 0 and at most 1", () => {
+    expect(fieldsOf("block_coefficient: 0.65\n").block_coefficient.issues).toEqual([]);
+    expect(fieldsOf("block_coefficient: 1.0\n").block_coefficient.issues).toEqual([]);
+    for (const value of ["0.0", "1.2", "-0.5"]) {
+      expect(fieldsOf(`block_coefficient: ${value}\n`).block_coefficient.issues).toEqual([
+        { severity: "error", message: "The backend accepts only a block_coefficient greater than 0 and at most 1." },
+      ]);
+    }
+  });
+
+  it("flags a hull ratio that is not positive, and has no upper limit for it", () => {
+    expect(fieldsOf("length_to_beam: 8.5\n").length_to_beam.issues).toEqual([]);
+    expect(fieldsOf("beam_to_draft: 40.0\n").beam_to_draft.issues).toEqual([]);
+    expect(messages(fieldsOf("length_to_beam: 0.0\n").length_to_beam)).toEqual(["The backend accepts only a length_to_beam greater than 0."]);
+    expect(messages(fieldsOf("beam_to_draft: -2.0\n").beam_to_draft)).toEqual(["The backend accepts only a beam_to_draft greater than 0."]);
+  });
+
+  it("flags one cell of the shipped vessel types and nothing else", () => {
+    const broken = applyEdit(VESSEL_TYPES, { kind: "set", path: ["MiniUSV", "block_coefficient"], value: 1.5, asFloat: true });
+    const model = buildConstraintsModel(broken.ok ? broken.text : "");
+    expect(model.ok && model.issueCount).toBe(1);
+    const table = (model.ok ? model.root : null) as TableModel;
+    const flagged = table.rows.filter((row) => row.cells.some((cell) => cell && cell.issues.length > 0));
+    expect(flagged.map((row) => row.key)).toEqual(["MiniUSV"]);
   });
 });
 

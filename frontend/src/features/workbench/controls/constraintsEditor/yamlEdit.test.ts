@@ -209,10 +209,19 @@ describe("table operations", () => {
     expect(applyEdit(text, { kind: "addItem", path: ["nope"] }).ok).toBe(false);
   });
 
-  it("every cell of the edited vessel types stays a number", () => {
+  it("every cell of the edited vessel types stays a number, and the steering type stays text", () => {
     const text = edit(VESSEL_TYPES, { kind: "duplicateRow", path: [], key: "MiniUSV", newKey: "Skiff" });
     const model = buildConstraintsModel(text);
-    expect(model.ok && flattenScalarFields(model.root).every((field) => typeof field.value === "number")).toBe(true);
+    const fields = model.ok ? flattenScalarFields(model.root) : [];
+    expect(fields).toHaveLength(12 * 11);
+    expect(fields.every((field) => typeof field.value === (field.key === "steering_type" ? "string" : "number"))).toBe(true);
+    expect(parse(text).Skiff).toMatchObject({ steering_type: "skid", block_coefficient: 0.45, length_to_beam: 2, beam_to_draft: 4 });
+  });
+
+  it("a steering type edit changes only that value and keeps the comment after it", () => {
+    const edited = edit(VESSEL_TYPES, { kind: "set", path: ["UnspecifiedVesselType", "steering_type"], value: "vectored_thrust" });
+    expect(edited).toBe(replaceOnce(VESSEL_TYPES, "steering_type: rudder # How the vessel turns", "steering_type: vectored_thrust # How the vessel turns"));
+    expect(commentsOf(edited)).toEqual(commentsOf(VESSEL_TYPES));
   });
 });
 

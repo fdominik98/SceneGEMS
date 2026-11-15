@@ -5,7 +5,7 @@ services:
     environment:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
-    - SITL_FRAME=motorboat
+    - SITL_FRAME=motorboat-skid
     - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_0.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1
@@ -47,7 +47,7 @@ services:
     environment:
     - SITL_SIMULATOR=ardupilot
     - SITL_VEHICLE=Rover
-    - SITL_FRAME=motorboat
+    - SITL_FRAME=motorboat-skid
     - SITL_PARAM_FILE=<backend>/assets/runtime_assets/simulation/gen_tmp/params-agent_1.params
     - SITL_NO_MAVPROXY=1
     - SITL_NO_REBUILD=1

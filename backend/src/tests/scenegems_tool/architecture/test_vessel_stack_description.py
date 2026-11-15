@@ -2,7 +2,7 @@
 
 import pytest
 
-from scenegems_tool.architecture.vessel_stack_description import CLUSTER_JOB_FACT, META_ASV_TO_CONTROL, META_CONTROL_TO_SIMULATION, vessel_stack_document
+from scenegems_tool.architecture.vessel_stack_description import CLUSTER_JOB_FACT, META_ASV_TO_CONTROL, META_CONTROL_TO_SIMULATION, capability_facts, vessel_stack_document
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, LayerRef, Role
@@ -63,6 +63,30 @@ def test_measured_values_are_marked_and_carry_their_evidence(document):
     assert fact(plugin, "repeatability_tier").measured and fact(plugin, "repeatability_tier").value == "bounded"
     assert any(item.key == "deviation_bounds_m" and item.measured for item in plugin.facts)
     assert any(item.key.startswith("max_speedup_on_") for item in plugin.facts)
+
+
+def test_the_steering_types_of_a_layer_are_a_declared_capability_in_words(document):
+    nodes = {node.id: node for node in document.nodes}
+    sitl = fact(nodes["simulation_layer/ardupilot_sim"], "steering_types")
+    assert (sitl.label, sitl.value, sitl.group) == ("Steering types", "rudder, skid", "capability")
+    assert not sitl.measured, "read from SITL's source, declared in the spec"
+    assert "no thruster that turns" in sitl.note
+    assert fact(nodes["simulation_layer/gazebo"], "steering_types").value == "rudder, skid, vectored thrust"
+    assert fact(nodes["simulation_layer/kinematic"], "steering_types").value == "rudder, skid, vectored thrust"
+
+
+def test_a_combination_shows_the_steering_types_its_whole_chain_runs(document):
+    def steering_types(simulation_layer):
+        return fact(_combination(document, "replay", "ardupilot", simulation_layer), "steering_types").value
+
+    assert steering_types("ardupilot_sim") == "rudder, skid"
+    assert steering_types("gazebo") == "rudder, skid, vectored thrust"
+
+
+def test_every_capability_has_a_label():
+    assert {item.key for item in capability_facts(Capabilities())} == set(Capabilities().as_dict())
+    assert all(item.label for item in capability_facts(Capabilities()))
+    assert fact(type("Owner", (), {"facts": capability_facts(Capabilities(steering_types=()))}), "steering_types").value == "none"
 
 
 def test_a_speedup_that_is_not_measured_says_so(document):

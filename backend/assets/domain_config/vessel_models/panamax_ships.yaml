@@ -1,0 +1,111 @@
+# Preset vessel models of Panamax size ships (about 32.3 m of beam) and one general cargo ship.
+# See mss_ships.yaml for what a preset is and for the meaning of each key.
+#
+# Sources: the ship data files of the Marine Systems Simulator (MSS, https://github.com/cybergalactic/MSS,
+# CRAFT/SHIP/models/shipModels, A. D. Pipchenko, 2007) and the Transportation Safety Board of Canada's
+# marine investigation report M96W0187 (near-collision of the cruise ship "Statendam", 1996), which
+# gives the ship's particulars and sea trial manoeuvres.
+
+hanjin_pretoria:
+    name: Hanjin Pretoria, Panamax container ship
+    source: "MSS CRAFT/SHIP/models/shipModels/dataPretoria.m (A. D. Pipchenko, 2007)"
+    steering_type: rudder
+    particulars:
+        length: 266.0 # between perpendiculars
+        breadth: 32.2
+        draft: 8.565 # 8.0 aft, 9.13 forward
+        hull_coefficient: 0.817
+        propeller_diameter: 8.2
+        propeller_blades: 5
+        rudder_area: 53.6
+        rudder_height: 10.0
+    bounds:
+        length: [226.0, 306.0]
+        breadth: [27.4, 37.0]
+        draft: [6.0, 13.5]
+    dynamics:
+        block_coefficient: 0.817
+        rudder_area_ratio: 0.02353 # 53.6 / (266 * 8.565)
+        rudder_span_ratio: 0.9 # the 10 m rudder is higher than this draft: as high as the model's draft allows
+    notes: "The source gives no speed. Its hull coefficient is used as the block coefficient."
+
+csl_spirit:
+    name: CSL Spirit, Panamax self-unloading bulk carrier
+    source: "MSS CRAFT/SHIP/models/shipModels/dataSpirit.m (A. D. Pipchenko, 2007)"
+    steering_type: rudder
+    particulars:
+        length: 225.023 # between perpendiculars
+        breadth: 32.192
+        draft: 14.0
+        hull_coefficient: 0.817
+        propeller_diameter: 7.24
+        propeller_blades: 4
+        rudder_area: 45.9
+        rudder_height: 8.98
+    bounds:
+        length: [191.0, 259.0]
+        breadth: [27.4, 37.0]
+        draft: [8.5, 16.0]
+    dynamics:
+        block_coefficient: 0.817
+        rudder_area_ratio: 0.01457 # 45.9 / (225.023 * 14)
+        rudder_span_ratio: 0.6414 # 8.98 / 14
+    notes: "The source gives no speed. Its hull coefficient is used as the block coefficient."
+
+captain_plaushevskiy:
+    name: Captain Plaushevskiy, general cargo ship
+    source: "MSS CRAFT/SHIP/models/shipModels/dataCaptPlaush.m (A. D. Pipchenko, 2007)"
+    steering_type: rudder
+    particulars:
+        length: 140.0 # between perpendiculars
+        breadth: 20.6
+        draft: 8.975 # 9.0 aft, 8.95 forward
+        hull_coefficient: 0.6886
+        displacement: 18321000.0 # kg
+        propeller_diameter: 5.3
+        propeller_blades: 4
+        rudder_area: 17.0
+        rudder_height: 6.8
+    bounds:
+        length: [119.0, 161.0]
+        breadth: [17.5, 23.7]
+        draft: [5.5, 10.5]
+    dynamics:
+        block_coefficient: 0.6886
+        rudder_area_ratio: 0.01353 # 17 / (140 * 8.975)
+        rudder_span_ratio: 0.7577 # 6.8 / 8.975
+    notes: "The source gives no speed. Its hull coefficient is used as the block coefficient."
+
+statendam:
+    name: Statendam, Panamax cruise ship
+    source: "Transportation Safety Board of Canada, marine investigation report M96W0187 (1996)"
+    steering_type: rudder
+    particulars:
+        length: 219.4
+        breadth: 30.8
+        draft: 7.55 # 7.5 forward, 7.6 aft
+        gross_tonnage: 55451
+        propulsion_power: 24000000.0 # W, diesel-electric, twin controllable pitch propellers
+        rudders: 2 # Becker flap rudders, 45 degrees hard over
+        speed: 11.163 # 21.7 knots, full sea speed
+        manoeuvring_speed: 8.591 # 16.7 knots, manoeuvring full ahead
+        # Sea trial, rudders hard over at 20.24 knots:
+        turn_approach_speed: 10.412
+        turn_advance: 426.0
+        turn_transfer: 94.0
+        turn_tactical_diameter: 292.0
+        turn_final_diameter: 258.0
+        # Crash stop estimates: 899 m in 171 s from 20.57 knots, 716.8 m in 141.4 s from 16 knots.
+        crash_stop_distance: 899.0
+        crash_stop_time: 171.0
+    bounds:
+        length: [186.0, 252.0]
+        breadth: [26.2, 35.4]
+        draft: [5.5, 9.5]
+        max_speed: [7.5, 13.0]
+        max_angular_speed: [0.0, 0.04]
+    dynamics:
+        rudder_max_angle_deg: 45.0
+        turn_diameter_ratio: 1.176 # 258 / 219.4: the yaw damping is calibrated on the sea trial's final turning diameter, in ship lengths
+        turn_speed: 10.412 # at the trial's approach speed
+    notes: "The twin propellers and twin flap rudders become one propeller and one plain rudder, which cannot hold the sea trial's turn of 1.18 ship lengths: the model turns as tightly as its rudder allows, on about one and a half ship lengths. The report gives no displacement, so the hull fullness stays the vessel's own. The crash stop figures are recorded, not reproduced: the model's astern thrust equals its ahead thrust."

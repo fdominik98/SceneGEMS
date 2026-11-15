@@ -80,13 +80,13 @@ def test_the_stack_values_and_a_geofence_are_kept_and_round_trip_through_the_sto
 
 
 # Configs stored before USV Navigation on ArduPilot existed, with the FEC id they were stored with, and their hashes with
-# the default domain presets of 2026-11-09 (READILY_APPARENT_COURSE_CHANGE_TIME and HEADING_PERSISTENCE_TIME 70 s)
+# the default domain presets of 2026-11-15 (the vessel types state their steering type and hull ratios)
 STORED_SCOPE = [{"classes": ["2vessel_0obstacle_scenarios/functional_model0"], "quota": 1}]
 STORED_ARDUPILOT_HASHES = {
-    "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "c0b9ce7fc3c3268a774719f15c84b8451fd3a7afe784b9fc685edf732ce339cb"),
+    "gazebo": ({"stack": {"simulation_layer": "gazebo"}}, "bafcd257bf65cd64d8311af4d6c14c152e10579dd0122000b259a1b715b3a3a1"),
     "sitl": (
         {"stack": {"simulation_layer": "ardupilot_sim", "speedup": 4, "dt": 2, "steps": 30, "geofence": {"latitude": 58.0}}, "monitor": "live", "repeats": 2},
-        "331c57d17e259321d0c6c0fe29bc6815dc48f33e905adee041ed9e03f37e9893",
+        "6cdfbea6f716321d99e504201748d30a217109697e09afd00bed326248c57878",
     ),
 }
 

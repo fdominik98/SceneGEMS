@@ -70,6 +70,7 @@ _CAPABILITY_LABELS = {
     "waves": "Waves",
     "max_speedup": "Max speedup",
     "interactive_only": "Workbench only",
+    "steering_types": "Steering types",
 }
 _UNIT_BY_FIELD = {"exact_up_to_speedup": "x", "max_speedup": "x"}
 
@@ -109,6 +110,9 @@ def capability_facts(capabilities: Capabilities, measured_fields: Iterable[str] 
         note = notes.get(field_name)
         if field_name == "max_speedup" and value is None and note is None:
             note = "not measured"
+        if isinstance(value, (list, tuple)):
+            # A fact holds one plain value: the steering types become "rudder, skid, vectored thrust".
+            value = ", ".join(str(item).replace("_", " ") for item in value) or "none"
         facts.append(
             Fact(
                 field_name,

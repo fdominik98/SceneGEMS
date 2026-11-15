@@ -25,6 +25,10 @@ export interface ActorStaticInfo {
   propellerDiameter?: number;
   thrusterMass?: number;
   motorLength?: number;
+  /** How the vessel turns: "rudder", "skid" or "vectored_thrust". Vessels only; absent on older data. */
+  steeringType?: string;
+  /** Hull fullness, 0 to 1: displaced volume over length * breadth * draft. Vessels only; absent on older data. */
+  blockCoefficient?: number;
 }
 
 export interface ActorKinematicState {

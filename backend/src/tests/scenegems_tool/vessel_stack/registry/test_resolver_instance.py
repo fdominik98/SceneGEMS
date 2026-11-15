@@ -1,15 +1,18 @@
 """resolve_instance: whole-instance validation (shared layer, environment, speedup, attended runs)."""
 
+import dataclasses
+
 import numpy as np
 import pytest
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.capabilities import RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig, WaveConfig
 from scenegems_tool.vessel_stack.registry.catalog import build_registry, default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
-from tests.scenegems_tool.vessel_stack.scenarios import stack_instance, wind_environment
+from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError, vessel_steering_types
+from tests.scenegems_tool.vessel_stack.scenarios import encounter_scene, stack_instance, wind_environment
 
 KINEMATIC = SimulationLayerId.KINEMATIC
 GAZEBO = SimulationLayerId.GAZEBO
@@ -153,6 +156,63 @@ class TestInstanceShape:
         assert resolution.repeatability_tier == RepeatabilityTier.EXACT
         instance.speedup = 5
         assert resolver.resolve_instance(instance).repeatability_tier == RepeatabilityTier.BOUNDED
+
+
+class TestSteering:
+    """A vessel's steering type against what its stack simulates: only ardupilot_sim (SITL's boat) lacks one, vectored thrust."""
+
+    def test_vectored_thrust_is_refused_on_ardupilot_sim_with_the_reason(self, resolver):
+        resolution = resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0, 1]), steering_types={"0": SteeringType.VECTORED_THRUST, "1": SteeringType.RUDDER})
+        assert not resolution.accepted
+        assert resolution.capabilities is None
+        assert resolution.errors == (
+            "vessel 0 has vectored thrust steering, which simulation_layer/ardupilot_sim does not simulate (it has rudder and skid): "
+            "SITL's boat steers by a rudder (frame motorboat) or by the difference of two motors (frame motorboat-skid) and has no thruster that turns",
+        )
+
+    def test_rudder_and_skid_are_accepted_on_ardupilot_sim(self, resolver):
+        resolution = resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0, 1]), steering_types={"0": SteeringType.RUDDER, "1": SteeringType.SKID})
+        assert resolution.accepted and resolution.warnings == ()
+
+    @pytest.mark.parametrize("steering", list(SteeringType))
+    def test_every_steering_type_is_accepted_where_the_layer_simulates_it_or_models_no_steering(self, resolver, steering):
+        for simulation, control in ((GAZEBO, ARDUPILOT), (GAZEBO, CUSTOM), (KINEMATIC, NONE)):
+            assert resolver.resolve_instance(stack_instance(simulation, [0], control_layer=control), steering_types={"0": steering}).accepted, (simulation, control)
+
+    def test_the_steering_type_may_be_given_by_its_name(self, resolver):
+        assert not resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0]), steering_types={"0": "vectored_thrust"}).accepted
+
+    def test_a_vessel_whose_steering_is_not_told_is_not_checked(self, resolver):
+        assert resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0])).accepted
+        assert resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0]), steering_types={"5": SteeringType.VECTORED_THRUST}).accepted
+
+    def test_a_real_vessel_steers_itself(self, resolver):
+        instance = with_real_vessel(stack_instance(ARDUPILOT_SIM, [0], adapter_ids=["replay_arduagent_follower"]))
+        assert resolver.resolve_instance(instance, steering_types={"0": SteeringType.SKID, "9": SteeringType.VECTORED_THRUST}).accepted
+
+    def test_the_spec_refuses_it_without_the_measurement_file_too(self):
+        resolution = StackResolver(build_registry({})).resolve_instance(stack_instance(ARDUPILOT_SIM, [0]), steering_types={"0": SteeringType.VECTORED_THRUST})
+        assert "vessel 0 has vectored thrust steering, which simulation_layer/ardupilot_sim does not simulate" in resolution.reason
+
+    def test_an_unavailable_stack_names_its_own_reason_only(self, resolver):
+        resolution = resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0], control_layer=CUSTOM), steering_types={"0": SteeringType.VECTORED_THRUST})
+        assert "SITL physics only accepts ArduPilot control" in resolution.reason
+        assert "steering" not in resolution.reason
+
+    def test_require_instance_raises_for_a_steering_type_the_stack_does_not_simulate(self, resolver):
+        with pytest.raises(StackUnavailableError, match="vessel 0 has vectored thrust steering"):
+            resolver.require_instance(stack_instance(ARDUPILOT_SIM, [0]), attended=False, steering_types={"0": SteeringType.VECTORED_THRUST})
+        assert resolver.require_instance(stack_instance(ARDUPILOT_SIM, [0]), attended=False, steering_types={"0": SteeringType.SKID}).accepted
+
+    def test_the_steering_types_of_a_scene_are_by_agent_id(self):
+        scene = encounter_scene("head_on")
+        rudder = dataclasses.replace(scene.vessels[1], _steering_type="rudder")
+        assert vessel_steering_types([scene.vessels[0], rudder]) == {"0": SteeringType.SKID, "1": SteeringType.RUDDER}
+
+    def test_the_chain_of_ardupilot_sim_runs_rudder_and_skid(self, resolver):
+        capabilities = resolver.resolve_instance(stack_instance(ARDUPILOT_SIM, [0])).capabilities
+        assert capabilities.steering_types == {SteeringType.RUDDER, SteeringType.SKID}
+        assert resolver.resolve_instance(stack_instance(GAZEBO, [0])).capabilities.steering_types == set(SteeringType)
 
 
 class TestAttended:

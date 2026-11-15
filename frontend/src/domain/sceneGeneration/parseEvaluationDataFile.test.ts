@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { sampleFrames } from "../../test/fixtures/sampleFrames";
+import { parseFrame } from "../simulation/protocol";
 import {
+  buildFramesFromTrajectoryData,
+  buildScenarioJsonForServer,
   formatScenarioJsonForExport,
   parseScenarioFile,
 } from "./parseEvaluationDataFile";
@@ -155,5 +158,125 @@ describe("parseScenarioFile", () => {
     expect(exported.best_scene).toBeDefined();
     const roundTrip = parseScenarioFile(JSON.stringify(exported));
     expect(roundTrip.scene.actors.length).toBe(parsed.scene.actors.length);
+  });
+});
+
+describe("the steering type and the block coefficient of a vessel", () => {
+  function backendVessel(id: number, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      id,
+      type: "CargoShip",
+      length: 120,
+      breadth: 18,
+      height: 17,
+      draft: 7,
+      mass: 11000000,
+      safety_radius: 480,
+      _is_os: id === 0,
+      is_vessel: true,
+      _max_speed: 12.8,
+      _propeller_diameter: 4.2,
+      _motor_length: 6,
+      ...extra,
+    };
+  }
+
+  function backendObstacle(id: number): Record<string, unknown> {
+    return { id, type: "SmallObstacle", length: 10, breadth: 10, height: 2, draft: 1, mass: 100, safety_radius: 20, is_vessel: false };
+  }
+
+  function sceneFile(actors: Record<string, unknown>[]): string {
+    return JSON.stringify({
+      scenario_name: "steering",
+      best_scene: { _data: actors.map((actor, index) => [actor, { x: index * 500, y: 0, speed: 5, heading: 0 }]) },
+    });
+  }
+
+  /** The actor dictionaries of `best_scene._data`, as the backend scenario loader gets them. */
+  function wireActors(scenario: Record<string, unknown>): Record<string, unknown>[] {
+    const bestScene = scenario.best_scene as { _data: [Record<string, unknown>, unknown][] };
+    return bestScene._data.map(([actor]) => actor);
+  }
+
+  const withFields = sceneFile([
+    backendVessel(0, { _steering_type: "rudder", _block_coefficient: 0.72 }),
+    backendVessel(1, { _steering_type: "vectored_thrust", _block_coefficient: 0.45 }),
+  ]);
+
+  it("reads them from a backend scene file", () => {
+    const { scene } = parseScenarioFile(withFields);
+    expect(scene.actors[0]).toMatchObject({ steeringType: "rudder", blockCoefficient: 0.72 });
+    expect(scene.actors[1]).toMatchObject({ steeringType: "vectored_thrust", blockCoefficient: 0.45 });
+  });
+
+  it("writes them back for a trajectory generation job and for an export", () => {
+    const parsed = parseScenarioFile(withFields);
+    const forServer = wireActors(buildScenarioJsonForServer(parsed.evaluationData, parsed.scene));
+    expect(forServer[0]).toMatchObject({ _steering_type: "rudder", _block_coefficient: 0.72 });
+    expect(forServer[1]).toMatchObject({ _steering_type: "vectored_thrust", _block_coefficient: 0.45 });
+    expect(forServer[0]).not.toHaveProperty("steeringType");
+    expect(forServer[0]).not.toHaveProperty("blockCoefficient");
+
+    const exported = formatScenarioJsonForExport(parsed.evaluationData, parsed.scene);
+    expect(wireActors(JSON.parse(exported) as Record<string, unknown>)).toEqual(forServer);
+
+    const again = parseScenarioFile(exported);
+    expect(again.scene.actors.map((actor) => [actor.steeringType, actor.blockCoefficient])).toEqual([
+      ["rudder", 0.72],
+      ["vectored_thrust", 0.45],
+    ]);
+  });
+
+  it("leaves them absent for a scene file from before these fields, so the backend defaults them", () => {
+    const parsed = parseScenarioFile(sceneFile([backendVessel(0), backendVessel(1)]));
+    for (const actor of parsed.scene.actors) {
+      expect(actor).not.toHaveProperty("steeringType");
+      expect(actor).not.toHaveProperty("blockCoefficient");
+    }
+    const exported = JSON.parse(formatScenarioJsonForExport(parsed.evaluationData, parsed.scene)) as Record<string, unknown>;
+    for (const actor of wireActors(exported)) {
+      expect(actor).not.toHaveProperty("_steering_type");
+      expect(actor).not.toHaveProperty("_block_coefficient");
+      expect(actor).toMatchObject({ _max_speed: 12.8, _propeller_diameter: 4.2 });
+    }
+  });
+
+  it("carries them per actor: a vessel with them, a vessel without and a static obstacle", () => {
+    const parsed = parseScenarioFile(
+      sceneFile([backendVessel(0, { _steering_type: "skid", _block_coefficient: 0.6 }), backendVessel(1), backendObstacle(2)])
+    );
+    const actors = wireActors(buildScenarioJsonForServer(parsed.evaluationData, parsed.scene));
+    expect(actors[0]).toMatchObject({ _steering_type: "skid", _block_coefficient: 0.6 });
+    for (const actor of actors.slice(1)) {
+      expect(actor).not.toHaveProperty("_steering_type");
+      expect(actor).not.toHaveProperty("_block_coefficient");
+    }
+    expect(actors[2]).toMatchObject({ is_vessel: false });
+  });
+
+  it("keeps them from a frame of the gateway, which names them in camel case", () => {
+    const scene = parseFrame({
+      ...sampleFrames[0],
+      actors: sampleFrames[0].actors.map((actor, index) => (index === 0 ? { ...actor, steeringType: "rudder", blockCoefficient: 0.65 } : actor)),
+    });
+    const actors = wireActors(buildScenarioJsonForServer({}, scene));
+    expect(actors[0]).toMatchObject({ _steering_type: "rudder", _block_coefficient: 0.65 });
+    expect(actors[1]).not.toHaveProperty("_steering_type");
+    expect(actors[1]).not.toHaveProperty("_block_coefficient");
+  });
+
+  it("reads them from every scene of a trajectory", () => {
+    const frames = buildFramesFromTrajectoryData({
+      trajectories: {
+        time_step: 10,
+        scene_list: [0, 1].map((step) => ({
+          _data: [[backendVessel(0, { _steering_type: "rudder", _block_coefficient: 0.72 }), { x: step * 50, y: 0, speed: 5, heading: 0 }]],
+        })),
+      },
+    });
+    expect(frames.map((frame) => [frame.actors[0].steeringType, frame.actors[0].blockCoefficient])).toEqual([
+      ["rudder", 0.72],
+      ["rudder", 0.72],
+    ]);
   });
 });

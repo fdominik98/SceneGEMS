@@ -10,6 +10,7 @@ import { EncounterSummaryCard } from "./EncounterSummaryCard";
 import { DynamicFieldGrid, DynamicValue } from "./frameDataDisplay";
 import {
   ACTOR_FIELD_PRIORITY,
+  actorDisplayFields,
   asRecord,
   FRAME_STRUCTURE_KEYS,
   humanizeKey,
@@ -78,7 +79,7 @@ export function BasicActorInfoPanel({ stream, frame: frameOverride }: BasicActor
           </summary>
           <div className="frame-actor-stack">
             {frame.actors.map((actor) => {
-              const actorRec = asRecord(actor) ?? {};
+              const actorRec = actorDisplayFields(asRecord(actor) ?? {});
               const state = asRecord(frame.statesByActorId[actor.id]);
               return (
                 <PersistedDetails

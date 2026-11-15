@@ -89,6 +89,11 @@ class VesselConfig:
     context: AgentContext = AgentContext.SIMULATION
     connection: Optional[AgentConnection] = None
     gazebo_vessel_model: Optional[str] = None  # SDF override; generated when None
+    # Id of a preset of the vessel model catalog (generators/vessel_model_catalog.py) the generated
+    # model, its ArduPilot parameters and the custom autopilot's gains take their hull and steering
+    # values from. None: the automatic model, from the vessel alone. The vessel must be within the
+    # preset's bounds.
+    vessel_model_preset: Optional[str] = None
     # Adapter ids chosen in place of the registry default where several adapters connect the
     # same two layers (for example ArduAgent or the lockstep MAVLink link from replay to ardupilot).
     adapter_ids: Tuple[str, ...] = ()

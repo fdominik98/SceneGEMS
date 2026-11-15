@@ -70,6 +70,9 @@ function normalizeBackendActor(
   id: string,
   displayName?: string
 ): Record<string, unknown> {
+  // A scene file from before these fields has neither; they stay absent, and the backend defaults them.
+  const steeringType = actorRaw._steering_type ?? actorRaw.steeringType;
+  const blockCoefficient = actorRaw._block_coefficient ?? actorRaw.blockCoefficient;
   return {
     id,
     name:
@@ -98,6 +101,8 @@ function normalizeBackendActor(
     propellerDiameter: actorRaw._propeller_diameter ?? actorRaw.propellerDiameter ?? 0,
     thrusterMass: actorRaw._thruster_mass ?? actorRaw.thrusterMass ?? 0,
     motorLength: actorRaw._motor_length ?? actorRaw.motorLength ?? 0,
+    ...(typeof steeringType === "string" ? { steeringType } : {}),
+    ...(typeof blockCoefficient === "number" ? { blockCoefficient } : {}),
   };
 }
 
@@ -194,6 +199,8 @@ function actorToBackendWire(actor: ActorStaticInfo): Record<string, unknown> {
   if (actor.propellerDiameter !== undefined) wire._propeller_diameter = actor.propellerDiameter;
   if (actor.thrusterMass !== undefined) wire._thruster_mass = actor.thrusterMass;
   if (actor.motorLength !== undefined) wire._motor_length = actor.motorLength;
+  if (actor.steeringType !== undefined) wire._steering_type = actor.steeringType;
+  if (actor.blockCoefficient !== undefined) wire._block_coefficient = actor.blockCoefficient;
   return wire;
 }
 

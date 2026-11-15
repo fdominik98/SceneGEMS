@@ -1,7 +1,8 @@
 """One console's connection to the workbench gateway: the scenario it loaded and the answers to its helper requests.
 
 The gateway runs no subsystem and holds no broker connection. It reads a scenario file, sends its
-scenes as a plain preview, generates Gazebo vessel models for a setup and lists the stack options;
+scenes as a plain preview, generates Gazebo vessel models for a setup, lists the stack options and
+the vessel model presets each vessel of the scenario can take;
 everything that computes runs as a job on a worker node, which the console submits to the operator API.
 """
 
@@ -12,9 +13,10 @@ from typing import Optional, Union
 from fastapi import WebSocket
 
 from scenegems_tool.gateway.protocol import ClientMessage, ServerMessage, make_error_message, make_simulation_models_message
-from scenegems_tool.gateway.vessel_models import generate_vessel_models
+from scenegems_tool.gateway.vessel_models import check_vessel_model_presets, generate_vessel_models, vessel_model_presets_message
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
+from scenegems_tool.vessel_stack.registry.resolver import vessel_steering_types
 from scenegems_tool.workbench.scenario_session import ScenarioSession
 
 
@@ -57,8 +59,9 @@ class SocketSession:
         self.scenario_session = ScenarioSession(scenario_id=scenario_id, file_name=file_name, file_path=file_path, file_content=file_content, send_payload=self.send_payload)
 
     def _accept_simulation_config(self, simulation_config: SimulationInstanceConfig) -> bool:
-        """Validate the vessel stacks, environment and speedup through the adapter registry."""
-        resolution = default_resolver().resolve_instance(simulation_config)
+        """Validate the vessel stacks, environment and speedup through the adapter registry, and the stacks against how the loaded scene's vessels steer."""
+        scene = self.scenario_session.trajectories.initial_scene if self.scenario_session is not None and self.scenario_session.is_initialized else None
+        resolution = default_resolver().resolve_instance(simulation_config, steering_types=vessel_steering_types(scene.vessels) if scene is not None else None)
         for warning in resolution.warnings:
             print(f"Simulation configuration warning: {warning}")
         if not resolution.accepted:
@@ -77,7 +80,23 @@ class SocketSession:
         if scene is None:
             self.send_runtime_error("No initial scene found")
             return
+        try:
+            check_vessel_model_presets(scene, simulation_config)
+        except ValueError as exc:  # an unknown preset, or a vessel outside its preset's bounds
+            self.send_runtime_error(f"Simulation configuration rejected: {exc}")
+            return
         self.send_payload(make_simulation_models_message(generate_vessel_models(scene, simulation_config)))
+
+    def send_vessel_model_presets(self) -> None:
+        """Answers with the presets of the vessel model catalog each vessel of the loaded scenario can take."""
+        if self.scenario_session is None or not self.scenario_session.is_initialized:
+            self.send_runtime_error("No scenario loaded")
+            return
+        scene = self.scenario_session.trajectories.initial_scene
+        if scene is None:
+            self.send_runtime_error("No initial scene found")
+            return
+        self.send_payload(vessel_model_presets_message(self.scenario_session.scenario_id, scene))
 
     def cancel(self) -> None:
         self.outbound_task.cancel()

@@ -52,4 +52,27 @@ describe("server vessel models", () => {
     const applied = applySimulationModels(drafts, { "1": "<sdf/>", "0": null });
     expect(applied.map((draft) => draft.gazeboVesselModel)).toEqual([undefined, "<sdf/>"]);
   });
+
+  it("keep the preset the answer names for a vessel", () => {
+    const chosen = drafts.map((draft) => (draft.vesselId === "0" ? { ...draft, vesselModelPreset: "hanjin_pretoria" } : draft));
+    const applied = applySimulationModels(chosen, { "0": "<sdf><os/></sdf>", "1": "<sdf><ts1/></sdf>" }, { "0": "hanjin_pretoria", "1": null });
+    expect(applied[0]).toMatchObject({ gazeboVesselModel: "<sdf><os/></sdf>", vesselModelPreset: "hanjin_pretoria" });
+    expect(applied[1]).toMatchObject({ gazeboVesselModel: "<sdf><ts1/></sdf>" });
+    expect(applied[1]).not.toHaveProperty("vesselModelPreset");
+  });
+
+  it("say what a model was made from when the choice changed while the server made it", () => {
+    // Asked for with the automatic model, then a preset was chosen: the model that arrives is the automatic one.
+    const chosenLater = drafts.map((draft) => ({ ...draft, vesselModelPreset: "mariner" }));
+    const applied = applySimulationModels(chosenLater, { "0": "<sdf/>", "1": "<sdf/>" }, { "0": null, "1": "container_ship_175" });
+    expect(applied[0]).not.toHaveProperty("vesselModelPreset");
+    expect(applied[1]?.vesselModelPreset).toBe("container_ship_175");
+  });
+
+  it("leave the choice of a vessel that got no model", () => {
+    const chosen = drafts.map((draft) => ({ ...draft, vesselModelPreset: "mariner" }));
+    const applied = applySimulationModels(chosen, { "0": null }, { "0": null });
+    expect(applied.map((draft) => draft.vesselModelPreset)).toEqual(["mariner", "mariner"]);
+    expect(applied[0]).toBe(chosen[0]);
+  });
 });

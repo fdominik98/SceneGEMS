@@ -10,9 +10,10 @@ from typing import Dict, List, Tuple
 
 import pytest
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, SpecStatus
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, LayerRef, SimulationLayerId
-from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStackConfig
+from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentContext, EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.registry.catalog import build_registry, default_resolver
 from scenegems_tool.vessel_stack.registry.resolver import StackResolver
 
@@ -154,6 +155,26 @@ def test_matrix_counts_are_seventeen_available_none_planned_sixty_three_unavaila
     assert statuses.count(AVAILABLE) == 17
     assert statuses.count(PLANNED) == 0
     assert statuses.count(UNAVAILABLE) == 63
+
+
+@pytest.mark.parametrize("key", sorted(key for key, (_, status, _) in EXPECTED.items() if status == AVAILABLE))
+def test_every_available_triple_runs_every_steering_type_but_vectored_thrust_on_ardupilot_sim(matrix, key):
+    """All 17 available triples against the three steering types: only SITL's boat (ardupilot_sim) lacks one."""
+    chain = matrix[key]
+    simulated = key[2] != "real_vessel"
+    instance = SimulationInstanceConfig(
+        simulation_layer=chain.stack.simulation_layer if simulated else SimulationLayerId.GAZEBO,
+        environment=EnvironmentConfig.calm(),
+        vessels={"0": VesselConfig(agent_id="0", stack=chain.stack, context=AgentContext.SIMULATION if simulated else AgentContext.REAL)},
+    )
+    expected = {SteeringType.RUDDER, SteeringType.SKID} if key[2] == "ardupilot_sim" else set(SteeringType)
+    assert chain.capabilities.steering_types == expected
+    for steering in SteeringType:
+        resolution = default_resolver().resolve_instance(instance, steering_types={"0": steering})
+        refused = key[2] == "ardupilot_sim" and steering == SteeringType.VECTORED_THRUST
+        assert resolution.accepted == (not refused), (key, steering, resolution.reason)
+        if refused:
+            assert "vessel 0 has vectored thrust steering, which simulation_layer/ardupilot_sim does not simulate (it has rudder and skid)" in resolution.reason
 
 
 def test_design_yes_rows_are_exactly_the_complete_chains(matrix):

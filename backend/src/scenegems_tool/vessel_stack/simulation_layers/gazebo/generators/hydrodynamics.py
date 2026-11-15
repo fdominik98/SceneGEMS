@@ -1,20 +1,26 @@
-"""Hydrodynamic coefficients of the generated vessel model (gz-sim Hydrodynamics system, SNAME names).
+"""Hydrodynamic coefficients of the generated vessel model (gz-sim Hydrodynamics system, SNAME names) and the forces of its steering gear.
 
 Every coefficient is negative (it opposes the motion) and follows the vessel's dimensions:
 
-- surge: the total resistance at max speed from a resistance coefficient on the wetted surface;
+- surge: the total resistance at max speed from a resistance coefficient on the hull's wetted surface;
 - sway: hull lift, linear with Clarke's (1983) derivative Y'v taken at max speed, plus quadratic
   cross-flow drag of the underwater side;
-- yaw: calibrated so that full differential thrust reaches the design yaw rate (control margin
-  times the vessel's max angular speed);
+- yaw: calibrated by the caller (vessel_dynamics.py) so that full helm reaches the design yaw rate
+  (control margin times the vessel's max angular speed);
 - heave, roll and pitch: linear damping at a fixed damping ratio of the buoyancy restoring;
 - added mass from strip theory, capped below the rigid-body value because the gz-sim system
   applies it explicitly from the previous step's acceleration, which diverges at or above it.
 
 Surge and yaw split their damping at a reference speed into a linear share (low-speed
 stability) and a quadratic remainder. The coefficients are constants (the gz-sim system has no
-speed-dependent terms), and the model leaves out the added-mass Coriolis terms (see
-vessel_model_generator.py), so the hull is directionally stable as a twin-screw hull with skegs.
+speed-dependent terms), and the model leaves out the added-mass Coriolis terms and the sway-yaw
+cross terms (see vessel_model_generator.py), so the hull itself is directionally stable.
+
+The steering gear's forces are what the model's plugins apply: a rudder is a foil in the water
+flowing past the stern (a second Hydrodynamics system on the rudder link, with one cross term),
+a vectored thruster pushes along its turned axis. The helm angle is counterclockwise seen from above, so a positive angle
+swings the rudder's trailing edge, or the thruster's wash, to starboard and turns the vessel to
+starboard.
 """
 
 import math
@@ -31,9 +37,8 @@ def split_damping(damping_at_reference: float, reference_speed: float, linear_sh
     return linear, quadratic
 
 
-def surge_damping(length: float, breadth: float, draft: float, max_speed: float, resistance_coefficient: float, linear_damping_share: float) -> Tuple[float, float]:
-    """(xU, xUabsU) from the total resistance at max speed on the wetted surface of a box hull."""
-    wetted_surface = length * (breadth + 2.0 * draft)
+def surge_damping(wetted_surface: float, max_speed: float, resistance_coefficient: float, linear_damping_share: float) -> Tuple[float, float]:
+    """(xU, xUabsU) from the total resistance at max speed on the hull's wetted surface."""
     resistance = 0.5 * RHO_WATER * resistance_coefficient * wetted_surface * max_speed**2
     return split_damping(resistance, max_speed, linear_damping_share)
 
@@ -41,6 +46,32 @@ def surge_damping(length: float, breadth: float, draft: float, max_speed: float,
 def damping_force(linear: float, quadratic: float, speed: float) -> float:
     """Magnitude of the damping force (or moment) at the given speed."""
     return abs(linear) * speed + abs(quadratic) * speed**2
+
+
+def rudder_normal_force_coefficient(area: float, lift_slope: float) -> float:
+    """yVabsU of the rudder link: its normal force is this times its velocity across the blade times its speed along it."""
+    return -0.5 * RHO_WATER * area * lift_slope
+
+
+def rudder_force(angle: float, surge: float, sway_at_rudder: float, area: float, lift_slope: float) -> Tuple[float, float]:
+    """(X, Y) in N of a rudder at a helm angle, in the body frame (x forward, y to port).
+
+    surge and sway_at_rudder are the rudder's own velocity through the water. The force is
+    normal to the blade and grows with the flow across it times the flow along it, which is
+    the lift of a foil at a small angle of attack and fades out as the blade turns broadside
+    (the rudder's normal force of the MMG model). It is what the Hydrodynamics system gives the
+    rudder link with a yVabsU coefficient.
+    """
+    cos_angle, sin_angle = math.cos(angle), math.sin(angle)
+    along = surge * cos_angle + sway_at_rudder * sin_angle
+    across = -surge * sin_angle + sway_at_rudder * cos_angle
+    normal = rudder_normal_force_coefficient(area, lift_slope) * across * abs(along)
+    return -normal * sin_angle, normal * cos_angle
+
+
+def vectored_thrust_force(angle: float, thrust: float) -> Tuple[float, float]:
+    """(X, Y) in N of a thruster turned by the helm angle."""
+    return thrust * math.cos(angle), thrust * math.sin(angle)
 
 
 def calculate_hydrodynamics(
@@ -56,11 +87,7 @@ def calculate_hydrodynamics(
     pitch_metacentric_height: float,
     waterplane_area: float,
     max_speed: float,
-    yaw_moment_at_full_differential: float,
-    design_yaw_rate: float,
-    resistance_coefficient: float,
     cross_flow_drag_coefficient: float,
-    linear_damping_share: float,
     block_coefficient: float,
     surge_added_mass_ratio: float,
     added_mass_cap: float,
@@ -79,16 +106,10 @@ def calculate_hydrodynamics(
     zDotW = -min(heave_strip, added_mass_cap * mass)
     nDotR = -min(yaw_strip, added_mass_cap * hull_izz)
 
-    # Surge: resistance at max speed.
-    xU, xUabsU = surge_damping(length, breadth, draft, max_speed, resistance_coefficient, linear_damping_share)
-
     # Sway: hull lift (Clarke's linear derivative, made dimensional at max speed) and cross-flow drag.
     clarke_yv = math.pi * (draft / length) ** 2 * (1.0 + 0.40 * block_coefficient * breadth / draft)
     yV = -0.5 * RHO_WATER * length**2 * max_speed * clarke_yv
     yVabsV = -0.5 * RHO_WATER * cross_flow_drag_coefficient * length * draft
-
-    # Yaw: full differential thrust balances the yaw damping at the design yaw rate.
-    nR, nRabsR = split_damping(yaw_moment_at_full_differential, design_yaw_rate, linear_damping_share)
 
     # Heave, roll and pitch: linear damping at a damping ratio of the hydrostatic stiffness.
     heave_stiffness = RHO_WATER * GRAVITY * waterplane_area
@@ -103,13 +124,9 @@ def calculate_hydrodynamics(
         "yDotV": yDotV,
         "zDotW": zDotW,
         "nDotR": nDotR,
-        "xU": xU,
         "yV": yV,
         "zW": zW,
         "kP": kP,
         "mQ": mQ,
-        "nR": nR,
-        "xUabsU": xUabsU,
         "yVabsV": yVabsV,
-        "nRabsR": nRabsR,
     }

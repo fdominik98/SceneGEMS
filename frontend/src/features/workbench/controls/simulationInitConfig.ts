@@ -3,6 +3,7 @@ import type {
   ControlLayerWire,
   StackOptionsPayload,
   StackOptionWire,
+  VesselModelPresetWire,
 } from "../../../domain/simulation/wireTypes";
 import { createActorNamer } from "../../../domain/simulation/actorNaming";
 
@@ -71,6 +72,8 @@ export interface VesselInitConnectionDraft {
   topic: string;
   /** Gazebo SDF model file content; undefined means the server generates one. */
   gazeboVesselModel?: string;
+  /** Id of the preset of the vessel model catalog the server generates the model from; undefined means the automatic model. */
+  vesselModelPreset?: string;
 }
 
 export type SimulationConnectionWire =
@@ -82,6 +85,7 @@ export type SimulationConnectionWire =
       agentName: string;
       topic: string;
       gazeboVesselModel?: string;
+      vesselModelPreset?: string;
     }
   | {
       context: "real";
@@ -153,6 +157,7 @@ function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire
     };
   }
   const hasModel = typeof draft.gazeboVesselModel === "string" && draft.gazeboVesselModel.length > 0;
+  const hasPreset = typeof draft.vesselModelPreset === "string" && draft.vesselModelPreset.length > 0;
   return {
     context: "simulation",
     asvSystem: draft.asvSystem,
@@ -161,6 +166,8 @@ function draftToWire(draft: VesselInitConnectionDraft): SimulationConnectionWire
     agentName: draft.agentName,
     topic: draft.topic,
     ...(hasModel ? { gazeboVesselModel: draft.gazeboVesselModel } : {}),
+    // Left out for the automatic model, as the backend leaves it out of its answers.
+    ...(hasPreset ? { vesselModelPreset: draft.vesselModelPreset } : {}),
   };
 }
 
@@ -173,7 +180,7 @@ export function buildInitializeSimulationConnectionsByAgentIdMap(
   }, {});
 }
 
-/** Vessel connection fields persisted across refresh (SDF model content excluded). */
+/** Vessel connection fields persisted across refresh (SDF model content excluded; the chosen vessel model preset's id is kept). */
 export type PersistedVesselConnectionDraft = Omit<
   VesselInitConnectionDraft,
   "gazeboVesselModel"
@@ -309,6 +316,74 @@ export function normalizeDraftStack(
     (layer) => controlLayerChoice(options, simulatorType, draft.asvSystem, layer).available
   );
   return working === undefined ? draft : { ...draft, controlLayer: working };
+}
+
+/** The presets of the vessel model catalog each vessel of the loaded scenario can take, as the gateway listed them. */
+export type VesselModelPresetsByAgentId = Record<string, VesselModelPresetWire[]>;
+
+/** Whether the server generates a Gazebo model for the vessel: a simulated vessel in a Gazebo world. A real vessel is its own physics. */
+export function hasGeneratedGazeboModel(draft: VesselInitConnectionDraft, simulatorType: GlobalSimulatorType): boolean {
+  return draft.context === "simulation" && simulatorType === "Gazebo";
+}
+
+/** The presets a vessel can take; none while the gateway has not listed them for the loaded scenario. */
+export function vesselModelPresetsOf(presetsByAgentId: VesselModelPresetsByAgentId | null, vesselId: string): VesselModelPresetWire[] {
+  return presetsByAgentId?.[vesselId] ?? [];
+}
+
+function canTakeVesselModelPreset(presetsByAgentId: VesselModelPresetsByAgentId | null, draft: VesselInitConnectionDraft): boolean {
+  return vesselModelPresetsOf(presetsByAgentId, draft.vesselId).some((preset) => preset.id === draft.vesselModelPreset);
+}
+
+function withoutVesselModelPreset(draft: VesselInitConnectionDraft): VesselInitConnectionDraft {
+  const rest = { ...draft };
+  delete rest.vesselModelPreset;
+  return rest;
+}
+
+/**
+ * The draft with a vessel model that can be generated, as shown and sent: its preset stays where a
+ * Gazebo model is generated for the vessel and the gateway lists the preset for it, and is the
+ * automatic model otherwise (also while the presets of the loaded scenario are not known). The
+ * stored draft keeps the choice for the other simulators, as it keeps its stack.
+ */
+export function normalizeDraftVesselModel(
+  draft: VesselInitConnectionDraft,
+  simulatorType: GlobalSimulatorType,
+  presetsByAgentId: VesselModelPresetsByAgentId | null
+): VesselInitConnectionDraft {
+  if (draft.vesselModelPreset === undefined) {
+    return draft;
+  }
+  return hasGeneratedGazeboModel(draft, simulatorType) && canTakeVesselModelPreset(presetsByAgentId, draft) ? draft : withoutVesselModelPreset(draft);
+}
+
+/**
+ * The drafts once the gateway listed the presets of the loaded scenario: a preset its vessel cannot take
+ * (one saved for another scenario's vessel, or one the catalog lost) falls back to the automatic model.
+ * The same array when every draft keeps its choice.
+ */
+export function dropUnavailableVesselModelPresets(drafts: VesselInitConnectionDraft[], presetsByAgentId: VesselModelPresetsByAgentId): VesselInitConnectionDraft[] {
+  const unavailable = (draft: VesselInitConnectionDraft) => draft.vesselModelPreset !== undefined && !canTakeVesselModelPreset(presetsByAgentId, draft);
+  return drafts.some(unavailable) ? drafts.map((draft) => (unavailable(draft) ? withoutVesselModelPreset(draft) : draft)) : drafts;
+}
+
+/**
+ * The draft with the chosen vessel model: a preset's id, or undefined for the automatic model. The
+ * vessel's loaded or generated SDF goes, since the server would use that text instead of the choice.
+ */
+export function chooseVesselModelPreset(draft: VesselInitConnectionDraft, presetId: string | undefined): VesselInitConnectionDraft {
+  const rest = withoutVesselModelPreset(draft);
+  delete rest.gazeboVesselModel;
+  return presetId !== undefined && presetId.length > 0 ? { ...rest, vesselModelPreset: presetId } : rest;
+}
+
+/** A preset's source and notes as one short hint: "Source: ... . ...". */
+export function describeVesselModelPreset(preset: Pick<VesselModelPresetWire, "source" | "notes">): string {
+  const sentence = (text: string) => (/[.!?]$/.test(text) ? text : `${text}.`);
+  const source = preset.source.trim();
+  const notes = preset.notes.trim();
+  return [source.length > 0 ? sentence(`Source: ${source}`) : "", notes.length > 0 ? sentence(notes) : ""].filter((part) => part.length > 0).join(" ");
 }
 
 /** "vessel 1: TCP localhost:49153" per Mission Planner vessel, ordered by vessel id: where Mission Planner connects. The host is the machine that runs the vessels: the worker node of an attended job. */
