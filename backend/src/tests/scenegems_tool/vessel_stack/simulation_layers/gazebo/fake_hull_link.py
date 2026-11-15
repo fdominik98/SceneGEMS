@@ -3,6 +3,7 @@
 import math
 from typing import Dict, Tuple
 
+from scenegems_tool.vessel_stack.control_layers.custom.actuator_allocation import ActuatorCommand
 from scenegems_tool.vessel_stack.control_layers.custom.hull_surge_yaw_model import HullState, HullSurgeYawModel
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_link import GzStepResult, HullOdometry
 
@@ -11,13 +12,19 @@ def odometry(state: HullState) -> HullOdometry:
     return HullOdometry(state.x, state.y, -0.1, 0.0, 0.0, math.sin(state.heading / 2), math.cos(state.heading / 2), state.surge, state.sway, 0.0, 0.0, 0.0, state.yaw_rate)
 
 
+def at_rest(model: HullSurgeYawModel) -> ActuatorCommand:
+    """No thrust, and the helm amidships where the hull has one: what the actuator commands while the world settles."""
+    dynamics = model.dynamics
+    return ActuatorCommand(thrusts=(0.0,) * dynamics.thruster_count, helm_angle=None if model.skid else 0.0, force=0.0, moment=0.0, yaw_saturated=False, surge_saturated=False)
+
+
 class FakeHullLink:
-    """Stands in for GzLockstepLink: each model is a HullSurgeYawModel, stepped step_ns per iteration with the thrust held over the step."""
+    """Stands in for GzLockstepLink: each model is a HullSurgeYawModel, stepped step_ns per iteration with the command held over the step."""
 
     def __init__(self, hulls: Dict[str, Tuple[HullSurgeYawModel, HullState]], late_steps=()):
         self.models = {name: model for name, (model, _) in hulls.items()}
         self.states = {name: state for name, (_, state) in hulls.items()}
-        self.late_steps = set(late_steps)  # step numbers (from 1) whose port thrusters report late
+        self.late_steps = set(late_steps)  # step numbers (from 1) in which every model's first thruster reports late
         self.started = None
         self.steps = 0
         self.sim_time_ns = 0
@@ -30,20 +37,20 @@ class FakeHullLink:
     def close(self) -> None:
         self.closed = True
 
-    def start(self, thrusters, step_ns, settle_iterations) -> GzStepResult:
-        self.started = ({name: dict(values) for name, values in thrusters.items()}, step_ns, settle_iterations)
+    def start(self, models, step_ns, settle_iterations) -> GzStepResult:
+        self.started = ({name: dict(entry) for name, entry in models.items()}, step_ns, settle_iterations)
         self.step_ns = step_ns
-        return self._iterate(settle_iterations, {name: (0.0, 0.0) for name in self.states}, ())
+        return self._iterate(settle_iterations, {name: at_rest(model) for name, model in self.models.items()}, ())
 
-    def step(self, iterations, thrust) -> GzStepResult:
+    def step(self, iterations, commands) -> GzStepResult:
         self.steps += 1
-        late = tuple(f"{name}/port" for name in sorted(thrust)) if self.steps in self.late_steps else ()
-        return self._iterate(iterations, thrust, late)
+        late = tuple(f"{name}/{self.started[0][name]['thrusters'][0]}" for name in sorted(commands)) if self.steps in self.late_steps else ()
+        return self._iterate(iterations, commands, late)
 
-    def _iterate(self, iterations, thrust, late) -> GzStepResult:
+    def _iterate(self, iterations, commands, late) -> GzStepResult:
         for _ in range(iterations):
             for name, model in self.models.items():
-                self.states[name] = model.step(self.states[name], *thrust[name], self.step_ns / 1e9)
+                self.states[name] = model.step(self.states[name], commands[name].thrusts, commands[name].helm_angle, self.step_ns / 1e9)
         self.sim_time_ns += iterations * self.step_ns
         return GzStepResult(self.sim_time_ns, {name: odometry(state) for name, state in self.states.items()}, late)
 

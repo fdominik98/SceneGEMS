@@ -83,7 +83,8 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
 def test_the_world_and_the_models_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     gen_folder = f"{worker_node.job_scope(job).folder}/gen"
-    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_model.sdf", "trajectories.json", "ts1_model.sdf"]
+    # Each vessel's model has its hull surface next to it (os_hull.stl), which the model refers to by name.
+    assert sorted(os.listdir(gen_folder)) == ["ocean_world.sdf", "os_hull.stl", "os_model.sdf", "trajectories.json", "ts1_hull.stl", "ts1_model.sdf"]
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
     model = open(f"{gen_folder}/os_model.sdf", encoding="utf-8").read()
     assert "ArduPilotPlugin" not in model
@@ -148,9 +149,9 @@ def fake_actuator(monkeypatch):
     connected = {"addresses": [], "links": [], "environments": []}
     original_hull_dynamics = gz_lockstep_runner.hull_dynamics
 
-    def recording_hull_dynamics(vessel, environment):
+    def recording_hull_dynamics(vessel, environment, preset_id=None):
         connected["environments"].append(environment)
-        return original_hull_dynamics(vessel, environment)
+        return original_hull_dynamics(vessel, environment, preset_id)
 
     def link(host, port):
         connected["addresses"].append((host, port))

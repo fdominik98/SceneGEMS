@@ -1,5 +1,6 @@
 """Specs of the ardupilot_sim simulation layer: the internal physics of ArduPilot SITL."""
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.adapter_spec import AdapterSpec, LayerSpec
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier
 from scenegems_tool.vessel_stack.contracts.ports import Port
@@ -8,8 +9,12 @@ from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, LayerRef
 ARDUPILOT_SIM_LAYER = LayerSpec(
     layer=LayerRef.of(SimulationLayerId.ARDUPILOT_SIM),
     description="ArduPilot SITL's built-in motorboat physics, homed at the start pose of each vessel. No separate simulator container.",
-    capabilities=Capabilities(wind=EnvironmentSupport.SUPPORTED, waves=EnvironmentSupport.UNMEASURED),
-    restriction_notes=(("waves", "SITL receives the SIM_WAVE_* parameters, but their effect on a boat is not measured yet"),),
+    # SITL's boat (libraries/SITL/SIM_Sailboat.cpp) steers by a rudder or, on a frame with "skid" in its name, by its two motors.
+    capabilities=Capabilities(wind=EnvironmentSupport.SUPPORTED, waves=EnvironmentSupport.UNMEASURED, steering_types=frozenset({SteeringType.RUDDER, SteeringType.SKID})),
+    restriction_notes=(
+        ("waves", "SITL receives the SIM_WAVE_* parameters, but their effect on a boat is not measured yet"),
+        ("steering_types", "SITL's boat steers by a rudder (frame motorboat) or by the difference of two motors (frame motorboat-skid) and has no thruster that turns"),
+    ),
     provides_ports=frozenset({Port.VESSEL_STATE, Port.CLOCK}),
     requires_ports=frozenset({Port.ENVIRONMENT}),
 )

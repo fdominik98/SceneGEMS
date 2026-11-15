@@ -4,10 +4,14 @@ import math
 
 import pytest
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.capabilities import (
+    ALL_STEERING_TYPES,
     Capabilities,
     EnvironmentSupport,
     RepeatabilityTier,
+    steering_type_text,
+    steering_type_values,
     weaker_support,
     weaker_tier,
     weakest_link,
@@ -35,6 +39,45 @@ class TestDefaults:
         assert data["repeatability_tier"] == "bounded"
         assert data["wind"] == "unmeasured"
         assert data["lockstep"] is True
+
+
+class TestSteeringTypes:
+    def test_a_default_spec_runs_every_steering_type(self):
+        assert Capabilities().steering_types == ALL_STEERING_TYPES == {SteeringType.RUDDER, SteeringType.SKID, SteeringType.VECTORED_THRUST}
+
+    def test_steering_types_are_given_as_types_or_as_their_names(self):
+        assert Capabilities(steering_types={"rudder", SteeringType.SKID}).steering_types == frozenset({SteeringType.RUDDER, SteeringType.SKID})
+
+    def test_an_unknown_steering_type_is_rejected(self):
+        with pytest.raises(ValueError):
+            Capabilities(steering_types={"sail"})
+
+    def test_a_chain_runs_the_steering_types_all_its_specs_run(self):
+        rudder_and_skid = Capabilities(steering_types={SteeringType.RUDDER, SteeringType.SKID})
+        skid_and_vectored = Capabilities(steering_types={SteeringType.SKID, SteeringType.VECTORED_THRUST})
+        assert Capabilities().combine(rudder_and_skid).steering_types == rudder_and_skid.steering_types
+        assert rudder_and_skid.combine(skid_and_vectored).steering_types == {SteeringType.SKID}
+        assert rudder_and_skid.combine(skid_and_vectored) == skid_and_vectored.combine(rudder_and_skid)
+        assert weakest_link([Capabilities(), rudder_and_skid, skid_and_vectored]).steering_types == {SteeringType.SKID}
+
+    def test_specs_with_no_steering_type_in_common_leave_none(self):
+        combined = Capabilities(steering_types={SteeringType.RUDDER}).combine(Capabilities(steering_types={SteeringType.SKID}))
+        assert combined.steering_types == frozenset()
+        assert combined.as_dict()["steering_types"] == []
+
+    def test_as_dict_lists_the_names_in_the_order_of_the_steering_types(self):
+        assert Capabilities().as_dict()["steering_types"] == ["rudder", "skid", "vectored_thrust"]
+        assert Capabilities(steering_types={SteeringType.VECTORED_THRUST, SteeringType.RUDDER}).as_dict()["steering_types"] == ["rudder", "vectored_thrust"]
+        assert steering_type_values({SteeringType.SKID, SteeringType.RUDDER}) == ["rudder", "skid"]
+
+    def test_steering_types_in_words(self):
+        assert steering_type_text(ALL_STEERING_TYPES) == "rudder, skid and vectored thrust"
+        assert steering_type_text({SteeringType.SKID, SteeringType.RUDDER}) == "rudder and skid"
+        assert steering_type_text([SteeringType.VECTORED_THRUST]) == "vectored thrust"
+        assert steering_type_text([]) == "no steering type"
+
+    def test_capabilities_stay_hashable(self):
+        assert len({Capabilities(), Capabilities(steering_types=set(SteeringType)), Capabilities(steering_types={"skid"})}) == 2
 
 
 class TestOrdering:

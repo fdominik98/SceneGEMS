@@ -1,6 +1,8 @@
 agent_0_model.sdf
+agent_0_hull.stl
 params-agent_0.params
 agent_1_model.sdf
+agent_1_hull.stl
 params-agent_1.params
 ocean_world.sdf
 trajectories.json

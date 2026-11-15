@@ -7,7 +7,7 @@ from scenegems_tool.gateway.stack_options import stack_options_message
 
 
 class SocketMessageProcessor:
-    """Answers a console's helper requests one at a time: load a scenario file, generate vessel models, list the stack options.
+    """Answers a console's helper requests one at a time: load a scenario file, generate vessel models, list the stack options, list the vessel model presets of the loaded scenario's vessels.
 
     Any other message type is refused as unknown. That includes the messages of the former live
     session (connect_to_mqtt_broker, initialize_simulation, start_simulation, initialize_monitor and
@@ -45,6 +45,8 @@ class SocketMessageProcessor:
                             self.session.generate_simulation_models(simulation_config)
                     case "query_stack_options":
                         self.session.send_payload(stack_options_message())
+                    case "query_vessel_model_presets":
+                        self.session.send_vessel_model_presets()
                     case _:
                         self.session.send_runtime_error(f"Unknown message type: {message['type']}")
                         print(f"Unknown message: {message}")

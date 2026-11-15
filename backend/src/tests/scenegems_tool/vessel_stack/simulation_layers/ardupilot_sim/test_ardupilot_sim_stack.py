@@ -3,7 +3,9 @@
 import pytest
 
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, SimulationLayerId
+from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
+from tests.scenegems_tool.vessel_stack.control_layers.ardupilot.steered_scenes import build_steered_stack
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
 from tests.scenegems_tool.vessel_stack.sdf import parse_params, parse_sdf, plugins
 
@@ -18,6 +20,46 @@ def test_sitl_runs_its_internal_physics(ardupilot_sim_stack):
         environment = ardupilot_sim_stack.compose["services"][name]["environment"]
         assert "SITL_SIMULATOR=ardupilot" in environment
         assert not [entry for entry in environment if entry.startswith("SITL_MODEL=") or entry.startswith("SITL_RESOLVE_HOST=")]
+
+
+def environment_of(compose: dict, service: str) -> dict:
+    return dict(entry.split("=", 1) for entry in compose["services"][service]["environment"])
+
+
+class TestSteeringType:
+    """SITL's boat steers by a rudder (frame motorboat) or by its two motors (frame motorboat-skid): frame and outputs follow the vessel."""
+
+    @pytest.fixture(scope="class")
+    def stack(self):
+        return build_steered_stack(stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1]), {0: "rudder", 1: "skid"})
+
+    def test_a_rudder_vessel_runs_the_motorboat_with_a_rudder_and_a_throttle(self, stack):
+        files, compose = stack
+        assert environment_of(compose, "agent_0")["SITL_FRAME"] == "motorboat"
+        params = parse_params(files["params-agent_0.params"])
+        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"], params["SKID_STEER_OUT"]) == (26, 70, 0)
+
+    def test_a_skid_vessel_runs_the_skid_steered_boat_with_its_two_motors(self, stack):
+        files, compose = stack
+        assert environment_of(compose, "agent_1")["SITL_FRAME"] == "motorboat-skid"
+        params = parse_params(files["params-agent_1.params"])
+        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"], params["SKID_STEER_OUT"]) == (73, 74, 1)
+
+    def test_a_vessel_without_a_steering_type_is_skid_steered(self, ardupilot_sim_stack):
+        for name in ("agent_0", "agent_1"):
+            assert "SITL_FRAME=motorboat-skid" in ardupilot_sim_stack.compose["services"][name]["environment"]
+            assert parse_params(ardupilot_sim_stack.files[f"params-{name}.params"])["SERVO1_FUNCTION"] == 73
+
+    def test_the_arduagent_containers_are_told_the_same_frame(self):
+        instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
+        _, compose = build_steered_stack(instance, {0: "rudder", 1: "skid"})
+        for service, frame in (("agent_0_arduagent", "motorboat"), ("agent_0_mavproxy", "motorboat"), ("agent_1_arduagent", "motorboat-skid")):
+            environment = environment_of(compose, service)
+            assert (environment["MODEL"], environment["VEHICLE_PARAMS"]) == (frame, frame), service
+
+    def test_a_vectored_thrust_vessel_is_refused_before_anything_is_generated(self):
+        with pytest.raises(StackUnavailableError, match="vessel 1 has vectored thrust steering, which simulation_layer/ardupilot_sim does not simulate \\(it has rudder and skid\\)"):
+            build_steered_stack(stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1]), {0: "rudder", 1: "vectored_thrust"})
 
 
 def test_speedup_reaches_sitl(ardupilot_sim_stack):

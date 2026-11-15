@@ -3,10 +3,11 @@
 import dataclasses
 import os
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Tuple
 
 import yaml
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier
 
 MEASURED_CAPABILITIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "measured_capabilities.yaml")
@@ -14,6 +15,14 @@ MEASURED_CAPABILITIES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file
 
 def _optional_float(value: Any) -> Optional[float]:
     return None if value is None else float(value)
+
+
+def _steering_types(value: Any) -> FrozenSet[SteeringType]:
+    """A list of steering types (rudder, skid, vectored_thrust); a single name is a list of one."""
+    names = [value] if isinstance(value, str) else list(value or ())
+    if not names:
+        raise ValueError("steering_types must name at least one steering type")
+    return frozenset(SteeringType(name) for name in names)
 
 
 _CAPABILITY_PARSERS: Dict[str, Callable[[Any], Any]] = {
@@ -24,6 +33,7 @@ _CAPABILITY_PARSERS: Dict[str, Callable[[Any], Any]] = {
     "wind": EnvironmentSupport,
     "waves": EnvironmentSupport,
     "max_speedup": _optional_float,
+    "steering_types": _steering_types,
 }
 _RECORD_FIELDS = {"notes", "deviation_bounds_m", "deviation_bounds_m_by_layer", "host_max_speedup", "evidence"}
 

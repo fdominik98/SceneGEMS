@@ -105,8 +105,8 @@ class TestDispatch:
         await settle()
         assert session.names() == ["set_scenario_session", "send_payload", "set_scenario_session"]
 
-    def test_the_gateway_takes_three_helper_requests(self):
-        assert sorted(known_message_types()) == ["generate_simulation_models", "load_scenario_file", "query_stack_options"]
+    def test_the_gateway_takes_four_helper_requests(self):
+        assert sorted(known_message_types()) == ["generate_simulation_models", "load_scenario_file", "query_stack_options", "query_vessel_model_presets"]
 
     @pytest.mark.parametrize("message_type", known_message_types())
     async def test_every_client_message_type_is_known_to_the_processor(self, setup, message_type):

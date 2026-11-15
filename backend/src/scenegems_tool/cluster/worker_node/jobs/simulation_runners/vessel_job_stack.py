@@ -98,11 +98,11 @@ def build_vessel_job_stack(
     from scenegems_tool.messaging.mqtt_client import SERVICE_NAME_VARIABLE, mqtt_container_environment
     from scenegems_tool.subsystems.monitoring.monitoring_types import monitoring_pool_environment
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-    from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
+    from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError, vessel_steering_types
     from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts, write_simulation_gen_files
 
     try:
-        default_resolver().require_instance(instance, attended=attended)
+        default_resolver().require_instance(instance, attended=attended, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
     except StackUnavailableError as error:
         raise JobFailed(f"Simulation stack rejected: {error}", retryable=False) from error
     scope = worker_node.job_scope(job)

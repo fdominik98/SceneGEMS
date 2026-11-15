@@ -6,17 +6,28 @@
 # Unknown keys fail the stack generation.
 #
 # Assumption keys (replaced before the derivation, so everything derived from them follows):
-#   block_coefficient, com_depth_ratio, thruster_mass_ratio, thruster_beam_ratio, thruster_aft_ratio,
-#   propeller_kt, resistance_coefficient, cross_flow_drag_coefficient, linear_damping_share,
-#   control_margin, surge_added_mass_ratio, added_mass_cap, heave_damping_ratio,
-#   roll_pitch_damping_ratio, air_drag_coefficient, wind_reference_speed
+#   hull form: block_coefficient (the vessel's own unless given here), midship_coefficient,
+#     waterplane_coefficient (0 derives either from the block coefficient)
+#   mass: com_depth_ratio, roll_gyration_ratio, pitch_yaw_gyration_ratio, thruster_mass_ratio
+#   thrusters: thruster_beam_ratio, thruster_aft_ratio, propeller_kt, control_margin
+#   damping and added mass: resistance_coefficient, cross_flow_drag_coefficient, linear_damping_share,
+#     surge_added_mass_ratio, added_mass_cap, heave_damping_ratio, roll_pitch_damping_ratio
+#   wind: air_drag_coefficient, wind_reference_speed
+#   steering by a rudder or by vectored thrust: steering_speed_share, min_yaw_damping_share
+#   rudder: rudder_area_ratio, rudder_span_ratio, rudder_aft_ratio, rudder_lift_slope,
+#     rudder_max_angle_deg, rudder_rate_deg_s
+#   vectored thrust: vectored_max_angle_deg, vectored_rate_deg_s
+#   a measured turning circle to calibrate the yaw damping on, in place of the design yaw rate:
+#     turn_diameter_ratio (diameter with the helm hard over, in ship lengths; 0: none),
+#     turn_speed (m/s the turn is entered at; 0: the steering speed)
 #
 # Value keys (replaced after the derivation, nothing else is recomputed), SI units:
 #   hull_mass, com_z, hull_ixx, hull_iyy, hull_izz,
-#   collision_length, collision_breadth, collision_height, collision_z,
 #   windage_mass, windage_z,
 #   thruster_mass, thruster_x, thruster_y, thruster_z, propeller_diameter, motor_length,
-#   max_thrust, thrust_coefficient,
+#   max_thrust (per thruster), thrust_coefficient,
+#   steering_mass, steering_x, steering_z, steering_max_angle, steering_rate,
+#   rudder_area, rudder_span, rudder_chord, max_steady_yaw_rate,
 #   xDotU, yDotV, zDotW, nDotR, xU, yV, zW, kP, mQ, nR, xUabsU, yVabsV, nRabsR
 #
 # Example:

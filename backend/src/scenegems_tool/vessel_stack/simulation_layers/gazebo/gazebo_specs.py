@@ -33,7 +33,10 @@ GAZEBO_CONTAINER = ContainerSpec(
 
 GAZEBO_LAYER = LayerSpec(
     layer=LayerRef.of(SimulationLayerId.GAZEBO),
-    description="Gazebo Harmonic with a generated ocean world and one parametric twin-thrust SDF model per vessel (buoyancy, hydrodynamics, thrusters, WindEffects wind on a windage link).",
+    description=(
+        "Gazebo Harmonic with a generated ocean world and one parametric SDF model per vessel, with the vessel's hull form and steering gear "
+        "(two thrusters for skid steering, a thruster with a rudder, or a thruster that turns with the helm; buoyancy, hydrodynamics, WindEffects wind on a windage link)."
+    ),
     # Waves come from asv_wave_sim (GAZEBO_WAVE_FORCES_AVAILABLE); whether they are supported is a measurement.
     capabilities=Capabilities(wind=EnvironmentSupport.SUPPORTED, waves=EnvironmentSupport.UNMEASURED),
     provides_ports=frozenset({Port.VESSEL_STATE, Port.CLOCK}),
@@ -45,7 +48,7 @@ ARDUPILOT_GAZEBO_PLUGIN = AdapterSpec(
     id="ardupilot_gazebo_plugin",
     source=LayerRef.of(ControlLayerId.ARDUPILOT),
     target=LayerRef.of(SimulationLayerId.GAZEBO),
-    description="SITL with the JSON backend, linked to the ArduPilotPlugin of each generated vessel model (lock_step 1, thrust commands on the motor joints).",
+    description="SITL with the JSON backend, linked to the ArduPilotPlugin of each generated vessel model (lock_step 1, thrust commands on the motor joints, the helm angle on the steering joint).",
     # Bounded and unmeasured until Phase 0 measures it; measured values replace these from
     # registry/measured_capabilities.yaml.
     capabilities=Capabilities(repeatability_tier=RepeatabilityTier.BOUNDED, max_speedup=None),
@@ -59,8 +62,8 @@ GZ_TRANSPORT_ACTUATOR = AdapterSpec(
     target=LayerRef.of(SimulationLayerId.GAZEBO),
     description=(
         "gz-transport actuator adapter in the Gazebo container (gz_transport_actuator.py): thrust as gz.msgs.Double on "
-        "/model/<model>/joint/<joint>/cmd_thrust, odometry back, and the paused world stepped through its world control "
-        "service, so controller and physics share one clock."
+        "/model/<model>/joint/<joint>/cmd_thrust and the helm angle on /model/<model>/joint/steering_joint/cmd_pos, odometry back, "
+        "and the paused world stepped through its world control service, so controller and physics share one clock."
     ),
     # Unmeasured until measured; registry/measured_capabilities.yaml holds the values.
     capabilities=Capabilities(repeatability_tier=RepeatabilityTier.BOUNDED, max_speedup=None),

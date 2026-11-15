@@ -1,4 +1,4 @@
-"""Runner side of the gz-transport actuator adapter: thrust in, odometry out, over one TCP connection.
+"""Runner side of the gz-transport actuator adapter: thrust and helm in, odometry out, over one TCP connection.
 
 The adapter itself runs in the Gazebo container (gz_transport_actuator.py, which documents the
 protocol). This side needs only the standard library, so the runner can live in the simulation
@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from concrete_level.models.actor_state import ActorState
+from scenegems_tool.vessel_stack.control_layers.custom.actuator_allocation import ActuatorCommand
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import HullObservation
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_transport_actuator import DEFAULT_PORT, PROTOCOL_VERSION, WORLD_NAME
 
@@ -56,14 +57,22 @@ class HullOdometry:
         return ActorState(x=self.x, y=self.y, speed=self.speed, heading=self.heading)
 
     def observation(self) -> HullObservation:
-        return HullObservation(heading=self.heading, surge=self.surge, yaw_rate=self.yaw_rate)
+        return HullObservation(heading=self.heading, surge=self.surge, yaw_rate=self.yaw_rate, sway=self.sway)
 
 
 @dataclass(frozen=True)
 class GzStepResult:
     sim_time_ns: int
     odometry: Mapping[str, HullOdometry]  # by model name
-    late: Tuple[str, ...]  # "<model>/<side>" thrusters whose command was not in effect from the step's first iteration
+    late: Tuple[str, ...]  # "<model>/<thruster>" thrusters whose command was not in effect from the step's first iteration
+
+
+def command_message(command: ActuatorCommand) -> Dict[str, Any]:
+    """The actuator protocol's form of one model's command: the thrusts in the order of its thrusters and, with a helm, the helm angle."""
+    message: Dict[str, Any] = {"thrust": [float(thrust) for thrust in command.thrusts]}
+    if command.helm_angle is not None:
+        message["helm"] = float(command.helm_angle)
+    return message
 
 
 class GzLockstepLink:
@@ -101,14 +110,19 @@ class GzLockstepLink:
                 time.sleep(1.0)
         raise GzLockstepLinkError(f"no gz-transport actuator at {self.host}:{self.port} within {timeout_s:g} s (last error: {last_error})")
 
-    def start(self, thrusters: Mapping[str, Mapping[str, float]], step_ns: int, settle_iterations: int) -> GzStepResult:
-        """Register the models with their thruster constants and let them float settle_iterations with no thrust."""
+    def start(self, models: Mapping[str, Mapping[str, Any]], step_ns: int, settle_iterations: int) -> GzStepResult:
+        """Register the models and let them float settle_iterations with no thrust and the helm amidships.
+
+        Each model's entry names its thrusters in the order their thrusts are commanded, says
+        whether it has a helm and gives the thruster constants (gz_lockstep_runner.thruster_constants).
+        """
         return self._request(
-            {"op": "start", "world": self.world, "step_ns": int(step_ns), "settle_iterations": int(settle_iterations), "thrusters": {name: dict(values) for name, values in thrusters.items()}}
+            {"op": "start", "world": self.world, "step_ns": int(step_ns), "settle_iterations": int(settle_iterations), "models": {name: dict(entry) for name, entry in models.items()}}
         )
 
-    def step(self, iterations: int, thrust: Mapping[str, Tuple[float, float]]) -> GzStepResult:
-        return self._request({"op": "step", "iterations": int(iterations), "thrust": {name: [float(port), float(starboard)] for name, (port, starboard) in thrust.items()}})
+    def step(self, iterations: int, commands: Mapping[str, ActuatorCommand]) -> GzStepResult:
+        """Apply each model's command (its thrusts and, with a helm, the helm angle) and step the world."""
+        return self._request({"op": "step", "iterations": int(iterations), "commands": {name: command_message(command) for name, command in commands.items()}})
 
     def close(self) -> None:
         if self._writer is not None:

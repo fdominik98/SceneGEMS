@@ -1,10 +1,14 @@
-"""The custom controller behind the wire protocol: its container gives the thrusts and setpoints of the classes in process, and so the same Gazebo run."""
+"""The custom controller behind the wire protocol: its container gives the actuator commands and setpoints of the classes in process, and so the same Gazebo run."""
 
+import dataclasses
 import math
 
 import pytest
 
-from scenegems_tool.vessel_stack.calibration.reference_scenarios import reference_run
+from concrete_level.models.actor_state import ActorState
+from concrete_level.models.concrete_scene import ConcreteScene
+from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBuilder
+from scenegems_tool.vessel_stack.calibration.reference_scenarios import reference_run, scaled_vessel
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_CONTROLLER, Endpoint, LineServer, WireError
 from scenegems_tool.vessel_stack.contracts.ports import VesselStateObservation
@@ -46,7 +50,49 @@ def test_the_container_gives_the_autopilots_thrusts(controller):
     for index in range(60):  # a turn demand large enough to saturate the yaw loop, then settling
         hull = HullObservation(heading=0.02 * index, surge=0.05 * index, yaw_rate=0.001 * index)
         desired_heading, desired_speed = math.pi / 2 if index < 30 else 0.5, 6.0
-        assert link.command(desired_heading, desired_speed, hull, 0.1) == autopilot.command(desired_heading, desired_speed, hull, 0.1)
+        command = link.command(desired_heading, desired_speed, hull, 0.1)
+        assert command == autopilot.command(desired_heading, desired_speed, hull, 0.1)
+        assert len(command.thrusts) == 2 and command.helm_angle is None, "port and starboard thrust, and no helm on a skid steered hull"
+
+
+def steered_vessel(steering: str):
+    return dataclasses.replace(scaled_vessel("30m"), _steering_type=steering)
+
+
+@pytest.mark.parametrize("steering", ["rudder", "vectored_thrust"])
+def test_the_container_gives_the_thrust_and_the_helm_angle_of_a_hull_with_a_helm(steering):
+    """Every field of the command, bit for bit: the thrust, the helm angle, the force and moment it gives and the saturation flags."""
+    vessel = steered_vessel(steering)
+    gains = AutopilotGains.from_dynamics(hull_dynamics(vessel, CALM), vessel, 0.1)
+    autopilot = TwinThrustAutopilot(gains)
+    with LineServer(ROLE_CONTROLLER, "custom", CustomControllerSession, host="127.0.0.1") as server:
+        link = CustomControllerLink(Endpoint("127.0.0.1", server.port), vessel, gains).connect(5.0)
+        link.reset()
+        commands = []
+        for index in range(90):  # a turn to port, a turn back while slowing down (vectored thrust goes astern), then settling
+            hull = HullObservation(heading=0.02 * index, surge=6.0 - 0.05 * index, yaw_rate=0.02 * math.sin(0.2 * index), sway=-0.3 * math.sin(0.2 * index))
+            desired_heading, desired_speed = (math.pi / 2, 6.0) if index < 30 else (-0.5, 1.0) if index < 60 else (0.02 * index, 3.0)
+            command = link.command(desired_heading, desired_speed, hull, 0.1)
+            assert command == autopilot.command(desired_heading, desired_speed, hull, 0.1)
+            commands.append(command)
+        link.close()
+    assert all(len(command.thrusts) == 1 and isinstance(command.helm_angle, float) for command in commands)
+    assert min(command.helm_angle for command in commands) < -0.1 and max(command.helm_angle for command in commands) > 0.1
+    assert any(command.yaw_saturated for command in commands) and any(not command.yaw_saturated for command in commands)
+
+
+def test_the_hulls_sway_reaches_the_controller():
+    """A rudder's allocation reads the sway: the same step with and without it gives another helm angle."""
+    vessel = steered_vessel("rudder")
+    gains = AutopilotGains.from_dynamics(hull_dynamics(vessel, CALM), vessel, 0.1)
+    with LineServer(ROLE_CONTROLLER, "custom", CustomControllerSession, host="127.0.0.1") as server:
+        link = CustomControllerLink(Endpoint("127.0.0.1", server.port), vessel, gains).connect(5.0)
+        link.reset()
+        straight = link.command(0.01, 8.0, HullObservation(0.0, 8.0, 0.0, 0.0), 0.1)
+        link.reset()
+        drifting = link.command(0.01, 8.0, HullObservation(0.0, 8.0, 0.0, -0.5), 0.1)
+        link.close()
+    assert drifting.helm_angle < straight.helm_angle
 
 
 def test_a_reset_starts_the_integrators_again(controller):
@@ -89,6 +135,21 @@ def fake_gazebo(monkeypatch, trajectories, vessel):
         return FakeHullLink({"os": (HullSurgeYawModel(hull_dynamics(vessel, CALM)), HullState(initial.x, initial.y, initial.heading, 0.0, 0.0, 0.0))}, ())
 
     monkeypatch.setattr(gz_lockstep_runner, "GzLockstepLink", link)
+
+
+@pytest.mark.parametrize("steering", ["rudder", "vectored_thrust"])
+def test_a_gazebo_run_of_a_hull_with_a_helm_in_containers_is_the_run_in_process(monkeypatch, steering):
+    """The gains with the steering gear and the commands with the helm angle cross the wire without a bit lost."""
+    vessel = steered_vessel(steering)
+    trajectories = TrajectoryBuilder.default_trajectory_from_scene(ConcreteScene({vessel: ActorState(0.0, 0.0, 8.0, 0.3)}), 1, 30)
+    fake_gazebo(monkeypatch, trajectories, vessel)
+    instance = gz_custom_instance(trajectories)
+    in_process = run_gz_custom(trajectories, instance, steps=30)
+    with loopback_hosting(instance) as hosting:
+        contained = run_gz_custom(trajectories, instance, steps=30, hosting=hosting)
+    assert contained.state_digest() == in_process.state_digest(), "every control step's odometry, bit for bit"
+    assert contained.run_record["steering_types"] == in_process.run_record["steering_types"] == {"0": steering}
+    assert contained.states[-1][0].x > 10.0 and contained.states[-1][0].heading > 0.02, "the vessel moved and turned toward its path"
 
 
 @pytest.mark.parametrize("asv_system", [AsvSystemId.REPLAY, AsvSystemId.USV_NAVIGATION])

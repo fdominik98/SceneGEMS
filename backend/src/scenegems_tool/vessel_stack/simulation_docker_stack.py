@@ -25,7 +25,7 @@ from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import SimulationInstanceConfig
 from scenegems_tool.vessel_stack.registry.adapter_registry import AdapterRegistry
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
+from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError, vessel_steering_types
 from utils.file_system_utils import GAZEBO_GEN_MOUNT, SIMULATION_GEN_FOLDER, docker_volume_path, merge_compose_volumes
 
 _logger = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ def build_simulation_docker_stack_artifacts(
 ) -> Tuple[List[Tuple[str, str]], dict]:
     """The files to write and the compose services of one instance. gen_folder must lie on the runtime assets volume."""
     resolver = default_resolver()
-    resolution = resolver.require_instance(simulation_config)
+    resolution = resolver.require_instance(simulation_config, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
     for warning in resolution.warnings:
         _logger.warning("Simulation stack: %s", warning)
 

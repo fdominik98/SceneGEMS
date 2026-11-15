@@ -3,7 +3,9 @@
 The runner gives it the vessel, the autopilot's gains (derived from the hull the simulator
 generated) and, when the ASV system hands over a waypoint mission, that mission. Then, for
 every control step, it turns the hull's observation and the heading and speed setpoint into the
-two thrusts (TwinThrustAutopilot). With a mission, the controller's line-of-sight follower
+actuator command of the hull's steering type (TwinThrustAutopilot): the port and starboard thrusts
+of a skid steered hull, or the thrust and the helm angle of a hull with a rudder or vectored
+thrust. With a mission, the controller's line-of-sight follower
 (LosWaypointFollower) computes the setpoint of every scenario step from the vessel's state.
 
     -> {"op": "start", "seed": 7, "vessel": <ConcreteVessel.to_dict()>, "gains": {<AutopilotGains fields>},
@@ -11,8 +13,10 @@ two thrusts (TwinThrustAutopilot). With a mission, the controller's line-of-sigh
     <- {"op": "started"}
     -> {"op": "guide", "index": 0, "time": 0.0, "target_time": 1.0, "own": [x, y, speed, heading]}   (with a mission only)
     <- {"op": "setpoint", "heading": .., "speed": ..}
-    -> {"op": "step", "dt": 0.1, "hull": [heading, surge, yaw_rate], "setpoint": [heading, speed]}
-    <- {"op": "thrust", "port": .., "starboard": .., "yaw_saturated": false, "surge_saturated": false}
+    -> {"op": "step", "dt": 0.1, "hull": [heading, surge, yaw_rate, sway], "setpoint": [heading, speed]}
+    <- {"op": "command", "thrusts": [port, starboard], "helm_angle": null, "force": .., "moment": .., "yaw_saturated": false, "surge_saturated": false}
+       (a hull with a rudder or vectored thrust: "thrusts": [center], "helm_angle": <rad, positive turns to starboard>;
+        force and moment are the surge force in N and the yaw moment in N m the command gives)
 
 Entry point of the container:
 
@@ -64,8 +68,16 @@ class CustomControllerSession(Session):
         if self._autopilot is None:
             raise WireError("step before start")
         heading, speed = request["setpoint"]
-        thrust = self._autopilot.command(float(heading), float(speed), HullObservation(*(float(value) for value in request["hull"])), float(request["dt"]))
-        return {"op": "thrust", "port": thrust.port, "starboard": thrust.starboard, "yaw_saturated": thrust.yaw_saturated, "surge_saturated": thrust.surge_saturated}
+        command = self._autopilot.command(float(heading), float(speed), HullObservation(*(float(value) for value in request["hull"])), float(request["dt"]))
+        return {
+            "op": "command",
+            "thrusts": list(command.thrusts),
+            "helm_angle": command.helm_angle,
+            "force": command.force,
+            "moment": command.moment,
+            "yaw_saturated": command.yaw_saturated,
+            "surge_saturated": command.surge_saturated,
+        }
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:

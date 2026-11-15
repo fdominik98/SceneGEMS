@@ -5,6 +5,7 @@ import math
 import pytest
 import yaml
 
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.contracts.capabilities import Capabilities, EnvironmentSupport, RepeatabilityTier
 from scenegems_tool.vessel_stack.registry.catalog import build_registry, default_registry
 from scenegems_tool.vessel_stack.registry.measured_capabilities import (
@@ -35,6 +36,19 @@ class TestParse:
         assert overrides["waves"] == EnvironmentSupport.UNMEASURED
         assert overrides["lockstep"] is False
         assert overrides["faster_than_real_time"] is True
+
+    def test_steering_types_are_a_list_of_names(self):
+        measurement = parse_capability_measurement("some_spec", {"steering_types": ["skid", "rudder"]})
+        assert dict(measurement.overrides)["steering_types"] == frozenset({SteeringType.RUDDER, SteeringType.SKID})
+        assert measurement.apply(Capabilities()).steering_types == {SteeringType.RUDDER, SteeringType.SKID}
+
+    def test_one_steering_type_may_be_given_as_a_name(self):
+        assert dict(parse_capability_measurement("some_spec", {"steering_types": "vectored_thrust"}).overrides)["steering_types"] == frozenset({SteeringType.VECTORED_THRUST})
+
+    @pytest.mark.parametrize("value", [["rudder", "sail"], "paddle", [], None])
+    def test_an_unknown_or_missing_steering_type_fails(self, value):
+        with pytest.raises(ValueError):
+            parse_capability_measurement("some_spec", {"steering_types": value})
 
     def test_null_max_speedup_means_not_measured(self):
         measurement = parse_capability_measurement("some_spec", {"max_speedup": None})
@@ -166,6 +180,26 @@ class TestRegistryBuild:
         layer = default_registry().layer(next(spec.layer for spec in default_registry().layers if spec.id == "simulation_layer/ardupilot_sim"))
         assert layer.capabilities.wind == EnvironmentSupport.UNSUPPORTED
         assert "no measurable effect" in layer.note_for("wind")
+
+    def test_ardupilot_sim_runs_rudder_and_skid_vessels_only_and_every_other_spec_all_three(self):
+        """SITL's boat has a rudder or two motors; the spec declares it, so it holds without the measurement file too."""
+        for registry in (default_registry(), build_registry({})):
+            for spec in (*registry.layers, *registry.adapters):
+                expected = {SteeringType.RUDDER, SteeringType.SKID} if spec.id == "simulation_layer/ardupilot_sim" else set(SteeringType)
+                assert spec.capabilities.steering_types == expected, spec.id
+            layer = next(spec for spec in registry.layers if spec.id == "simulation_layer/ardupilot_sim")
+            assert "no thruster that turns" in layer.note_for("steering_types")
+
+    def test_what_a_simulator_steers_by_is_declared_in_its_spec_and_not_repeated_as_a_measurement(self):
+        assert all("steering_types" not in dict(measurement.overrides) for measurement in load_capability_measurements().values())
+
+    def test_a_measured_entry_narrows_the_steering_types_of_its_spec(self):
+        registry = build_registry(
+            {"simulation_layer/gazebo": parse_capability_measurement("simulation_layer/gazebo", {"steering_types": ["skid"], "notes": {"steering_types": "only the twin hull was run"}})}
+        )
+        gazebo = next(spec for spec in registry.layers if spec.id == "simulation_layer/gazebo")
+        assert gazebo.capabilities.steering_types == {SteeringType.SKID}
+        assert gazebo.note_for("steering_types") == "only the twin hull was run"
 
     def test_without_measurements_specs_keep_their_declared_defaults(self):
         registry = build_registry({})

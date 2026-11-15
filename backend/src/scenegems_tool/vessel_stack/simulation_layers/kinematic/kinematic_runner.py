@@ -34,7 +34,7 @@ from scenegems_tool.vessel_stack.contracts.stack_services import stack_agent_nam
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import EnvironmentConfig, SimulationInstanceConfig, VesselConfig, VesselStackConfig
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting, participant_reports
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import InstanceResolution, StackResolver
+from scenegems_tool.vessel_stack.registry.resolver import InstanceResolution, StackResolver, vessel_steering_types
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_simulation import KinematicSimulation
 
 KINEMATIC_REPLAY_STACK = VesselStackConfig(asv_system=AsvSystemId.REPLAY, control_layer=ControlLayerId.NONE, simulation_layer=SimulationLayerId.KINEMATIC)
@@ -181,7 +181,7 @@ def run_kinematic_instance(
     observes every step and may end the run early.
     """
     resolver = resolver or default_resolver()
-    resolution = resolver.require_instance(instance, attended=attended)
+    resolution = resolver.require_instance(instance, attended=attended, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
     hosting = hosting or InProcessHosting()
     dt = float(trajectories.time_step) if dt is None else dt
     scene = trajectories.initial_scene

@@ -1,5 +1,7 @@
 """Key properties of the generated Gazebo stack (the full output is pinned by the snapshots of test_simulation_docker_stack)."""
 
+import math
+
 import pytest
 
 from scenegems_tool.vessel_stack.contracts.roles import ControlLayerId, SimulationLayerId
@@ -7,6 +9,8 @@ from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselStac
 from scenegems_tool.vessel_stack.registry.resolver import StackUnavailableError
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.hydrodynamics import RHO_WATER
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics import BUOYANCY_GRID, HULL_STATIONS
+from tests.scenegems_tool.vessel_stack.control_layers.ardupilot.steered_scenes import build_steered_stack
 from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
 from tests.scenegems_tool.vessel_stack.sdf import child_float, parse_params, parse_sdf, plugins
 from tests.scenegems_tool.vessel_stack.stack_cases import generate_stack
@@ -127,9 +131,11 @@ class TestVesselModel:
         assert len(windage) == 1
         assert windage[0].find("enable_wind").text == "true"
 
-    def test_hull_floats_on_nine_buoyancy_cells(self, model):
+    def test_hull_floats_on_buoyant_boxes_along_its_length_each_split_into_cells_across(self, model):
+        """Nine boxes along the hull form in flat water, three cells across each (it was one box of three by three cells before the hull form)."""
         cells = [collision for collision in model.iter("collision") if collision.get("name").startswith("collision_hull_")]
-        assert len(cells) == 9
+        assert (HULL_STATIONS, BUOYANCY_GRID) == (9, 3)
+        assert len(cells) == HULL_STATIONS * BUOYANCY_GRID
 
     def test_imu_sensor_feeds_the_ardupilot_plugin(self, model):
         (plugin,) = plugins(model, "ArduPilotPlugin")
@@ -145,15 +151,63 @@ class TestParams:
         assert params["CRUISE_SPEED"] == 8.0
         assert params["ATC_ACCEL_MAX"] == 0.4
 
-    def test_the_hull_is_skid_steered(self, gazebo_stack):
+    def test_the_hull_of_a_skid_vessel_is_skid_steered(self, gazebo_stack):
+        """The vessels of the stack have no steering type of their own, which is skid."""
         params = parse_params(gazebo_stack.files["params-agent_0.params"])
-        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"]) == (73, 74)
+        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"], params["SKID_STEER_OUT"]) == (73, 74, 1)
         assert params["ATC_STR_RAT_FF"] > 0
+        assert "MOT_VEC_ANGLEMAX" not in params and "MOT_SPD_SCA_BASE" not in params
 
     def test_wind_reaches_ardupilot_as_speed_and_direction(self, gazebo_stack):
         params = parse_params(gazebo_stack.files["params-agent_0.params"])
         assert params["SIM_WIND_SPD"] == pytest.approx(5.0)
         assert params["SIM_WAVE_ENABLE"] == 0
+
+
+class TestSteeringType:
+    """ArduPilot's outputs follow the vessel's steering type, as the generated model's servo channels do."""
+
+    @pytest.fixture(scope="class")
+    def stack(self):
+        return build_steered_stack(stack_instance(SimulationLayerId.GAZEBO, [0, 1]), {0: "rudder", 1: "vectored_thrust"})
+
+    @staticmethod
+    def servo_channels(model_sdf: str) -> dict:
+        (plugin,) = plugins(parse_sdf(model_sdf), "ArduPilotPlugin")
+        return {control.get("channel"): control.find("jointName").text for control in plugin.findall("control")}
+
+    def test_a_rudder_vessel_drives_the_helm_on_servo_1_and_the_thruster_on_servo_3(self, stack):
+        files, _ = stack
+        params = parse_params(files["params-agent_0.params"])
+        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"], params["SKID_STEER_OUT"]) == (26, 70, 0)
+        assert self.servo_channels(files["agent_0_model.sdf"]) == {"0": "steering_joint", "2": "motor_center_joint"}
+        assert params["MOT_SPD_SCA_BASE"] > 0 and "MOT_VEC_ANGLEMAX" not in params
+        assert params["ATC_STR_RAT_FF"] > 0
+
+    def test_a_vectored_thrust_vessel_adds_rovers_vectoring_angle_which_is_the_models_hard_over(self, stack):
+        files, _ = stack
+        params = parse_params(files["params-agent_1.params"])
+        assert (params["SERVO1_FUNCTION"], params["SERVO3_FUNCTION"], params["SKID_STEER_OUT"]) == (26, 70, 0)
+        assert self.servo_channels(files["agent_1_model.sdf"]) == {"0": "steering_joint", "2": "motor_center_joint"}
+        assert "MOT_SPD_SCA_BASE" not in params
+        # Hard over is the largest angle the model's servo channel commands (half its multiplier); the joint's stops lie beyond it.
+        helm = next(control for control in parse_sdf(files["agent_1_model.sdf"]).iter("control") if control.get("channel") == "0")
+        hard_over = child_float(helm, "multiplier") / 2.0
+        assert math.radians(params["MOT_VEC_ANGLEMAX"]) == pytest.approx(hard_over, rel=1e-5)
+        limit = parse_sdf(files["agent_1_model.sdf"]).find("model/joint[@name='steering_joint']/axis/limit")
+        assert child_float(limit, "upper") > hard_over
+
+    def test_the_sitl_frame_is_the_same_for_every_steering_type(self, stack, gazebo_stack):
+        """The physics are Gazebo's (JSON backend); the frame only names default parameters, and the parameter file sets every output."""
+        _, compose = stack
+        for services in (compose["services"], gazebo_stack.compose["services"]):
+            for name in ("agent_0", "agent_1"):
+                assert "SITL_FRAME=motorboat" in services[name]["environment"] and "SITL_MODEL=JSON" in services[name]["environment"]
+
+    def test_every_steering_type_is_accepted_on_gazebo_with_both_control_layers(self):
+        for control_layer in (ControlLayerId.ARDUPILOT, ControlLayerId.CUSTOM):
+            files, _ = build_steered_stack(stack_instance(SimulationLayerId.GAZEBO, [0, 1], control_layer=control_layer), {0: "vectored_thrust", 1: "rudder"})
+            assert {"agent_0_model.sdf", "agent_1_model.sdf"} <= set(files)
 
 
 def build(instance):

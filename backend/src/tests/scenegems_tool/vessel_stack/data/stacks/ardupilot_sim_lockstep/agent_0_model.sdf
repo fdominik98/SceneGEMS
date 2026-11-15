@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <sdf version="1.9">
-  <!-- Parametric twin-thrust vessel, control layer ardupilot: L 30 m, B 10 m,
-       draft 1.8 m, 332100 kg, full thrust 308127 N per thruster for 24.6933 m/s,
-       full differential thrust for 0.06 rad/s. Thrust commands: gz.msgs.Double in N on
-       /model/agent_0/joint/motor_port_joint/cmd_thrust and /model/agent_0/joint/motor_stbd_joint/cmd_thrust. -->
+  <!-- Parametric vessel, control layer ardupilot: L 30 m, B 10 m, draft 1.8 m,
+       block coefficient 0.6, 332100 kg, full thrust for 24.6933 m/s;
+       skid steered by two thrusters of 205267 N each: full differential thrust for 0.06 rad/s.
+       Commands: gz.msgs.Double thrust in N on /model/agent_0/joint/motor_port_joint/cmd_thrust, /model/agent_0/joint/motor_stbd_joint/cmd_thrust. -->
   <model name="agent_0">
     <self_collide>false</self_collide>
     <!-- Avoid links auto-disabling mid-run (can destabilize coupled buoyancy/hydro). -->
@@ -15,89 +15,238 @@
       <inertial>
         <pose>0 0 -0.9 0 0 0</pose>
         <mass>331391</mass>
-        <inertia><ixx>3320820</ixx><iyy>25413600</iyy><izz>27615900</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
+        <inertia><ixx>4059540</ixx><iyy>18640800</iyy><izz>18640800</izz><ixy>0</ixy><ixz>0</ixz><iyz>0</iyz></inertia>
       </inertial>
-      <!-- Buoyant volume: displaces the total mass at the draft (world Buoyancy system), split into
-           3 x 3 cells so that roll and pitch are restored (see vessel_dynamics.BUOYANCY_GRID). -->
+      <!-- Buoyant volume: boxes along the hull with its waterline breadth and mean depth, which displace the
+           total mass at the draft (world Buoyancy system). Each is centered on the waterline and split into
+           3 or more cells across the hull so that roll is restored (see vessel_dynamics.BUOYANCY_GRID). -->
       <collision name="collision_hull_0_0">
-        <pose>-7.74597 -2.58199 0 0 0 0</pose>
+        <pose>-12.8469 -1.02355 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 1.02355 2.24911</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_0_1">
-        <pose>-7.74597 0 0 0 0 0</pose>
+        <pose>-12.8469 0 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 1.02355 2.24911</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_0_2">
-        <pose>-7.74597 2.58199 0 0 0 0</pose>
+        <pose>-12.8469 1.02355 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 1.02355 2.24911</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_1_0">
-        <pose>0 -2.58199 0 0 0 0</pose>
+        <pose>-9.51355 -2.53457 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 2.53457 2.45867</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_1_1">
-        <pose>0 0 0 0 0 0</pose>
+        <pose>-9.51355 0 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 2.53457 2.45867</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_1_2">
-        <pose>0 2.58199 0 0 0 0</pose>
+        <pose>-9.51355 2.53457 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 2.53457 2.45867</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_2_0">
-        <pose>7.74597 -2.58199 0 0 0 0</pose>
+        <pose>-6.18021 -3.24207 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 3.24207 2.81528</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_2_1">
-        <pose>7.74597 0 0 0 0 0</pose>
+        <pose>-6.18021 0 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 3.24207 2.81528</size>
           </box>
         </geometry>
       </collision>
       <collision name="collision_hull_2_2">
-        <pose>7.74597 2.58199 0 0 0 0</pose>
+        <pose>-6.18021 3.24207 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>7.74597 2.58199 3.6</size>
+            <size>3.33333 3.24207 2.81528</size>
           </box>
         </geometry>
       </collision>
-      <visual name="visual_hull">
-        <pose>0 0 0.45 0 0 0</pose>
+      <collision name="collision_hull_3_0">
+        <pose>-2.84688 -3.33324 0 0 0 0</pose>
         <geometry>
           <box>
-            <size>30 10 4.5</size>
+            <size>3.33333 3.33324 3.28408</size>
           </box>
         </geometry>
+      </collision>
+      <collision name="collision_hull_3_1">
+        <pose>-2.84688 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.33324 3.28408</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_3_2">
+        <pose>-2.84688 3.33324 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.33324 3.28408</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_4_0">
+        <pose>0.486452 -3.33131 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.33131 3.45468</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_4_1">
+        <pose>0.486452 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.33131 3.45468</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_4_2">
+        <pose>0.486452 3.33131 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.33131 3.45468</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_5_0">
+        <pose>3.81979 -3.19832 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.19832 3.17573</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_5_1">
+        <pose>3.81979 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.19832 3.17573</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_5_2">
+        <pose>3.81979 3.19832 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 3.19832 3.17573</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_6_0">
+        <pose>7.15312 -2.72679 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 2.72679 2.86848</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_6_1">
+        <pose>7.15312 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 2.72679 2.86848</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_6_2">
+        <pose>7.15312 2.72679 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 2.72679 2.86848</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_7_0">
+        <pose>10.4865 -1.89806 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 1.89806 2.61982</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_7_1">
+        <pose>10.4865 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 1.89806 2.61982</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_7_2">
+        <pose>10.4865 1.89806 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 1.89806 2.61982</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_8_0">
+        <pose>13.8198 -0.712105 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 0.712105 2.43283</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_8_1">
+        <pose>13.8198 0 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 0.712105 2.43283</size>
+          </box>
+        </geometry>
+      </collision>
+      <collision name="collision_hull_8_2">
+        <pose>13.8198 0.712105 0 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>3.33333 0.712105 2.43283</size>
+          </box>
+        </geometry>
+      </collision>
+      <!-- The hull surface, a mesh next to this file (hull_form.py). -->
+      <visual name="visual_hull">
+        <geometry>
+          <mesh>
+            <uri>agent_0_hull.stl</uri>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.25 0.3 0.4 1</ambient>
+          <diffuse>0.25 0.3 0.4 1</diffuse>
+        </material>
       </visual>
       <sensor name="imu_sensor" type="imu">
         <pose degrees="true">0 0 0 180 0 0</pose>
@@ -145,8 +294,8 @@
            with it that a thrust command was in effect from the step's first iteration. -->
       <velocity_control>1</velocity_control>
       <use_angvel_cmd>0</use_angvel_cmd>
-      <max_thrust_cmd>308127</max_thrust_cmd>
-      <min_thrust_cmd>-308127</min_thrust_cmd>
+      <max_thrust_cmd>205267</max_thrust_cmd>
+      <min_thrust_cmd>-205267</min_thrust_cmd>
     </plugin>
 
     <link name="motor_stbd_link">
@@ -173,12 +322,12 @@
            with it that a thrust command was in effect from the step's first iteration. -->
       <velocity_control>1</velocity_control>
       <use_angvel_cmd>0</use_angvel_cmd>
-      <max_thrust_cmd>308127</max_thrust_cmd>
-      <min_thrust_cmd>-308127</min_thrust_cmd>
+      <max_thrust_cmd>205267</max_thrust_cmd>
+      <min_thrust_cmd>-205267</min_thrust_cmd>
     </plugin>
 
     <!-- Added-mass Coriolis terms off: their Munk moment makes a bare hull directionally unstable
-         (measured: the 5 m hull spun under equal thrust above 2.5 m/s); real twin-screw hulls are kept
+         (measured: the 5 m hull spun under equal thrust above 2.5 m/s); real hulls are kept
          straight by skegs, which this model does not have. -->
     <plugin filename="gz-sim-hydrodynamics-system" name="gz::sim::systems::Hydrodynamics">
       <link_name>base_link</link_name>
@@ -186,16 +335,16 @@
       <xDotU>-16605</xDotU>
       <yDotV>-156498</yDotV>
       <zDotW>-166050</zDotW>
-      <nDotR>-11737400</nDotR>
-      <xU>-4302.81</xU>
+      <nDotR>-9320380</nDotR>
+      <xU>-2866.43</xU>
       <yV>-250475</yV>
-      <zW>-949539</zW>
-      <kP>-3101090</kP>
-      <mQ>-25736300</mQ>
-      <nR>-8216730</nR>
-      <xUabsU>-836.4</xUabsU>
+      <zW>-1049750</zW>
+      <kP>-4348530</kP>
+      <mQ>-27067900</mQ>
+      <nR>-5473790</nR>
+      <xUabsU>-557.19</xUabsU>
       <yVabsV>-27675</yVabsV>
-      <nRabsR>-547782000</nRabsR>
+      <nRabsR>-364920000</nRabsR>
     </plugin>
 
     <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
@@ -222,7 +371,7 @@
         <jointName>motor_port_joint</jointName>
         <type>COMMAND</type>
         <cmd_topic>/model/agent_0/joint/motor_port_joint/cmd_thrust</cmd_topic>
-        <multiplier>616255</multiplier>
+        <multiplier>410534</multiplier>
         <offset>-0.5</offset>
         <servo_min>1000</servo_min>
         <servo_max>2000</servo_max>
@@ -232,7 +381,7 @@
         <jointName>motor_stbd_joint</jointName>
         <type>COMMAND</type>
         <cmd_topic>/model/agent_0/joint/motor_stbd_joint/cmd_thrust</cmd_topic>
-        <multiplier>616255</multiplier>
+        <multiplier>410534</multiplier>
         <offset>-0.5</offset>
         <servo_min>1000</servo_min>
         <servo_max>2000</servo_max>

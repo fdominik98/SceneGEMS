@@ -15,6 +15,7 @@ SITL_SERIAL1_BASE_PORT = 5762  # SITL's SERIAL1 (MAVLink) of instance 0; each in
 GCS_MAVPROXY_RETRY_S = 2  # seconds between MAVProxy starts while SITL boots
 ARDUAGENT_RETRY_S = 2  # seconds between ArduAgent starts while its MAVProxy comes up
 POSITION_CHANNEL = "/sensor/position"
+DEFAULT_SITL_FRAME = "motorboat"  # SITL's boat with a rudder on servo 1 and a throttle on servo 3
 
 
 def _retried(command: str, retry_s: int) -> list:
@@ -32,8 +33,15 @@ def generate_vessel_service(
     speed_factor: int,
     is_ardupilot_sim: bool,
     other_position_topics: Sequence[str] = (),
+    sitl_frame: str = DEFAULT_SITL_FRAME,
 ) -> dict:
     """SITL, MAVProxy and ArduAgent of one simulated vessel that ArduAgent drives.
+
+    sitl_frame is the frame SITL starts with (sim_vehicle.py -f), which follows the vessel's steering
+    type (ardu_param_generator.sitl_frame): on ardupilot_sim it selects how SITL's boat steers
+    (motorboat by a rudder, motorboat-skid by its two motors), so it must match the outputs of the
+    parameter file. On gazebo the physics are Gazebo's and the frame only names the default parameters
+    sim_vehicle.py loads before the parameter file, which sets every output itself.
 
     The services are named after the client (the vessel). The agent's name on the broker, and the first level of its
     topics, come from the client's topic when it is a simulated unit's in the WARA-PS layout (messaging/topic_layout.py);
@@ -80,8 +88,8 @@ def generate_vessel_service(
         "SIM_PORT": sim_port,
         "SPEEDUP": str(speed_factor),
         "VEHICLE": "Rover",
-        "MODEL": "motorboat",  # or rover-skid
-        "VEHICLE_PARAMS": "motorboat",
+        "MODEL": sitl_frame,
+        "VEHICLE_PARAMS": sitl_frame,
         # Bind tcpin on all interfaces inside the mavproxy container; arduagent uses the service hostname.
         "MAVPROXY": f"tcpin:{mavproxy}:{arduagent_port}",
     }

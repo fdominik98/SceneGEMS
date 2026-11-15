@@ -1,8 +1,8 @@
 """
 WebSocket message shapes shared with the React frontend (`src/domain/simulation/wireTypes.ts`).
 
-The console sends the gateway three helper requests (load_scenario_file, generate_simulation_models,
-query_stack_options) and gets their answers; the results of cluster jobs do not pass here.
+The console sends the gateway four helper requests (load_scenario_file, generate_simulation_models,
+query_stack_options, query_vessel_model_presets) and gets their answers; the results of cluster jobs do not pass here.
 SimulationModelsBody is also the setup an attended simulation job runs.
 """
 
@@ -50,6 +50,8 @@ class SimulationConnectionInfo(TypedDict):
     # Older setups carry a ground control station port per vessel; it is read by nothing any more (Docker assigns the port a job publishes).
     port: NotRequired[Optional[int]]
     gazeboVesselModel: Optional[str]
+    # Id of a preset of the vessel model catalog chosen for this vessel; absent or null: the automatic model.
+    vesselModelPreset: NotRequired[Optional[str]]
 
 
 class WaveInfo(TypedDict):
@@ -75,12 +77,40 @@ class GenerateSimulationModelsMessage(SimulationModelsBody):
     type: Literal["generate_simulation_models"]
 
 
+class QueryVesselModelPresetsMessage(TypedDict):
+    type: Literal["query_vessel_model_presets"]
+
+
+class VesselModelPresetInfo(TypedDict):
+    """One preset of the vessel model catalog, as the console shows it."""
+
+    id: str
+    name: str
+    source: str
+    steeringType: str
+    bounds: Dict[str, List[float]]  # [low, high] per bounded vessel property
+    particulars: Dict[str, float]  # the source ship's own numbers
+    notes: str
+
+
+class VesselModelPresetsMessage(TypedDict):
+    """Per vessel of the loaded scenario, the presets it can take: those of its steering type whose bounds it lies within.
+
+    A vessel with an empty list has only the automatic model.
+    """
+
+    type: Literal["vessel_model_presets"]
+    scenarioId: str
+    presetsByAgentId: Dict[str, List[VesselModelPresetInfo]]
+
+
 # Scene generation, trajectory generation, simulation and monitoring are not here: the workbench
 # submits them as jobs to the cluster's operator API, and they run on worker nodes.
 ClientMessage = Union[
     LoadScenarioFileMessage,
     GenerateSimulationModelsMessage,
     QueryStackOptionsMessage,
+    QueryVesselModelPresetsMessage,
 ]
 
 
@@ -118,6 +148,7 @@ ServerMessage = Union[
     Dict[str, Any],
     StackOptionsMessage,
     SimulationModelsMessage,
+    VesselModelPresetsMessage,
 ]
 
 
@@ -193,6 +224,7 @@ def simulation_config_from_body(body: SimulationModelsBody) -> SimulationInstanc
                 context=contexts[agent_id],
                 connection=AgentConnection(agent_name=connection["agentName"], topic=connection["topic"]),
                 gazebo_vessel_model=connection.get("gazeboVesselModel", None),
+                vessel_model_preset=connection.get("vesselModelPreset") or None,
                 adapter_ids=workbench_adapter_ids(stacks[agent_id], has_real_vessel),
             )
             for agent_id, connection in connections.items()
@@ -212,6 +244,9 @@ def _connection_info(vessel: VesselConfig) -> SimulationConnectionInfo:
     control_mode = control_mode_label(vessel.stack.asv_system)
     if control_mode is not None:
         info["controlMode"] = control_mode
+    if vessel.vessel_model_preset is not None:
+        # Left out while the model is automatic, so a setup from before the presets reads as it did.
+        info["vesselModelPreset"] = vessel.vessel_model_preset
     return info
 
 

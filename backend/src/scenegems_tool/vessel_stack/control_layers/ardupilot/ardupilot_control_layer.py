@@ -7,11 +7,12 @@ from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_spec
 from scenegems_tool.vessel_stack.contracts.docker_stack import DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig
-from scenegems_tool.vessel_stack.control_layers.ardupilot.ardu_param_generator import generate_ardu_params
+from scenegems_tool.vessel_stack.control_layers.ardupilot.ardu_param_generator import generate_ardu_params, sitl_frame
 from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS, arduagent_control_mode
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUPILOT_CONTROL_LAYER
 from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import generate_gcs_mavproxy_service, generate_vessel_service
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_catalog import vessel_dynamics_overrides
 
 
 class ArduPilotControlLayer:
@@ -44,6 +45,8 @@ class ArduPilotControlLayer:
             environment.wave,
             vessel_config.stack.simulation_layer,
             guided_targets=not arduagent,
+            # The gains follow the hull the generated model has: the override files' entries and the vessel's model preset
+            overrides=vessel_dynamics_overrides(vessel, vessel_config.vessel_model_preset),
         )
         params_file = f"{request.gen_folder}/params-{connection.agent_name}.params"
         lines = []
@@ -58,7 +61,9 @@ class ArduPilotControlLayer:
         other_topics = [
             other.connection.topic for other_id, other in request.simulation.vessels.items() if other_id != vessel_config.agent_id and other.connection is not None and other.connection.topic
         ]
-        services = generate_vessel_service(agent_stub, params_file, request.simulation.speedup, sitl_internal_physics, other_topics)
+        # The frame follows the vessel's steering type, as the outputs of the parameter file do
+        frame = sitl_frame(vessel.steering_type, vessel_config.stack.simulation_layer, vessel.id)
+        services = generate_vessel_service(agent_stub, params_file, request.simulation.speedup, sitl_internal_physics, other_topics, frame)
         if not arduagent:
             # The ASV system talks MAVLink to SITL's SERIAL0 itself (mavlink_link.py), so the
             # vessel gets SITL only: no MAVProxy and no ArduAgent. A Mission Planner vessel adds

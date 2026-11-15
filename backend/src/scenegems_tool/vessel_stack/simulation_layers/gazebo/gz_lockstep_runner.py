@@ -2,7 +2,8 @@
 
 Every vessel has an ASV participant (the line-of-sight waypoint follower for replay, USV
 Navigation for usv_navigation, MOOS-IvP's helm for moos_ivp) and a TwinThrustAutopilot with gains
-from its generated hull.
+from its generated hull, whose steering type (skid, rudder or vectored thrust) decides what the
+autopilot commands: two thrusts, or one thrust and a helm angle.
 Both come from a hosting (vessel_stack/hosting.py): built in this process, or the vessel's ASV
 system and controller containers, which this runner then carries the messages between.
 The world is paused and advances only through the gz-transport actuator (gz_transport_actuator.py):
@@ -10,8 +11,8 @@ The world is paused and advances only through the gz-transport actuator (gz_tran
     for every scenario step of dt:
         the participants compute heading and speed commands from the states at the step's start
         for every control step of control_dt within it:
-            each autopilot turns its command and its hull's latest odometry into two thrusts
-            the actuator applies the thrusts and steps the world control_dt / PHYSICS_STEP_S iterations
+            each autopilot turns its command and its hull's latest odometry into thrusts and, with a helm, a helm angle
+            the actuator applies them and steps the world control_dt / PHYSICS_STEP_S iterations
 
 Nothing reads the wall clock except the timeouts and the reported pace, so a run is a function of
 its inputs and Gazebo's physics. A thrust that reached gz sim only after the first iteration of
@@ -35,6 +36,7 @@ import numpy as np
 from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from concrete_level.models.trajectories import Trajectories
+from logical_level.mapping.vessel_type import SteeringType
 from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest, RunParameters
 from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import MoosIvpParameters
 from scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_parameters import UsvNavigationParameters
@@ -46,10 +48,10 @@ from scenegems_tool.vessel_stack.contracts.vessel_stack_config import AgentConne
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, TwinThrustAutopilot
 from scenegems_tool.vessel_stack.hosting import InProcessHosting, StackHosting
 from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError
+from scenegems_tool.vessel_stack.registry.resolver import StackResolver, StackUnavailableError, vessel_steering_types
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics import VesselDynamics, derive_vessel_dynamics
-from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics_overrides import load_vessel_dynamics_overrides
-from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_generator import sdf_value
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_catalog import vessel_dynamics_overrides
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_model_generator import sdf_value, thruster_names
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.world_generator import PHYSICS_STEP_S
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_lockstep_link import GzLockstepLink, HullOdometry
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_transport_actuator import DEFAULT_PORT
@@ -92,15 +94,27 @@ class GzRunResult:
         return digest.hexdigest()
 
 
-def hull_dynamics(vessel: ConcreteVessel, environment: EnvironmentConfig) -> VesselDynamics:
-    """The dynamics of the vessel's generated model, as vessel_model_generator.generate_vessel_model derives them."""
+def hull_dynamics(vessel: ConcreteVessel, environment: EnvironmentConfig, preset_id: Optional[str] = None) -> VesselDynamics:
+    """The dynamics of the vessel's generated model, as the model's generator derives them.
+
+    preset_id: the vessel model preset the model was generated with (VesselConfig.vessel_model_preset);
+    None for the automatic model, from the vessel and the override files alone.
+    """
     wind_speed = float(np.linalg.norm(environment.wind_vector))
-    return derive_vessel_dynamics(vessel, wind_speed, load_vessel_dynamics_overrides().for_vessel(vessel))
+    return derive_vessel_dynamics(vessel, wind_speed, vessel_dynamics_overrides(vessel, preset_id))
 
 
-def thruster_constants(dynamics: VesselDynamics) -> Dict[str, float]:
-    """The Thruster system's constants as the SDF gives them to gz sim (rounded), for the actuator's check of applied thrust."""
+def thruster_constants(dynamics: VesselDynamics) -> Dict[str, Any]:
+    """What the actuator is told of a model (an entry of GzLockstepLink.start).
+
+    Its steering type, its thrusters in the order their thrusts are commanded, whether it has
+    a helm, and the Thruster system's constants as the SDF gives them to gz sim (rounded), for the
+    actuator's check of applied thrust.
+    """
     return {
+        "steering_type": dynamics.steering_type,
+        "thrusters": list(thruster_names(dynamics.steering_type)),
+        "helm": dynamics.steering_type != SteeringType.SKID.value,
         "thrust_coefficient": sdf_value(dynamics.thrust_coefficient),
         "propeller_diameter": sdf_value(dynamics.propeller_diameter),
         "fluid_density": FLUID_DENSITY,
@@ -114,7 +128,7 @@ def run_gz_lockstep(
     participants: Mapping[int, LockstepParticipant],
     autopilots: Mapping[int, TwinThrustAutopilot],
     vessels: Mapping[int, ConcreteVessel],
-    thrusters: Mapping[int, Mapping[str, float]],
+    thrusters: Mapping[int, Mapping[str, Any]],
     dt: float,
     steps: int,
     run_seed: int,
@@ -123,7 +137,10 @@ def run_gz_lockstep(
     settle_s: float = SETTLE_S,
     on_step: Optional[StepObserver] = None,
 ) -> GzRunResult:
-    """Start the actuator on the models, let them settle, then run `steps` scenario steps of dt. Everything is keyed by vessel id."""
+    """Start the actuator on the models, let them settle, then run `steps` scenario steps of dt. Everything is keyed by vessel id.
+
+    thrusters: each vessel's thruster_constants. An autopilot's command must fit them: one thrust per thruster, a helm angle with a helm.
+    """
     vessel_ids = tuple(sorted(models))
     sub_steps = int(round(dt / control_dt))
     iterations = int(round(control_dt / PHYSICS_STEP_S))
@@ -153,12 +170,11 @@ def run_gz_lockstep(
             break
         commands = _step_commands(clock, participants, vessels, states)
         for _ in range(sub_steps):
-            thrust = {}
+            actuation = {}
             for vessel_id in vessel_ids:
                 hull = latest.odometry[models[vessel_id]]
-                command = autopilots[vessel_id].command(commands[vessel_id].heading, commands[vessel_id].speed, hull.observation(), control_dt)
-                thrust[models[vessel_id]] = (command.port, command.starboard)
-            latest = link.step(iterations, thrust)
+                actuation[models[vessel_id]] = autopilots[vessel_id].command(commands[vessel_id].heading, commands[vessel_id].speed, hull.observation(), control_dt)
+            latest = link.step(iterations, actuation)
             late += len(latest.late)
             odometry_log.append(tuple(latest.odometry[models[vessel_id]] for vessel_id in vessel_ids))
     return GzRunResult(
@@ -251,7 +267,7 @@ def run_gz_custom(
     environment.seed.
     """
     resolver = resolver or default_resolver()
-    resolution = resolver.require_instance(simulation, attended=False, host=machine)
+    resolution = resolver.require_instance(simulation, attended=False, host=machine, steering_types=vessel_steering_types(trajectories.initial_scene.vessels))
     wrong = [f"vessel {agent_id} runs on {chain.stack.control_layer.value}" for agent_id, chain in resolution.chains.items() if chain.stack.control_layer != ControlLayerId.CUSTOM]
     if wrong:
         raise StackUnavailableError([f"run_gz_custom needs the custom control layer for every simulated vessel: {', '.join(wrong)}"])
@@ -262,7 +278,8 @@ def run_gz_custom(
     participants: Dict[int, LockstepParticipant] = {}
     autopilots: Dict[int, TwinThrustAutopilot] = {}
     vessels: Dict[int, ConcreteVessel] = {}
-    thrusters: Dict[int, Dict[str, float]] = {}
+    thrusters: Dict[int, Dict[str, Any]] = {}
+    presets: Dict[str, str] = {}
     parameters = RunParameters({AsvSystemId.USV_NAVIGATION: usv_navigation_parameters, AsvSystemId.MOOS_IVP: moos_ivp_parameters})
     link = GzLockstepLink(host, port)
     try:
@@ -281,7 +298,9 @@ def run_gz_custom(
                 dt=dt,
                 parameters=parameters.resolve(software, vessel, trajectories, dt),
             )
-            dynamics = hull_dynamics(vessel, simulation.environment)
+            dynamics = hull_dynamics(vessel, simulation.environment, preset_id=vessel_config.vessel_model_preset)
+            if vessel_config.vessel_model_preset is not None:
+                presets[str(vessel.id)] = vessel_config.vessel_model_preset
             participants[vessel.id], autopilots[vessel.id] = hosting.custom_control(request, AutopilotGains.from_dynamics(dynamics, vessel, control_dt))
             thrusters[vessel.id] = thruster_constants(dynamics)
             models[vessel.id] = agent_name
@@ -310,6 +329,9 @@ def run_gz_custom(
         "repeatability_tier": tier.value if tier is not None else None,
         "environment": resolution.effective_environment(),
         "state_digest": result.state_digest(),
+        "steering_types": {str(vessel_id): thrusters[vessel_id]["steering_type"] for vessel_id in sorted(thrusters)},
     }
+    if presets:
+        run_record["vessel_model_presets"] = presets  # by vessel id, where a vessel's model comes from a preset
     run_record.update(parameters.record())  # usv_navigation and moos_ivp: each vessel's parameters, where a vessel runs one
     return dataclasses.replace(result, run_record=run_record)

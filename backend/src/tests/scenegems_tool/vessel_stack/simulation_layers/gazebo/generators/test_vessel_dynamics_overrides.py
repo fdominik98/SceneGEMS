@@ -1,7 +1,13 @@
 """Loading of the vessel dynamics override files: sections, precedence, and loud failures."""
 
+import dataclasses
+import re
+from pathlib import Path
+from typing import Set
+
 import pytest
 
+from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics import ASSUMPTION_KEYS, VALUE_KEYS, derive_vessel_dynamics
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.generators.vessel_dynamics_overrides import VesselDynamicsOverrides, load_vessel_dynamics_overrides
 from tests.scenegems_tool.vessel_stack.scenarios import make_vessel
 from utils.file_system_utils import VESSEL_DYNAMICS_FOLDER
@@ -15,6 +21,47 @@ def test_the_shipped_folder_loads_and_holds_no_overrides_yet():
     overrides = load_vessel_dynamics_overrides(VESSEL_DYNAMICS_FOLDER)
     assert overrides.by_vessel_type == {}
     assert overrides.by_vessel_id == {}
+
+
+def shipped_header() -> str:
+    """The comment at the head of the shipped override file, which tells its reader the keys."""
+    text = (Path(VESSEL_DYNAMICS_FOLDER) / "vessel_dynamics.yaml").read_text(encoding="utf-8")
+    return "\n".join(line for line in text.splitlines() if line.startswith("#"))
+
+
+def header_section(start: str, end: str) -> Set[str]:
+    """The words of the header between two of its headings."""
+    header = shipped_header()
+    return set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", header[header.index(start) + len(start) : header.index(end)]))
+
+
+def test_the_shipped_header_lists_exactly_the_assumption_keys():
+    words = header_section("# Assumption keys", "# Value keys")
+    assert ASSUMPTION_KEYS <= words, f"missing: {sorted(ASSUMPTION_KEYS - words)}"
+    assert not VALUE_KEYS & words, "a value key among the assumption keys"
+    assert {word for word in words if "_" in word} == ASSUMPTION_KEYS, "every assumption key has an underscore, so any other such word is a key that no longer exists"
+
+
+def test_the_shipped_header_lists_exactly_the_value_keys():
+    words = header_section("# Value keys", "# Example:")
+    assert VALUE_KEYS <= words, f"missing: {sorted(VALUE_KEYS - words)}"
+    assert not ASSUMPTION_KEYS & words, "an assumption key among the value keys"
+    assert {word for word in words if "_" in word} <= VALUE_KEYS, "a key that no longer exists"
+
+
+def test_the_shipped_header_names_no_key_of_the_former_box_hull():
+    assert "collision_" not in shipped_header()
+
+
+def test_the_example_of_the_shipped_header_is_a_valid_override_file(tmp_path):
+    header = shipped_header()
+    example = "\n".join(line[2:] for line in header[header.index("# Example:") :].splitlines()[1:])
+    write(tmp_path, "example.yaml", example)
+    overrides = load_vessel_dynamics_overrides(str(tmp_path))
+    assert overrides.by_vessel_type == {"CargoShip": {"block_coefficient": 0.75}}
+    assert overrides.by_vessel_id == {3: {"max_thrust": 250000.0}}
+    cargo_ship = dataclasses.replace(make_vessel(3, False), type="CargoShip")
+    assert derive_vessel_dynamics(cargo_ship, overrides=overrides.for_vessel(cargo_ship)).max_thrust == 250000.0
 
 
 def test_empty_folder_gives_no_overrides(tmp_path):
