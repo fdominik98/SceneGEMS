@@ -136,9 +136,9 @@ def test_a_kinematic_attended_stack_is_the_stack_of_the_kinematic_job(instances_
 
 def test_mission_planners_port_stays_published_and_is_what_the_job_reports(instances_folder, worker_node, make_job, head_on_trajectories):
     instance, stack = stack_of(worker_node, make_job, head_on_trajectories, setup("ArduPilot Sim", agent_0={"asvSystem": "mission_planner"}))
-    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 5770)}, "by agent id: the service and the container port a ground control station reaches"
+    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 12200)}, "by agent id: the service and the container port a ground control station reaches"
     services = stack.compose["services"]
-    assert services["os_mavproxy"]["ports"] == ["5770"], "Docker assigns the host port"
+    assert services["os_mavproxy"]["ports"] == ["12200"], "Docker assigns the host port"
     assert [key for key, service in services.items() if "ports" in service] == ["os_mavproxy"], "no other port of the stack is published"
     document = project_compose(stack.scope, stack.compose)
     assert "ports" in document["services"][stack.scope.service_key("os_mavproxy")]
@@ -301,9 +301,9 @@ def test_an_external_broker_is_dialled_from_the_stacks_own_network(instances_fol
 
 def test_mission_planner_beside_a_real_vessel_reaches_its_vessel_through_the_arduagent_mavproxy(instances_folder, worker_node, make_job, head_on_trajectories):
     instance, stack = real_stack(worker_node, make_job, head_on_trajectories, real_setup(asvSystem="mission_planner"))
-    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 5770)}
+    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 12200)}
     services = stack.compose["services"]
-    assert services["os_mavproxy"]["ports"] == ["5770"] and "--out=tcpin:0.0.0.0:5770" in services["os_mavproxy"]["command"][-1]
+    assert services["os_mavproxy"]["ports"] == ["12200"] and "--out=tcpin:0.0.0.0:12200" in services["os_mavproxy"]["command"][-1]
     assert [key for key, service in services.items() if "ports" in service] == ["os_mavproxy"]
 
 

@@ -15,8 +15,10 @@ MoosIvpParameters in wire form with the step and the contacts' lengths
 Its report holds the behaviours' life events, when the goal was reached, the steps without a
 decision and the MOOS-IvP commit of the image. Entry point:
 
-    python3 -m scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server --port 11410
+    python3 -m scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server --port 12000 --moosdb-port 12400
 
+--port is where the runner connects, --moosdb-port the first port of the vessel's MOOSDB (the stack gives
+every vessel ports of its own, since the containers of a run may share a network namespace).
 What runs, per run, in the container (HelmProcesses): a MOOSDB, the bridge and pHelmIvP, with a
 mission file and a behaviour file written from the config. MoosIvpNavigator is the navigation
 step around them; the tests run it against a helm of their own, since MOOS-IvP exists only in
@@ -49,6 +51,7 @@ Frame mapping:
   the navigator holds heading and speed for the rest of the run, as USV Navigation does.
 """
 
+import argparse
 import math
 import os
 import shutil
@@ -62,7 +65,10 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Seque
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Message, Session, WireError, serve_component
 
 IMPLEMENTATION = "moos_ivp"
-DEFAULT_PORT = 11410  # contracts/stack_services.ASV_SYSTEM_PORT, which this file cannot import
+# What contracts/stack_services.py gives vessel 0, which this file cannot import; a test keeps them equal. The stack's generator sets both ports per vessel.
+DEFAULT_PORT = 12000
+DEFAULT_MOOSDB_PORT = 12400
+MOOSDB_PORTS_PER_VESSEL = 16  # a server process takes a new MOOSDB port per run, counting up within this many ports from its first
 
 BASE_TIME = 1_000_000_000.0  # MOOS time of the helm's start, the same in every run
 LEAD_IN_S = 2.0  # MOOS time between the helm's start and simulated time 0: the helm decides nothing in its first second
@@ -202,7 +208,8 @@ class HelmProcesses:
     standard input and answers queries with one line: it writes the clock, posts, and waits for mail.
     """
 
-    _next_port = 9000  # every run gets a MOOSDB port of its own, so a run never meets the socket of the one before
+    first_port = DEFAULT_MOOSDB_PORT  # the process's MOOSDB ports start here: --moosdb-port
+    _runs = 0  # every run gets a MOOSDB port of its own, so a run never meets the socket of the one before
 
     def __init__(self) -> None:
         self._folder: Optional[str] = None
@@ -211,9 +218,15 @@ class HelmProcesses:
         self._logs: List[Any] = []
         self._bridge: Optional[subprocess.Popen] = None
 
+    @classmethod
+    def take_port(cls) -> int:
+        """The MOOSDB port of the next run: the process's first port, then the ones after it, round again after MOOSDB_PORTS_PER_VESSEL runs."""
+        port = cls.first_port + cls._runs % MOOSDB_PORTS_PER_VESSEL
+        cls._runs += 1
+        return port
+
     def start(self, mission: Callable[[int], str], behaviours: str) -> None:
-        port = HelmProcesses._next_port
-        HelmProcesses._next_port += 1
+        port = HelmProcesses.take_port()
         self._folder = tempfile.mkdtemp(prefix="moos_ivp_")
         self._clock_path = os.path.join(SHARED_MEMORY_FOLDER if os.path.isdir(SHARED_MEMORY_FOLDER) else self._folder, f"moos_ivp_clock_{os.getpid()}_{port}")
         with open(self._clock_path, "wb") as clock:
@@ -455,7 +468,11 @@ class MoosIvpSession(Session):
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, MoosIvpSession, argv, default_port=DEFAULT_PORT)
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--moosdb-port", type=int, default=DEFAULT_MOOSDB_PORT)
+    arguments, rest = parser.parse_known_args(argv)
+    HelmProcesses.first_port = arguments.moosdb_port
+    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, MoosIvpSession, rest, default_port=DEFAULT_PORT)
 
 
 if __name__ == "__main__":

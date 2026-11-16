@@ -21,7 +21,7 @@ def test_a_custom_vessel_adds_its_controller_container_and_no_file():
     assert artifacts.pending_writes == []
     ((name, service),) = artifacts.services.items()
     assert name == "agent_0_controller"
-    assert service["command"] == ["python", "-m", "scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
+    assert service["command"] == ["python", "-m", "scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
     assert service["networks"] == ["maritime_net"] and "ports" not in service and "volumes" not in service
 
 

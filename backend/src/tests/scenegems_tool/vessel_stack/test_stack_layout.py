@@ -6,12 +6,12 @@ from scenegems_tool.vessel_stack.contracts.docker_stack import DockerAsvSystem, 
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import (
-    ASV_SYSTEM_PORT,
-    CONTROLLER_PORT,
     KINEMATIC_SIM_PORT,
     asv_system_endpoint,
+    asv_system_port,
     asv_system_service_name,
     controller_endpoint,
+    controller_port,
     controller_service_name,
     is_participant_service,
     kinematic_sim_endpoint,
@@ -22,7 +22,7 @@ from scenegems_tool.vessel_stack.hosting import ContainerHosting, InProcessHosti
 from scenegems_tool.vessel_stack.registry.catalog import default_registry, default_resolver
 from scenegems_tool.vessel_stack.simulation_docker_stack import build_simulation_docker_stack_artifacts
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import kinematic_instance
-from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, mqtt_connection, stack_instance
+from tests.scenegems_tool.vessel_stack.scenarios import GEOFENCE, encounter_trajectories, make_vessel, mqtt_connection, stack_instance
 
 SIMULATION = "${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}"
 USV_NAVIGATION = "${USV_NAVIGATION_IMAGE:-scenegems-usv-navigation:latest}"
@@ -65,7 +65,7 @@ class TestEveryLayerHasItsContainer:
             "ts1_asv_system": SIMULATION,
             "kinematic_sim": SIMULATION,
         }
-        assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "11410"]
+        assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "12000", "--moosdb-port", "12400"]
 
     def test_gazebo_with_the_custom_controller(self):
         instance = stack_instance(SimulationLayerId.GAZEBO, [0, 1], asv_system=AsvSystemId.USV_NAVIGATION, control_layer=ControlLayerId.CUSTOM)
@@ -98,12 +98,12 @@ class TestComponentServices:
             assert service["networks"] == ["maritime_net"]
             assert "ports" not in service and "volumes" not in service, "the runner sends a component what it needs when it starts it"
         assert services["kinematic_sim"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_sim_server", "--port", str(KINEMATIC_SIM_PORT)]
-        assert services["ts1_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", str(ASV_SYSTEM_PORT)]
-        assert services["os_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server", "--port", str(ASV_SYSTEM_PORT)]
+        assert services["ts1_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", str(asv_system_port(1))]
+        assert services["os_asv_system"]["command"] == ["python", "-m", "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server", "--port", str(asv_system_port(0))]
 
     def test_the_runner_finds_each_component_by_its_service_name(self):
-        assert asv_system_endpoint("agent_3") == Endpoint(asv_system_service_name("agent_3"), ASV_SYSTEM_PORT) == Endpoint("agent_3_asv_system", 11410)
-        assert controller_endpoint("agent_3") == Endpoint(controller_service_name("agent_3"), CONTROLLER_PORT) == Endpoint("agent_3_controller", 11420)
+        assert asv_system_endpoint("agent_3", 3) == Endpoint(asv_system_service_name("agent_3"), asv_system_port(3)) == Endpoint("agent_3_asv_system", 12003)
+        assert controller_endpoint("agent_3", 3) == Endpoint(controller_service_name("agent_3"), controller_port(3)) == Endpoint("agent_3_controller", 12103)
         assert kinematic_sim_endpoint() == Endpoint("kinematic_sim", 11430)
 
     def test_a_vessel_without_an_agent_connection_is_named_by_its_id(self):
@@ -183,6 +183,19 @@ class TestHosting:
         assert len(hosting._links) == 1
         hosting.close()
         assert hosting._links == []
+
+    def test_container_hosting_reaches_each_vessels_components_on_the_ports_of_that_vessel(self):
+        from scenegems_tool.vessel_stack.asv_system.asv_system_runtime import ParticipantRequest
+
+        hosting = ContainerHosting()
+        hosting._connected = lambda link: link  # the links are made, not connected
+        adapter = default_registry().adapter("custom_controller_waypoint_follower")
+        for vessel_id in (0, 1):
+            request = ParticipantRequest(make_vessel(vessel_id, vessel_id == 0), f"agent_{vessel_id}", AsvSystemId.REPLAY, adapter, TRAJECTORIES, 1.0)
+            participant, controller = hosting.custom_control(request, None)
+            assert controller._client.endpoint == controller_endpoint(f"agent_{vessel_id}", vessel_id) == Endpoint(f"agent_{vessel_id}_controller", controller_port(vessel_id))
+            assert hosting.asv_system(request)._client.endpoint == asv_system_endpoint(f"agent_{vessel_id}", vessel_id)
+        assert Endpoint("agent_1_controller", 12101) == controller_endpoint("agent_1", 1) and Endpoint("agent_1_asv_system", 12001) == asv_system_endpoint("agent_1", 1)
 
     def test_reports_are_collected_from_the_software_that_has_one(self):
         class Reporting:

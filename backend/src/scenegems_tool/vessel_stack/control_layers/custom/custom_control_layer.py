@@ -9,7 +9,7 @@ from concrete_level.models.actor_state import ActorState
 from concrete_level.models.concrete_actors import ConcreteVessel
 from scenegems_tool.vessel_stack.contracts.docker_stack import DockerStackArtifacts, DockerStackRequest
 from scenegems_tool.vessel_stack.contracts.roles import SimulationLayerId
-from scenegems_tool.vessel_stack.contracts.stack_services import CONTROLLER_PORT, component_service, controller_service_name, stack_agent_name
+from scenegems_tool.vessel_stack.contracts.stack_services import component_service, controller_port, controller_service_name, stack_agent_name
 from scenegems_tool.vessel_stack.contracts.vessel_stack_config import VesselConfig
 from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_specs import CUSTOM_CONTROL_LAYER, CUSTOM_CONTROLLER_CONTAINER
 
@@ -18,7 +18,7 @@ class CustomControlLayer:
     spec = CUSTOM_CONTROL_LAYER
 
     def add_vessel(self, artifacts: DockerStackArtifacts, request: DockerStackRequest, vessel_config: VesselConfig, vessel: ConcreteVessel, state: ActorState) -> None:
-        del request, vessel, state  # the runner sends the vessel and its gains when it starts the controller
+        del request, state  # the runner sends the vessel and its gains when it starts the controller
         if vessel_config.stack.simulation_layer != SimulationLayerId.GAZEBO:
             raise ValueError(f"The custom control layer drives Gazebo only, not {vessel_config.stack.simulation_layer.value}")
-        artifacts.services[controller_service_name(stack_agent_name(vessel_config))] = component_service(CUSTOM_CONTROLLER_CONTAINER, CONTROLLER_PORT)
+        artifacts.services[controller_service_name(stack_agent_name(vessel_config))] = component_service(CUSTOM_CONTROLLER_CONTAINER, controller_port(vessel.id))

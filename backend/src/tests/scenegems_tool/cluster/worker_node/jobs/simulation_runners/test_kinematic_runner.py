@@ -86,7 +86,7 @@ def test_in_mode_moos_ivp_the_own_ship_runs_the_moos_ivp_image(instances_folder,
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
     services = stack.compose["services"]
     assert "scenegems-moos-ivp" in services["os_asv_system"]["image"]
-    assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "11410"]
+    assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "12000", "--moosdb-port", "12400"]
     assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
 
 
