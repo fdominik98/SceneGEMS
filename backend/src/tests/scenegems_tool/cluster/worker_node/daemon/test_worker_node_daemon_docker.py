@@ -34,7 +34,7 @@ from scenegems_tool.persistence.clock import utc_now
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
 from tests.scenegems_tool.cluster.worker_node.daemon.conftest import make_job, make_offer
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
-from tests.scenegems_tool.cluster.worker_node.jobs.test_jobs_in_containers import _scene_generation_payload
+from tests.scenegems_tool.cluster.worker_node.jobs.test_pool_jobs_on_kubernetes import _scene_generation_payload
 from tests.scenegems_tool.persistence.artifacts.fake_artifact_records import InMemoryArtifactRecords
 from utils.file_system_utils import REPO_ROOT
 

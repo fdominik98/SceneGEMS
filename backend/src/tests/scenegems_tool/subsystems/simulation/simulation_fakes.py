@@ -27,7 +27,6 @@ def task_context() -> WorkerNodeContext:
         worker_node_id="n1",
         mqtt_connection=MQttConnectionInfo("", "", "broker", "broker", 1883, False, False, topic_root="scenegems"),
         reference_geofence=Geofence(57.7, 11.9, 2000.0),
-        broker_network="scenegems-m1-n1",
     )
 
 

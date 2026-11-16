@@ -37,7 +37,6 @@ from scenegems_tool.cluster.worker_node.launchers.container_environment import g
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, service_name_from_environment
 from scenegems_tool.subsystems.simulation.simulation_types import (
-    BROKER_NETWORK_VARIABLE,
     CONTROL_NODE_VARIABLE,
     OBSERVE_SIGNAL,
     SIMULATION_FRAMES_STREAM,
@@ -72,7 +71,6 @@ def context_from_environment() -> WorkerNodeContext:
         worker_node_id=os.environ[WORKER_NODE_VARIABLE],
         mqtt_connection=MQttConnectionInfo.from_environment(),
         reference_geofence=geofence_from_environment(),
-        broker_network=os.environ.get(BROKER_NETWORK_VARIABLE, "").strip() or None,
         instance_number=worker_node_number(service_name_from_environment(SIMULATION_SERVICE_NAME)),
     )
 

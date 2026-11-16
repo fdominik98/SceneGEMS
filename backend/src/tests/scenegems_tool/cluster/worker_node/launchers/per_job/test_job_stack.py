@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from scenegems_tool.cluster.protocol.messages import LogStream
-from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, InstanceScope
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, WORKER_NODE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
 from scenegems_tool.cluster.worker_node.launchers.per_job import job_stack
@@ -84,10 +84,10 @@ def test_a_stack_in_the_worker_nodes_project_has_unique_service_keys_and_keeps_i
     network = "simulation-subsystem-j7-maritime-net"
     assert document["services"][simulator]["networks"] == {network: {"aliases": ["kinematic-sim"]}}, "the name the runner dials"
     assert document["services"][asv_system]["networks"] == {network: {"aliases": ["vessel-0-asv-system"]}, "scenegems_broker": None}, "no alias on a network other instances share"
-    assert document["services"][asv_system]["labels"] == {"role": "asv", INSTANCE_LABEL: "j7-1"}
+    assert document["services"][asv_system]["labels"] == {"role": "asv", INSTANCE_LABEL: "j7-1", WORKER_NODE_LABEL: "n1"}
     assert all(service["labels"][INSTANCE_LABEL] == "j7-1" for service in document["services"].values())
     assert list(document["networks"]) == [network, "scenegems_broker"], "compose tells a project's networks apart by their keys too"
-    assert document["networks"][network] == {"driver": "bridge", "name": "scenegems-m1-n1-simulation-subsystem-j7-maritime-net", "labels": {INSTANCE_LABEL: "j7-1"}}
+    assert document["networks"][network] == {"driver": "bridge", "name": "scenegems-m1-n1-simulation-subsystem-j7-maritime-net", "labels": {INSTANCE_LABEL: "j7-1", WORKER_NODE_LABEL: "n1"}}
     assert document["networks"]["scenegems_broker"] == {"external": True, "name": "scenegems-m1-n1"}, "the worker node's network stays as it is"
     assert document["volumes"] == {"runtime": {"external": True}}
     assert list(stack.compose["services"]) == [RUNNER_SERVICE, "kinematic-sim", "vessel-0-asv-system"], "the stack itself keeps its own names"

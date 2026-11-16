@@ -1,16 +1,14 @@
 import pytest
 
-from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
+from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 
 
 @pytest.fixture
-def no_docker(monkeypatch):
-    """Build launchers without starting containers: the startup thread does nothing."""
-    monkeypatch.setattr(PooledService, "_run_container_lifecycle_startup", lambda self, compose: None)
-    monkeypatch.delenv("SCENEGEMS_DOCKER_NETWORK", raising=False)
-    for variable in ("SCENE_GENERATION_IMAGE", "TRAJECTORY_GENERATION_IMAGE", "MONITORING_IMAGE", "SIMULATION_IMAGE"):
+def release_images(monkeypatch):
+    """The pools run the release's images: no image override and no image tag from the test's environment."""
+    for variable in [*IMAGE_ENVIRONMENT_VARIABLES.values(), "SITL_IMAGE", "GAZEBO_IMAGE", "SCENEGEMS_IMAGE_TAG"]:
         monkeypatch.delenv(variable, raising=False)
 
 

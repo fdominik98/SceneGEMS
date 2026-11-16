@@ -131,7 +131,7 @@ def build_vessel_job_stack(
     # The cluster's broker is reached on the network the worker node's pooled services reach it on
     on_cluster_broker = [RUNNER_SERVICE, *arduagent_services(instance)] if on_broker and mqtt_connection is None else [RUNNER_SERVICE] if monitored else []
     if on_cluster_broker:
-        networks.update(scenegems_broker_network_definition(worker_node.broker_network))
+        networks.update(scenegems_broker_network_definition())
         for name in on_cluster_broker:
             attach_broker_network_to_service(services[name])
     published = [service for service, _ in ground_control_ports(instance).values()] if attended else []

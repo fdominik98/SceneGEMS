@@ -130,6 +130,9 @@ def test_the_worker_node_reports_its_machine_from_the_machine_name():
     values.update({"SCENEGEMS_WORKER_NODE_NAME": "worker-1", "SCENEGEMS_WORKER_NODE_STATE_DIR": "/state"})
     values.update({key: worker_node["parameters"][key]["default"] for key in ("SCENEGEMS_WORKER_NODE_SLOTS", "SCENEGEMS_WORKER_NODE_COMPONENTS")})
     values["SCENEGEMS_WORKER_NODE_MACHINE"] = worker_node["env"]["SCENEGEMS_WORKER_NODE_MACHINE"].replace("{machine.name}", "lab-pc-3")
+    # The place in the cluster and the release manifest come from the chart's worker node template, not from the role's env
+    values.update({"SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems", "SCENEGEMS_KUBERNETES_NODE": "lab-pc-3", "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/worker-1/runtime"})
+    values["SCENEGEMS_RELEASE_MANIFEST"] = "/etc/scenegems/release.json"
     assert WorkerNodeConfiguration.from_values(values).machine == "lab-pc-3"
 
 

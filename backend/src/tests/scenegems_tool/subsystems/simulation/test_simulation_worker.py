@@ -142,7 +142,6 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
     for variable, value in {
         "SCENEGEMS_CONTROL_NODE_ID": "lab",
         "SCENEGEMS_WORKER_NODE_ID": "bench",
-        "SCENEGEMS_DOCKER_NETWORK": "scenegems-lab-bench",
         "MQTT_BROKER": "broker.lab",
         "MQTT_PORT": "1883",
         "MQTT_TOPIC_ROOT": "scenegems",
@@ -152,7 +151,8 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
     }.items():
         monkeypatch.setenv(variable, value)
     context = context_from_environment()
-    assert (context.control_node_id, context.worker_node_id, context.broker_network) == ("lab", "bench", "scenegems-lab-bench")
+    assert (context.control_node_id, context.worker_node_id) == ("lab", "bench")
+    assert context.cluster is None and context.kubernetes is None, "the subsystem names its worker node's pools; it starts none"
     assert context.instance_number == 1, "a subsystem started on its own"
     monkeypatch.setenv("MQTT_SERVICE_NAME", "simulation-subsystem-3")
     numbered = context_from_environment()
@@ -160,8 +160,6 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
 
     assert numbered.instance_number == 3 and numbered.pools.service_name(Subsystem.MONITORING) == "monitoring-subsystem-3", "the worker node's other subsystems by its number"
     assert (context.mqtt_connection.agent_broker, context.mqtt_connection.topic_root, context.reference_geofence.radius_meters) == ("broker.lab", "scenegems", 2000.0)
-    monkeypatch.setenv("SCENEGEMS_DOCKER_NETWORK", " ")
-    assert context_from_environment().broker_network is None, "the default network of the stack builder"
 
 
 def test_the_pools_worker_runs_its_task_in_the_containers_context(monkeypatch):

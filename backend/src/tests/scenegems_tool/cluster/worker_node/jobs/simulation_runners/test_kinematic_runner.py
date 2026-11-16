@@ -51,12 +51,12 @@ def test_the_stack_is_the_simulator_an_asv_system_container_per_vessel_and_the_r
     assert "volumes" not in stack.compose, "the runner sends every container what it needs"
 
 
-def test_the_runner_of_a_judged_run_is_told_the_monitoring_subsystem_and_reaches_the_clusters_broker(instances_folder, worker_node, make_job, head_on_trajectories):
+def test_the_runner_of_a_judged_run_is_told_the_monitoring_subsystem_and_reaches_the_clusters_broker(instances_folder, worker_node, make_job, head_on_trajectories, monkeypatch):
     """Its scenes are judged by the worker node's monitoring pool; the simulator and the ASV systems still reach nothing but the stack."""
     from scenegems_tool.subsystems.monitoring.monitoring_types import monitoring_pool_from_environment
 
     worker_node.set_instance_number(3)
-    worker_node.broker_network = "scenegems-m1-n1"
+    monkeypatch.setenv("SCENEGEMS_DOCKER_NETWORK", "scenegems-m1-n1")  # the compose stack's broker network, until a run is a pod
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, monitor="live")
     services = stack.compose["services"]
     runner = services[RUNNER_SERVICE]
