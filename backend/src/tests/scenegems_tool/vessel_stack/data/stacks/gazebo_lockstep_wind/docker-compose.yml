@@ -38,7 +38,7 @@ services:
     - -m
     - scenegems_tool.vessel_stack.asv_system.replay.replay_server
     - --port
-    - '11410'
+    - '12000'
     environment:
       PYTHONUNBUFFERED: '1'
     networks:
@@ -82,7 +82,7 @@ services:
     - -m
     - scenegems_tool.vessel_stack.asv_system.replay.replay_server
     - --port
-    - '11410'
+    - '12001'
     environment:
       PYTHONUNBUFFERED: '1'
     networks:

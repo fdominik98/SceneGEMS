@@ -10,7 +10,7 @@ the start message; the config is UsvNavigationParameters in wire form
 
 Its report holds the automaton's transitions and when the goal was reached. Entry point:
 
-    python -m scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server --port 11410
+    python -m scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server --port 12000
 
 UsvNavigator is the navigation step itself. The in-process participant
 (usv_navigation_participant.py) runs the same class, so a run gives the same commands whether USV
@@ -52,7 +52,7 @@ import numpy as np
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Message, Session, WireError, serve_component
 
 IMPLEMENTATION = "usv_navigation"
-DEFAULT_PORT = 11410  # contracts/stack_services.ASV_SYSTEM_PORT, which this file cannot import
+DEFAULT_PORT = 12000  # contracts/stack_services.asv_system_port(0), which this file cannot import; the stack's generator gives every vessel its own --port
 
 State = Tuple[float, float, float, float]  # x, y, speed, heading
 

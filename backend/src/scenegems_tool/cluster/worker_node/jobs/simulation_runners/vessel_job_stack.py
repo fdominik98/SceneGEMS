@@ -41,7 +41,8 @@ if TYPE_CHECKING:
 
 def ground_control_ports(instance: "SimulationInstanceConfig") -> Dict[str, Tuple[str, int]]:
     """By agent id, the MAVProxy service of every Mission Planner vessel and the container port its ground control station connects to."""
-    from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT, MISSION_PLANNER_GCS_PORT, MISSION_PLANNER_MAVLINK_PORT
+    from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import MISSION_PLANNER_GCS_PORT, MISSION_PLANNER_MAVLINK_PORT
+    from scenegems_tool.vessel_stack.contracts.stack_services import gcs_container_port
     from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import gcs_mavproxy_service_name
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 
@@ -52,7 +53,7 @@ def ground_control_ports(instance: "SimulationInstanceConfig") -> Dict[str, Tupl
     for agent_id, vessel in instance.simulated_vessels.items():
         adapter = resolver.resolve(vessel.stack, vessel.adapter_ids).asv_adapter
         if adapter is not None and adapter.id in ground_station_adapters:
-            ports[agent_id] = (gcs_mavproxy_service_name(vessel.require_connection().agent_name), GCS_CONTAINER_PORT)
+            ports[agent_id] = (gcs_mavproxy_service_name(vessel.require_connection().agent_name), gcs_container_port(int(agent_id)))
     return ports
 
 

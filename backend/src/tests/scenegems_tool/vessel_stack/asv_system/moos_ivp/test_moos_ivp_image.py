@@ -17,7 +17,7 @@ import pytest
 from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_specs import MOOS_IVP_CONTAINER
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import Endpoint
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId
-from scenegems_tool.vessel_stack.contracts.stack_services import ASV_SYSTEM_PORT
+from scenegems_tool.vessel_stack.contracts.stack_services import asv_system_port
 from scenegems_tool.vessel_stack.hosting import ContainerHosting
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import KinematicInstanceRun, kinematic_instance, run_kinematic_instance
 from tests.scenegems_tool.vessel_stack.loopback_stack import loopback_endpoints
@@ -36,13 +36,13 @@ def pinned_commit() -> str:
 
 @pytest.fixture(scope="module")
 def helm_container() -> Iterator[Endpoint]:
-    """One MOOS-IvP container, as a vessel's ASV system service of a stack is, with its port on the loopback interface."""
-    started = subprocess.run(["docker", "run", "-d", "--rm", "-p", f"127.0.0.1::{ASV_SYSTEM_PORT}", MOOS_IVP_CONTAINER.default_image], capture_output=True, text=True)
+    """One MOOS-IvP container, as the own ship's ASV system service of a stack is (its default ports are vessel 0's), with its port on the loopback interface."""
+    started = subprocess.run(["docker", "run", "-d", "--rm", "-p", f"127.0.0.1::{asv_system_port(0)}", MOOS_IVP_CONTAINER.default_image], capture_output=True, text=True)
     if started.returncode != 0:
         pytest.fail(f"could not start {MOOS_IVP_CONTAINER.default_image} (build it with ./build.sh --simulation): {started.stderr.strip()}")
     container = started.stdout.strip()
     try:
-        published = subprocess.run(["docker", "port", container, f"{ASV_SYSTEM_PORT}/tcp"], capture_output=True, text=True, check=True).stdout.splitlines()[0]
+        published = subprocess.run(["docker", "port", container, f"{asv_system_port(0)}/tcp"], capture_output=True, text=True, check=True).stdout.splitlines()[0]
         yield Endpoint("127.0.0.1", int(published.rsplit(":", 1)[1]))
     finally:
         subprocess.run(["docker", "rm", "-f", container], capture_output=True, check=False)

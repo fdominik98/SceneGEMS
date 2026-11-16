@@ -113,7 +113,7 @@ def test_mavproxy_and_arduagent_start_again_inside_their_containers(arduagent_st
 
 def test_mavproxy_has_a_tcp_endpoint_for_a_ground_control_station(arduagent_stack):
     mavproxy = arduagent_stack.compose["services"]["agent_0_mavproxy"]
-    assert "--out=tcpin:0.0.0.0:5770" in mavproxy["command"][-1] and mavproxy["ports"] == ["5770"], "on a host port Docker assigns"
+    assert "--out=tcpin:0.0.0.0:12200" in mavproxy["command"][-1] and mavproxy["ports"] == ["12200"], "on a host port Docker assigns"
 
 
 def test_an_arduagent_takes_the_positions_of_its_instances_other_vessels_only(arduagent_stack):
@@ -155,8 +155,9 @@ class TestMissionPlannerGroundStation:
         assert "--master=tcp:agent_1:5772" in services["agent_1_mavproxy"]["command"][-1]
 
     def test_the_ground_station_endpoint_is_published_on_a_port_docker_assigns(self, services):
-        assert "--out=tcpin:0.0.0.0:5770" in services["agent_0_mavproxy"]["command"][-1]
-        assert services["agent_0_mavproxy"]["ports"] == ["5770"]
+        assert "--out=tcpin:0.0.0.0:12200" in services["agent_0_mavproxy"]["command"][-1]
+        assert services["agent_0_mavproxy"]["ports"] == ["12200"]
+        assert "--out=tcpin:0.0.0.0:12201" in services["agent_1_mavproxy"]["command"][-1], "every vessel has a ground control port of its own"
 
     def test_mavproxy_restarts_inside_its_container_so_the_published_port_stays(self, services):
         """Docker gives a restarted container a new host port; MAVProxy exits until SITL has booted."""

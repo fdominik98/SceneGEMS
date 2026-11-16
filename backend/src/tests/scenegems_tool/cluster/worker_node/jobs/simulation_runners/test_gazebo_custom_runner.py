@@ -65,8 +65,8 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
         assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
-    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
-    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
+    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
+    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "12000"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)
