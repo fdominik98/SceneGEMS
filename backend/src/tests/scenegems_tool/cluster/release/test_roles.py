@@ -2,10 +2,26 @@ import re
 
 from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SIMULATION_IMAGE, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.release.roles import NAME_PATTERN, POSTGRES_IMAGE, WORKER_NODE_IMAGE, component_item_images, role_images, scenegems_roles, slot_item_images
+from scenegems_tool.cluster.release.roles import (
+    NAME_PATTERN,
+    PARAMETER_KEY,
+    POSTGRES_IMAGE,
+    VALUE_TYPES,
+    VALUES_PLACEHOLDERS,
+    WORKER_NODE_IMAGE,
+    WORKER_NODE_IMAGES_VALUES_PATH,
+    component_item_images,
+    role_images,
+    scenegems_roles,
+    slot_item_images,
+    worker_node_image_variables,
+)
+from tests.scenegems_tool.cluster.release.chart_values_builder import placeholders
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
-FIELDS = {"description", "count", "stack", "project", "images", "env", "parameters", "secrets", "setup", "outputs", "ready"}
+COMPOSE_FIELDS = {"stack", "project", "env", "secrets", "setup", "outputs"}
+KUBERNETES_FIELDS = {"values", "image_values", "forwards"}
+FIELDS = {"description", "count", "images", "parameters", "ready"} | COMPOSE_FIELDS | KUBERNETES_FIELDS
 PLACEHOLDERS = {"cluster", "name", "machine.vpn_ip", "machine.name", "release.revision", "dependent.name"}
 # {<role>.vpn_ip} and {<role>.<parameter>}: the machine of another role of the cluster
 CONTROL_NODE_PLACEHOLDERS = {"control-node.vpn_ip"} | {f"control-node.{key}" for key in scenegems_roles()["control-node"]["parameters"]}
@@ -154,3 +170,87 @@ def test_the_control_node_role_names_its_one_compose_file():
     control_node = scenegems_roles()["control-node"]
     assert control_node["env"]["COMPOSE_FILE"] == "docker-compose.yml"
     assert "COMPOSE_FILE" not in control_node["parameters"] and "COMPOSE_PATH_SEPARATOR" not in control_node["env"]
+
+
+def _parameter_values(template):
+    """Every $parameter object of a values entry."""
+    if isinstance(template, dict):
+        if PARAMETER_KEY in template:
+            yield template
+        else:
+            for value in template.values():
+                yield from _parameter_values(value)
+    elif isinstance(template, list):
+        for item in template:
+            yield from _parameter_values(item)
+
+
+def _item_images(role):
+    return {image for parameter in role["parameters"].values() for images in parameter.get("items", {}).get("images", {}).values() for image in images}
+
+
+def test_values_text_and_ready_names_use_only_the_values_placeholders():
+    for name, role in scenegems_roles().items():
+        texts = [role["values"]["entry"], role["ready"]["deployments"], role["ready"].get("stateful_sets", [])]
+        assert set(placeholders(texts)) <= set(VALUES_PLACEHOLDERS), name
+        assert role["values"]["path"] and "{" not in role["values"]["path"]
+
+
+def test_every_parameter_a_values_entry_names_is_a_parameter_of_its_role():
+    for name, role in scenegems_roles().items():
+        for value in _parameter_values(role["values"]["entry"]):
+            assert value[PARAMETER_KEY] in role["parameters"], name
+            assert set(value) <= {PARAMETER_KEY, "type", "split", "pair"} and value.get("type", "text") in VALUE_TYPES
+            assert "pair" not in value or "split" in value
+            items = role["parameters"][value[PARAMETER_KEY]].get("items")
+            if items:
+                assert (value.get("split"), value.get("pair")) == (items["separator"], items.get("key_separator")), "a list parameter splits as its items do"
+
+
+def test_every_image_of_a_role_and_its_items_takes_a_value():
+    roles = scenegems_roles("abc")
+    for name, role in roles.items():
+        assert set(role["image_values"]) == set(role["images"]) | _item_images(role), name
+    paths = {}
+    for role in roles.values():
+        for image, path in role["image_values"].items():
+            assert paths.setdefault(path, image) == image, f"{path} takes one image"
+    assert set().union(*(role["image_values"] for role in roles.values())) == set(role_images(roles))
+
+
+def test_the_worker_node_images_go_to_the_variables_the_code_reads_them_from():
+    from scenegems_tool.cluster.worker_node.launchers.pooled.simulation_pool import image_overrides
+    from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES
+
+    variables = worker_node_image_variables()
+    assert set(IMAGE_ENVIRONMENT_VARIABLES.values()) <= set(variables.values())
+    assert variables["scenegems-ardupilot-sitl"] == "SITL_IMAGE" and variables["scenegems-gazebo-harmonic"] == "GAZEBO_IMAGE"
+    assert image_overrides({variable: "x" for variable in variables.values()}) == {variable: "x" for variable in variables.values()}, "the daemon passes every one to the simulation pool"
+    image_values = scenegems_roles("abc")["worker-node"]["image_values"]
+    assert image_values[WORKER_NODE_IMAGE.replace(":latest", ":abc")] == "images.workerNode"
+    assert image_values["scenegems-ardupilot-sitl:abc"] == f"{WORKER_NODE_IMAGES_VALUES_PATH}.SITL_IMAGE"
+
+
+def test_ready_names_the_workloads_of_each_role():
+    roles = scenegems_roles()
+    for name, role in roles.items():
+        ready = role["ready"]
+        assert set(ready) <= {"running", "healthy", "deployments", "stateful_sets"} and ready["deployments"], name
+        names = ready["deployments"] + ready.get("stateful_sets", [])
+        assert all(isinstance(workload, str) and workload for workload in names) and len(names) == len(set(names))
+        rendered = [workload.replace("{name}", "worker-1") for workload in names]
+        assert all(re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", workload) for workload in rendered), rendered
+        if role["count"] == "many":
+            assert all("{name}" in workload for workload in names), "each member has workloads of its own"
+    assert roles["control-node"]["ready"]["stateful_sets"] == ["postgres"] and roles["worker-node"]["ready"]["deployments"] == ["worker-node-{name}"]
+
+
+def test_the_operator_api_is_the_one_forward():
+    from scenegems_tool.cluster.control_node.settings import ControlNodeSettings
+
+    roles = scenegems_roles()
+    assert roles["worker-node"]["forwards"] == []
+    (forward,) = roles["control-node"]["forwards"]
+    assert set(forward) == {"name", "description", "service", "port", "local_port"} and forward["description"]
+    assert forward["port"] == forward["local_port"] == ControlNodeSettings.operator.port == 5174
+    assert forward["service"] in roles["control-node"]["ready"]["deployments"], "the service of the control-node-api Deployment"
