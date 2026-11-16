@@ -31,7 +31,7 @@ def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, hea
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
     vessel_services = [key for key in services if key.startswith(("os", "ts"))]
-    assert sorted(vessel_services) == ["os", "os_asv_system", "ts1", "ts1_asv_system"], "SITL and a replay container per vessel"
+    assert sorted(vessel_services) == ["os", "os-asv-system", "ts1", "ts1-asv-system"], "SITL and a replay container per vessel"
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "ports" not in service and "restart" not in service
@@ -83,11 +83,11 @@ def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_fold
     """Every vessel has a SITL service and its ASV system container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"os", "ts1", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"os", "ts1", "os-asv-system", "ts1-asv-system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
     assert services["os"]["image"] == services["ts1"]["image"]
-    assert "scenegems-usv-navigation" in services["os_asv_system"]["image"]
-    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
+    assert "scenegems-usv-navigation" in services["os-asv-system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["ts1-asv-system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):

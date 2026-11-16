@@ -37,7 +37,7 @@ def stack_for(worker_node, make_job, head_on_trajectories, job_id="sim-1", **fie
 def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="usv_navigation")
     services = stack.compose["services"]
-    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
+    own_ship, target = services["os-asv-system"], services["ts1-asv-system"]
     assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server"
     assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
@@ -45,9 +45,9 @@ def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, mak
 def test_moos_ivp_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
     services = stack.compose["services"]
-    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
+    own_ship, target = services["os-asv-system"], services["ts1-asv-system"]
     assert "scenegems-moos-ivp" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server"
-    assert "scenegems-simulation-subsystem" in target["image"] and "os_controller" in services, "the other vessel replays, and the helm's heading and speed go to the own ship's controller"
+    assert "scenegems-simulation-subsystem" in target["image"] and "os-controller" in services, "the other vessel replays, and the helm's heading and speed go to the own ship's controller"
 
 
 def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -61,12 +61,12 @@ def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_an
     job, stack = stack_for(worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = {f"{vessel}_{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv_system")}
+    vessel_services = {f"{vessel}-{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv-system")}
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
         assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
-    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
-    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "12000"]
+    assert services["os-controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
+    assert services["os-asv-system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "12000"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)

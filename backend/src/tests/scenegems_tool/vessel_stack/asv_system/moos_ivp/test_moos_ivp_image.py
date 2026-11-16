@@ -52,7 +52,7 @@ def run_encounter(helm: Endpoint, name: str, timespan: int) -> KinematicInstance
     """The own ship on the container's helm against the encounter's replaying target."""
     trajectories = encounter_trajectories(name, timespan)
     with loopback_endpoints(kinematic_instance(trajectories)) as endpoints:  # the simulator and the target's replay
-        endpoints["os_asv_system"] = helm
+        endpoints["os-asv-system"] = helm
         return run_kinematic_instance(trajectories, kinematic_instance(trajectories, {0: AsvSystemId.MOOS_IVP}), hosting=ContainerHosting(endpoints, connect_timeout_s=60.0))
 
 

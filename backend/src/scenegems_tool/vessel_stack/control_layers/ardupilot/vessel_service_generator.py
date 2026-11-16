@@ -51,8 +51,8 @@ def generate_vessel_service(
     that port is published (a job keeps it for a Mission Planner vessel, on a host port Docker assigns).
     """
     mqtt_connection = mqtt_client.mqtt_connection
-    mavproxy = f"{mqtt_client.name}_mavproxy"
-    arduagent = f"{mqtt_client.name}_arduagent"
+    mavproxy = gcs_mavproxy_service_name(mqtt_client.name)
+    arduagent = arduagent_service_name(mqtt_client.name)
     ardupilot = mqtt_client.name
 
     reference_geofence = mqtt_client.reference_geofence
@@ -168,7 +168,13 @@ def generate_vessel_service(
 
 
 def gcs_mavproxy_service_name(agent_name: str) -> str:
-    return f"{agent_name}_mavproxy"
+    """The MAVProxy service of a vessel: a host name on the stack's network, so an RFC 1123 name."""
+    return f"{agent_name}-mavproxy"
+
+
+def arduagent_service_name(agent_name: str) -> str:
+    """The ArduAgent service of a vessel, named as its MAVProxy is."""
+    return f"{agent_name}-arduagent"
 
 
 def generate_gcs_mavproxy_service(agent_name: str, vessel_id: int) -> dict:
