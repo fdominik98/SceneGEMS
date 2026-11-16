@@ -20,7 +20,7 @@ def test_a_custom_vessel_adds_its_controller_container_and_no_file():
     CustomControlLayer().add_vessel(artifacts, None, instance.vessels["0"], vessel, trajectories.initial_scene[vessel])
     assert artifacts.pending_writes == []
     ((name, service),) = artifacts.services.items()
-    assert name == "agent_0_controller"
+    assert name == "agent_0-controller"
     assert service["command"] == ["python", "-m", "scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
     assert service["networks"] == ["maritime_net"] and "ports" not in service and "volumes" not in service
 

@@ -60,6 +60,7 @@ def ground_control_ports(instance: "SimulationInstanceConfig") -> Dict[str, Tupl
 def arduagent_services(instance: "SimulationInstanceConfig") -> Tuple[str, ...]:
     """The MAVProxy and ArduAgent services of the simulated vessels ArduAgent drives: the stack's containers that talk to the broker."""
     from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS
+    from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import arduagent_service_name, gcs_mavproxy_service_name
     from scenegems_tool.vessel_stack.registry.catalog import default_resolver
 
     resolver = default_resolver()
@@ -68,7 +69,7 @@ def arduagent_services(instance: "SimulationInstanceConfig") -> Tuple[str, ...]:
         adapter = resolver.resolve(vessel.stack, vessel.adapter_ids).asv_adapter
         if adapter is not None and adapter.id in ARDUAGENT_ADAPTER_IDS:
             name = vessel.require_connection().agent_name
-            services.extend((f"{name}_mavproxy", f"{name}_arduagent"))
+            services.extend((gcs_mavproxy_service_name(name), arduagent_service_name(name)))
     return tuple(services)
 
 

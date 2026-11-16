@@ -29,7 +29,7 @@ services:
     - host.docker.internal:host-gateway
     networks:
     - maritime_net
-  agent_0_mavproxy:
+  agent_0-mavproxy:
     image: ${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}
     tty: true
     stdin_open: true
@@ -49,13 +49,13 @@ services:
     - MQTT_PASSWORD=password
     - FCS_SERIAL=/dev/serial0
     - BAUD_RATE=57600
-    - CONNECTION_STRING=tcp:agent_0_mavproxy:12300
+    - CONNECTION_STRING=tcp:agent_0-mavproxy:12300
     - SIM_PORT=5760
     - SPEEDUP=1
     - VEHICLE=Rover
     - MODEL=motorboat-skid
     - VEHICLE_PARAMS=motorboat-skid
-    - MAVPROXY=tcpin:agent_0_mavproxy:12300
+    - MAVPROXY=tcpin:agent_0-mavproxy:12300
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position
     networks:
     - maritime_net
@@ -64,11 +64,11 @@ services:
     command:
     - sh
     - -c
-    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_0:5760 --out=tcpin:agent_0_mavproxy:12300 --out=tcpin:0.0.0.0:12200; sleep 2; done
-  agent_0_arduagent:
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_0:5760 --out=tcpin:agent_0-mavproxy:12300 --out=tcpin:0.0.0.0:12200; sleep 2; done
+  agent_0-arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
-    - agent_0_mavproxy
+    - agent_0-mavproxy
     restart: unless-stopped
     environment: *id001
     networks:
@@ -107,7 +107,7 @@ services:
     - host.docker.internal:host-gateway
     networks:
     - maritime_net
-  agent_1_mavproxy:
+  agent_1-mavproxy:
     image: ${MAVPROXY_IMAGE:-scenegems-mavproxy:latest}
     tty: true
     stdin_open: true
@@ -127,13 +127,13 @@ services:
     - MQTT_PASSWORD=password
     - FCS_SERIAL=/dev/serial0
     - BAUD_RATE=57600
-    - CONNECTION_STRING=tcp:agent_1_mavproxy:12301
+    - CONNECTION_STRING=tcp:agent_1-mavproxy:12301
     - SIM_PORT=5770
     - SPEEDUP=1
     - VEHICLE=Rover
     - MODEL=motorboat-skid
     - VEHICLE_PARAMS=motorboat-skid
-    - MAVPROXY=tcpin:agent_1_mavproxy:12301
+    - MAVPROXY=tcpin:agent_1-mavproxy:12301
     - OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position
     networks:
     - maritime_net
@@ -142,11 +142,11 @@ services:
     command:
     - sh
     - -c
-    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_1:5770 --out=tcpin:agent_1_mavproxy:12301 --out=tcpin:0.0.0.0:12201; sleep 2; done
-  agent_1_arduagent:
+    - while true; do python3 -m MAVProxy.mavproxy --non-interactive --default-modules=link,log,signing,wp,rally,fence,ftp,param,relay,tuneopt,arm,mode,calibration,rc,auxopt,misc,cmdlong,battery,output,layout --master=tcp:agent_1:5770 --out=tcpin:agent_1-mavproxy:12301 --out=tcpin:0.0.0.0:12201; sleep 2; done
+  agent_1-arduagent:
     image: ${ARDUAGENT_IMAGE:-scenegems-arduagent:latest}
     depends_on:
-    - agent_1_mavproxy
+    - agent_1-mavproxy
     restart: unless-stopped
     environment: *id002
     networks:

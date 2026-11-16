@@ -65,9 +65,10 @@ FOREIGN_PORT_RANGES = {
     "gazebo_sitl_json": PortRange(9000, 10, 10, "udp"),  # the ArduPilot plugin of Gazebo (9002) and SITL's JSON backend (9003, IRLock 9005)
 }
 FIXED_PORTS = (KINEMATIC_SIM_PORT, GZ_ACTUATOR_PORT)  # TCP
-KINEMATIC_SIM_SERVICE = "kinematic_sim"
-_ASV_SYSTEM_SUFFIX = "_asv_system"  # after the agent's name, as its _mavproxy and _arduagent services are named
-_CONTROLLER_SUFFIX = "_controller"
+# The names of services are host names on the stack's network (and in a pod, hostAliases), so they are RFC 1123 names: lowercase letters, digits and hyphens.
+KINEMATIC_SIM_SERVICE = "kinematic-sim"
+_ASV_SYSTEM_SUFFIX = "-asv-system"  # after the agent's name, as its -mavproxy and -arduagent services are named
+_CONTROLLER_SUFFIX = "-controller"
 
 
 def backend_component_container(server_module: str) -> ContainerSpec:

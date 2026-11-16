@@ -70,9 +70,9 @@ def test_a_stack_in_the_worker_nodes_project_has_unique_service_keys_and_keeps_i
     stack = JobStack(
         SCOPE,
         {
-            RUNNER_SERVICE: runner_service("image", networks=["maritime_net"], depends_on=["kinematic_sim", "vessel_0_asv_system"]),
-            "kinematic_sim": {"image": "sim", "networks": ["maritime_net"]},
-            "vessel_0_asv_system": {"image": "asv", "networks": ["maritime_net", "scenegems_broker"], "labels": ["role=asv"]},
+            RUNNER_SERVICE: runner_service("image", networks=["maritime_net"], depends_on=["kinematic-sim", "vessel-0-asv-system"]),
+            "kinematic-sim": {"image": "sim", "networks": ["maritime_net"]},
+            "vessel-0-asv-system": {"image": "asv", "networks": ["maritime_net", "scenegems_broker"], "labels": ["role=asv"]},
         },
         networks={"maritime_net": {"driver": "bridge"}, "scenegems_broker": {"external": True, "name": "scenegems-m1-n1"}},
         volumes={"runtime": {"external": True}},
@@ -82,15 +82,15 @@ def test_a_stack_in_the_worker_nodes_project_has_unique_service_keys_and_keeps_i
     assert list(document["services"]) == [runner, simulator, asv_system], "compose tells a project's containers apart by these keys"
     assert document["services"][runner]["depends_on"] == [simulator, asv_system]
     network = "simulation-subsystem-j7-maritime-net"
-    assert document["services"][simulator]["networks"] == {network: {"aliases": ["kinematic_sim"]}}, "the name the runner dials"
-    assert document["services"][asv_system]["networks"] == {network: {"aliases": ["vessel_0_asv_system"]}, "scenegems_broker": None}, "no alias on a network other instances share"
+    assert document["services"][simulator]["networks"] == {network: {"aliases": ["kinematic-sim"]}}, "the name the runner dials"
+    assert document["services"][asv_system]["networks"] == {network: {"aliases": ["vessel-0-asv-system"]}, "scenegems_broker": None}, "no alias on a network other instances share"
     assert document["services"][asv_system]["labels"] == {"role": "asv", INSTANCE_LABEL: "j7-1"}
     assert all(service["labels"][INSTANCE_LABEL] == "j7-1" for service in document["services"].values())
     assert list(document["networks"]) == [network, "scenegems_broker"], "compose tells a project's networks apart by their keys too"
     assert document["networks"][network] == {"driver": "bridge", "name": "scenegems-m1-n1-simulation-subsystem-j7-maritime-net", "labels": {INSTANCE_LABEL: "j7-1"}}
     assert document["networks"]["scenegems_broker"] == {"external": True, "name": "scenegems-m1-n1"}, "the worker node's network stays as it is"
     assert document["volumes"] == {"runtime": {"external": True}}
-    assert list(stack.compose["services"]) == [RUNNER_SERVICE, "kinematic_sim", "vessel_0_asv_system"], "the stack itself keeps its own names"
+    assert list(stack.compose["services"]) == [RUNNER_SERVICE, "kinematic-sim", "vessel-0-asv-system"], "the stack itself keeps its own names"
 
 
 def test_a_runner_without_a_network_gets_only_its_key_and_label():
@@ -231,16 +231,16 @@ def _wait_until(condition, timeout_s: float = 5.0) -> None:
 
 
 def test_only_the_named_services_keep_their_published_ports():
-    services = scope_services(SCOPE, {"os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}, "os": {"image": "sitl", "ports": ["5760:5760"]}}, published=["os_mavproxy"])
-    assert services["os_mavproxy"]["ports"] == ["5770"] and "ports" not in services["os"]
-    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os_mavproxy"])
-    assert stack.compose["services"]["os_mavproxy"]["ports"] == ["5770"]
+    services = scope_services(SCOPE, {"os-mavproxy": {"image": "mavproxy", "ports": ["5770"]}, "os": {"image": "sitl", "ports": ["5760:5760"]}}, published=["os-mavproxy"])
+    assert services["os-mavproxy"]["ports"] == ["5770"] and "ports" not in services["os"]
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os-mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os-mavproxy"])
+    assert stack.compose["services"]["os-mavproxy"]["ports"] == ["5770"]
 
 
 def test_the_ports_docker_assigned_go_into_every_status_detail(monkeypatch):
     from scenegems_tool.cluster.worker_node.job_report import StatusDetailReport
 
-    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os_mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os_mavproxy"])
+    stack = JobStack(SCOPE, {RUNNER_SERVICE: runner_service("image"), "os-mavproxy": {"image": "mavproxy", "ports": ["5770"]}}, published=["os-mavproxy"])
     asked = []
     answers = iter([None, 49153])  # not assigned yet, then assigned
 
@@ -253,7 +253,7 @@ def test_the_ports_docker_assigned_go_into_every_status_detail(monkeypatch):
     inner = RecordingDetailReport()
     report = StatusDetailReport(inner)
     report.status("ready to start", None, {"phase": "ready_to_start"})
-    stack._report_published_ports({"0": ("os_mavproxy", 5770)}, report, threading.Event())
+    stack._report_published_ports({"0": ("os-mavproxy", 5770)}, report, threading.Event())
     assert asked == [("simulation-subsystem-j7-os-mavproxy", 5770)] * 2, "asked by the service's key in the worker node's project, until Docker assigned the port"
     assert inner.statuses[-1] == ("ready to start", None, {"phase": "ready_to_start", "ground_control": {"0": 49153}}), "the latest status again, with the ports"
     report.status("running", 0.0, {"phase": "running"})

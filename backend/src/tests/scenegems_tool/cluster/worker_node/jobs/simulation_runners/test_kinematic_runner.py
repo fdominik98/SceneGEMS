@@ -41,7 +41,7 @@ def test_the_stack_is_the_simulator_an_asv_system_container_per_vessel_and_the_r
     job, stack = kinematic_stack(worker_node, make_job, head_on_trajectories)
     scope = worker_node.job_scope(job)
     services = stack.compose["services"]
-    assert set(services) == {"kinematic_sim", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE}
+    assert set(services) == {"kinematic-sim", "os-asv-system", "ts1-asv-system", RUNNER_SERVICE}
     for key, service in services.items():
         assert service["container_name"] == scope.container_name(key)
         assert "scenegems-simulation-subsystem" in service["image"], "the simulator, replay and the runner start from the simulation subsystem image"
@@ -78,16 +78,16 @@ def test_the_runner_of_a_run_without_a_monitor_is_told_of_none(instances_folder,
 def test_in_mode_usv_navigation_the_own_ship_runs_usv_navigations_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="usv_navigation", own_ship_id=1)
     services = stack.compose["services"]
-    assert "scenegems-usv-navigation" in services["ts1_asv_system"]["image"]
-    assert "scenegems-simulation-subsystem" in services["os_asv_system"]["image"]
+    assert "scenegems-usv-navigation" in services["ts1-asv-system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["os-asv-system"]["image"]
 
 
 def test_in_mode_moos_ivp_the_own_ship_runs_the_moos_ivp_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = kinematic_stack(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
     services = stack.compose["services"]
-    assert "scenegems-moos-ivp" in services["os_asv_system"]["image"]
-    assert services["os_asv_system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "12000", "--moosdb-port", "12400"]
-    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
+    assert "scenegems-moos-ivp" in services["os-asv-system"]["image"]
+    assert services["os-asv-system"]["command"] == ["python3", "-m", "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server", "--port", "12000", "--moosdb-port", "12400"]
+    assert "scenegems-simulation-subsystem" in services["ts1-asv-system"]["image"]
 
 
 def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
