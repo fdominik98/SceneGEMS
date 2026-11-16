@@ -7,6 +7,9 @@ control node can tell whether a worker node runs the images of this release.
 ./build.sh builds every image as :latest (its stale check reads the label of that tag); the
 bundle tags each one with the release's image tag (roles.release_image_tag) and lists it under
 that name, so every release names its own images and a machine can hold several releases.
+
+The bundle is release.json, the Helm chart in chart/ (deploy/kubernetes/chart, with a copy of release.json the
+chart puts into a ConfigMap, since a chart reads only its own files) and the compose stacks in stacks/.
 """
 
 import datetime
@@ -15,14 +18,15 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, Optional, Tuple
 
 from scenegems_tool.cluster.release.manifest import FINGERPRINT_LABEL, RELEASE_FILE, Release, ReleaseError, ReleaseImage, write_release
-from scenegems_tool.cluster.release.roles import CONTROL_NODE_COMPOSE_FILE, NAME_PATTERN, POSTGRES_IMAGE, PULLED_IMAGES, release_image_tag, role_images, scenegems_roles
+from scenegems_tool.cluster.release.roles import CONTROL_NODE_COMPOSE_FILE, NAME_PATTERN, POSTGRES_IMAGE, PULLED_IMAGES, release_image_tag, role_images, scenegems_chart, scenegems_roles
 from utils.image_names import DEFAULT_IMAGE_TAG, with_tag
 
 RELEASE_NAME = "scenegems"
 STACKS_FOLDER = "stacks"
+CHART_SOURCE = "deploy/kubernetes/chart"  # relative to the repository root; the bundle holds it as the release's chart folder
 # The compose files each role's stack is made of, relative to the repository root; they keep their names in the stack
 STACK_COMPOSE_FILES: Dict[str, Tuple[str, ...]] = {
     "control-node": (f"deploy/control_node/{CONTROL_NODE_COMPOSE_FILE}",),
@@ -56,6 +60,17 @@ def built_image(image: str) -> str:
     return image if image in PULLED_IMAGES else with_tag(image, DEFAULT_IMAGE_TAG)
 
 
+def _copy_stacks(stacks: Path, repo_root: Path, roles: Dict[str, Any]) -> None:
+    """Each role's compose files into stacks/<stack>/, replacing what an older bundle left there."""
+    if stacks.exists():
+        shutil.rmtree(stacks)
+    for role, compose_files in STACK_COMPOSE_FILES.items():
+        target = stacks / roles[role]["stack"]
+        target.mkdir(parents=True)
+        for compose_file in compose_files:
+            shutil.copyfile(repo_root / compose_file, target / Path(compose_file).name)
+
+
 def build_bundle(
     out_dir: Path,
     repo_root: Path,
@@ -65,8 +80,10 @@ def build_bundle(
     now: Optional[datetime.datetime] = None,
     tag: Callable[[str, str], None] = tag_local_image,
 ) -> Release:
-    """Tag the built images with the release's image tag, write release.json and stacks/ into out_dir and return the release. Fails if an image is not built here."""
-    roles = scenegems_roles(release_image_tag(revision, dirty))
+    """Tag the built images with the release's image tag, write release.json, chart/ and stacks/ into out_dir and return the release. Fails if an image is not built here."""
+    image_tag = release_image_tag(revision, dirty)
+    roles = scenegems_roles(image_tag)
+    chart = scenegems_chart(image_tag)
     images: Dict[str, ReleaseImage] = {}
     missing = []
     for image in role_images(roles):
@@ -86,16 +103,14 @@ def build_bundle(
             tag(built_image(image), image)
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    stacks = out_dir / STACKS_FOLDER
-    if stacks.exists():
-        shutil.rmtree(stacks)
-    for role, compose_files in STACK_COMPOSE_FILES.items():
-        target = stacks / roles[role]["stack"]
-        target.mkdir(parents=True)
-        for compose_file in compose_files:
-            shutil.copyfile(repo_root / compose_file, target / Path(compose_file).name)
+    _copy_stacks(out_dir / STACKS_FOLDER, repo_root, roles)
+    chart_dir = out_dir / chart.folder
+    if chart_dir.exists():
+        shutil.rmtree(chart_dir)
+    shutil.copytree(repo_root / CHART_SOURCE, chart_dir)
 
     created = (now or datetime.datetime.now(datetime.timezone.utc)).isoformat(timespec="seconds")
-    release = Release(name=RELEASE_NAME, revision=revision, dirty=dirty, created_at=created, images=images, roles=roles, name_pattern=NAME_PATTERN)
+    release = Release(name=RELEASE_NAME, revision=revision, dirty=dirty, created_at=created, images=images, roles=roles, name_pattern=NAME_PATTERN, chart=chart)
     write_release(out_dir / RELEASE_FILE, release)
+    write_release(chart_dir / RELEASE_FILE, release)
     return release

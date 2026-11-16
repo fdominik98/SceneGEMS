@@ -1,49 +1,100 @@
 """The roles of a SceneGEMS cluster, written into release.json for the deployment tool.
 
-A cluster is one control node and any number of worker nodes; one machine may hold several roles of
-several clusters. Control node and worker nodes trust the VPN: there is no pairing, certificate or
-credential, so a worker node needs nothing from a deployed control node and starts, and retries its
-connection, before or after the control node. For each role the tool installs `stacks/<stack>/` plus release.json into
-a folder on the machine, writes its `.env`, runs the setup commands and starts the compose
-project. The fields are the contract with the tool:
+A cluster is one control node and any number of worker nodes. Control node and worker nodes trust their network:
+there is no pairing, certificate or credential, so a worker node needs nothing from a deployed control node and
+starts, and retries its connection, before or after the control node. A role is the contract with the tool. It
+holds the fields of two ways to install it: Kubernetes, and Docker Compose, whose fields stay until the chart
+replaces the compose stacks.
+
+Fields of both ways:
 
     description      shown to the operator
-    count            "one" (one machine per cluster) or "many"
-    stack            folder under stacks/ with the compose file
-    project          compose project name
+    count            "one" (one member per cluster) or "many"
     images           images the role always needs, named with the release's image tag
-    env              values the tool writes into .env
-    parameters       values the operator may change per machine, with defaults; a parameter
+    parameters       values the operator may change per member, as text with defaults; a parameter
                      with `items` is a list (components, or job types with slots), and
                      `items.images` names the extra images each item needs; an item has an
                      amount after `items.key_separator` when the parameter names one
+
+Kubernetes: the tool installs the release's chart (release.json `chart`: folder, helm_release, namespace and
+values) into a Kubernetes cluster with one values file built from the cluster's members. A member is a role on
+a Kubernetes node, with an instance name and the operator's parameter values.
+
+    values           {"path", "entry"}: the chart values a member gives; the entry is a template (below).
+                     Count "one": the entry is merged into the object at `path`. Count "many": `path` is a
+                     list of the entries of every member, ordered by member name, [] without members
+    image_values     image tag of the release to the dotted values path that takes that image, for
+                     every image of the role and of its parameters' items
+    ready            beside the compose keys, `deployments` and `stateful_sets`: the names (with
+                     placeholders) of the workloads that must be available after the install
+    forwards         ports the operator may forward to their PC: name, description, service, port
+                     (the service's) and local_port (the one the web console expects)
+
+Building the values file, as the tool does it (tests/scenegems_tool/cluster/release/chart_values_builder.py is
+the executable reference):
+
+1. Start from the chart's values, their text rendered with {cluster} and {release.revision}.
+2. For each member: its parameter values are its own or the defaults, their text rendered like an entry's.
+   The role's entry is rendered: a text gets its placeholders replaced; a number, boolean or null stays; a list
+   is rendered item by item; an object with the key "$parameter" becomes the member's value of that parameter,
+   converted (below); any other object is rendered key by key. The result goes to `values.path` by the count.
+3. The images the cluster needs (each member's role images and the item images its list parameters name, as
+   for compose) are pushed, and each one's `image_values` path is set to the pushed reference
+   registry/repository@sha256:<digest>. An image no member needs is not pushed and its value is not written,
+   so the chart's default stays.
+4. The parts are merged: objects key by key; a path two parts set must get equal values, else the deploy fails.
+
+A "$parameter" object is {"$parameter": key, "type": "text" | "integer" | "number", "split": separator,
+"pair": separator}, all but "$parameter" optional (type text). Without "split" the value is converted to the
+type: integer is an optional sign and digits, number an integer or a decimal fraction. With "split" the value
+is split at that separator into parts, each trimmed and empty ones dropped, and becomes a list of parts of the
+type. With "pair" as well, each part is split at the first "pair" into a key and a value, both trimmed, and the
+parameter becomes an object of key to value of the type. A part without the pair separator, a key listed twice
+or a value not of the type fails the deploy, naming the member and the parameter. A list parameter's "split"
+and "pair" are its `items.separator` and `items.key_separator`.
+
+Placeholders in an entry, in a parameter value and in `ready` names: {cluster} (the cluster id, which is the
+control node id), {name} (the member's instance name), {node} (its Kubernetes node), {machine.name} (the
+machine of that node as the operator knows it) and {release.revision}. Values paths are dot-separated keys, and
+no key of the chart's values holds a dot. No secret is a value: the chart generates the Postgres password in the
+cluster and keeps it over upgrades, so nothing secret passes through the tool or the release.
+
+Docker Compose: for each role the tool installs `stacks/<stack>/` plus release.json into a folder on the
+machine, writes its `.env`, runs the setup commands and starts the compose project.
+
+    stack            folder under stacks/ with the compose file
+    project          compose project name
+    env              values the tool writes into .env
     secrets          .env keys generated once on the machine (random) and kept afterwards
     requires         another role whose output's KEY=VALUE lines go into this role's .env,
                      kept afterwards like secrets (unused by this release: no role needs one)
     outputs          commands run in the role's folder whose stdout is secret KEY=VALUE lines
     setup            commands run in the role's folder before the project starts (idempotent)
-    ready            services that must be running, or healthy, after the start
+    ready            `running` and `healthy`: services that must be running, or healthy, after the start
 
-Text in env, parameters, commands and project may use {cluster} (the cluster id, which is
-the control node id), {name} (the role's instance name on that machine), {machine.vpn_ip},
-{machine.name}, {release.revision}, {control-node.vpn_ip} and {control-node.<parameter>} (the VPN
-address and a parameter value, default included, of the machine that holds the cluster's
-control node, deployed or not) and, in outputs, {dependent.name} (the instance name of the role
-that requires the output). Cluster ids and instance names follow `name_pattern`,
-because they become MQTT topic levels and Docker names.
+Text in env, parameters, commands and project may use {cluster}, {name} (the role's instance name on that
+machine), {machine.vpn_ip}, {machine.name}, {release.revision}, {control-node.vpn_ip} and
+{control-node.<parameter>} (the VPN address and a parameter value, default included, of the machine that holds
+the cluster's control node, deployed or not) and, in outputs, {dependent.name} (the instance name of the role
+that requires the output). Cluster ids and instance names follow `name_pattern`, because they become MQTT topic
+levels, Docker names and Kubernetes names.
 
 Every image SceneGEMS builds is named with the release's image tag (release_image_tag): the
 revision, with -dirty when built from uncommitted changes. Both roles pass it as
 SCENEGEMS_IMAGE_TAG, which their compose files and the worker node's job stacks name the images with
-(utils/image_names.py). Without a release the tag is latest, the tag ./build.sh builds.
+(utils/image_names.py), and the chart gets it as its value imageTag. Without a release the tag is latest,
+the tag ./build.sh builds.
 """
 
+import re
 from typing import Any, Dict, List, Optional
 
-from scenegems_tool.cluster.fingerprints.components import check_runner_stacks, component_images
+from scenegems_tool.cluster.fingerprints.components import SIMULATION_IMAGE, SUBSYSTEM_IMAGES, check_runner_stacks, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.release.manifest import ReleaseChart
 from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN
-from utils.image_names import DEFAULT_IMAGE_TAG, IMAGE_TAG_VARIABLE, tagged, with_tag
+from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem
+from utils.image_names import DEFAULT_IMAGE_TAG, IMAGE_TAG_VARIABLE, image_repository, tagged, with_tag
 
 CONTROL_NODE_API_REPOSITORY = "scenegems-control-node-api"
 BROKER_REPOSITORY = "scenegems-mqtt-broker"
@@ -69,6 +120,25 @@ DEFAULT_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES = str(2 * 1024 * 1024 * 1024)
 # starts no containers and has no Docker socket.
 CONTROL_NODE_COMPOSE_FILE = "docker-compose.yml"
 
+# The chart (deploy/kubernetes/chart, the folder `chart` of a bundle). The placeholders of the values a member gives
+# and of the chart's own values; deploy/kubernetes/chart/values.yaml holds every value a role names, with its default.
+VALUES_PLACEHOLDERS = ("cluster", "name", "node", "machine.name", "release.revision")
+CHART_VALUES_PLACEHOLDERS = ("cluster", "release.revision")
+PARAMETER_KEY = "$parameter"  # an object of a values entry that stands for the member's value of a parameter
+VALUE_TYPES = ("text", "integer", "number")
+CONTROL_NODE_VALUES_PATH = "controlNode"
+WORKER_NODES_VALUES_PATH = "workerNodes"
+WORKER_NODE_IMAGES_VALUES_PATH = "workerNodeImages"  # every image a worker node can run, by its environment variable
+# The workloads and the service the chart names (its templates follow these names): the control node's, a worker node's daemon
+CONTROL_NODE_API_SERVICE = "control-node-api"
+CONTROL_NODE_DEPLOYMENTS = ("control-node-api", "cluster-broker")
+CONTROL_NODE_STATEFUL_SETS = ("postgres",)
+WORKER_NODE_DEPLOYMENT = "worker-node-{name}"
+# The operator API and workbench gateway (cluster/control_node/settings.py); the web console reaches it on this port
+OPERATOR_API_PORT = 5174
+# A compose image reference ${VARIABLE:-repository:tag} (vessel_stack/contracts/adapter_spec.py image_reference)
+_IMAGE_REFERENCE = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*):-([^}]+)\}")
+
 
 def release_image_tag(revision: str, dirty: bool) -> str:
     """The tag of a release's images: the revision, with -dirty when the checkout had uncommitted changes."""
@@ -89,6 +159,62 @@ def component_item_images(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, List[
 def slot_item_images() -> Dict[str, List[str]]:
     """The job types a worker node may give slots, each with no image of its own: the components bring the images."""
     return {job_type.value: [] for job_type in JobType}
+
+
+def worker_node_image_variables() -> Dict[str, str]:
+    """Repository to environment variable, for every image a worker node can run: the variables the code reads each image from.
+
+    The subsystem pools' images come from cluster/worker_node/subsystem.py, the images of a run's containers from the
+    image references of the vessel stack's ContainerSpecs. Fails when a component's image has no variable or a
+    repository has two.
+    """
+    from scenegems_tool.vessel_stack.registry.catalog import default_registry
+
+    subsystems = {subsystem.value for subsystem in Subsystem}
+    pairs = [(image_repository(SIMULATION_IMAGE), IMAGE_ENVIRONMENT_VARIABLES[Subsystem.SIMULATION])]
+    pairs += [(image_repository(images[0]), IMAGE_ENVIRONMENT_VARIABLES[Subsystem(component)]) for component, images in SUBSYSTEM_IMAGES.items() if component in subsystems]
+    registry = default_registry()
+    containers = [container for layer in registry.layers for container in layer.containers] + [container for adapter in registry.adapters for container in adapter.containers]
+    for container in containers:
+        match = _IMAGE_REFERENCE.fullmatch(container.image)
+        if match:
+            pairs.append((image_repository(match.group(2)), match.group(1)))
+    variables: Dict[str, str] = {}
+    for repository, variable in pairs:
+        if variables.setdefault(repository, variable) != variable:
+            raise ValueError(f"image {repository} is named by both {variables[repository]} and {variable}")
+    missing = sorted({image_repository(image) for images in component_images().values() for image in images} - set(variables))
+    if missing:
+        raise ValueError(f"no environment variable names these images of worker node components: {', '.join(missing)}")
+    return dict(sorted(variables.items(), key=lambda pair: pair[1]))
+
+
+def parameter_value(key: str, value_type: str = "text", split: Optional[str] = None, pair: Optional[str] = None) -> Dict[str, Any]:
+    """A values entry's stand-in for the member's value of a parameter, converted as the module docstring says."""
+    value: Dict[str, Any] = {PARAMETER_KEY: key}
+    if value_type != "text":
+        value["type"] = value_type
+    if split is not None:
+        value["split"] = split
+    if pair is not None:
+        value["pair"] = pair
+    return value
+
+
+def list_parameter_value(parameters: Dict[str, Any], key: str, value_type: str = "text") -> Dict[str, Any]:
+    """The stand-in for a list parameter: split at its items' separator, and paired at their key separator when it has one."""
+    items = parameters[key]["items"]
+    return parameter_value(key, value_type, split=items["separator"], pair=items.get("key_separator"))
+
+
+def chart_values(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
+    """The chart values every cluster of a release gets: its control node id, the revision and the images' tag."""
+    return {"controlNodeId": "{cluster}", "revision": "{release.revision}", "imageTag": image_tag}
+
+
+def scenegems_chart(image_tag: Optional[str] = None) -> ReleaseChart:
+    """The chart of a release whose images carry image_tag (release_image_tag), by default latest."""
+    return ReleaseChart(values=chart_values(image_tag or DEFAULT_IMAGE_TAG))
 
 
 def control_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
@@ -124,12 +250,49 @@ def control_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "secrets": ["POSTGRES_PASSWORD"],
         "setup": [],
         "outputs": {},
-        "ready": {"healthy": ["control-node-api"], "running": ["postgres", "cluster-broker"]},
+        "ready": {
+            "healthy": ["control-node-api"],
+            "running": ["postgres", "cluster-broker"],
+            "deployments": list(CONTROL_NODE_DEPLOYMENTS),
+            "stateful_sets": list(CONTROL_NODE_STATEFUL_SETS),
+        },
+        "values": {
+            "path": CONTROL_NODE_VALUES_PATH,
+            "entry": {
+                "enabled": True,
+                "node": "{node}",
+                "operatorAllowedOrigins": parameter_value("SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"),
+                "artifactMaxBytes": parameter_value("SCENEGEMS_ARTIFACT_MAX_BYTES", "integer"),
+                "artifactSweepIntervalS": parameter_value("SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S", "number"),
+                "artifactSweepGraceS": parameter_value("SCENEGEMS_ARTIFACT_SWEEP_GRACE_S", "number"),
+            },
+        },
+        "image_values": {
+            tagged(CONTROL_NODE_API_REPOSITORY, image_tag): "images.controlNodeApi",
+            tagged(BROKER_REPOSITORY, image_tag): "images.broker",
+            POSTGRES_IMAGE: "images.postgres",
+        },
+        "forwards": [
+            {
+                "name": "operator-api",
+                "description": "operator API and workbench gateway, which the web console reaches on this PC",
+                "service": CONTROL_NODE_API_SERVICE,
+                "port": OPERATOR_API_PORT,
+                "local_port": OPERATOR_API_PORT,
+            }
+        ],
     }
 
 
+def worker_node_image_values(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, str]:
+    """The values path of every image of the worker node's components, named as in a release of that tag."""
+    variables = worker_node_image_variables()
+    images = {image for images in component_item_images(image_tag).values() for image in images}
+    return {image: f"{WORKER_NODE_IMAGES_VALUES_PATH}.{variables[image_repository(image)]}" for image in sorted(images)}
+
+
 def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
-    return {
+    role: Dict[str, Any] = {
         "description": "Worker node: the worker node daemon, which leases jobs from its control node and runs them in subsystem containers; it needs no deployed control node",
         "count": "many",
         "stack": "worker_node",
@@ -164,8 +327,24 @@ def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
         "secrets": [],
         "setup": [],
         "outputs": {},
-        "ready": {"running": ["daemon"]},
+        "ready": {"running": ["daemon"], "deployments": [WORKER_NODE_DEPLOYMENT]},
+        "image_values": {tagged(WORKER_NODE_REPOSITORY, image_tag): "images.workerNode", **worker_node_image_values(image_tag)},
+        "forwards": [],
     }
+    parameters = role["parameters"]
+    role["values"] = {
+        "path": WORKER_NODES_VALUES_PATH,
+        "entry": {
+            "name": "{name}",
+            "node": "{node}",
+            "machine": "{machine.name}",
+            "components": list_parameter_value(parameters, "SCENEGEMS_WORKER_NODE_COMPONENTS"),
+            "slots": list_parameter_value(parameters, "SCENEGEMS_WORKER_NODE_SLOTS", "integer"),
+            "labels": parameter_value("SCENEGEMS_WORKER_NODE_LABELS", split=",", pair="="),
+            "artifactCacheMaxBytes": parameter_value("SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES", "integer"),
+        },
+    }
+    return role
 
 
 def scenegems_roles(image_tag: Optional[str] = None) -> Dict[str, Any]:

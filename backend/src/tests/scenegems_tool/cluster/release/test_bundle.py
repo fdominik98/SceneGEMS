@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from scenegems_tool.cluster.release.bundle import STACK_COMPOSE_FILES, InspectedImage, build_bundle
+from scenegems_tool.cluster.release.bundle import CHART_SOURCE, STACK_COMPOSE_FILES, InspectedImage, build_bundle
 from scenegems_tool.cluster.release.manifest import FINGERPRINT_LABEL, ReleaseError, read_release
-from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE, role_images, scenegems_roles
+from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE, role_images, scenegems_chart, scenegems_roles
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
 NOW = datetime.datetime(2026, 10, 25, 12, 0, tzinfo=datetime.timezone.utc)
@@ -39,6 +39,27 @@ def test_the_bundle_holds_the_release_and_the_stacks(tmp_path):
             stack = tmp_path / "stacks" / scenegems_roles()[role]["stack"] / Path(compose_file).name
             assert stack.read_bytes() == (REPO_ROOT / compose_file).read_bytes()
     assert sorted(path.name for path in (tmp_path / "stacks" / "control_node").iterdir()) == ["docker-compose.yml"], "one file: the control node starts no containers"
+
+
+def test_the_bundle_holds_the_chart_with_the_release_in_it(tmp_path):
+    release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=True, inspect=_all_built, now=NOW, tag=_Tags())
+    assert release.chart == scenegems_chart("abc123-dirty") and release.chart.values["imageTag"] == "abc123-dirty"
+    source = REPO_ROOT / CHART_SOURCE
+    chart = tmp_path / release.chart.folder
+    files = sorted(path.relative_to(source).as_posix() for path in source.rglob("*") if path.is_file())
+    assert {"Chart.yaml", "values.yaml"} <= set(files)
+    for name in files:
+        assert (chart / name).read_bytes() == (source / name).read_bytes(), name
+    assert sorted(path.relative_to(chart).as_posix() for path in chart.rglob("*") if path.is_file()) == sorted(files + ["release.json"])
+    assert (chart / "release.json").read_bytes() == (tmp_path / "release.json").read_bytes(), "the chart puts release.json into a ConfigMap"
+
+
+def test_an_older_chart_is_replaced(tmp_path):
+    stale = tmp_path / "chart" / "templates" / "old.yaml"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("old", encoding="utf-8")
+    build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=False, inspect=_all_built, now=NOW, tag=_Tags())
+    assert not stale.exists() and (tmp_path / "chart" / "Chart.yaml").is_file()
 
 
 def test_the_release_tags_the_latest_builds_with_its_revision(tmp_path):

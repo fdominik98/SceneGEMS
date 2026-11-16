@@ -49,7 +49,8 @@ Options:
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
-                          with those tags, and the control node and worker node stacks.
+                          with those tags, the Helm chart (chart/) and the control node and
+                          worker node compose stacks (stacks/).
                           Machine Hub installs the bundle on the machines.
 
   --fingerprints          Print "image fingerprint" for every image of this checkout
