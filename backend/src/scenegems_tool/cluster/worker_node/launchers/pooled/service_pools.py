@@ -1,8 +1,11 @@
-"""The pooled services of one worker node: one long-lived container per subsystem, sized by the worker node's slots, removed together.
+"""The pooled services of one worker node: one long-lived Deployment per subsystem, sized by the worker node's slots, removed together.
 
 The daemon starts the pools of the subsystems its worker node offers once it knows its number (start), and looks
-after them from then on: a pool whose container is gone is started again (ensure_running). A pool that was
-never started is started when a job first asks for it (get), as on a worker node that names no components.
+after them from then on: Kubernetes starts a pool's pod again when it dies, and a pool whose Deployment is gone is
+applied again (ensure_running). A pool that was never started is started when a job first asks for it (get), as on
+a worker node that names no components. Pools are started in the worker node's place in the cluster through its
+cluster API client; a worker node without them (a test, the simulation subsystem's view of its worker node) can
+name its pools but not start them.
 
 On MQTT a pool is named after its subsystem and the number the control node gave the worker node
 (instance_scope.pooled_service_name), so the pools of a cluster never share a topic.
@@ -13,6 +16,7 @@ import threading
 from typing import Callable, Dict, Iterable, List, Optional
 
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope, pooled_service_name
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import ClusterPlace, KubernetesApi
 from scenegems_tool.cluster.worker_node.launchers.pooled.design_space_exploration_pool import DesignSpaceExplorationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
@@ -42,7 +46,8 @@ class ServicePools:
         mqtt_connection: MQttConnectionInfo,
         reference_geofence: Geofence,
         workers: Callable[[Subsystem], int],
-        broker_network: Optional[str] = None,
+        cluster: Optional[ClusterPlace] = None,
+        api: Optional[KubernetesApi] = None,
         instance_number: Callable[[], int] = lambda: 1,
     ):
         self.control_node_id = control_node_id
@@ -50,7 +55,8 @@ class ServicePools:
         self.mqtt_connection = mqtt_connection
         self.reference_geofence = reference_geofence
         self.workers = workers
-        self.broker_network = broker_network
+        self.cluster = cluster
+        self.api = api
         self.instance_number = instance_number  # read when a pool starts, after the control node's Welcome
         self._pools: Dict[Subsystem, PooledService] = {}
         self._lock = threading.RLock()
@@ -66,8 +72,10 @@ class ServicePools:
         with self._lock:
             pool = self._pools.get(subsystem)
             if pool is None:
+                if self.cluster is None or self.api is None:
+                    raise RuntimeError(f"The {subsystem.value} pool cannot start: this worker node has no place in a Kubernetes cluster")
                 pool = _POOL_CLASSES[subsystem].for_scope(
-                    self.scope(subsystem), self.mqtt_connection, self.reference_geofence, self.workers(subsystem), self.broker_network, self.service_name(subsystem)
+                    self.scope(subsystem), self.mqtt_connection, self.reference_geofence, self.workers(subsystem), self.cluster, self.api, self.service_name(subsystem)
                 )
                 self._pools[subsystem] = pool
             return pool
@@ -79,7 +87,7 @@ class ServicePools:
                 self.get(subsystem)
 
     def ensure_running(self) -> List[Subsystem]:
-        """Start again every pool whose container is gone; returns the subsystems it restarted."""
+        """Start again every pool whose Deployment is gone; returns the subsystems it restarted."""
         restarted = []
         with self._lock:
             for subsystem, pool in list(self._pools.items()):

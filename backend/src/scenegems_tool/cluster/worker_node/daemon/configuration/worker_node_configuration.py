@@ -1,19 +1,25 @@
 """The worker node daemon's configuration, from its environment and its `.env` file.
 
-Variables (deploy/worker_node/.env.example is the template):
+Variables (the chart's worker node template sets them; deploy/worker_node/.env.example is the compose deploy's, until the chart replaces it):
 
     SCENEGEMS_CONTROL_NODE_URL          http://<host>[:<port>] of the control node's cluster API; the worker node dials it and keeps
                                   retrying while the control node is not up. Control node and worker nodes trust the VPN: no TLS, no pairing.
-    SCENEGEMS_CONTROL_NODE_ID           the control node's id; names the worker node's compose project and is checked against the control node's Welcome
-    SCENEGEMS_BROKER_PORT         optional, the port of the control node's cluster broker on the control node's host (1883)
-    SCENEGEMS_WORKER_NODE_NAME           this worker node's name and worker node id on the control node and in Docker names
+    SCENEGEMS_CONTROL_NODE_ID           the control node's id; checked against the control node's Welcome
+    SCENEGEMS_BROKER_HOST         optional, the host of the cluster broker (the control node's host, from SCENEGEMS_CONTROL_NODE_URL)
+    SCENEGEMS_BROKER_PORT         optional, the port of the cluster broker (1883)
+    SCENEGEMS_WORKER_NODE_NAME           this worker node's name and worker node id on the control node, and the start of its objects' names
+                                  in the cluster: 1 to 28 lowercase letters, digits and hyphens (instance_scope.WORKER_NODE_NAME_MAX)
     SCENEGEMS_WORKER_NODE_SLOTS          job types with slots, for example simulation:4,scene_generation:1
     SCENEGEMS_WORKER_NODE_COMPONENTS     what the worker node runs, comma separated (cluster/fingerprints/components.py), for example
                                   asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation
     SCENEGEMS_WORKER_NODE_LABELS         optional key=value pairs, for example gpu=true,site=lab
     SCENEGEMS_WORKER_NODE_MACHINE        optional, the name of the machine the worker node runs on (the deployment tool writes it); shown in the UI
     SCENEGEMS_WORKER_NODE_STATE_DIR      folder on the worker node's volume for the artifact cache
-    SCENEGEMS_DOCKER_NETWORK      optional, the Docker network pooled services join
+    SCENEGEMS_KUBERNETES_NAMESPACE   the namespace of the SceneGEMS cluster: the daemon's, its pools' and its runs'
+    SCENEGEMS_KUBERNETES_NODE        the Kubernetes node the daemon runs on; its pools and runs are pinned to it
+    SCENEGEMS_RUNTIME_HOST_PATH      the worker node's runtime folder on that node (absolute), which the simulation subsystem and the
+                                  runs mount, and the daemon at the image's runtime assets folder
+    SCENEGEMS_RELEASE_MANIFEST       release.json of the release the worker node is deployed with; its image fingerprints are the Hello's
     SCENEGEMS_WORKER_NODE_REFERENCE_GEOFENCE  optional, latitude,longitude,radius of the pools' local frame
     SCENEGEMS_SOFTWARE_REVISION   optional, the revision the worker node reports (its release's revision)
     SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR        optional, the cache of downloaded artifacts (<state>/artifacts)
@@ -24,7 +30,7 @@ monitoring for monitoring.post_hoc, ...). SCENEGEMS_WORKER_NODE_CAPABILITIES of 
 is refused with a message naming the two variables that replace it.
 
 Process variables win over the file; an empty process variable counts as unset, since
-Compose passes unset optional variables as empty strings. Every problem is reported at
+a deployment may pass unset optional variables as empty strings. Every problem is reported at
 once, so a start fails with one message that lists all of them.
 """
 
@@ -39,6 +45,7 @@ from scenegems_tool.cluster.fingerprints.components import COMPONENTS, JOB_TYPE_
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.scope_names import is_scope_name
 from scenegems_tool.cluster.worker_node.daemon.configuration.env_file import EnvFileError, read_env_file
+from scenegems_tool.cluster.worker_node.instance_scope import WORKER_NODE_NAME_MAX
 
 ENV_FILE_VARIABLE = "SCENEGEMS_ENV_FILE"  # read from the process environment only
 DEFAULT_ENV_FILE = ".env"
@@ -48,6 +55,9 @@ DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_BROKER_PORT = 1883  # the cluster broker's plain MQTT port (deploy/control_node/nanomq.conf)
 ARTIFACT_CACHE_FOLDER = "artifacts"  # under the state folder
 MAX_MACHINE_LENGTH = 256  # the registry column
+_DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")  # a namespace's name
+_DNS_SUBDOMAIN = re.compile(r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$")  # a node's name
+_HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$")
 
 _LABEL_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _JOB_TYPES = {job_type.value: job_type for job_type in JobType}
@@ -70,9 +80,13 @@ class WorkerNodeConfiguration:
     slots: Dict[JobType, int]  # job type to slots
     components: FrozenSet[str]  # what the worker node runs its jobs with
     state_dir: Path
-    broker_port: int = DEFAULT_BROKER_PORT  # on the control node's host
+    kubernetes_namespace: str
+    kubernetes_node: str
+    runtime_host_path: str  # on the node, POSIX
+    release_manifest: Path
+    broker_port: int = DEFAULT_BROKER_PORT
+    broker_host_override: Optional[str] = None  # SCENEGEMS_BROKER_HOST
     labels: Dict[str, str] = field(default_factory=dict)
-    docker_network: Optional[str] = None
     reference_geofence: Tuple[float, float, float] = DEFAULT_REFERENCE_GEOFENCE
     software_revision: Optional[str] = None
     machine: Optional[str] = None  # reported in the Hello
@@ -90,13 +104,8 @@ class WorkerNodeConfiguration:
 
     @property
     def broker_host(self) -> str:
-        """The control node's host: the cluster broker runs next to the control node API."""
-        return urlsplit(self.control_node_url).hostname or ""
-
-    @property
-    def docker_name(self) -> str:
-        """The worker node's compose project on this machine, one per control node and worker node name: the daemon and every container it starts."""
-        return f"scenegems-{self.control_node_id}-{self.worker_node_name}"
+        """SCENEGEMS_BROKER_HOST when set (the broker's service in the cluster), else the control node's host, where the cluster broker runs next to the control node API."""
+        return self.broker_host_override or urlsplit(self.control_node_url).hostname or ""
 
     @classmethod
     def load(cls, environ: Optional[Mapping[str, str]] = None, env_file: Optional[Path] = None) -> "WorkerNodeConfiguration":
@@ -141,11 +150,15 @@ class WorkerNodeConfiguration:
         if control_node_id and not is_scope_name(control_node_id):
             problems.append(f"SCENEGEMS_CONTROL_NODE_ID: {control_node_id!r} is not a control node id (1 to 63 lowercase letters, digits and hyphens)")
         worker_node_name = required("SCENEGEMS_WORKER_NODE_NAME")
-        if worker_node_name and not is_scope_name(worker_node_name):
-            problems.append(f"SCENEGEMS_WORKER_NODE_NAME: {worker_node_name!r} must be 1 to 63 lowercase letters, digits and hyphens, since it names Docker objects")
+        if worker_node_name and (not is_scope_name(worker_node_name) or len(worker_node_name) > WORKER_NODE_NAME_MAX):
+            problems.append(
+                f"SCENEGEMS_WORKER_NODE_NAME: {worker_node_name!r} must be 1 to {WORKER_NODE_NAME_MAX} lowercase letters, digits and hyphens, "
+                "since the names of its Deployments in the cluster start with it and Kubernetes takes at most 63 characters"
+            )
         slots, components = _slots_and_components(get, required, parsed, problems)
         labels = parsed("SCENEGEMS_WORKER_NODE_LABELS", parse_labels, get("SCENEGEMS_WORKER_NODE_LABELS"), {})
         state_text = required("SCENEGEMS_WORKER_NODE_STATE_DIR")
+        namespace, node, runtime_host_path, release_manifest, broker_host = _place_in_the_cluster(get, required, problems)
         broker_port_text = get("SCENEGEMS_BROKER_PORT")
         broker_port = parsed("SCENEGEMS_BROKER_PORT", parse_port, broker_port_text, DEFAULT_BROKER_PORT) if broker_port_text else DEFAULT_BROKER_PORT
         geofence_text = get("SCENEGEMS_WORKER_NODE_REFERENCE_GEOFENCE")
@@ -163,9 +176,13 @@ class WorkerNodeConfiguration:
             slots=slots,
             components=components,
             state_dir=Path(state_text),
+            kubernetes_namespace=namespace,
+            kubernetes_node=node,
+            runtime_host_path=runtime_host_path.rstrip("/") or "/",
+            release_manifest=Path(release_manifest),
             broker_port=broker_port,
+            broker_host_override=broker_host or None,
             labels=labels,
-            docker_network=get("SCENEGEMS_DOCKER_NETWORK") or None,
             reference_geofence=geofence,
             software_revision=get("SCENEGEMS_SOFTWARE_REVISION") or None,
             machine=machine or None,
@@ -188,6 +205,24 @@ def _slots_and_components(get, required, parsed, problems: List[str]) -> Tuple[O
     if slots is not None and components is not None:
         problems.extend(f"SCENEGEMS_WORKER_NODE_SLOTS: {problem}" for problem in slots_without_components(slots, components))
     return slots, components
+
+
+def _place_in_the_cluster(get, required, problems: List[str]) -> Tuple[str, str, str, str, str]:
+    """The namespace, the node, the runtime folder on the node, the release manifest and the broker host, each checked."""
+    namespace = required("SCENEGEMS_KUBERNETES_NAMESPACE")
+    if namespace and not _DNS_LABEL.match(namespace):
+        problems.append(f"SCENEGEMS_KUBERNETES_NAMESPACE: {namespace!r} is not a namespace name (1 to 63 lowercase letters, digits and hyphens)")
+    node = required("SCENEGEMS_KUBERNETES_NODE")
+    if node and not _DNS_SUBDOMAIN.match(node):
+        problems.append(f"SCENEGEMS_KUBERNETES_NODE: {node!r} is not a Kubernetes node name")
+    runtime_host_path = required("SCENEGEMS_RUNTIME_HOST_PATH")
+    if runtime_host_path and not runtime_host_path.startswith("/"):
+        problems.append(f"SCENEGEMS_RUNTIME_HOST_PATH: {runtime_host_path!r} must be an absolute path on the node")
+    release_manifest = required("SCENEGEMS_RELEASE_MANIFEST")
+    broker_host = get("SCENEGEMS_BROKER_HOST")
+    if broker_host and not _HOST.match(broker_host):
+        problems.append(f"SCENEGEMS_BROKER_HOST: {broker_host!r} must be a host name or address, without a scheme or a port")
+    return namespace, node, runtime_host_path, release_manifest, broker_host
 
 
 def parse_control_node_url(text: str) -> str:

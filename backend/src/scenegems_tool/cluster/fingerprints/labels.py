@@ -1,32 +1,21 @@
-"""The fingerprints the images on this machine carry, read from their labels."""
+"""The fingerprints a worker node reports: those of the release it is deployed with.
 
-from typing import Any, Dict, Optional
+A worker node in a Kubernetes cluster has no image store of its own to read labels from. Its pods run the images
+the chart was given, which are the release's, so its Hello reports the image fingerprints of the release manifest
+(release.json) it is deployed with, keyed by image repository as the control node compares them
+(comparison.by_repository). The fingerprint is still the label org.scenegems.fingerprint of each built image,
+which the release records when it is built (cluster/release/bundle.py).
+"""
 
-from utils.image_names import image_repository, image_tag
+from pathlib import Path
+from typing import Dict, Union
 
-FINGERPRINT_LABEL = "org.scenegems.fingerprint"
+from scenegems_tool.cluster.fingerprints.comparison import by_repository
+from scenegems_tool.cluster.release.manifest import FINGERPRINT_LABEL, read_release
+
+__all__ = ["FINGERPRINT_LABEL", "release_fingerprints"]
 
 
-def read_image_fingerprints(client: Optional[Any] = None, tag: Optional[str] = None) -> Dict[str, str]:
-    """Image repository to fingerprint for every local image with the label; this is the worker node's Hello.fingerprints.
-
-    The worker node runs its images under one tag (SCENEGEMS_IMAGE_TAG, or tag), so a repository it has
-    under that tag reports that image; a repository it has only under other tags reports one of them,
-    the first by name, so a tag change alone never drops a fingerprint.
-    """
-    if client is None:
-        import docker
-
-        client = docker.from_env()
-    tag = tag or image_tag()
-    names: Dict[str, str] = {}
-    for image in client.images.list():
-        fingerprint = (image.labels or {}).get(FINGERPRINT_LABEL)
-        if fingerprint:
-            names.update((name, fingerprint) for name in image.tags)
-    fingerprints: Dict[str, str] = {}
-    for name, fingerprint in sorted(names.items()):
-        repository = image_repository(name)
-        if repository not in fingerprints or name == f"{repository}:{tag}":
-            fingerprints[repository] = fingerprint
-    return fingerprints
+def release_fingerprints(manifest: Union[str, Path]) -> Dict[str, str]:
+    """Image repository to fingerprint for every fingerprinted image of the release; ReleaseError when the file cannot be read."""
+    return by_repository(read_release(Path(manifest)).fingerprints())

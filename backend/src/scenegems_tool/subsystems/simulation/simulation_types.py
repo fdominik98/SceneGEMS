@@ -19,10 +19,13 @@ SIMULATION_LOG_STREAM = "simulation_log"  # sensor/simulation_log: the lines the
 SIMULATION_RESULT_STREAM = "simulation_result"  # sensor/simulation_result: the result of a run or of a comparison, or why it has none
 
 # What the subsystem's container is told about the worker node it belongs to, next to the broker and the reference
-# area every subsystem gets: the names its tasks' containers, folders and networks start with (instance_scope.py).
+# area every subsystem gets: the names its tasks' objects and folders start with (instance_scope.py), and the place
+# in the cluster its runs' pods go to. The daemon reads the last three under the same names (its configuration).
 CONTROL_NODE_VARIABLE = "SCENEGEMS_CONTROL_NODE_ID"
 WORKER_NODE_VARIABLE = "SCENEGEMS_WORKER_NODE_ID"
-BROKER_NETWORK_VARIABLE = "SCENEGEMS_DOCKER_NETWORK"  # the Docker network the cluster's broker is reached on (utils/docker_compose_network.py)
+KUBERNETES_NAMESPACE_VARIABLE = "SCENEGEMS_KUBERNETES_NAMESPACE"  # the SceneGEMS cluster's namespace
+KUBERNETES_NODE_VARIABLE = "SCENEGEMS_KUBERNETES_NODE"  # the node the worker node's pods are pinned to
+RUNTIME_HOST_PATH_VARIABLE = "SCENEGEMS_RUNTIME_HOST_PATH"  # the worker node's runtime folder on that node, mounted at the image's runtime assets folder
 
 
 @dataclass(frozen=True)

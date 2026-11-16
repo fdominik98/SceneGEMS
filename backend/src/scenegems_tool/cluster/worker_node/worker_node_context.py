@@ -1,4 +1,4 @@
-"""What a job runner needs from its worker node: identity, slots, broker access, the shared pools, artifact transport and observations.
+"""What a job runner needs from its worker node: identity, slots, broker access, its place in the cluster, the shared pools, artifact transport and observations.
 
 The worker node daemon builds one WorkerNodeContext from its configuration
 (daemon/worker_node_runtime.py) and calls `shutdown` when it stops. Tests build one directly.
@@ -12,6 +12,7 @@ from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.worker_node.artifacts.worker_node_artifacts import ArtifactTransport
 from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.cluster.worker_node.job_observation import JobObservations
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import ClusterPlace, KubernetesApi
 from scenegems_tool.cluster.worker_node.launchers.pooled.service_pools import ServicePools
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo
@@ -46,7 +47,10 @@ class WorkerNodeContext:
     reference_geofence: Geofence  # frame of the pooled services; simulation payloads carry their own
     slots: Dict[JobType, int] = field(default_factory=dict)
     components: FrozenSet[str] = frozenset()  # what the worker node runs jobs with; empty for any (a test)
-    broker_network: Optional[str] = None  # Docker network the broker is reachable on; SCENEGEMS_DOCKER_NETWORK when None
+    # Where the worker node's pools and runs go (namespace, node, runtime folder on the node, the daemon's Deployment that owns
+    # them) and the cluster API they are created through; None where nothing is started (tests, the simulation subsystem's view)
+    cluster: Optional[ClusterPlace] = None
+    kubernetes: Optional[KubernetesApi] = None
     artifacts: Optional[ArtifactTransport] = None  # downloads referenced inputs and uploads results; None keeps results inline
     observations: JobObservations = field(default_factory=JobObservations)  # running jobs' live observations; the daemon's lease manager opens them
     # The number the control node gave this worker node in its Welcome; it tells the worker node's pooled services from
@@ -55,7 +59,16 @@ class WorkerNodeContext:
     pools: ServicePools = field(init=False)
 
     def __post_init__(self) -> None:
-        self.pools = ServicePools(self.control_node_id, self.worker_node_id, self.mqtt_connection, self.reference_geofence, self.pool_workers, self.broker_network, lambda: self.instance_number)
+        self.pools = ServicePools(
+            self.control_node_id,
+            self.worker_node_id,
+            self.mqtt_connection,
+            self.reference_geofence,
+            self.pool_workers,
+            cluster=self.cluster,
+            api=self.kubernetes,
+            instance_number=lambda: self.instance_number,
+        )
 
     def lacks(self, job: JobSpec) -> List[str]:
         """The components the job requires that this worker node does not offer; empty when it offers them all, or when it names none."""
@@ -86,7 +99,7 @@ class WorkerNodeContext:
         self.pools.start(self.pool_subsystems())
 
     def check_pools(self) -> List[Subsystem]:
-        """Start again the pools whose container is gone; returns the subsystems that were restarted."""
+        """Start again the pools whose Deployment is gone; returns the subsystems that were restarted."""
         return self.pools.ensure_running()
 
     def job_scope(self, job: JobSpec) -> InstanceScope:

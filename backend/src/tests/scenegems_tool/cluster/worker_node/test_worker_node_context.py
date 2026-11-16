@@ -1,4 +1,7 @@
+import pytest
+
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import Kind
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
 from scenegems_tool.cluster.worker_node.launchers.pooled.scene_generation_pool import SceneGenerationPool
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
@@ -10,7 +13,7 @@ def test_job_scope_is_per_attempt(worker_node, make_job):
     assert (first.instance_id, second.instance_id) == ("simulation-subsystem-abc", "simulation-subsystem-abc-2"), "named after the job's subsystem"
     assert worker_node.job_scope(make_job(JobType.MONITORING_POST_HOC, {}, job_id="abc")).instance_id == "monitoring-subsystem-abc"
     assert worker_node.job_scope(make_job(JobType.CALIBRATION_DEVIATION, {}, job_id="abc")).instance_id == "simulation-subsystem-abc", "repeats of a simulation"
-    assert first.docker_name != second.docker_name
+    assert first.name != second.name and first.labels != second.labels
 
 
 def test_pool_workers_come_from_the_slots(worker_node):
@@ -39,22 +42,30 @@ def test_a_worker_node_offers_the_pools_of_its_components(worker_node):
     assert worker_node.pool_subsystems() == [Subsystem.DESIGN_SPACE_EXPLORATION] and worker_node.pool_workers(Subsystem.DESIGN_SPACE_EXPLORATION) == 2
 
 
-def test_pools_start_once_with_scoped_names(monkeypatch, worker_node):
-    monkeypatch.setattr(PooledService, "_run_container_lifecycle_startup", lambda self, compose: None)
-    destroyed = []
-    monkeypatch.setattr(PooledService, "destroy", lambda self: destroyed.append(self))
+def test_pools_start_once_with_scoped_names_in_the_worker_nodes_place(monkeypatch, placed_worker_node, fake_cluster):
+    worker_node = placed_worker_node
     pool = worker_node.pools.get(Subsystem.SCENE_GENERATION)
     assert isinstance(pool, SceneGenerationPool)
     assert worker_node.pools.get(Subsystem.SCENE_GENERATION) is pool
-    assert pool.workers == 3
-    assert pool.names.container_name == "scenegems-m1-n1-scene-generation-subsystem"
+    assert pool.workers == 3 and pool.cluster is worker_node.cluster and pool.api is worker_node.kubernetes
+    assert pool.names.deployment == "n1-scene-generation-subsystem"
     assert pool.service_name == "scene-generation-subsystem-1" and pool.service_topic.endswith("/service/virtual/real/scene-generation-subsystem-1")
+    pool._lifecycle_thread.join(5.0)
+    assert fake_cluster.get(Kind.DEPLOYMENT, "n1-scene-generation-subsystem") is not None
     worker_node.shutdown()
-    assert destroyed == [pool]
+    assert fake_cluster.get(Kind.DEPLOYMENT, "n1-scene-generation-subsystem") is None
 
 
-def test_another_instance_number_renames_the_pools(monkeypatch, worker_node):
-    monkeypatch.setattr(PooledService, "_run_container_lifecycle_startup", lambda self, compose: None)
+def test_a_worker_node_without_a_place_in_a_cluster_starts_no_pool(worker_node):
+    """The simulation subsystem's view of its worker node: it names the monitoring pool, it does not start it."""
+    assert worker_node.cluster is None and worker_node.pools.service_name(Subsystem.MONITORING) == "monitoring-subsystem-1"
+    with pytest.raises(RuntimeError, match="no place in a Kubernetes cluster"):
+        worker_node.pools.get(Subsystem.MONITORING)
+
+
+def test_another_instance_number_renames_the_pools(monkeypatch, placed_worker_node):
+    worker_node = placed_worker_node
+    monkeypatch.setattr(PooledService, "_start_deployment", lambda self, deployment: None)
     destroyed = []
     monkeypatch.setattr(PooledService, "destroy", lambda self: destroyed.append(self))
     first = worker_node.pools.get(Subsystem.SCENE_GENERATION)

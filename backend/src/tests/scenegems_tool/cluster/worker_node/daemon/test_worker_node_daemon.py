@@ -32,8 +32,11 @@ from scenegems_tool.cluster.protocol.messages import (
 )
 from scenegems_tool.cluster.protocol.version import PROTOCOL_VERSION
 from scenegems_tool.cluster.protocol.worker_node_description import SlotOffer
+from scenegems_tool.cluster.release.manifest import Release, ReleaseImage, write_release
 from scenegems_tool.cluster.worker_node.daemon.worker_node_daemon import DaemonStopped
+from scenegems_tool.cluster.worker_node.instance_scope import InstanceScope
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import Kind
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from tests.scenegems_tool.cluster.worker_node.daemon.conftest import FINGERPRINTS, make_job, make_offer, wait_for
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
@@ -72,6 +75,35 @@ def test_the_worker_node_says_hello_under_its_name_without_any_pairing(fake_cont
     assert hello.running_lease_ids == []
     assert hello.machine is None
     assert not configuration.state_dir.exists() or not any(configuration.state_dir.glob("pairing*"))  # nothing is stored to pair
+
+
+def test_the_hello_reports_the_fingerprints_of_the_release_manifest_the_worker_node_is_deployed_with(fake_control_node, worker_node_configuration, start_daemon):
+    """No Docker engine to ask: the pods run the images the chart was given, which are the release's."""
+    configuration = worker_node_configuration()
+    images = {"scenegems-simulation-subsystem:abc123": ReleaseImage("sha256:1", "fp-simulation"), "postgres:16.10-alpine": ReleaseImage("sha256:2")}
+    write_release(configuration.release_manifest, Release(name="scenegems", revision="abc123", dirty=False, created_at="2026-11-16T12:00:00+00:00", images=images))
+    _, _, hello = connect(fake_control_node, start_daemon, configuration, fingerprints=None)
+    assert hello.fingerprints == {"scenegems-simulation-subsystem": "fp-simulation"}, "by repository, as the control node compares them"
+
+
+def test_a_daemon_without_a_readable_release_manifest_stops(worker_node_configuration, start_daemon):
+    error = start_daemon(worker_node_configuration(), fingerprints=None).wait_exit()
+    assert isinstance(error, DaemonStopped) and "SCENEGEMS_RELEASE_MANIFEST" in str(error)
+
+
+def test_the_daemon_removes_its_worker_nodes_leftovers_when_it_starts_and_when_it_stops(fake_control_node, worker_node_configuration, start_daemon, daemon_cluster):
+    def leftover(worker_node: str, job_id: str) -> str:
+        scope = InstanceScope.per_job("test-control-node", worker_node, "simulation", job_id)
+        daemon_cluster.add(Kind.POD, {"metadata": {"name": scope.name, "labels": dict(scope.labels)}})
+        return scope.name
+
+    mine, others = leftover("test-worker-node", "job-1"), leftover("another-worker-node", "job-2")
+    daemon, _, _ = connect(fake_control_node, start_daemon, worker_node_configuration(), clean_leftovers=True)
+    assert daemon_cluster.names(Kind.POD) == [others], "what an earlier process of this worker node left goes before the Hello; another worker node's stays"
+    later = leftover("test-worker-node", "job-3")
+    daemon.stop()
+    assert later not in daemon_cluster.names(Kind.POD) and daemon_cluster.names(Kind.POD) == [others]
+    assert mine != later
 
 
 def test_hello_names_the_machine_from_the_configuration(fake_control_node, worker_node_configuration, start_daemon):

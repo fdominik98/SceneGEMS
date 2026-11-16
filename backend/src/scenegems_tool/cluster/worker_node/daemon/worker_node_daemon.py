@@ -4,7 +4,8 @@ The worker node needs no control node to start, and no pairing: control node and
 its name, and it dials the configured control node and keeps retrying while that is not up.
 
 Start-up order:
-    1. build the WorkerNodeContext and remove instances a crashed predecessor left;
+    1. read the image fingerprints of the release manifest it is deployed with (the Hello's), build the WorkerNodeContext
+       (its place in the cluster, owned by its own Deployment) and remove instances a crashed predecessor left;
     2. connect: Hello, then the control node's Welcome sets the worker node's instance number, the heartbeat interval and the lease timeout;
     3. serve lease messages until the connection drops, then reconnect with backoff.
 
@@ -14,7 +15,8 @@ leases, sends heartbeats and streams reports whether or not a connection is up; 
 thread sends the frames of observed simulations, about 10 batches a second at most.
 
 Conditions that no retry can fix stop the daemon with DaemonStopped: the control node speaks
-another protocol version, or is not the control node the worker node is configured for.
+another protocol version, or is not the control node the worker node is configured for, or the release
+manifest cannot be read.
 """
 
 import logging
@@ -22,10 +24,12 @@ import threading
 import time
 from typing import Callable, Optional
 
+from scenegems_tool.cluster.fingerprints.labels import release_fingerprints
 from scenegems_tool.cluster.protocol.codec import MalformedFrame
 from scenegems_tool.cluster.protocol.messages import ControlNodeMessage, ProtocolError, ProtocolErrorCode, Welcome
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
 from scenegems_tool.cluster.protocol.version import ProtocolVersionMismatch
+from scenegems_tool.cluster.release.manifest import ReleaseError
 from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import WorkerNodeConfiguration
 from scenegems_tool.cluster.worker_node.daemon.control.control_link import ControlLink, LinkClosed
 from scenegems_tool.cluster.worker_node.daemon.control.reconnect_backoff import ReconnectBackoff
@@ -43,7 +47,7 @@ _logger = logging.getLogger(__name__)
 WELCOME_TIMEOUT_S = 30.0
 RECEIVE_POLL_S = 0.5  # how often the connection thread looks at the stop event
 TICK_S = 0.25
-POOL_CHECK_S = 30.0  # how often the daemon looks whether its subsystems' containers still run
+POOL_CHECK_S = 30.0  # how often the daemon looks whether its subsystems' Deployments are still there
 RELAY_S = 0.1  # how often observed jobs' frames are relayed to the control node
 SHUTDOWN_TIMEOUT_S = 30.0  # time for running jobs to stop and remove their containers
 
@@ -75,7 +79,7 @@ class WorkerNodeDaemon:
         *,
         run: Optional[JobRunner] = None,
         probe: Optional[ResourceProbe] = None,
-        fingerprints: Optional[Callable[[], dict]] = None,
+        fingerprints: Optional[Callable[[], dict]] = None,  # the release manifest's (SCENEGEMS_RELEASE_MANIFEST) unless given
         link_factory: Callable[..., ControlLink] = ControlLink,
         backoff: Optional[ReconnectBackoff] = None,
         worker_node_context: Callable[[WorkerNodeConfiguration, object], WorkerNodeContext] = build_worker_node_context,
@@ -106,9 +110,10 @@ class WorkerNodeDaemon:
     def run(self, stop: threading.Event) -> None:
         """Run until stop is set (then release the running leases) or DaemonStopped is raised."""
         control_node_id, worker_node_id = self.configuration.control_node_id, self.configuration.worker_node_id
+        fingerprints = self._fingerprints or self._release_fingerprints()
         worker_node = self._worker_node_context(self.configuration)
         if self._clean_leftovers:
-            remove_leftover_instances(control_node_id, worker_node_id)
+            _remove_leftovers(worker_node)
         self.manager = LeaseManager(SlotTable(self.configuration.slots), worker_node, self._current, run=self._run)
         self.status = StatusFrames(
             worker_node_id=worker_node_id,
@@ -119,7 +124,7 @@ class WorkerNodeDaemon:
             components=self.configuration.components,
             labels=self.configuration.labels,
             resources=self._probe.read,
-            fingerprints=self._fingerprints or _local_image_fingerprints,
+            fingerprints=fingerprints,
             leases=self.manager,
         )
         ticker_stop = threading.Event()
@@ -148,8 +153,17 @@ class WorkerNodeDaemon:
                 link.close()
             worker_node.shutdown()
             if self._clean_leftovers:
-                remove_leftover_instances(control_node_id, worker_node_id)
+                _remove_leftovers(worker_node)
             _logger.info("Worker node %s stopped", worker_node_id)
+
+    def _release_fingerprints(self) -> Callable[[], dict]:
+        """The fingerprints of the release manifest, read once: the images the chart gave this worker node's pods."""
+        manifest = self.configuration.release_manifest
+        try:
+            fingerprints = release_fingerprints(manifest)
+        except ReleaseError as error:
+            raise DaemonStopped(f"Cannot read the release manifest {manifest} (SCENEGEMS_RELEASE_MANIFEST): {error}") from error
+        return lambda: dict(fingerprints)
 
     # Connection
 
@@ -255,7 +269,7 @@ class WorkerNodeDaemon:
                 _logger.exception("Observation relay failed; continuing")
 
     def _check_pools(self) -> None:
-        """Every POOL_CHECK_S: a subsystem whose container is gone is started again."""
+        """Every POOL_CHECK_S: a subsystem whose Deployment is gone is started again."""
         if self._next_pool_check is None or time.monotonic() < self._next_pool_check:
             return
         self._next_pool_check = time.monotonic() + POOL_CHECK_S
@@ -270,10 +284,14 @@ class WorkerNodeDaemon:
             self._current.send(self.status.heartbeat())
 
 
-def _local_image_fingerprints() -> dict:
-    from scenegems_tool.cluster.fingerprints.labels import read_image_fingerprints
-
-    return read_image_fingerprints()
+def _remove_leftovers(worker_node: WorkerNodeContext) -> None:
+    if worker_node.kubernetes is None:
+        _logger.warning("Worker node %s has no cluster API, so it cannot look for leftover instances", worker_node.worker_node_id)
+        return
+    try:
+        remove_leftover_instances(worker_node.kubernetes, worker_node.worker_node_id)
+    except Exception as error:  # the next start looks again
+        _logger.warning("Cannot remove the leftover instances of worker node %s: %s", worker_node.worker_node_id, error)
 
 
 def _slots_text(configuration: WorkerNodeConfiguration) -> str:
