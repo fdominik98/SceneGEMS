@@ -9,7 +9,7 @@ The Cluster page shows the machines of the selected cluster: whether each worker
 
 ## Clusters
 
-**Manage clusters** lists the control nodes this browser knows (a name and the operator URL, `http://127.0.0.1:5174` by default) and selects the one the cluster pages work on. A remote control node is reached over an SSH tunnel to its operator listener.
+**Manage clusters** lists the control nodes this browser knows (a name and the operator URL, `http://127.0.0.1:5174` by default) and selects the one the cluster pages work on. The operator API is inside the cluster's Kubernetes cluster, so the PC reaches it through a port forward to the service `control-node-api` (Machine Hub opens it, or `kubectl -n scenegems port-forward service/control-node-api 5174:5174`); give each control node its own local port. The forward ends when the control node's pod is replaced, and has to be opened again.
 
 ## Worker nodes
 

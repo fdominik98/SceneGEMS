@@ -1,0 +1,130 @@
+{{- range $entry := .Values.workerNodes }}
+{{- $w := include "scenegems.workerNode" (list $ $entry) | fromYaml }}
+{{- $name := printf "worker-node-%s" $w.name }}
+{{- $folder := printf "%s/%s" (trimSuffix "/" $.Values.workerNodeHostPath) $w.name }}
+{{- $slots := list }}
+{{- range $type, $count := $w.slots }}
+{{- $slots = append $slots (printf "%s:%d" $type (int64 $count)) }}
+{{- end }}
+{{- $labels := list }}
+{{- range $key, $value := $w.labels }}
+{{- $labels = append $labels (printf "%s=%v" $key $value) }}
+{{- end }}
+---
+# The daemon of worker node {{ $w.name }} (scenegems_tool.cluster.worker_node.daemon), pinned to its node. It leases jobs
+# from the control node (control-node-api:8443) and starts the pool of every subsystem its components need as a
+# Deployment of its own through the cluster API, owned by this Deployment, so deleting it removes the pools; the
+# simulation pool starts each run as a pod. The daemon needs no deployed control node: it retries until one answers.
+# Its pod carries no scenegems.instance label, which marks the instances the daemon removes as leftovers.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "scenegems.labels" $ | nindent 4 }}
+    app.kubernetes.io/name: worker-node
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  replicas: 1
+  # One daemon per worker node name at a time: two would register the same worker node
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: worker-node
+      app.kubernetes.io/component: {{ $name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "scenegems.labels" $ | nindent 8 }}
+        app.kubernetes.io/name: worker-node
+        app.kubernetes.io/component: {{ $name }}
+      annotations:
+        # A new release.json (another release) restarts the daemon, which reports its fingerprints in the Hello
+        checksum/release-manifest: {{ $.Files.Get "release.json" | sha256sum }}
+    spec:
+      {{- include "scenegems.nodeSelector" $w.node | nindent 6 }}
+      serviceAccountName: worker-node
+      automountServiceAccountToken: true
+      enableServiceLinks: false
+      # Time for running jobs to stop, remove their pods and give their leases back
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: daemon
+          image: {{ include "scenegems.image" (list $ $.Values.images.workerNode "scenegems-worker-node") | quote }}
+          imagePullPolicy: {{ $.Values.imagePullPolicy }}
+          env:
+            - name: SCENEGEMS_CONTROL_NODE_URL
+              value: "http://control-node-api:8443"
+            - name: SCENEGEMS_CONTROL_NODE_ID
+              value: {{ $.Values.controlNodeId | quote }}
+            - name: SCENEGEMS_BROKER_HOST
+              value: cluster-broker
+            - name: SCENEGEMS_BROKER_PORT
+              value: "1883"
+            - name: SCENEGEMS_WORKER_NODE_NAME
+              value: {{ $w.name | quote }}
+            - name: SCENEGEMS_WORKER_NODE_MACHINE
+              value: {{ $w.machine | default "" | quote }}
+            - name: SCENEGEMS_WORKER_NODE_COMPONENTS
+              value: {{ join "," $w.components | quote }}
+            - name: SCENEGEMS_WORKER_NODE_SLOTS
+              value: {{ join "," $slots | quote }}
+            - name: SCENEGEMS_WORKER_NODE_LABELS
+              value: {{ join "," $labels | quote }}
+            - name: SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES
+              value: {{ $w.artifactCacheMaxBytes | int64 | quote }}
+            - name: SCENEGEMS_SOFTWARE_REVISION
+              value: {{ $.Values.revision | quote }}
+            # The tag the code names the release's images with when an image below is not given (utils/image_names.py)
+            - name: SCENEGEMS_IMAGE_TAG
+              value: {{ $.Values.imageTag | quote }}
+            - name: SCENEGEMS_WORKER_NODE_STATE_DIR
+              value: /var/lib/scenegems-worker-node
+            - name: SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR
+              value: /var/lib/scenegems-worker-node/artifacts
+            # Its place in the cluster: its pools and runs go into this namespace, onto this node, with this folder
+            - name: SCENEGEMS_KUBERNETES_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SCENEGEMS_KUBERNETES_NODE
+              value: {{ $w.node | quote }}
+            - name: SCENEGEMS_RUNTIME_HOST_PATH
+              value: {{ printf "%s/runtime" $folder | quote }}
+            - name: SCENEGEMS_RELEASE_MANIFEST
+              value: {{ include "scenegems.releaseManifestPath" $ | quote }}
+            # The images its pools and runs start, by the variables the code reads them from; an empty one is left
+            # out, so the code names <repository>:<imageTag>
+            {{- range $variable, $image := $.Values.workerNodeImages }}
+            {{- if $image }}
+            - name: {{ $variable }}
+              value: {{ $image | quote }}
+            {{- end }}
+            {{- end }}
+          volumeMounts:
+            # The runtime folder on the node, which its simulation pool and the runs' pods mount too; the daemon
+            # removes the folders of leftover instances in it
+            - name: runtime
+              mountPath: /app/assets/runtime_assets
+            # The artifact cache; on the node, so it outlives a restart of the pod as compose's volume did
+            - name: state
+              mountPath: /var/lib/scenegems-worker-node
+            - name: release-manifest
+              mountPath: {{ include "scenegems.releaseManifestPath" $ }}
+              subPath: release.json
+              readOnly: true
+      volumes:
+        - name: runtime
+          hostPath:
+            path: {{ printf "%s/runtime" $folder | quote }}
+            type: DirectoryOrCreate
+        - name: state
+          hostPath:
+            path: {{ printf "%s/state" $folder | quote }}
+            type: DirectoryOrCreate
+        - name: release-manifest
+          configMap:
+            name: {{ include "scenegems.releaseConfigMap" $ }}
+{{- end }}

@@ -49,7 +49,7 @@ The channels every subsystem has, and the task states, are in [Subsystem channel
 
 | Name | Protocol | Host | Topic root | Description |
 |------|----------|------|------------|-------------|
-| cluster broker | mqtt 3.1.1 | `<control node host>:1883` | `scenegems` | The control node's own broker (NanoMQ). Plain MQTT without accounts, reachable on the cluster's VPN only. Port from `SCENEGEMS_BROKER_PORT`. Takes packets up to 256 MB. |
+| cluster broker | mqtt 3.1.1 | `cluster-broker:1883` | `scenegems` | The control node's own broker (NanoMQ), the service `cluster-broker` of the cluster's namespace. Plain MQTT without accounts, reachable from the cluster's pods only. Takes packets up to 256 MB. |
 | WARA-PS | mqtt 3.1.1 over TLS | `broker.waraps.org:8883` | `waraps` | The public WARA-PS broker, for runs with a real vessel or external agents. Needs an account. |
 | other broker | mqtt 3.1.1, plain or TLS | as set on the [Connections](../connections) page | `waraps` | Any external broker a run with a real vessel is given. |
 

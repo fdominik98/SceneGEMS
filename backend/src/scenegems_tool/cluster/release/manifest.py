@@ -5,9 +5,8 @@ image fingerprints to know which worker nodes are up to date (cluster/control_no
 is JSON with a format number, so a reader of another format fails with a clear message.
 
 Format 2 adds the chart: the folder of the bundle that holds it, the Helm release and namespace it is installed
-as, and the chart values every cluster gets (roles.py has the rules for building a values file). The roles
-keep their compose fields beside the chart's until the compose stacks are removed, so the compose deploy works
-on a format 2 bundle too.
+as, and the chart values every cluster gets (roles.py has the rules for building a values file). A cluster is
+installed from the chart only: the roles have no compose fields and the bundle no compose stacks.
 """
 
 import json
@@ -19,7 +18,7 @@ from typing import Any, Dict, Optional
 RELEASE_FILE = "release.json"
 RELEASE_FORMAT = 2
 FINGERPRINT_LABEL = "org.scenegems.fingerprint"
-CHART_FOLDER = "chart"  # the chart's folder in the bundle, beside release.json and stacks/
+CHART_FOLDER = "chart"  # the chart's folder in the bundle, beside release.json
 CHART_HELM_RELEASE = "scenegems"
 CHART_NAMESPACE = "scenegems"
 _FOLDER = re.compile(r"[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)*")  # relative, forward slashes

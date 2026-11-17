@@ -1,6 +1,6 @@
 """The worker node daemon's configuration, from its environment and its `.env` file.
 
-Variables (the chart's worker node template sets them; deploy/worker_node/.env.example is the compose deploy's, until the chart replaces it):
+Variables (the chart's worker node template sets them, deploy/kubernetes/chart/templates/worker-node.yaml):
 
     SCENEGEMS_CONTROL_NODE_URL          http://<host>[:<port>] of the control node's cluster API; the worker node dials it and keeps
                                   retrying while the control node is not up. Control node and worker nodes trust the VPN: no TLS, no pairing.
@@ -51,7 +51,7 @@ DEFAULT_ENV_FILE = ".env"
 # The workbench's default reference geofence (frontend referenceGeofence.ts).
 DEFAULT_REFERENCE_GEOFENCE = (57.76080082972655, 16.680965995056, 20.0)
 DEFAULT_ARTIFACT_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024
-DEFAULT_BROKER_PORT = 1883  # the cluster broker's plain MQTT port (deploy/control_node/nanomq.conf)
+DEFAULT_BROKER_PORT = 1883  # the cluster broker's plain MQTT port (deploy/images/mqtt_broker/Dockerfiles/nanomq/nanomq.conf)
 ARTIFACT_CACHE_FOLDER = "artifacts"  # under the state folder
 MAX_MACHINE_LENGTH = 256  # the registry column
 _DNS_LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")  # a namespace's name

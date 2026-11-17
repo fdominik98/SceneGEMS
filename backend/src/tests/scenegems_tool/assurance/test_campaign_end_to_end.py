@@ -1,38 +1,34 @@
-"""The Phase 4 exit test on one host (design doc 5.4, P4.7): a control node and a worker node from the release
-bundle, campaigns through every stage implementation, and a control node restart in the middle.
+"""The Phase 4 exit test on one host (design doc 5.4, P4.7), now on Kubernetes: a control node and a worker node
+installed from the release bundle's chart into k3d, campaigns through every stage implementation, and a control node
+restart in the middle.
 
-The cluster is deployed as the deployment tool deploys it (local_cluster.py). One campaign
-has 20 cases (five two-vessel classes at quota 4) with straight trajectories and three runs:
-replay with the post-hoc monitor, USV Navigation with the live monitor, replay with the empty
-monitor. A second, small campaign uses the monitor-driven RRT. Once some cases are complete
-the control-node-api container stops until every lease has expired, then starts again; both
-campaigns must finish with their books in order.
+The cluster is deployed as the deployment tool deploys it (local_cluster.py: values from the roles, the chart
+installed with helm and waited for). One campaign has 20 cases (five two-vessel classes at quota 4) with straight
+trajectories and three runs: replay with the post-hoc monitor, USV Navigation with the live monitor, replay with the
+empty monitor. A second, small campaign uses the monitor-driven RRT. Once some cases are complete the control node's
+pod is deleted (its Deployment scaled to none) and stays away until every lease has expired, then a new pod is
+created (scaled to one again); both campaigns must finish with their books in order. The operator API is reached
+through a port forward to the service control-node-api, opened again after the restart, as the console reaches it.
 
-Needs Docker with Compose v2 and the cluster's images built from this checkout
-(`./build.sh --release <folder>`); about ten minutes.
+Needs k3d, helm, kubectl and Docker, and every image of the release built under SCENEGEMS_TEST_IMAGE_TAG (latest by
+default; tests/scenegems_tool/cluster/worker_node/k3d_cluster.py); the bundle is made of those images as they are.
+About fifteen minutes.
 """
 
 import hashlib
-import shutil
-import subprocess
 import time
-from pathlib import Path
+import uuid
+from contextlib import ExitStack
 from typing import Any, Callable, Dict, List
 
 import httpx
 import pytest
 
-from scenegems_tool.cluster.release.__main__ import checkout_revision
-from scenegems_tool.cluster.release.bundle import build_bundle
-from tests.scenegems_tool.assurance.local_cluster import LocalRole, deploy_control_node, deploy_worker_node, remove_cluster_containers
+from tests.scenegems_tool.assurance.local_cluster import LocalCluster, bundle_release, control_node, deploy, worker_node
 
-pytestmark = [pytest.mark.docker, pytest.mark.slow]
+pytestmark = [pytest.mark.kubernetes, pytest.mark.slow]
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
 CLUSTER = "p4-rehearsal"
-WORKER_NODE = "local"
-OPERATOR_PORT = 15174
-CONTROL_NODE_PARAMETERS = {"SCENEGEMS_API_PORT": "18443", "SCENEGEMS_BROKER_PORT": "18883", "SCENEGEMS_OPERATOR_PORT": str(OPERATOR_PORT), "POSTGRES_HOST_PORT": "15432"}
 WORKER_NODE_PARAMETERS = {
     "SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:2,trajectory_generation:2,simulation:2,monitoring.post_hoc:2",
     "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,asv_system/usv_navigation,control_layer/none,simulation_layer/kinematic,scene_generation,trajectory_generation,monitoring",
@@ -88,10 +84,6 @@ policy:
 """
 
 
-def _docker_available() -> bool:
-    return shutil.which("docker") is not None and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
-
-
 def _wait_for(condition: Callable[[], Any], timeout_s: float, what: str, every_s: float = 3.0) -> Any:
     deadline = time.monotonic() + timeout_s
     while True:
@@ -106,45 +98,72 @@ def _wait_for(condition: Callable[[], Any], timeout_s: float, what: str, every_s
         time.sleep(every_s)
 
 
+class OperatorApi:
+    """The operator API through a port forward to the control node's service; the forward is opened again after a restart, since it ends with the pod it reached."""
+
+    def __init__(self, cluster: LocalCluster):
+        self.cluster = cluster
+        self._stack = ExitStack()
+        self.client: httpx.Client
+
+    def open(self) -> "OperatorApi":
+        port = self._stack.enter_context(self.cluster.forward("operator-api"))
+        self.client = self._stack.enter_context(httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=60))
+        return self
+
+    def close(self) -> None:
+        self._stack.close()
+        self._stack = ExitStack()
+
+    def _call(self, method: str, *arguments: Any, **options: Any) -> httpx.Response:
+        """A request; a forward that broke during the long wait (kubectl ends it on a lost stream) is opened again once."""
+        try:
+            return getattr(self.client, method)(*arguments, **options)
+        except httpx.TransportError:
+            self.close()
+            self.open()
+            return getattr(self.client, method)(*arguments, **options)
+
+    def get(self, *arguments: Any, **options: Any) -> httpx.Response:
+        return self._call("get", *arguments, **options)
+
+    def post(self, *arguments: Any, **options: Any) -> httpx.Response:
+        return self.client.post(*arguments, **options)  # not repeated: it may have reached the control node
+
+
 @pytest.fixture(scope="module")
-def cluster(tmp_path_factory):
-    if not _docker_available():
-        pytest.skip("Docker is not available")
-    work = tmp_path_factory.mktemp("local-cluster")
-    revision, dirty = checkout_revision(REPO_ROOT)
-    release = build_bundle(work / "release", REPO_ROOT, revision, dirty)
-    remove_cluster_containers(CLUSTER)
-    roles: List[LocalRole] = []
+def cluster(k3d_cluster, tmp_path_factory):
+    release_dir, release = bundle_release(tmp_path_factory.mktemp("local-cluster"), k3d_cluster.image_tag)
+    members = [control_node(k3d_cluster.node), worker_node(f"e2e-{uuid.uuid4().hex[:6]}", k3d_cluster.node, **WORKER_NODE_PARAMETERS)]
+    local = deploy(k3d_cluster, release_dir, release, members, cluster_id=CLUSTER)
     try:
-        control_node = deploy_control_node(work / "release", release, work, CLUSTER, CONTROL_NODE_PARAMETERS)
-        roles.append(control_node)
-        roles.append(deploy_worker_node(work / "release", release, work, CLUSTER, WORKER_NODE, WORKER_NODE_PARAMETERS, CONTROL_NODE_PARAMETERS))
-        yield control_node
+        yield local
     finally:
-        for role in reversed(roles):
-            role.down()
-        remove_cluster_containers(CLUSTER)
+        local.uninstall()
 
 
 @pytest.fixture(scope="module")
 def api(cluster):
-    with httpx.Client(base_url=f"http://127.0.0.1:{OPERATOR_PORT}", timeout=60) as client:
-        yield client
+    operator = OperatorApi(cluster).open()
+    try:
+        yield operator
+    finally:
+        operator.close()
 
 
-def _create(api: httpx.Client, config: str) -> Dict[str, Any]:
+def _create(api: OperatorApi, config: str) -> Dict[str, Any]:
     response = api.post("/cluster/campaigns", params={"start": "true"}, content=config.encode(), headers={"Content-Type": "application/yaml"})
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def _campaign(api: httpx.Client, campaign_id: str) -> Dict[str, Any]:
+def _campaign(api: OperatorApi, campaign_id: str) -> Dict[str, Any]:
     response = api.get(f"/cluster/campaigns/{campaign_id}")
     response.raise_for_status()
     return response.json()
 
 
-def _all(api: httpx.Client, path: str, **params: Any) -> List[Dict[str, Any]]:
+def _all(api: OperatorApi, path: str, **params: Any) -> List[Dict[str, Any]]:
     items: List[Dict[str, Any]] = []
     while True:
         page = api.get(path, params={**params, "limit": 1000, "offset": len(items)}).json()
@@ -153,18 +172,39 @@ def _all(api: httpx.Client, path: str, **params: Any) -> List[Dict[str, Any]]:
             return items
 
 
-def _live_leases(control_node: LocalRole) -> int:
-    count = control_node.compose(
-        "exec", "-T", "postgres", "psql", "-U", "scenegems", "-d", "scenegems", "-tAc", "SELECT count(*) FROM job WHERE state IN ('leased', 'running') AND lease_expires_at > now()"
+def _live_leases(cluster: LocalCluster) -> int:
+    count = cluster.kubectl(
+        "exec",
+        "statefulset/postgres",
+        "-c",
+        "postgres",
+        "--",
+        "psql",
+        "-U",
+        "scenegems",
+        "-d",
+        "scenegems",
+        "-tAc",
+        "SELECT count(*) FROM job WHERE state IN ('leased', 'running') AND lease_expires_at > now()",
     )
     return int(count.strip())
 
 
-def _restart_control_node_after_the_leases_expired(control_node: LocalRole) -> None:
-    control_node.compose("stop", "control-node-api")
-    _wait_for(lambda: _live_leases(control_node) == 0, 180, "every lease expiring while the control node is down")
-    control_node.compose("start", "control-node-api")
-    control_node.wait_ready()
+def _control_node_pods(cluster: LocalCluster) -> List[str]:
+    return cluster.kubectl("get", "pods", "-l", "app.kubernetes.io/name=control-node-api", "-o", "name").split()
+
+
+def _restart_control_node_after_the_leases_expired(cluster: LocalCluster, api: OperatorApi) -> None:
+    """The control node's pod deleted and kept away until every lease has expired, then a new one created, as a crashed control node comes back."""
+    api.close()
+    before = _control_node_pods(cluster)
+    cluster.kubectl("scale", "deployment/control-node-api", "--replicas=0")
+    _wait_for(lambda: not _control_node_pods(cluster), 120, "the control node's pod going")
+    _wait_for(lambda: _live_leases(cluster) == 0, 180, "every lease expiring while the control node is down")
+    cluster.kubectl("scale", "deployment/control-node-api", "--replicas=1")
+    cluster.wait_ready()
+    assert not set(_control_node_pods(cluster)) & set(before), "a new pod"
+    api.open()
 
 
 def test_campaigns_through_every_stage_survive_a_control_node_restart(cluster, api):
@@ -177,7 +217,7 @@ def test_campaigns_through_every_stage_survive_a_control_node_restart(cluster, a
     rrt = _create(api, RRT_CAMPAIGN)
 
     _wait_for(lambda: _campaign(api, straight["campaign_id"])["totals"]["complete"] >= 6, 1200, "six complete cases before the restart", every_s=5)
-    _restart_control_node_after_the_leases_expired(cluster)
+    _restart_control_node_after_the_leases_expired(cluster, api)
 
     finished = {}
     for campaign in (straight, rrt):

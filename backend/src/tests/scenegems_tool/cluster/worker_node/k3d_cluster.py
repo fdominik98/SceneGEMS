@@ -1,21 +1,27 @@
-"""A k3d cluster for the tests marked kubernetes: the namespace, the service accounts and roles of the chart, the cluster broker and the images.
+"""The k3d cluster of the tests marked kubernetes, created the way deploy/kubernetes/scripts/local_cluster.sh creates one.
 
-What it needs on the machine: Docker, kubectl on the PATH, k3d on the PATH or named by SCENEGEMS_K3D, and the images
-of the tag in SCENEGEMS_TEST_IMAGE_TAG (latest by default): the broker, the subsystems the tests start and the worker
-node image. It creates a cluster of its own (one server, no load balancer, Traefik and the service load balancer
-off), with its API and the broker's node port on 127.0.0.1 only, imports the images by tag, and deletes the cluster
-at the end. With SCENEGEMS_TEST_K3D_CLUSTER set, the cluster of that name is used, created first when there is none,
-and kept, so a second run skips the start; its namespace is still the run's own and deleted at the end.
+What it needs on the machine: Docker, kubectl on the PATH, k3d and helm on the PATH or named by SCENEGEMS_K3D and
+SCENEGEMS_HELM, and the images of the tag in SCENEGEMS_TEST_IMAGE_TAG (latest by default). It creates a cluster of
+its own (one server, no load balancer, Traefik and the service load balancer off) with its API on 127.0.0.1 and a
+block of node ports mapped to 127.0.0.1, which the API server is told to assign node ports from, as the script
+does; and deletes it at the end. With SCENEGEMS_TEST_K3D_CLUSTER set, the cluster of that name is used, created
+first when there is none, and kept, so a second run skips the start; its namespaces are still the run's own and
+deleted at the end.
+
+Every test of the run shares the cluster. The tests of pools and runs share one namespace of it as well: the chart's
+service accounts, roles and network policy (rendered from deploy/kubernetes/chart with helm and applied, so the tests
+run under exactly the rights and the policy the chart gives), the cluster broker as a Deployment beside them, and the
+images of pools and runs imported by tag. The tests that install the whole chart (tests/scenegems_tool/assurance/
+local_cluster.py) take a namespace of their own.
 
 Every kubectl call names the cluster's kubeconfig: kubectl without one talks to 127.0.0.1:8080, which can be any
 program on the machine. On a host with cgroup version 1 the kubelet needs fail-cgroupv1=false, which is passed when
 Docker reports that version. The kubelet of a cluster created here rotates a container's log at CONTAINER_LOG_MAX_SIZE
 (1 MiB, where Kubernetes' default is 10 MiB), so a test of a log followed across its rotation needs only a few MiB.
 
-The rights are the ones the chart has to give (written down in the design log, K3 and K4 results): the daemon's
-service account worker-node, and the simulation subsystem's simulation-subsystem. The tests run the launcher in the
-test process with a kubeconfig of the worker-node service account, so what the launcher does is checked against those
-rights and nothing more; the simulation subsystem creates its runs from its own pod, with its own account.
+The tests run the launcher in the test process with a kubeconfig of the worker-node service account, so what the
+launcher does is checked against those rights and nothing more; the simulation subsystem creates its runs from its
+own pod, with its own account.
 """
 
 import json
@@ -29,46 +35,48 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 import yaml
 
 K3D_VARIABLE = "SCENEGEMS_K3D"
+HELM_VARIABLE = "SCENEGEMS_HELM"
 CLUSTER_VARIABLE = "SCENEGEMS_TEST_K3D_CLUSTER"
 IMAGE_TAG_VARIABLE = "SCENEGEMS_TEST_IMAGE_TAG"
-NODE_PORTS = (30000, 32767)  # Kubernetes' default node port range
+NODE_PORTS = (30000, 32767)  # Kubernetes' default node port range, which the mapped block is taken from
+NODE_PORT_COUNT = 20  # node ports mapped to 127.0.0.1: the broker's and those of attended runs
 BROKER = "cluster-broker"
+BROKER_LABELS = {"app.kubernetes.io/name": BROKER}  # the chart's broker's, which its network policy lets runs reach
 WORKER_NODE_ACCOUNT = "worker-node"
 SIMULATION_ACCOUNT = "simulation-subsystem"
 START_TIMEOUT_S = 300
 CONTAINER_LOG_MAX_SIZE = "1Mi"  # the kubelet rotates a container's log at this size (containerLogMaxSize)
-
-# The rules of the chart's two roles (K5 copies them into rbac.yaml)
-WORKER_NODE_RULES = [
-    {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list", "create", "update", "delete"]},
-    {"apiGroups": [""], "resources": ["pods", "services"], "verbs": ["list", "delete"]},
-]
-SIMULATION_RULES = [
-    {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "create", "delete"]},
-    {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
-    {"apiGroups": [""], "resources": ["services"], "verbs": ["get", "list", "create", "update", "delete"]},
-]
+CHART = Path(__file__).resolve().parents[5].parent / "deploy" / "kubernetes" / "chart"
 
 
 class K3dUnavailable(RuntimeError):
     pass
 
 
-def k3d_executable() -> str:
-    named = os.environ.get(K3D_VARIABLE, "").strip()
+def _program(variable: str, name: str, why: str) -> str:
+    named = os.environ.get(variable, "").strip()
     if named:
         if not Path(named).is_file():
-            raise K3dUnavailable(f"{K3D_VARIABLE}={named} names no file")
+            raise K3dUnavailable(f"{variable}={named} names no file")
         return named
-    found = shutil.which("k3d")
+    found = shutil.which(name)
     if found is None:
-        raise K3dUnavailable(f"k3d is needed for the tests marked kubernetes: put it on the PATH or name it with {K3D_VARIABLE} (k3d 5.9.0 was used)")
+        raise K3dUnavailable(f"{name} is needed for {why}: put it on the PATH or name it with {variable}")
     return found
+
+
+def k3d_executable() -> str:
+    return _program(K3D_VARIABLE, "k3d", "the tests marked kubernetes (k3d 5.9.0 was used)")
+
+
+def helm_executable() -> str:
+    """Helm, for the chart's tests: named by SCENEGEMS_HELM or on the PATH."""
+    return _program(HELM_VARIABLE, "helm", "the chart's tests (Helm 4.3.2, the version Machine Hub pins, was used)")
 
 
 def kubectl_executable() -> str:
@@ -78,17 +86,31 @@ def kubectl_executable() -> str:
     return found
 
 
+def _free(port: int) -> bool:
+    with socket.socket() as probe:
+        try:
+            probe.bind(("127.0.0.1", port))
+        except OSError:
+            return False
+        return True
+
+
 def free_local_port(low: int = 1024, high: int = 65535) -> int:
     """A port free on 127.0.0.1 between low and high."""
     for _ in range(200):
         port = random.randint(low, high)
-        with socket.socket() as probe:
-            try:
-                probe.bind(("127.0.0.1", port))
-            except OSError:
-                continue
+        if _free(port):
             return port
     raise RuntimeError(f"No free port between {low} and {high} on 127.0.0.1")
+
+
+def free_node_ports(count: int = NODE_PORT_COUNT) -> Tuple[int, int]:
+    """A block of count ports in the node port range, all free on 127.0.0.1: first and last."""
+    for _ in range(200):
+        first = random.randint(NODE_PORTS[0], NODE_PORTS[1] - count + 1)
+        if all(_free(port) for port in range(first, first + count)):
+            return first, first + count - 1
+    raise RuntimeError(f"No {count} free ports in a row between {NODE_PORTS[0]} and {NODE_PORTS[1]} on 127.0.0.1")
 
 
 def _run(arguments: List[str], *, input_text: Optional[str] = None, timeout_s: float = START_TIMEOUT_S, check: bool = True) -> subprocess.CompletedProcess:
@@ -98,17 +120,48 @@ def _run(arguments: List[str], *, input_text: Optional[str] = None, timeout_s: f
     return result
 
 
+def create_cluster_arguments(k3d: str, name: str, api_port: int, node_ports: Tuple[int, int], cgroup_v1: bool, kubelet_args: Sequence[str] = ()) -> List[str]:
+    """`k3d cluster create` as deploy/kubernetes/scripts/local_cluster.sh runs it: the node ports mapped to 127.0.0.1 straight onto
+    the server node, and the API server told to assign node ports from that block only, since only ports mapped now reach this PC."""
+    ports = f"{node_ports[0]}-{node_ports[1]}"
+    arguments = [k3d, "cluster", "create", name, "--servers", "1", "--agents", "0", "--no-lb", "--api-port", f"127.0.0.1:{api_port}"]
+    arguments += ["--port", f"127.0.0.1:{ports}:{ports}@server:0:direct", "--k3s-arg", f"--service-node-port-range={ports}@server:0"]
+    arguments += ["--k3s-arg", "--disable=traefik@server:0", "--k3s-arg", "--disable=servicelb@server:0"]
+    arguments += ["--kubeconfig-update-default=false", "--kubeconfig-switch-context=false", "--wait", "--timeout", f"{START_TIMEOUT_S}s"]
+    if cgroup_v1:
+        arguments += ["--k3s-arg", "--kubelet-arg=fail-cgroupv1=false@server:*"]
+    for argument in kubelet_args:
+        arguments += ["--k3s-arg", f"--kubelet-arg={argument}@server:*"]
+    return arguments
+
+
+def render_chart(helm: str, values: Mapping[str, Any], namespace: str, show_only: Sequence[str] = (), release: Optional[Mapping[str, Any]] = None) -> List[Dict[str, Any]]:
+    """The chart's objects rendered with helm template for a namespace, from a copy of the chart with release.json in it (an empty one when none is given)."""
+    with tempfile.TemporaryDirectory(prefix="scenegems-chart-") as folder:
+        chart = Path(folder) / "chart"
+        shutil.copytree(CHART, chart)
+        (chart / "release.json").write_text(json.dumps(release or {}), encoding="utf-8")
+        (Path(folder) / "values.yaml").write_text(yaml.safe_dump(dict(values)), encoding="utf-8")
+        arguments = [helm, "template", "scenegems", str(chart), "--namespace", namespace, "-f", str(Path(folder) / "values.yaml")]
+        for template in show_only:
+            arguments += ["--show-only", template]
+        rendered = _run(arguments, timeout_s=120)
+    return [document for document in yaml.safe_load_all(rendered.stdout) if document]
+
+
 @dataclass
 class K3dCluster:
     name: str
     k3d: str
     kubectl: str
+    helm: str
     folder: Path  # holds the kubeconfigs
-    namespace: str
-    broker_port: int  # the broker's service port, node port and local port on 127.0.0.1
+    namespace: str  # the namespace of the tests of pools and runs
+    node_ports: Tuple[int, int]  # mapped to the same ports on 127.0.0.1; the API server assigns node ports from them
     image_tag: str
     keep: bool  # a named cluster is kept after the run
     node: str = ""
+    imported: set = field(default_factory=set)  # the images this run imported into the node
     kubeconfig: Path = field(init=False)
     worker_node_kubeconfig: Path = field(init=False)
 
@@ -116,13 +169,21 @@ class K3dCluster:
         self.kubeconfig = self.folder / "admin.kubeconfig"
         self.worker_node_kubeconfig = self.folder / "worker-node.kubeconfig"
 
+    @property
+    def broker_port(self) -> int:
+        """The broker's service port, node port and local port on 127.0.0.1: the first mapped node port."""
+        return self.node_ports[0]
+
     # kubectl
 
     def kubectl_run(self, *arguments: str, input_text: Optional[str] = None, check: bool = True, timeout_s: float = 120) -> subprocess.CompletedProcess:
         return _run([self.kubectl, "--kubeconfig", str(self.kubeconfig), *arguments], input_text=input_text, check=check, timeout_s=timeout_s)
 
-    def apply(self, documents: List[dict]) -> None:
-        self.kubectl_run("apply", "-f", "-", input_text=yaml.safe_dump_all(documents))
+    def helm_run(self, *arguments: str, check: bool = True, timeout_s: float = 900) -> subprocess.CompletedProcess:
+        return _run([self.helm, "--kubeconfig", str(self.kubeconfig), *arguments], check=check, timeout_s=timeout_s)
+
+    def apply(self, documents: List[dict], namespace: Optional[str] = None) -> None:
+        self.kubectl_run("apply", "-n", namespace or self.namespace, "-f", "-", input_text=yaml.safe_dump_all(documents))
 
     def json(self, *arguments: str) -> dict:
         return json.loads(self.kubectl_run("get", "-n", self.namespace, *arguments, "-o", "json").stdout)
@@ -144,7 +205,7 @@ class K3dCluster:
         self.node = nodes[0]["metadata"]["name"]
         self._namespace_and_rights()
         self._import_images()
-        self._broker()
+        self.add_broker(self.namespace, self.broker_port, node_port=self.broker_port)
         self._worker_node_kubeconfig()
 
     def _exists(self) -> bool:
@@ -152,54 +213,17 @@ class K3dCluster:
         return any(cluster.get("name") == self.name for cluster in listing)
 
     def _create(self) -> None:
-        arguments = [
-            self.k3d,
-            "cluster",
-            "create",
-            self.name,
-            "--servers",
-            "1",
-            "--agents",
-            "0",
-            "--no-lb",
-            "--api-port",
-            f"127.0.0.1:{free_local_port()}",
-            "--port",
-            f"127.0.0.1:{self.broker_port}:{self.broker_port}@server:0:direct",  # no load balancer: straight onto the server node
-            "--k3s-arg",
-            "--disable=traefik@server:0",
-            "--k3s-arg",
-            "--disable=servicelb@server:0",
-            "--kubeconfig-update-default=false",
-            "--kubeconfig-switch-context=false",
-            "--wait",
-            "--timeout",
-            f"{START_TIMEOUT_S}s",
-        ]
-        if _run(["docker", "info", "--format", "{{.CgroupVersion}}"]).stdout.strip() == "1":
-            arguments += ["--k3s-arg", "--kubelet-arg=fail-cgroupv1=false@server:*"]
-        arguments += ["--k3s-arg", f"--kubelet-arg=container-log-max-size={CONTAINER_LOG_MAX_SIZE}@server:*"]
-        _run(arguments, timeout_s=START_TIMEOUT_S + 60)
+        cgroup_v1 = _run(["docker", "info", "--format", "{{.CgroupVersion}}"]).stdout.strip() == "1"
+        _run(create_cluster_arguments(self.k3d, self.name, free_local_port(), self.node_ports, cgroup_v1, [f"container-log-max-size={CONTAINER_LOG_MAX_SIZE}"]), timeout_s=START_TIMEOUT_S + 60)
 
     def _namespace_and_rights(self) -> None:
-        documents: List[dict] = [{"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": self.namespace}}]
-        for account, rules in ((WORKER_NODE_ACCOUNT, WORKER_NODE_RULES), (SIMULATION_ACCOUNT, SIMULATION_RULES)):
-            metadata = {"name": account, "namespace": self.namespace}
-            documents += [
-                {"apiVersion": "v1", "kind": "ServiceAccount", "metadata": metadata},
-                {"apiVersion": "rbac.authorization.k8s.io/v1", "kind": "Role", "metadata": metadata, "rules": rules},
-                {
-                    "apiVersion": "rbac.authorization.k8s.io/v1",
-                    "kind": "RoleBinding",
-                    "metadata": metadata,
-                    "roleRef": {"apiGroup": "rbac.authorization.k8s.io", "kind": "Role", "name": account},
-                    "subjects": [{"kind": "ServiceAccount", "name": account, "namespace": self.namespace}],
-                },
-            ]
-        self.apply(documents)
+        """The namespace with the chart's service accounts, roles and network policy, as the chart renders them for it."""
+        self.kubectl_run("create", "namespace", self.namespace)
+        values = {"controlNodeId": "k3d", "workerNodes": []}
+        self.apply(render_chart(self.helm, values, self.namespace, ["templates/rbac.yaml", "templates/network-policy.yaml"]))
 
     def images(self) -> Dict[str, str]:
-        """The images the tests need, by the variable the code reads each one from."""
+        """The images the tests of pools and runs need, by the variable the code reads each one from."""
         tag = self.image_tag
         return {
             "BROKER": f"scenegems-mqtt-broker:{tag}",
@@ -214,29 +238,57 @@ class K3dCluster:
         self.import_images(list(self.images().values()))
 
     def import_images(self, images: List[str]) -> None:
-        """Import images of this machine's Docker into the cluster by tag; K3dUnavailable naming the ones that are missing."""
+        """Import images of this machine's Docker into the cluster by tag; K3dUnavailable naming the ones that are missing.
+
+        As local_cluster.sh does it: a pulled image (Postgres) is a multi-platform index of which Docker Desktop holds one
+        platform, and containerd refuses an archive naming content it lacks, with every other image of the same import;
+        so pulled images are saved for the node's platform first. k3d reports success even then, so the node is checked."""
+        from scenegems_tool.cluster.release.roles import PULLED_IMAGES
+
         missing = [image for image in images if _run(["docker", "image", "inspect", image], check=False).returncode != 0]
         if missing:
             raise K3dUnavailable(f"Images missing for the tests marked kubernetes ({IMAGE_TAG_VARIABLE}={self.image_tag}): {', '.join(missing)}")
-        _run([self.k3d, "image", "import", *images, "--cluster", self.name], timeout_s=1800)
+        wanted = [image for image in images if image not in self.imported]  # imported by this run already: the same build
+        built, pulled = [image for image in wanted if image not in PULLED_IMAGES], [image for image in wanted if image in PULLED_IMAGES]
+        if built:
+            _run([self.k3d, "image", "import", *built, "--cluster", self.name], timeout_s=1800)
+        if pulled:
+            architecture = _run(["docker", "info", "--format", "{{.Architecture}}"]).stdout.strip().replace("x86_64", "amd64").replace("aarch64", "arm64")
+            archive = self.folder / "pulled-images.tar"
+            _run(["docker", "save", "--platform", f"linux/{architecture}", "-o", archive.as_posix(), *pulled], timeout_s=600)
+            _run([self.k3d, "image", "import", archive.as_posix(), "--cluster", self.name], timeout_s=600)  # k3d takes a path with backslashes for an image name
+            archive.unlink()
+        refused = [image for image in images if not self._node_has(image)]
+        if refused:
+            raise RuntimeError(f"The cluster's node did not take these images: {', '.join(refused)}")
+        self.imported.update(images)
+
+    def _node_has(self, image: str) -> bool:
+        """Whether the node's containerd holds the image by that name (docker.io/library/<name> for a short one)."""
+        names = _run(["docker", "exec", self.node, "ctr", "-n", "k8s.io", "images", "ls", "-q"]).stdout.split()
+        return any(name == image or name.endswith("/" + image) for name in names)
 
     def node_run(self, *command: str, check: bool = True) -> subprocess.CompletedProcess:
         """A command on the cluster's node (k3d's container of the server), such as a look at a host path."""
         return _run(["docker", "exec", self.node, *command], check=check, timeout_s=60)
 
-    def _broker(self) -> None:
-        labels = {"app.kubernetes.io/name": BROKER}
+    def add_broker(self, namespace: str, port: int = 1883, node_port: Optional[int] = None) -> None:
+        """The cluster broker in a namespace, labelled as the chart labels its own: a Deployment and the Service cluster-broker on port, a
+        NodePort Service when node_port is given (the pools dial cluster-broker on that port, the test process 127.0.0.1)."""
+        service: Dict[str, Any] = {"type": "ClusterIP", "selector": BROKER_LABELS, "ports": [{"name": "mqtt", "port": port, "targetPort": 1883}]}
+        if node_port is not None:
+            service = {"type": "NodePort", "selector": BROKER_LABELS, "ports": [{"name": "mqtt", "port": port, "targetPort": 1883, "nodePort": node_port}]}
         self.apply(
             [
                 {
                     "apiVersion": "apps/v1",
                     "kind": "Deployment",
-                    "metadata": {"name": BROKER, "namespace": self.namespace, "labels": labels},
+                    "metadata": {"name": BROKER, "labels": BROKER_LABELS},
                     "spec": {
                         "replicas": 1,
-                        "selector": {"matchLabels": labels},
+                        "selector": {"matchLabels": BROKER_LABELS},
                         "template": {
-                            "metadata": {"labels": labels},
+                            "metadata": {"labels": BROKER_LABELS},
                             "spec": {
                                 "containers": [
                                     {
@@ -252,16 +304,11 @@ class K3dCluster:
                         },
                     },
                 },
-                {
-                    "apiVersion": "v1",
-                    "kind": "Service",
-                    "metadata": {"name": BROKER, "namespace": self.namespace},
-                    # One port number everywhere: the pools dial cluster-broker on it, the test process 127.0.0.1
-                    "spec": {"type": "NodePort", "selector": labels, "ports": [{"port": self.broker_port, "targetPort": 1883, "nodePort": self.broker_port}]},
-                },
-            ]
+                {"apiVersion": "v1", "kind": "Service", "metadata": {"name": BROKER}, "spec": service},
+            ],
+            namespace,
         )
-        self.kubectl_run("rollout", "status", f"deployment/{BROKER}", "-n", self.namespace, "--timeout=180s", timeout_s=200)
+        self.kubectl_run("rollout", "status", f"deployment/{BROKER}", "-n", namespace, "--timeout=180s", timeout_s=200)
 
     def _worker_node_kubeconfig(self) -> None:
         """A kubeconfig of the daemon's service account: the cluster's server and certificate, the account's token."""
@@ -307,18 +354,19 @@ class K3dCluster:
 
 def start_test_cluster() -> K3dCluster:
     """The cluster of the run, started; K3dUnavailable when a tool or an image is missing."""
-    k3d, kubectl = k3d_executable(), kubectl_executable()
+    k3d, kubectl, helm = k3d_executable(), kubectl_executable(), helm_executable()
     named = os.environ.get(CLUSTER_VARIABLE, "").strip()
     name = named or f"scenegems-test-{uuid.uuid4().hex[:6]}"
     folder = Path(tempfile.mkdtemp(prefix="scenegems-k3d-"))
-    broker_port = _mapped_broker_port(k3d, name) if named else None
+    node_ports = _mapped_node_ports(k3d, name) if named else None
     cluster = K3dCluster(
         name=name,
         k3d=k3d,
         kubectl=kubectl,
+        helm=helm,
         folder=folder,
         namespace=f"scenegems-test-{uuid.uuid4().hex[:6]}",
-        broker_port=broker_port or free_local_port(*NODE_PORTS),
+        node_ports=node_ports or free_node_ports(),
         image_tag=os.environ.get(IMAGE_TAG_VARIABLE, "").strip() or "latest",
         keep=bool(named),
     )
@@ -330,15 +378,18 @@ def start_test_cluster() -> K3dCluster:
     return cluster
 
 
-def _mapped_broker_port(k3d: str, name: str) -> Optional[int]:
-    """The broker port a kept cluster was created with: its server's one port mapping in the node port range."""
+def _mapped_node_ports(k3d: str, name: str) -> Optional[Tuple[int, int]]:
+    """The block of node ports a kept cluster was created with: its server's port mappings in the node port range."""
     listing = json.loads(_run([k3d, "cluster", "list", "-o", "json"]).stdout or "[]")
     for cluster in listing:
         if cluster.get("name") != name:
             continue
-        for node in cluster.get("nodes", []):
-            for container_port in node.get("portMappings") or {}:
-                port = int(str(container_port).split("/")[0])
-                if NODE_PORTS[0] <= port <= NODE_PORTS[1]:
-                    return port
+        ports = sorted(
+            int(str(container_port).split("/")[0])
+            for node in cluster.get("nodes", [])
+            for container_port in node.get("portMappings") or {}
+            if NODE_PORTS[0] <= int(str(container_port).split("/")[0]) <= NODE_PORTS[1]
+        )
+        if ports:
+            return ports[0], ports[-1]
     return None

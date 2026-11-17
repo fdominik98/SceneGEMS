@@ -3,7 +3,7 @@
 Called by `./build.sh --release <folder>` after the images are built as :latest. The revision is
 the checkout's HEAD commit; `dirty` says whether the checkout had uncommitted changes. The images
 are tagged with the revision (with -dirty for a dirty checkout) and release.json lists them by
-those names. The bundle holds release.json, the Helm chart in chart/ and the compose stacks in stacks/.
+those names. The bundle holds release.json and the Helm chart in chart/.
 """
 
 import argparse
@@ -28,7 +28,7 @@ def checkout_revision(repo_root: Path) -> Tuple[str, bool]:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m scenegems_tool.cluster.release", description="Write a SceneGEMS release bundle.")
-    parser.add_argument("--out", type=Path, required=True, help="folder to write the bundle into: release.json, the Helm chart in chart/ and the compose stacks in stacks/")
+    parser.add_argument("--out", type=Path, required=True, help="folder to write the bundle into: release.json and the Helm chart in chart/")
     parser.add_argument("--repo-root", type=Path, default=REPO_ROOT, help="the checkout the images were built from")
     arguments = parser.parse_args(argv)
     try:

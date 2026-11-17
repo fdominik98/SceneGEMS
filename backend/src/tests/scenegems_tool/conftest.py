@@ -1,7 +1,7 @@
 """Postgres for the tests of persistence/ and of the control node (cluster/control_node/), which share one server.
 
 The server is SCENEGEMS_TEST_DATABASE_URL when set (its role needs CREATEDB), otherwise a
-throwaway container started from the image the control node compose file uses. Every test gets
+throwaway container started from the image the chart's Postgres uses. Every test gets
 its own database: empty for the migration tests, or a copy of a template migrated once.
 Without either server the postgres tests are skipped.
 """
@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.engine import make_url
 
-from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE  # the image of deploy/control_node/docker-compose.yml
+from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE  # the image of the chart's Postgres (deploy/kubernetes/chart, images.postgres)
 from scenegems_tool.persistence.database import create_database_engine, create_session_factory, normalize_database_url
 from scenegems_tool.persistence.migrate import upgrade_database
 
@@ -128,3 +128,17 @@ def engine(database_url) -> Iterator[Engine]:
 @pytest.fixture
 def session_factory(engine):
     return create_session_factory(engine)
+
+
+@pytest.fixture(scope="session")
+def k3d_cluster():
+    """The run's k3d cluster (tests marked kubernetes): with the namespace of the pool and run tests, their rights, the broker and the
+    images (cluster/worker_node/k3d_cluster.py); it fails clearly when k3d, helm, kubectl or an image is missing."""
+    from tests.scenegems_tool.cluster.worker_node.k3d_cluster import K3dUnavailable, start_test_cluster
+
+    try:
+        cluster = start_test_cluster()
+    except K3dUnavailable as error:
+        pytest.fail(str(error), pytrace=False)
+    yield cluster
+    cluster.stop()

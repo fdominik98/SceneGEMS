@@ -14,6 +14,7 @@ from scenegems_tool.cluster.release.roles import (
     WORKER_NODE_IMAGES_VALUES_PATH,
     component_item_images,
     role_images,
+    scenegems_chart,
     scenegems_roles,
     slot_item_images,
     worker_node_image_variables,
@@ -21,56 +22,44 @@ from scenegems_tool.cluster.release.roles import (
 from tests.scenegems_tool.cluster.release.chart_values_builder import placeholders
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
-COMPOSE_FIELDS = {"stack", "project", "env", "secrets", "setup", "outputs"}
-KUBERNETES_FIELDS = {"values", "image_values", "forwards"}
-FIELDS = {"description", "count", "images", "parameters", "ready"} | COMPOSE_FIELDS | KUBERNETES_FIELDS
-PLACEHOLDERS = {"cluster", "name", "machine.vpn_ip", "machine.name", "release.revision", "dependent.name"}
-# {<role>.vpn_ip} and {<role>.<parameter>}: the machine of another role of the cluster
-CONTROL_NODE_PLACEHOLDERS = {"control-node.vpn_ip"} | {f"control-node.{key}" for key in scenegems_roles()["control-node"]["parameters"]}
+FIELDS = {"description", "count", "images", "parameters", "ready", "values", "image_values", "forwards"}
+OPTIONAL_FIELDS = {"name_pattern"}
+# The fields of the compose deploy, which went with the compose stacks
+COMPOSE_FIELDS = {"stack", "project", "env", "secrets", "requires", "outputs", "setup"}
 
 
-def _texts(role):
-    yield role["project"]
-    yield from role["env"].values()
-    yield from (parameter["default"] for parameter in role["parameters"].values())
-    for command in role["setup"]:
-        yield from command
-    for output in role["outputs"].values():
-        yield from output["command"]
-
-
-def test_every_role_has_the_contract_fields():
+def test_every_role_has_the_contract_fields_and_no_others():
     for name, role in scenegems_roles().items():
-        assert FIELDS <= set(role), name
+        assert FIELDS <= set(role) <= FIELDS | OPTIONAL_FIELDS, name
+        assert not COMPOSE_FIELDS & set(role), name
         assert role["count"] in ("one", "many")
 
 
-def test_placeholders_are_the_documented_ones():
-    for role in scenegems_roles().values():
-        for text in _texts(role):
-            assert set(re.findall(r"\{([^{}]+)\}", text)) <= PLACEHOLDERS | CONTROL_NODE_PLACEHOLDERS, text
+def test_parameter_defaults_use_only_the_values_placeholders():
+    for name, role in scenegems_roles().items():
+        for parameter in role["parameters"].values():
+            assert set(re.findall(r"\{([^{}]+)\}", parameter["default"])) <= set(VALUES_PLACEHOLDERS), name
 
 
-def test_secrets_parameters_and_fixed_values_do_not_overlap():
+def test_no_parameter_is_a_port_or_an_address_of_the_compose_deploy():
+    """Pods reach each other by service name on fixed ports; nothing is published on a host."""
     for role in scenegems_roles().values():
-        env, parameters, secrets = set(role["env"]), set(role["parameters"]), set(role["secrets"])
-        required = set(role.get("requires", {}).get("keys", []))
-        groups = [env, parameters, secrets, required]
-        assert sum(len(group) for group in groups) == len(set().union(*groups))
+        assert not [key for key in role["parameters"] if key.endswith(("_PORT", "_BIND_ADDRESS"))], role["description"]
 
 
 def test_the_worker_node_needs_nothing_from_a_deployed_control_node():
+    """Its values name the cluster and itself only: the daemon finds the control node by its service name in the cluster."""
     roles = scenegems_roles()
-    assert "requires" not in roles["worker-node"] and roles["control-node"]["outputs"] == {} and roles["control-node"]["setup"] == []
-    assert roles["control-node"]["count"] == "one"  # {control-node.*} names the one control node of the cluster
-    env = roles["worker-node"]["env"]
-    assert env["SCENEGEMS_CONTROL_NODE_ID"] == "{cluster}"
-    assert env["SCENEGEMS_CONTROL_NODE_URL"] == "http://{control-node.vpn_ip}:{control-node.SCENEGEMS_API_PORT}"
-    assert env["SCENEGEMS_BROKER_PORT"] == "{control-node.SCENEGEMS_BROKER_PORT}"
+    assert roles["control-node"]["count"] == "one"
+    entry = roles["worker-node"]["values"]["entry"]
+    assert not [name for name in placeholders(entry) if name.startswith("control-node")]
+    assert (entry["name"], entry["node"], entry["machine"]) == ("{name}", "{node}", "{machine.name}")
 
 
-def test_there_are_no_secrets_but_the_database_password():
-    assert scenegems_roles()["control-node"]["secrets"] == ["POSTGRES_PASSWORD"] and scenegems_roles()["worker-node"]["secrets"] == []
+def test_no_role_holds_a_secret():
+    """The chart generates the Postgres password in the cluster."""
+    for role in scenegems_roles().values():
+        assert "secrets" not in role and not [key for key in role["parameters"] if "PASSWORD" in key]
 
 
 def test_component_items_are_the_catalog_with_its_images():
@@ -143,12 +132,12 @@ def test_the_worker_node_reports_its_machine_from_the_machine_name():
     from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import WorkerNodeConfiguration
 
     worker_node = scenegems_roles()["worker-node"]
-    assert worker_node["env"]["SCENEGEMS_WORKER_NODE_MACHINE"] == "{machine.name}"
-    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://10.88.0.2:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab"}
+    assert worker_node["values"]["entry"]["machine"] == "{machine.name}"
+    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://control-node-api:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab"}
     values.update({"SCENEGEMS_WORKER_NODE_NAME": "worker-1", "SCENEGEMS_WORKER_NODE_STATE_DIR": "/state"})
     values.update({key: worker_node["parameters"][key]["default"] for key in ("SCENEGEMS_WORKER_NODE_SLOTS", "SCENEGEMS_WORKER_NODE_COMPONENTS")})
-    values["SCENEGEMS_WORKER_NODE_MACHINE"] = worker_node["env"]["SCENEGEMS_WORKER_NODE_MACHINE"].replace("{machine.name}", "lab-pc-3")
-    # The place in the cluster and the release manifest come from the chart's worker node template, not from the role's env
+    values["SCENEGEMS_WORKER_NODE_MACHINE"] = worker_node["values"]["entry"]["machine"].replace("{machine.name}", "lab-pc-3")
+    # The chart's worker node template turns the entry into the daemon's variables (test_stack_contract.py)
     values.update({"SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems", "SCENEGEMS_KUBERNETES_NODE": "lab-pc-3", "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/worker-1/runtime"})
     values["SCENEGEMS_RELEASE_MANIFEST"] = "/etc/scenegems/release.json"
     assert WorkerNodeConfiguration.from_values(values).machine == "lab-pc-3"
@@ -181,16 +170,9 @@ def test_a_release_s_images_carry_its_tag_and_the_pulled_one_keeps_its_own():
     roles = scenegems_roles("abc")
     images = role_images(roles)
     assert POSTGRES_IMAGE in images and all(image.endswith(":abc") for image in images if image != POSTGRES_IMAGE)
-    assert roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc"
+    assert scenegems_chart("abc").values["imageTag"] == "abc", "the chart names the images it is not given with the release's tag"
     assert all(image.endswith(":abc") for images in roles["worker-node"]["parameters"]["SCENEGEMS_WORKER_NODE_COMPONENTS"]["items"]["images"].values() for image in images)
     assert scenegems_roles()["worker-node"]["images"] == [WORKER_NODE_IMAGE] and WORKER_NODE_IMAGE.endswith(":latest")
-
-
-def test_the_control_node_role_names_its_one_compose_file():
-    """Fixed, not a parameter: a redeploy overwrites a .env that still names the former live sessions overlay."""
-    control_node = scenegems_roles()["control-node"]
-    assert control_node["env"]["COMPOSE_FILE"] == "docker-compose.yml"
-    assert "COMPOSE_FILE" not in control_node["parameters"] and "COMPOSE_PATH_SEPARATOR" not in control_node["env"]
 
 
 def _parameter_values(template):
@@ -256,7 +238,7 @@ def test_ready_names_the_workloads_of_each_role():
     roles = scenegems_roles()
     for name, role in roles.items():
         ready = role["ready"]
-        assert set(ready) <= {"running", "healthy", "deployments", "stateful_sets"} and ready["deployments"], name
+        assert set(ready) <= {"deployments", "stateful_sets"} and ready["deployments"], name
         names = ready["deployments"] + ready.get("stateful_sets", [])
         assert all(isinstance(workload, str) and workload for workload in names) and len(names) == len(set(names))
         rendered = [workload.replace("{name}", "worker-1") for workload in names]

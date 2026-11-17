@@ -1,135 +1,166 @@
-"""A control node and a worker node of one cluster on this host, deployed from a release bundle the way the
-deployment tool deploys them (cluster/release/roles.py).
+"""A SceneGEMS cluster in the k3d cluster of the tests, deployed from a release bundle the way the deployment tool deploys it.
 
-Each role gets a folder of its own with its stack and release.json, and a .env made of the
-role's values, its parameters and secrets generated here. There is no pairing: the worker node's .env
-holds the control node's address and ports ({control-node.vpn_ip} and {control-node.<parameter>} of its role),
-and each compose project is started and waited for until the role's ready services are up.
-Worker nodes reach the control node through host.docker.internal, which stands in for the control node's VPN address.
+The bundle (release.json and the chart) is built from the images of the test's tag (bundle.build_bundle with
+built_tag and image_tag). The values file is built from the roles of release.json with the reference builder
+(tests/scenegems_tool/cluster/release/chart_values_builder.py), as Machine Hub builds it: one member per role on the
+cluster's node. Machine Hub pushes the images a cluster needs to the cluster's registry and writes each as
+registry/repository@sha256:<digest>; here they are imported into the node by tag, and the values name each one by
+that tag, which the chart takes as it is too. The chart is installed with helm into a namespace of its own and waited
+for until the workloads of the roles' `ready` are available. deploy/kubernetes/scripts/local_cluster.sh does the
+same on an operator's PC with a hand-written values file.
+
+The control node and the worker nodes reach each other by service name inside the cluster. The operator API is reached
+through a port forward to the service the control node role's `forwards` names, as the console reaches it.
 """
 
 import json
-import secrets
-import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+import uuid
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Tuple
 
+import yaml
+
+from scenegems_tool.cluster.release.__main__ import checkout_revision
+from scenegems_tool.cluster.release.bundle import build_bundle
 from scenegems_tool.cluster.release.manifest import Release
+from tests.scenegems_tool.cluster.release.chart_values_builder import Member, build_values, member_context, needed_images, render
+from tests.scenegems_tool.cluster.worker_node.k3d_cluster import K3dCluster, free_local_port
 
-CONTROL_NODE_ADDRESS = "host.docker.internal"
-
-
-def render(text: str, context: Mapping[str, str]) -> str:
-    for placeholder, value in context.items():
-        text = text.replace("{" + placeholder + "}", value)
-    return text
+REPO_ROOT = Path(__file__).resolve().parents[5]
+INSTALL_TIMEOUT = "10m"
 
 
-def run(command: List[str], cwd: Path, timeout_s: float = 600) -> str:
-    result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=timeout_s)
-    if result.returncode != 0:
-        raise RuntimeError(f"{' '.join(command)} failed in {cwd} ({result.returncode}): {result.stderr.strip() or result.stdout.strip()}")
-    return result.stdout
+def bundle_release(folder: Path, image_tag: str) -> Tuple[Path, Release]:
+    """A release bundle of this checkout whose images are the ones built under image_tag, named by that tag."""
+    revision, dirty = checkout_revision(REPO_ROOT)
+    release_dir = folder / "release"
+    return release_dir, build_bundle(release_dir, REPO_ROOT, revision, dirty, image_tag=image_tag, built_tag=image_tag)
+
+
+def control_node(node: str, **parameters: str) -> Member:
+    return Member("control-node", "control-node", node=node, machine="operator-pc", parameters=parameters)
+
+
+def worker_node(name: str, node: str, **parameters: str) -> Member:
+    return Member("worker-node", name, node=node, machine="operator-pc", parameters=parameters)
 
 
 @dataclass
-class LocalRole:
-    """One deployed role: its folder, compose project and ready services."""
+class LocalCluster:
+    """One install of the chart in a namespace of the test's k3d cluster."""
 
-    name: str
+    k3d: K3dCluster
+    namespace: str
+    cluster_id: str
+    helm_release: str
+    release: Dict[str, Any]  # release.json as the deployment tool reads it
+    members: List[Member]
+    values: Dict[str, Any]
     folder: Path
-    ready: Mapping[str, List[str]]
+    forwards: List[subprocess.Popen] = field(default_factory=list)
 
-    def compose(self, *arguments: str, timeout_s: float = 600) -> str:
-        return run(["docker", "compose", *arguments], self.folder, timeout_s)
+    def kubectl(self, *arguments: str, check: bool = True, timeout_s: float = 120, input_text: Optional[str] = None) -> str:
+        return self.k3d.kubectl_run("-n", self.namespace, *arguments, check=check, timeout_s=timeout_s, input_text=input_text).stdout
 
-    def services(self) -> Dict[str, Dict[str, Any]]:
-        output = self.compose("ps", "--all", "--format", "json")
-        lines = [json.loads(line) for line in output.splitlines() if line.strip()]
-        return {line["Service"]: line for line in lines}
+    def ready_workloads(self) -> List[str]:
+        """kind/name of every workload the roles' `ready` names for the members, rendered as the deployment tool renders them."""
+        workloads = []
+        for member in self.members:
+            ready = self.release["roles"][member.role]["ready"]
+            context = member_context(self.release, self.cluster_id, member)
+            workloads += [f"deployment/{render(name, context, 'ready')}" for name in ready.get("deployments", [])]
+            workloads += [f"statefulset/{render(name, context, 'ready')}" for name in ready.get("stateful_sets", [])]
+        return workloads
 
-    def is_ready(self) -> bool:
-        services = self.services()
-        running = all(services.get(service, {}).get("State") == "running" for service in self.ready.get("running", []))
-        healthy = all(services.get(service, {}).get("Health") == "healthy" for service in self.ready.get("healthy", []))
-        return running and healthy
+    def wait_ready(self, timeout_s: float = 600) -> None:
+        """Every workload of `ready` available, as the deployment tool's ready check reads it."""
+        for workload in self.ready_workloads():
+            self.kubectl("rollout", "status", workload, f"--timeout={int(timeout_s)}s", timeout_s=timeout_s + 30)
 
-    def wait_ready(self, timeout_s: float = 300) -> None:
-        deadline = time.monotonic() + timeout_s
-        while not self.is_ready():
-            if time.monotonic() > deadline:
-                raise TimeoutError(f"{self.name} is not ready after {timeout_s:.0f} s: {self.services()}")
-            time.sleep(2)
+    def logs(self, workload: str, tail: int = 200) -> str:
+        return self.kubectl("logs", workload, f"--tail={tail}", "--all-containers", check=False)
 
-    def down(self) -> None:
+    @contextmanager
+    def forward(self, forward_name: str = "operator-api") -> Iterator[int]:
+        """The forward of a role's `forwards` opened as kubectl port-forward on a free local port; yields the port."""
+        (forward,) = [item for role in self.release["roles"].values() for item in role["forwards"] if item["name"] == forward_name]
+        port = free_local_port(20000, 29999)
+        process = subprocess.Popen(
+            [self.k3d.kubectl, "--kubeconfig", str(self.k3d.kubeconfig), "-n", self.namespace, "port-forward", f"service/{forward['service']}", f"{port}:{forward['port']}"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        self.forwards.append(process)
         try:
-            self.compose("down", "--volumes", "--remove-orphans", timeout_s=300)
-        except RuntimeError:
-            pass
+            _wait_listening(port, process)
+            yield port
+        finally:
+            process.terminate()
+            process.wait(timeout=30)
+
+    def uninstall(self) -> None:
+        for process in self.forwards:
+            if process.poll() is None:
+                process.terminate()
+        self.k3d.helm_run("uninstall", self.helm_release, "--namespace", self.namespace, "--wait", "--timeout", "5m", check=False)
+        self.k3d.kubectl_run("delete", "namespace", self.namespace, "--wait=false", check=False)
 
 
-def _install(release_dir: Path, role: Mapping[str, Any], folder: Path) -> None:
-    if folder.exists():
-        shutil.rmtree(folder)
-    shutil.copytree(release_dir / "stacks" / role["stack"], folder)
-    shutil.copy(release_dir / "release.json", folder / "release.json")
+def _wait_listening(port: int, process: subprocess.Popen, timeout_s: float = 30) -> None:
+    import socket
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            raise RuntimeError(f"kubectl port-forward ended: {process.stderr.read() if process.stderr else ''}")
+        with socket.socket() as probe:
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                return
+        time.sleep(0.3)
+    raise TimeoutError(f"the port forward on 127.0.0.1:{port} did not open within {timeout_s:g} s")
 
 
-def _write_env(folder: Path, values: Mapping[str, str]) -> None:
-    (folder / ".env").write_text("".join(f"{key}={value}\n" for key, value in values.items()), encoding="utf-8", newline="\n")
-
-
-def _role_env(role: Mapping[str, Any], context: Mapping[str, str], parameters: Optional[Mapping[str, str]]) -> Dict[str, str]:
-    values = {key: render(value, context) for key, value in role["env"].items()}
-    values.update({key: definition["default"] for key, definition in role["parameters"].items()})
-    values.update(parameters or {})
-    values.update({key: secrets.token_urlsafe(32) for key in role["secrets"]})
-    return values
-
-
-def deploy_control_node(release_dir: Path, release: Release, work_dir: Path, cluster: str, parameters: Optional[Mapping[str, str]] = None) -> LocalRole:
-    role = release.roles["control-node"]
-    context = {"cluster": cluster, "name": cluster, "machine.vpn_ip": CONTROL_NODE_ADDRESS, "machine.name": "local", "release.revision": release.revision}
-    folder = work_dir / f"control node-{cluster}"
-    _install(release_dir, role, folder)
-    _write_env(folder, _role_env(role, context, parameters))
-    control_node = LocalRole(name=f"control node {cluster}", folder=folder, ready=role["ready"])
-    for command in role["setup"]:
-        run([render(part, context) for part in command], folder)
-    control_node.compose("up", "--detach")
-    control_node.wait_ready()
-    return control_node
-
-
-def deploy_worker_node(
+def deploy(
+    k3d: K3dCluster,
     release_dir: Path,
     release: Release,
-    work_dir: Path,
-    cluster: str,
-    name: str,
-    parameters: Optional[Mapping[str, str]] = None,
-    control_node_parameters: Optional[Mapping[str, str]] = None,
-) -> LocalRole:
-    """A worker node of the cluster. It needs no deployed control node, only the control node's address and parameters, as Machine Hub passes them."""
-    role = release.roles["worker-node"]
-    control_node_values = {key: definition["default"] for key, definition in release.roles["control-node"]["parameters"].items()}
-    control_node_values.update(control_node_parameters or {})
-    context = {"cluster": cluster, "name": name, "machine.vpn_ip": CONTROL_NODE_ADDRESS, "machine.name": "local", "release.revision": release.revision, "control-node.vpn_ip": CONTROL_NODE_ADDRESS}
-    context.update({f"control-node.{key}": value for key, value in control_node_values.items()})
-    folder = work_dir / f"worker node-{cluster}-{name}"
-    _install(release_dir, role, folder)
-    _write_env(folder, _role_env(role, context, parameters))
-    worker_node = LocalRole(name=f"worker node {name}", folder=folder, ready=role["ready"])
-    worker_node.compose("up", "--detach")
-    worker_node.wait_ready()
-    return worker_node
+    members: Iterable[Member],
+    *,
+    cluster_id: str,
+    namespace: Optional[str] = None,
+    extra_values: Optional[Mapping[str, Any]] = None,
+    wait: bool = True,
+) -> LocalCluster:
+    """The chart of the bundle installed into a namespace of the k3d cluster, with the values the roles give for the members.
 
-
-def remove_cluster_containers(cluster: str) -> None:
-    """Subsystem containers a worker node started for this cluster and left behind."""
-    names = subprocess.run(["docker", "ps", "--all", "--quiet", "--filter", f"name=scenegems-{cluster}-"], capture_output=True, text=True).stdout.split()
-    if names:
-        subprocess.run(["docker", "rm", "--force", *names], capture_output=True)
+    The images the members need are imported by tag first. With wait, the install waits (helm --wait) and the
+    roles' ready workloads are checked."""
+    release_json = json.loads((release_dir / "release.json").read_text(encoding="utf-8"))
+    members = list(members)
+    images = sorted(needed_images(release_json, cluster_id, members))
+    k3d.import_images(images)
+    values = build_values(release_json, cluster_id, members, {image: image for image in images})  # imported by tag: the reference is the tag
+    values.update(extra_values or {})
+    namespace = namespace or f"scenegems-{cluster_id}-{uuid.uuid4().hex[:6]}"
+    folder = Path(k3d.folder) / namespace
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "values.yaml").write_text(yaml.safe_dump(values, sort_keys=True), encoding="utf-8")
+    chart = release_json["chart"]
+    local = LocalCluster(k3d, namespace, cluster_id, chart["helm_release"], release_json, members, values, folder)
+    arguments = ["upgrade", "--install", chart["helm_release"], str(release_dir / chart["folder"]), "--namespace", namespace, "--create-namespace", "-f", str(folder / "values.yaml")]
+    if wait:
+        arguments += ["--wait", "--timeout", INSTALL_TIMEOUT]
+    try:
+        k3d.helm_run(*arguments)
+        if wait:
+            local.wait_ready()
+    except BaseException:
+        print(local.kubectl("get", "pods", "-o", "wide", check=False))
+        local.uninstall()
+        raise
+    return local

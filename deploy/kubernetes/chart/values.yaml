@@ -87,6 +87,15 @@ controlNode:
 # (<workerNodeHostPath>/<worker node name>/runtime, a host path mounted in its simulation pool and its runs' pods).
 workerNodeHostPath: /var/lib/scenegems
 
+# The network policy of the simulation runs' pods (templates/network-policy.yaml): a run reaches the cluster broker,
+# DNS and, for a run with a real vessel on an external broker, these TCP ports at any address; it is reached only on
+# the ground control ports of an attended run. Chart-only values, which no role writes.
+networkPolicy:
+  enabled: true
+  # The ports of the external brokers a run with a real vessel may name (WARA-PS: 8883 with TLS)
+  externalBrokerPorts:
+    - 8883
+
 # The fields of an entry of workerNodes with their defaults: an entry is merged over these, so a hand-written
 # values file may leave out what it does not change. The deployment tool writes every field.
 workerNodeDefaults:
