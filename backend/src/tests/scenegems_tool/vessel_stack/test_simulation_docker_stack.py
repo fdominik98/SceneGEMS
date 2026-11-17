@@ -60,7 +60,7 @@ def test_every_service_joins_the_maritime_network(stacks, case):
 
 
 def test_a_stack_is_only_generated_never_started_from_here():
-    """A simulation job starts the stack it generated (cluster/worker_node/launchers/per_job/job_stack.py); nothing runs one on its own."""
+    """A simulation job runs the stack it generated as a pod (cluster/worker_node/launchers/per_job/run_pod.py); nothing runs one on its own."""
     for name in ("run_simulation_docker_stack_startup", "destroy_simulation_docker_stack", "SIMULATION_COMPOSE_PROJECT"):
         assert not hasattr(simulation_docker_stack, name), name
 

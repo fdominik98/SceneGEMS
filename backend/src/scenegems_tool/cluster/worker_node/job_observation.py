@@ -3,7 +3,7 @@
 The lease manager opens one per accepted job in WorkerNodeContext.observations and closes it when
 the job's worker stops. The control node's Observe sets the request (request). The simulation job
 passes every change on to its task in the simulation subsystem, which keeps an observation of its
-own for the run: there the run's stack (launchers/per_job/job_stack.py) passes every change into its
+own for the run: there the run's pod (launchers/per_job/run_pod.py) passes every change into its
 runner container and hands the frames the runner writes to add_frames, and the task publishes them.
 The job hands the frames it receives to add_frames here, and the daemon's relay takes them out in
 batches (take_batch) for ObservationFrames:

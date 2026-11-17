@@ -11,25 +11,26 @@ removes its replica sets and pods after it.
 
 What is here:
     Deployments   apply (create, or replace the one of that name), read, whether one is available, delete, an owner reference to one
-    pods          create, delete
+    pods          create, read, delete, an owner reference to one, following a container's log
     services      apply, delete, the node port of a port
     by label      the names of the Deployments, pods or services that carry labels, and deleting them
+    reading       the state of a pod's container (container_state, container_states), and whether an error is the API's (api_error)
 
-What the simulation subsystem's run pods need beyond this (following a container's log, waiting for a container's
-exit code) is added here beside the pod functions when the run becomes a pod; nothing else in the code base talks
-to the cluster API.
+The simulation subsystem waits for a run's runner by reading the run's pod at an interval of its own, so it needs no
+watch. Nothing else in the code base talks to the cluster API.
 """
 
 import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional
 
 KUBECONFIG_VARIABLE = "KUBECONFIG"
 IN_CLUSTER_VARIABLE = "KUBERNETES_SERVICE_HOST"  # set by the kubelet in every pod
 _BACKGROUND = "Background"
 _NOT_FOUND = 404
 _CONFLICT = 409
+_LOG_CHUNK_BYTES = 64 * 1024
 
 
 class Kind(str, Enum):
@@ -63,7 +64,61 @@ class ClusterPlace:
     namespace: str
     node: str  # the node the worker node's daemon is pinned to; its pools and runs are pinned there too
     runtime_host_path: str  # the worker node's runtime folder on that node (mounted in the simulation subsystem and in a run's pod)
-    owner: Optional[OwnerReference] = None  # the daemon's Deployment: removing the worker node removes its pools
+    # What the objects started from here belong to: for the daemon its Deployment (removing the worker node removes its pools),
+    # for the simulation subsystem its own pod (a pool that goes takes its runs with it)
+    owner: Optional[OwnerReference] = None
+
+
+@dataclass(frozen=True)
+class ContainerState:
+    """One container of a pod as the pod's status has it: waiting (with the reason, such as ContainerCreating or ImagePullBackOff), running, or terminated (with the exit code)."""
+
+    WAITING = "waiting"
+    RUNNING = "running"
+    TERMINATED = "terminated"
+
+    state: str  # WAITING, RUNNING or TERMINATED
+    reason: str = ""
+    message: str = ""
+    exit_code: Optional[int] = None
+    restarts: int = 0
+
+    @property
+    def started(self) -> bool:
+        """It runs or has run, so it has a log."""
+        return self.state in (self.RUNNING, self.TERMINATED)
+
+
+def container_state(pod: Any, container: str) -> Optional[ContainerState]:
+    """The state of a container of a pod as read (a regular one, or an init container such as a sidecar); None while the pod's status names none."""
+    return container_states(pod).get(container)
+
+
+def container_states(pod: Any) -> Dict[str, ContainerState]:
+    """The state of every container the status of a pod as read names, by container name."""
+    status = getattr(pod, "status", None)
+    states: Dict[str, ContainerState] = {}
+    for entry in [*(getattr(status, "init_container_statuses", None) or []), *(getattr(status, "container_statuses", None) or [])]:
+        if entry.state is None:
+            continue
+        restarts = int(entry.restart_count or 0)
+        if entry.state.terminated is not None:
+            ended = entry.state.terminated
+            states[entry.name] = ContainerState(ContainerState.TERMINATED, ended.reason or "", ended.message or "", int(ended.exit_code), restarts)
+        elif entry.state.running is not None:
+            states[entry.name] = ContainerState(ContainerState.RUNNING, restarts=restarts)
+        else:
+            waiting = entry.state.waiting
+            states[entry.name] = ContainerState(ContainerState.WAITING, getattr(waiting, "reason", None) or "", getattr(waiting, "message", None) or "", restarts=restarts)
+    return states
+
+
+def api_error(error: BaseException) -> Optional[str]:
+    """What the cluster API answered, for an error that is its answer (it has an HTTP status); None for any other error."""
+    status = _status(error)
+    if status is None:
+        return None
+    return f"{status} {getattr(error, 'reason', '') or ''}".strip()
 
 
 def label_selector(equal: Optional[Mapping[str, str]] = None, present: Iterable[str] = ()) -> str:
@@ -149,8 +204,48 @@ class KubernetesApi:
 
     # Pods
 
-    def create_pod(self, manifest: Mapping[str, Any]) -> None:
-        self._core.create_namespaced_pod(self.namespace, manifest)
+    def create_pod(self, manifest: Mapping[str, Any]) -> Any:
+        """Create the pod; returns it as created, with its uid."""
+        return self._core.create_namespaced_pod(self.namespace, manifest)
+
+    def read_pod(self, name: str) -> Optional[Any]:
+        """The pod with its status, or None when there is none of that name."""
+        try:
+            return self._core.read_namespaced_pod(name, self.namespace)
+        except Exception as error:
+            if _status(error) == _NOT_FOUND:
+                return None
+            raise
+
+    def pod_owner_reference(self, pod_name: str) -> OwnerReference:
+        """A reference to the pod, for objects it is to own. LookupError when there is none of that name."""
+        pod = self.read_pod(pod_name)
+        if pod is None:
+            raise LookupError(f"There is no pod {pod_name} in namespace {self.namespace}")
+        return OwnerReference("v1", Kind.POD.value, pod_name, pod.metadata.uid)
+
+    def follow_log(self, name: str, container: str, *, timestamps: bool = False, since_seconds: Optional[int] = None) -> Iterator[str]:
+        """The lines of a container's log, without their line end, followed until the container stops or the connection ends.
+
+        The API gives stdout and stderr as one log. The container has to have started (ContainerState.started): the API
+        refuses the log of one that waits. timestamps: each line starts with the time the kubelet took it (RFC 3339 with
+        nanoseconds) and a space. since_seconds: only the lines of the last seconds.
+        """
+        options: Dict[str, Any] = {"container": container, "follow": True, "timestamps": timestamps, "_preload_content": False}
+        if since_seconds is not None:
+            options["since_seconds"] = int(since_seconds)
+        response = self._core.read_namespaced_pod_log(name, self.namespace, **options)
+        try:
+            pending = b""
+            for chunk in response.stream(_LOG_CHUNK_BYTES):
+                pending += chunk
+                *lines, pending = pending.split(b"\n")
+                for line in lines:
+                    yield line.decode("utf-8", errors="replace").rstrip("\r")
+            if pending:
+                yield pending.decode("utf-8", errors="replace").rstrip("\r")
+        finally:
+            response.release_conn()
 
     def delete_pod(self, name: str, grace_period_s: Optional[int] = None) -> bool:
         """Delete the pod, giving its containers grace_period_s to stop (the pod's own when None). False when there was none."""

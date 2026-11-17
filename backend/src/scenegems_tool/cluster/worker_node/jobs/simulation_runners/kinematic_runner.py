@@ -5,8 +5,8 @@ or an ASV system on the own ship against replaying targets (run_kinematic_closed
 in mode usv_navigation, MOOS-IvP's helm in mode moos_ivp.
 The stack holds the kinematic simulator, one container for the scenario, and an ASV system
 container per vessel (vessel_job_stack.py); the runner, from the simulation subsystem image, owns
-the clock and carries the commands and states between them. The stack's network is its own and
-reaches nothing else. A run is bit-identical for the same payload, and the result carries its
+the clock and carries the commands and states between them. They are the containers of the run's pod and
+reach each other by their service names. A run is bit-identical for the same payload, and the result carries its
 state digest.
 
 With monitor live, the worker node's monitoring subsystem judges the run's scenes as one series
@@ -36,7 +36,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import TrajectoriesInpu
 from scenegems_tool.cluster.worker_node.jobs.live_monitor import LiveMonitor, SimulationMonitor
 from scenegems_tool.cluster.worker_node.jobs.runner_container import StatusCallback, job_document
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RunPod
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import MoosIvpParameters
 from scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_parameters import parameters_for as moos_ivp_parameters_for
@@ -249,7 +249,7 @@ def kinematic_run_instance(payload: KinematicSimulationPayload):
     return trajectories, kinematic_instance(trajectories, own_ship_asv_system(payload, trajectories.initial_scene), environment=EnvironmentConfig.calm(seed=payload.seed))
 
 
-def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: KinematicSimulationPayload) -> JobStack:
+def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: KinematicSimulationPayload) -> RunPod:
     """The job's stack: the kinematic simulator, an ASV system container per vessel, and the runner."""
     try:
         trajectories, instance = kinematic_run_instance(payload)

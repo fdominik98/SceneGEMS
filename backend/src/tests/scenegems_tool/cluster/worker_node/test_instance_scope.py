@@ -17,14 +17,12 @@ from scenegems_tool.cluster.worker_node.instance_scope import (
     safe_id,
     short_job_id,
     subsystem_name,
-    worker_node_project,
     worker_node_selector_labels,
 )
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 
 DNS_LABEL = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")  # a Kubernetes object name
 LABEL_VALUE = re.compile(r"^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$")
-DOCKER_NAME = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]+$")
 JOB_ID = "265ca868-b95b-4baa-a53a-5dae157a3f5a"
 
 
@@ -148,20 +146,6 @@ def test_safe_id_maps_any_string_to_scope_characters():
     assert safe_id("Job 7/Attempt#2") == "job-7-attempt-2"
     with pytest.raises(ValueError):
         safe_id("///")
-
-
-# The Docker names of a run's compose stack (launchers/per_job/job_stack.py), until a run is a pod
-
-
-def test_a_runs_compose_stack_keeps_its_docker_names():
-    scope = InstanceScope.per_job("m1", "n1", "simulation", JOB_ID)
-    assert worker_node_project("m1", "n1") == scope.compose_project == "scenegems-m1-n1"
-    assert scope.docker_name == "scenegems-m1-n1-simulation-subsystem-265ca868"
-    assert scope.container_name("kinematic_sim") == "scenegems-m1-n1-simulation-subsystem-265ca868-kinematic-sim", "one spelling: hyphens"
-    assert scope.service_key("vessel_0_asv_system") == "simulation-subsystem-265ca868-vessel-0-asv-system", "unique in the worker node's project"
-    assert scope.network_name("net") == "scenegems-m1-n1-simulation-subsystem-265ca868-net"
-    for name in (scope.docker_name, scope.container_name("vessel_1"), scope.network_name("net"), scope.service_key("vessel_1")):
-        assert DOCKER_NAME.match(name), name
 
 
 def test_every_instance_belongs_to_a_worker_node():

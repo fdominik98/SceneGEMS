@@ -6,9 +6,11 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.protocol.messages import LogStream
 from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import ClusterPlace, Kind, OwnerReference
 from scenegems_tool.subsystems.simulation import simulation_worker
 from scenegems_tool.subsystems.simulation.simulation_types import SIMULATION_FRAMES_STREAM, SIMULATION_LOG_STREAM, SIMULATION_RESULT_STREAM
 from scenegems_tool.subsystems.simulation.simulation_worker import CancelFlag, ChannelReport, TaskRelay, context_from_environment, run_task
+from tests.scenegems_tool.cluster.worker_node.fake_kubernetes import FakeCluster
 from tests.scenegems_tool.subsystems.simulation.simulation_fakes import PAYLOAD, SignalChannel, simulation_task, stand_in_run, task_context
 
 
@@ -139,6 +141,7 @@ def test_a_run_that_breaks_fails_its_task_and_still_closes_its_observation():
 
 
 def test_the_context_comes_from_the_containers_environment(monkeypatch):
+    monkeypatch.delenv("SCENEGEMS_KUBERNETES_NAMESPACE", raising=False)
     for variable, value in {
         "SCENEGEMS_CONTROL_NODE_ID": "lab",
         "SCENEGEMS_WORKER_NODE_ID": "bench",
@@ -152,7 +155,7 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
         monkeypatch.setenv(variable, value)
     context = context_from_environment()
     assert (context.control_node_id, context.worker_node_id) == ("lab", "bench")
-    assert context.cluster is None and context.kubernetes is None, "the subsystem names its worker node's pools; it starts none"
+    assert context.cluster is None and context.kubernetes is None, "outside a cluster: no place to create runs in"
     assert context.instance_number == 1, "a subsystem started on its own"
     monkeypatch.setenv("MQTT_SERVICE_NAME", "simulation-subsystem-3")
     numbered = context_from_environment()
@@ -160,6 +163,36 @@ def test_the_context_comes_from_the_containers_environment(monkeypatch):
 
     assert numbered.instance_number == 3 and numbered.pools.service_name(Subsystem.MONITORING) == "monitoring-subsystem-3", "the worker node's other subsystems by its number"
     assert (context.mqtt_connection.agent_broker, context.mqtt_connection.topic_root, context.reference_geofence.radius_meters) == ("broker.lab", "scenegems", 2000.0)
+
+
+PLACE_ENVIRONMENT = {
+    "SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems",
+    "SCENEGEMS_KUBERNETES_NODE": "k3d-lab-server-0",
+    "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/bench/runtime/",
+    "HOSTNAME": "bench-simulation-subsystem-5d8f9-x2x7q",
+}
+
+
+def test_the_place_of_the_runs_is_the_pods_and_their_owner_the_subsystems_own_pod():
+    cluster = FakeCluster()
+    pool_pod = cluster.add(Kind.POD, {"metadata": {"name": PLACE_ENVIRONMENT["HOSTNAME"]}, "spec": {"containers": [{"name": "simulation-subsystem"}]}})
+    connected = []
+    place, api = simulation_worker.cluster_from_environment(PLACE_ENVIRONMENT, connect=lambda namespace: connected.append(namespace) or cluster.api(namespace))
+    assert connected == ["scenegems"] and api.namespace == "scenegems"
+    assert place == ClusterPlace("scenegems", "k3d-lab-server-0", "/var/lib/scenegems/bench/runtime", OwnerReference("v1", "Pod", PLACE_ENVIRONMENT["HOSTNAME"], pool_pod["metadata"]["uid"]))
+
+
+def test_runs_whose_owner_cannot_be_read_go_without_one_and_say_so(caplog):
+    cluster = FakeCluster()
+    place, _ = simulation_worker.cluster_from_environment(PLACE_ENVIRONMENT, connect=cluster.api)
+    assert place.owner is None and place.node == "k3d-lab-server-0"
+    assert "have no owner: its pod 'bench-simulation-subsystem-5d8f9-x2x7q' could not be read" in caplog.text
+    place, _ = simulation_worker.cluster_from_environment({**PLACE_ENVIRONMENT, "HOSTNAME": ""}, connect=cluster.api)
+    assert place.owner is None and "HOSTNAME names no pod" in caplog.text
+
+
+def test_outside_a_cluster_there_is_no_place_and_nothing_is_connected():
+    assert simulation_worker.cluster_from_environment({}, connect=lambda namespace: pytest.fail("no cluster to connect to")) == (None, None)
 
 
 def test_the_pools_worker_runs_its_task_in_the_containers_context(monkeypatch):

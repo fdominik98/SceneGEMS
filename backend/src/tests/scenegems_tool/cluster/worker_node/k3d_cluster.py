@@ -9,12 +9,13 @@ and kept, so a second run skips the start; its namespace is still the run's own 
 
 Every kubectl call names the cluster's kubeconfig: kubectl without one talks to 127.0.0.1:8080, which can be any
 program on the machine. On a host with cgroup version 1 the kubelet needs fail-cgroupv1=false, which is passed when
-Docker reports that version.
+Docker reports that version. The kubelet of a cluster created here rotates a container's log at CONTAINER_LOG_MAX_SIZE
+(1 MiB, where Kubernetes' default is 10 MiB), so a test of a log followed across its rotation needs only a few MiB.
 
-The rights are the ones the chart has to give (written down in the design log, K3 results): the daemon's service
-account worker-node, and the simulation subsystem's simulation-subsystem. The tests run the launcher in the test
-process with a kubeconfig of the worker-node service account, so what the launcher does is checked against those
-rights and nothing more.
+The rights are the ones the chart has to give (written down in the design log, K3 and K4 results): the daemon's
+service account worker-node, and the simulation subsystem's simulation-subsystem. The tests run the launcher in the
+test process with a kubeconfig of the worker-node service account, so what the launcher does is checked against those
+rights and nothing more; the simulation subsystem creates its runs from its own pod, with its own account.
 """
 
 import json
@@ -40,6 +41,7 @@ BROKER = "cluster-broker"
 WORKER_NODE_ACCOUNT = "worker-node"
 SIMULATION_ACCOUNT = "simulation-subsystem"
 START_TIMEOUT_S = 300
+CONTAINER_LOG_MAX_SIZE = "1Mi"  # the kubelet rotates a container's log at this size (containerLogMaxSize)
 
 # The rules of the chart's two roles (K5 copies them into rbac.yaml)
 WORKER_NODE_RULES = [
@@ -47,7 +49,7 @@ WORKER_NODE_RULES = [
     {"apiGroups": [""], "resources": ["pods", "services"], "verbs": ["list", "delete"]},
 ]
 SIMULATION_RULES = [
-    {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "watch", "create", "delete"]},
+    {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "create", "delete"]},
     {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
     {"apiGroups": [""], "resources": ["services"], "verbs": ["get", "list", "create", "update", "delete"]},
 ]
@@ -126,7 +128,10 @@ class K3dCluster:
         return json.loads(self.kubectl_run("get", "-n", self.namespace, *arguments, "-o", "json").stdout)
 
     def can_i(self, account: str, verb: str, resource: str, namespace: Optional[str] = None) -> bool:
-        result = self.kubectl_run("auth", "can-i", verb, resource, "-n", namespace or self.namespace, "--as", f"system:serviceaccount:{self.namespace}:{account}", check=False)
+        """Whether the account may do verb on resource; a subresource is written resource/subresource (pods/log), which kubectl itself would read as a resource and an object's name."""
+        kind, _, subresource = resource.partition("/")
+        arguments = ["auth", "can-i", verb, kind, *(["--subresource", subresource] if subresource else [])]
+        result = self.kubectl_run(*arguments, "-n", namespace or self.namespace, "--as", f"system:serviceaccount:{self.namespace}:{account}", check=False)
         return result.stdout.strip() == "yes"
 
     # Setting up
@@ -173,6 +178,7 @@ class K3dCluster:
         ]
         if _run(["docker", "info", "--format", "{{.CgroupVersion}}"]).stdout.strip() == "1":
             arguments += ["--k3s-arg", "--kubelet-arg=fail-cgroupv1=false@server:*"]
+        arguments += ["--k3s-arg", f"--kubelet-arg=container-log-max-size={CONTAINER_LOG_MAX_SIZE}@server:*"]
         _run(arguments, timeout_s=START_TIMEOUT_S + 60)
 
     def _namespace_and_rights(self) -> None:
@@ -205,11 +211,18 @@ class K3dCluster:
         }
 
     def _import_images(self) -> None:
-        images = list(self.images().values())
+        self.import_images(list(self.images().values()))
+
+    def import_images(self, images: List[str]) -> None:
+        """Import images of this machine's Docker into the cluster by tag; K3dUnavailable naming the ones that are missing."""
         missing = [image for image in images if _run(["docker", "image", "inspect", image], check=False).returncode != 0]
         if missing:
             raise K3dUnavailable(f"Images missing for the tests marked kubernetes ({IMAGE_TAG_VARIABLE}={self.image_tag}): {', '.join(missing)}")
         _run([self.k3d, "image", "import", *images, "--cluster", self.name], timeout_s=1800)
+
+    def node_run(self, *command: str, check: bool = True) -> subprocess.CompletedProcess:
+        """A command on the cluster's node (k3d's container of the server), such as a look at a host path."""
+        return _run(["docker", "exec", self.node, *command], check=check, timeout_s=60)
 
     def _broker(self) -> None:
         labels = {"app.kubernetes.io/name": BROKER}
@@ -252,18 +265,23 @@ class K3dCluster:
 
     def _worker_node_kubeconfig(self) -> None:
         """A kubeconfig of the daemon's service account: the cluster's server and certificate, the account's token."""
-        token = self.kubectl_run("create", "token", WORKER_NODE_ACCOUNT, "-n", self.namespace, "--duration", "6h").stdout.strip()
+        self.account_kubeconfig(WORKER_NODE_ACCOUNT, self.worker_node_kubeconfig)
+
+    def account_kubeconfig(self, account: str, path: Path) -> Path:
+        """A kubeconfig of a service account of the namespace at path: the cluster's server and certificate, the account's token."""
+        token = self.kubectl_run("create", "token", account, "-n", self.namespace, "--duration", "6h").stdout.strip()
         admin = yaml.safe_load(self.kubeconfig.read_text(encoding="utf-8"))
         cluster = admin["clusters"][0]
         document = {
             "apiVersion": "v1",
             "kind": "Config",
             "clusters": [cluster],
-            "users": [{"name": WORKER_NODE_ACCOUNT, "user": {"token": token}}],
-            "contexts": [{"name": WORKER_NODE_ACCOUNT, "context": {"cluster": cluster["name"], "user": WORKER_NODE_ACCOUNT, "namespace": self.namespace}}],
-            "current-context": WORKER_NODE_ACCOUNT,
+            "users": [{"name": account, "user": {"token": token}}],
+            "contexts": [{"name": account, "context": {"cluster": cluster["name"], "user": account, "namespace": self.namespace}}],
+            "current-context": account,
         }
-        self.worker_node_kubeconfig.write_text(yaml.safe_dump(document), encoding="utf-8")
+        path.write_text(yaml.safe_dump(document), encoding="utf-8")
+        return path
 
     # Waiting
 

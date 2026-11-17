@@ -6,7 +6,7 @@ runner's does: replay puts every vessel on replay (replay_mavlink_lockstep), usv
 the own ship (the scene's OS unless own_ship_id names another vessel) on USV Navigation
 (usv_navigation_mavlink_lockstep, its heading and speed sent as GUIDED targets) and the others on
 replay, and moos_ivp does the same with MOOS-IvP's helm (moos_ivp_mavlink_lockstep). The worker node resolves the instance, generates the vessel stack into the job's folder and adds
-a runner from the simulation subsystem image on the stack network (vessel_job_stack.py). Every
+a runner from the simulation subsystem image in the run's pod (vessel_job_stack.py). Every
 vessel has its SITL and its ASV system container; the runner steps the ASV system, sends its
 commands to the vessel's SITL SERIAL0 (mavlink_lockstep_runner.run_mavlink_stack) and returns the run.
 
@@ -50,7 +50,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner
     without_absent_moos_ivp,
 )
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RunPod
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK  # noqa: F401  (the network of every service of the job's stack)
@@ -131,7 +131,7 @@ def _instance(payload: ArduPilotSimulationPayload):
     return trajectories, instance
 
 
-def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: ArduPilotSimulationPayload) -> JobStack:
+def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: ArduPilotSimulationPayload) -> RunPod:
     """The job's stack: SITL and an ASV system container per vessel, Gazebo on the gazebo layer, and the runner."""
     from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import lockstep_dt
 
