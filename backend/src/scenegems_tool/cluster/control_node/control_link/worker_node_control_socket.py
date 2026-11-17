@@ -24,7 +24,7 @@ from scenegems_tool.cluster.protocol.codec import MalformedFrame, decode_worker_
 from scenegems_tool.cluster.protocol.messages import Hello, ProtocolError, ProtocolErrorCode
 from scenegems_tool.cluster.protocol.model_base import ProtocolFrame
 from scenegems_tool.cluster.protocol.version import ProtocolVersionMismatch
-from scenegems_tool.cluster.scope_names import is_scope_name
+from scenegems_tool.cluster.scope_names import WORKER_NODE_NAME_MAX, is_worker_node_name
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,9 @@ async def _receive_hello(socket: WebSocketControlSocket, timeout_s: float) -> Op
     if not isinstance(frame, Hello):
         await socket.refuse(ProtocolErrorCode.MALFORMED_FRAME, f"The first frame must be hello, got {frame.type}", CLOSE_PROTOCOL_ERROR)
         return None
-    if not is_scope_name(frame.worker_node_id):  # it becomes a topic level and part of Docker names
-        await socket.refuse(ProtocolErrorCode.MALFORMED_FRAME, f"Invalid worker node id {frame.worker_node_id!r}: use 1 to 63 lowercase letters, digits and hyphens", CLOSE_PROTOCOL_ERROR)
+    if not is_worker_node_name(frame.worker_node_id):  # it becomes a topic level and the start of the worker node's names in the cluster
+        await socket.refuse(
+            ProtocolErrorCode.MALFORMED_FRAME, f"Invalid worker node id {frame.worker_node_id!r}: use 1 to {WORKER_NODE_NAME_MAX} lowercase letters, digits and hyphens", CLOSE_PROTOCOL_ERROR
+        )
         return None
     return frame

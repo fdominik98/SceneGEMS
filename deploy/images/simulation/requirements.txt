@@ -12,3 +12,5 @@ pymavlink==2.4.50
 pydantic==2.13.4
 # The COLREGS monitor in process, for a run that was given no monitoring subsystem (utils/interval.py); a judged run on a worker node uses its monitoring subsystem
 portion==2.6.3
+# The cluster API: the pods of the runs (scenegems_tool.cluster.worker_node.launchers.kubernetes_api), the version the worker node image has
+kubernetes==36.0.3

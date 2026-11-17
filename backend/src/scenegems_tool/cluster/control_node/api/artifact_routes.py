@@ -50,7 +50,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from scenegems_tool.cluster.protocol.artifacts import JSON_MEDIA_TYPE, SHA256_PATTERN, ArtifactKind
 from scenegems_tool.cluster.protocol.jobs import JobState
 from scenegems_tool.cluster.protocol.routes import ARTIFACTS_PATH, WORKER_NODE_ID_HEADER
-from scenegems_tool.cluster.scope_names import is_scope_name
+from scenegems_tool.cluster.scope_names import WORKER_NODE_NAME_MAX, is_worker_node_name
 from scenegems_tool.persistence.artifacts.artifact_store import COMPRESSED_ENCODING, ArtifactHashMismatch, ArtifactNotFound, ArtifactTooLarge, ArtifactWriter
 from scenegems_tool.persistence.artifacts.recorded_artifacts import ArtifactHolder, RecordedArtifacts, result_role
 from scenegems_tool.persistence.clock import Clock, utc_now
@@ -88,8 +88,8 @@ def worker_node_artifact_router(artifacts: RecordedArtifacts, job_holder: JobHol
 
     async def worker_node_of(request: Request) -> str:
         worker_node_id = request.headers.get(WORKER_NODE_ID_HEADER, "")
-        if not is_scope_name(worker_node_id):
-            raise HTTPException(status_code=400, detail=f"send the worker node's id in the {WORKER_NODE_ID_HEADER} header (1 to 63 lowercase letters, digits and hyphens)")
+        if not is_worker_node_name(worker_node_id):
+            raise HTTPException(status_code=400, detail=f"send the worker node's id in the {WORKER_NODE_ID_HEADER} header (1 to {WORKER_NODE_NAME_MAX} lowercase letters, digits and hyphens)")
         return worker_node_id
 
     @router.get(ARTIFACT_PATH)

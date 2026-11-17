@@ -1,28 +1,17 @@
 # scenegems-worker-node: the worker node daemon (python -m scenegems_tool.cluster.worker_node.daemon).
 #
-# Python, the Docker CLI with the compose plugin, Git and the backend source. The daemon starts the
-# worker node's subsystems through the host's Docker socket and passes every job to one of them as a
-# request over the cluster's broker; it runs no job itself.
-# deploy/worker_node/docker-compose.yml starts it with the socket, the repository and its volumes.
+# Python, Git and the backend source. The daemon creates the worker node's subsystems as Deployments
+# through the cluster API (with its pod's service account) and passes every job to one of them as a
+# request over the cluster's broker; it runs no job itself. It needs no Docker CLI and no Docker socket.
+# The chart's worker node template runs it as the pod of its Deployment worker-node-<name>.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# The static Docker CLI and the compose plugin, for the machine's architecture (x86_64 or aarch64).
-# The plugin binary also serves as `docker-compose`, which the launchers call.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
         ca-certificates \
-        curl \
         git \
-    && arch="$(uname -m)" \
-    && curl -fsSL "https://download.docker.com/linux/static/stable/${arch}/docker-27.5.1.tgz" \
-        | tar xz -C /usr/local/bin --strip-components=1 docker/docker \
-    && mkdir -p /usr/local/lib/docker/cli-plugins \
-    && curl -fsSL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-${arch}" \
-        -o /usr/local/lib/docker/cli-plugins/docker-compose \
-    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
-    && ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose \
     && rm -rf /var/lib/apt/lists/*
 
 COPY deploy/images/worker_node/requirements.txt ./requirements.txt

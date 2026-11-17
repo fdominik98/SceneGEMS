@@ -14,5 +14,5 @@ scipy==1.18.1
 pyproj==3.8.0
 haversine==2.9.0
 pymavlink==2.4.50
-# Image fingerprints from the local Docker engine (scenegems_tool.cluster.fingerprints)
-docker==7.2.0
+# The cluster API: the pools' Deployments (scenegems_tool.cluster.worker_node.launchers.kubernetes_api)
+kubernetes==36.0.3

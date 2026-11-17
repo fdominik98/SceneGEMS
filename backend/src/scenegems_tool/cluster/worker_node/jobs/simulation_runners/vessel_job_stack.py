@@ -1,36 +1,34 @@
-"""The per-job stack of a simulation: every layer of every vessel's stack in its own container, plus the runner.
+"""The pod of a simulation run: every layer of every vessel's stack in its own container, plus the runner.
 
-Every simulation runner builds its stack here. The instance is resolved first, so a stack the
+Every simulation runner builds its run's pod here. The instance is resolved first, so a stack the
 worker node cannot run fails the job before anything starts. The vessel stack then brings its
-containers (vessel_stack/simulation_docker_stack.py): the simulator of the scenario, and per
-vessel its controller and its ASV system. The runner, from the simulation subsystem image, joins
-their network and steps them (vessel_stack/hosting.py, ContainerHosting).
+services (vessel_stack/simulation_docker_stack.py): the simulator of the scenario, and per
+vessel its controller and its ASV system. The runner, from the simulation subsystem image, steps
+them (vessel_stack/hosting.py, ContainerHosting). The services become the containers of one pod
+(launchers/per_job/run_pod.py), which share its network: each reaches the others by its service name.
 
 An instance with a real vessel runs every vessel through its ArduAgent over MQTT
 (subsystems/simulation/arduagent_simulation_driver.py): each simulated vessel then has MAVProxy and
-an ArduAgent beside its SITL, and those and the runner are given the job's broker. On the cluster's
-broker they join the network the worker node's pooled services reach it on; an external broker is
-dialled from the stack's own network.
+an ArduAgent beside its SITL, and those and the runner are given the job's broker in their environment:
+the cluster's broker by its service name, or an external one.
 
 A run that is judged while it runs (monitor live) has its scenes judged by the worker node's monitoring
-subsystem: its runner is told which one and joins the network the cluster's broker is reached on, whatever
-broker its vessels use (jobs/pooled_series.py). The other containers of such a stack still reach nothing else.
+subsystem: its runner is told which one and the cluster's broker in its environment, whatever broker
+its vessels use (jobs/pooled_series.py).
 
-The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the
-runtime assets volume, so a stack is built where that volume is mounted at
-RUNTIME_ASSETS_FOLDER: the container of the worker node's simulation subsystem, whose tasks
-build and start their stacks (subsystems/simulation/simulation_worker.py).
+The generated files of a simulator (Gazebo's world, SITL's parameters) reach it through the worker
+node's runtime folder, so a run's pod is built where that folder is mounted at RUNTIME_ASSETS_FOLDER:
+the container of the worker node's simulation subsystem, whose tasks build and start their runs' pods
+(subsystems/simulation/simulation_worker.py).
 """
 
 from typing import TYPE_CHECKING, Dict, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, JobStack, runner_service
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RUNNER_SERVICE, RunPod, runner_service
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem, subsystem_image
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
-from scenegems_tool.vessel_stack.contracts.stack_services import STACK_NETWORK
-from utils.docker_compose_network import attach_broker_network_to_service, scenegems_broker_network_definition
 
 if TYPE_CHECKING:
     from concrete_level.models.trajectories import Trajectories
@@ -57,22 +55,6 @@ def ground_control_ports(instance: "SimulationInstanceConfig") -> Dict[str, Tupl
     return ports
 
 
-def arduagent_services(instance: "SimulationInstanceConfig") -> Tuple[str, ...]:
-    """The MAVProxy and ArduAgent services of the simulated vessels ArduAgent drives: the stack's containers that talk to the broker."""
-    from scenegems_tool.vessel_stack.control_layers.ardupilot.arduagent_control_mode import ARDUAGENT_ADAPTER_IDS
-    from scenegems_tool.vessel_stack.control_layers.ardupilot.vessel_service_generator import arduagent_service_name, gcs_mavproxy_service_name
-    from scenegems_tool.vessel_stack.registry.catalog import default_resolver
-
-    resolver = default_resolver()
-    services = []
-    for vessel in instance.simulated_vessels.values():
-        adapter = resolver.resolve(vessel.stack, vessel.adapter_ids).asv_adapter
-        if adapter is not None and adapter.id in ARDUAGENT_ADAPTER_IDS:
-            name = vessel.require_connection().agent_name
-            services.extend((gcs_mavproxy_service_name(name), arduagent_service_name(name)))
-    return tuple(services)
-
-
 def build_vessel_job_stack(
     job: JobSpec,
     worker_node: WorkerNodeContext,
@@ -84,11 +66,11 @@ def build_vessel_job_stack(
     monitored: bool = False,
     mqtt_connection: Optional["MQttConnectionInfo"] = None,
     service_name: Optional[str] = None,
-) -> JobStack:
-    """Resolve the instance, write its generated files into the job's folder and assemble the stack: its containers and the runner.
+) -> RunPod:
+    """Resolve the instance, write its generated files into the job's folder and assemble the run's pod: its containers and the runner.
 
     attended: an operator is beside the run, so the stacks that need one are allowed (Mission Planner), and the ground
-    control station port of each such vessel's MAVProxy stays published.
+    control station port of each such vessel's MAVProxy can get a port on the node (RunPod.run, published_ports).
 
     monitored: the run is judged while it runs, so its runner is a requester of the worker node's monitoring subsystem
     on the cluster's broker.
@@ -111,11 +93,8 @@ def build_vessel_job_stack(
     gen_folder = f"{scope.folder}/gen"
     pending_writes, stack_compose = build_simulation_docker_stack_artifacts(instance, trajectories, mqtt_connection or worker_node.mqtt_connection, geofence, headless=True, gen_folder=gen_folder)
     write_simulation_gen_files(pending_writes, gen_folder)
-    stack_services = list(stack_compose["services"])
-    networks = dict(stack_compose["networks"])
-    on_broker = instance.has_real_vessel
     environment = None
-    if on_broker:
+    if instance.has_real_vessel:
         environment = {"PYTHONUNBUFFERED": "1", **mqtt_container_environment(mqtt_connection or worker_node.mqtt_connection)}
         if service_name:
             environment[SERVICE_NAME_VARIABLE] = service_name
@@ -124,15 +103,5 @@ def build_vessel_job_stack(
         cluster_broker = mqtt_container_environment(worker_node.mqtt_connection)
         environment = {"PYTHONUNBUFFERED": "1"} if environment is None else environment
         environment.update(monitoring_pool_environment(worker_node.pools.service_name(Subsystem.MONITORING), cluster_broker, (area.latitude, area.longitude, area.radius_meters)))
-    services = {
-        **stack_compose["services"],
-        RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SIMULATION), networks=[STACK_NETWORK], depends_on=stack_services, environment=environment),
-    }
-    # The cluster's broker is reached on the network the worker node's pooled services reach it on
-    on_cluster_broker = [RUNNER_SERVICE, *arduagent_services(instance)] if on_broker and mqtt_connection is None else [RUNNER_SERVICE] if monitored else []
-    if on_cluster_broker:
-        networks.update(scenegems_broker_network_definition(worker_node.broker_network))
-        for name in on_cluster_broker:
-            attach_broker_network_to_service(services[name])
-    published = [service for service, _ in ground_control_ports(instance).values()] if attended else []
-    return JobStack(scope, services, networks=networks, volumes=stack_compose.get("volumes"), published=published)
+    services = {**stack_compose["services"], RUNNER_SERVICE: runner_service(subsystem_image(Subsystem.SIMULATION), environment=environment)}
+    return RunPod(scope, services, cluster=worker_node.cluster, api=worker_node.kubernetes, networks=stack_compose.get("networks"), volumes=stack_compose.get("volumes"))
