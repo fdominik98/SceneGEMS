@@ -4,7 +4,7 @@ import pytest
 from kubernetes.client.exceptions import ApiException
 
 from scenegems_tool.cluster.worker_node.launchers import kubernetes_api
-from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import Kind, KubernetesApi, KubernetesUnavailable, OwnerReference, label_selector
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import ContainerState, Kind, KubernetesApi, KubernetesUnavailable, OwnerReference, label_selector
 from tests.scenegems_tool.cluster.worker_node.fake_kubernetes import FakeCluster
 
 
@@ -144,3 +144,62 @@ def test_in_a_pod_the_pods_service_account_is_used(monkeypatch):
     api = KubernetesApi.connect("scenegems", environ={"KUBERNETES_SERVICE_HOST": "10.43.0.1"})
     assert loaded and api._apps.api_client.configuration.host == "https://10.43.0.1:443"
     assert kubernetes_api.IN_CLUSTER_VARIABLE == "KUBERNETES_SERVICE_HOST"
+
+
+# Pods: their state and their log (a run's pod)
+
+
+def run_pod_manifest(name: str = "run") -> dict:
+    return {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {"name": name},
+        "spec": {"initContainers": [{"name": "sim", "image": "sim", "restartPolicy": "Always"}], "containers": [{"name": "runner", "image": "runner"}]},
+    }
+
+
+def test_a_pod_is_created_with_its_uid_read_and_referenced_as_an_owner(cluster, api):
+    created = api.create_pod(run_pod_manifest())
+    assert created.metadata.uid and api.read_pod("run").metadata.uid == created.metadata.uid
+    assert api.read_pod("other") is None
+    assert api.pod_owner_reference("run") == OwnerReference("v1", "Pod", "run", created.metadata.uid)
+    with pytest.raises(LookupError, match="There is no pod other in namespace lab"):
+        api.pod_owner_reference("other")
+
+
+def test_the_state_of_a_regular_container_and_of_a_sidecar_is_read_from_the_pods_status(cluster, api):
+    api.create_pod(run_pod_manifest())
+    assert kubernetes_api.container_state(api.read_pod("run"), "runner") is None, "no status yet"
+    cluster.set_container_state("run", "sim", "running", namespace="lab", restarts=2)
+    cluster.set_container_state("run", "runner", "waiting", namespace="lab", reason="PodInitializing")
+    states = kubernetes_api.container_states(api.read_pod("run"))
+    assert states == {"sim": ContainerState("running", restarts=2), "runner": ContainerState("waiting", "PodInitializing")}
+    assert states["sim"].started and not states["runner"].started
+    cluster.set_container_state("run", "runner", "terminated", namespace="lab", exitCode=3, reason="Error", message="boom")
+    runner = kubernetes_api.container_state(api.read_pod("run"), "runner")
+    assert runner == ContainerState("terminated", "Error", "boom", 3) and runner.started
+
+
+def test_a_containers_log_is_followed_line_by_line_across_its_chunks(cluster, api):
+    api.create_pod(run_pod_manifest())
+    cluster.add_log("run", "runner", ["first line, longer than a chunk", "", "third\r", "ünïcode"])
+    assert list(api.follow_log("run", "runner", timestamps=True, since_seconds=12.7)) == ["first line, longer than a chunk", "", "third", "ünïcode"]
+    assert cluster.log_calls == [{"name": "run", "container": "runner", "follow": True, "timestamps": True, "since_seconds": 12, "_preload_content": False}]
+
+
+def test_a_log_whose_connection_breaks_gives_its_lines_then_the_error_and_lets_go_of_the_connection(cluster, api, monkeypatch):
+    api.create_pod(run_pod_manifest())
+    cluster.add_log("run", "runner", ["one", "two"], ConnectionResetError("gone"))
+    responses = []
+    original = cluster.read_log
+    monkeypatch.setattr(cluster, "read_log", lambda *args, **options: responses.append(original(*args, **options)) or responses[-1])
+    lines = []
+    with pytest.raises(ConnectionResetError):
+        for line in api.follow_log("run", "runner"):
+            lines.append(line)
+    assert lines == ["one", "two"] and responses[0].released
+
+
+def test_an_api_error_is_told_from_any_other_error():
+    assert kubernetes_api.api_error(ApiException(status=403, reason="Forbidden")) == "403 Forbidden"
+    assert kubernetes_api.api_error(ConnectionResetError("gone")) is None

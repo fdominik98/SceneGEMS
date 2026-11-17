@@ -17,9 +17,6 @@ Deployment of its pool with the longest subsystem name fit whole. The daemon's c
 name. A name that is still too long (a run's attempt past 9999, an id that did not pass the daemon's check) is
 cut and ends in a hash of the whole name (kubernetes_name), so it stays valid and unique.
 
-The Docker names below (compose_project, docker_name, service_key, container_name, network_name) are those of a
-run's compose stack (launchers/per_job/job_stack.py); they go when a run becomes a pod.
-
 The ids are lowercase letters, digits, '-' and '_'. MQTT topics do not come from here: a topic names the subsystem
 or vessel that publishes and not the worker node it runs on (messaging/topic_layout.py).
 """
@@ -32,7 +29,6 @@ from typing import Dict
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from utils.file_system_utils import RUNTIME_ASSETS_FOLDER
 
-SCOPE_ROOT = "scenegems"
 SUBSYSTEM_SUFFIX = "-subsystem"
 JOB_ID_LENGTH = 8  # characters of the job id in a job instance's name
 INSTANCE_LABEL = "scenegems.instance"  # on every object of an instance; its value is the scope's key
@@ -122,11 +118,6 @@ def is_instance_folder(folder_name: str, worker_node_id: str) -> bool:
     return any(rest == name or rest.startswith(f"{name}-") for name in (subsystem_name(subsystem.value) for subsystem in Subsystem))
 
 
-def worker_node_project(control_node_id: str, worker_node_id: str) -> str:
-    """The compose project of a worker node's run stacks (launchers/per_job/job_stack.py)."""
-    return f"{SCOPE_ROOT}-{_require_id('control node id', control_node_id)}-{_require_id('worker node id', worker_node_id)}"
-
-
 @dataclass(frozen=True)
 class InstanceScope:
     control_node_id: str
@@ -168,24 +159,3 @@ class InstanceScope:
     def folder(self) -> str:
         """Local folder of the instance's generated files, on the worker node's runtime folder."""
         return f"{INSTANCES_FOLDER}/{self.name}"
-
-    # Docker names of a run's compose stack (launchers/per_job/job_stack.py)
-
-    @property
-    def compose_project(self) -> str:
-        return worker_node_project(self.control_node_id, self.worker_node_id)
-
-    @property
-    def docker_name(self) -> str:
-        """The start of every Docker name of the instance, and the whole name of a single container."""
-        return f"{self.compose_project}-{self.instance_id}"
-
-    def service_key(self, service: str) -> str:
-        """The compose key of one of the instance's services, unique in the worker node's project."""
-        return f"{self.instance_id}-{docker_word(service)}"
-
-    def container_name(self, service: str) -> str:
-        return f"{self.docker_name}-{docker_word(service)}"
-
-    def network_name(self, key: str) -> str:
-        return f"{self.docker_name}-{docker_word(key)}"

@@ -1,6 +1,6 @@
 """What a run's runner container is handed: the job document, and the status callback of its in-container part.
 
-The runner container belongs to a simulation's stack (launchers/per_job/job_stack.py); no job has a container
+The runner container belongs to a simulation run's pod (launchers/per_job/run_pod.py); no job has a container
 of its own any more.
 """
 

@@ -5,7 +5,7 @@ line-of-sight waypoint follower, or in mode usv_navigation the own ship (the sce
 own_ship_id names another vessel) on USV Navigation, or in mode moos_ivp on MOOS-IvP's helm, and the
 others on replay, as the kinematic runner's modes are. The worker node resolves the instance (gz_lockstep_runner.gz_custom_instance),
 generates the world and the vessel models into the job's folder and adds a runner from the
-simulation subsystem image on the stack network (vessel_job_stack.py). Every vessel has its ASV
+simulation subsystem image in the run's pod (vessel_job_stack.py). Every vessel has its ASV
 system container and its controller container. The stack has no SITL: the Gazebo service starts
 paused with the gz-transport actuator listening (GZ_START_PAUSED, GZ_ACTUATOR_PORT), and the
 runner steps the world itself and carries the messages between the containers
@@ -47,7 +47,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners.kinematic_runner
     without_absent_moos_ivp,
 )
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import JobStack
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RunPod
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.vessel_stack.contracts.roles import AsvSystemId, ControlLayerId, SimulationLayerId
 
@@ -55,7 +55,7 @@ if TYPE_CHECKING:
     from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import ContainerObservation
     from scenegems_tool.vessel_stack.hosting import StackHosting
 
-GAZEBO_SERVICE = "gazebo"  # the Gazebo service's name on the stack network (generators/gazebo_service_generator.py), where the actuator listens
+GAZEBO_SERVICE = "gazebo"  # the Gazebo service's name in the run's pod (generators/gazebo_service_generator.py), where the actuator listens
 
 ARTIFACT_INPUT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
 ARTIFACT_RESULT_FIELDS: Tuple[ArtifactField, ...] = (ArtifactField("trajectories", ArtifactKind.TRAJECTORIES),)
@@ -129,7 +129,7 @@ def _instance(payload: GazeboCustomSimulationPayload):
     return trajectories, instance
 
 
-def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: GazeboCustomSimulationPayload) -> JobStack:
+def build_job_stack(job: JobSpec, worker_node: WorkerNodeContext, payload: GazeboCustomSimulationPayload) -> RunPod:
     """The job's stack: the paused Gazebo service with the world and the vessel models, a controller and an ASV system container per vessel, and the runner."""
     try:
         trajectories, instance = _instance(payload)
