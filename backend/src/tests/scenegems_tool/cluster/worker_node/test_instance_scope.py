@@ -2,11 +2,11 @@ import re
 
 import pytest
 
+from scenegems_tool.cluster.scope_names import WORKER_NODE_NAME_MAX
 from scenegems_tool.cluster.worker_node.instance_scope import (
     INSTANCE_LABEL,
     KUBERNETES_NAME_MAX,
     WORKER_NODE_LABEL,
-    WORKER_NODE_NAME_MAX,
     InstanceScope,
     daemon_deployment_name,
     docker_word,

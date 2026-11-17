@@ -129,7 +129,7 @@ def test_worker_node_names_must_be_topic_safe_and_short_enough_for_the_names_of_
 
 
 def test_a_worker_node_name_of_28_characters_is_taken():
-    """worker-node-<name> and <name>-design-space-exploration-subsystem then both fit in 63 characters (instance_scope.WORKER_NODE_NAME_MAX)."""
+    """worker-node-<name> and <name>-design-space-exploration-subsystem then both fit in 63 characters (scope_names.WORKER_NODE_NAME_MAX)."""
     assert WorkerNodeConfiguration.from_values(values(SCENEGEMS_WORKER_NODE_NAME="w" * 28)).worker_node_name == "w" * 28
 
 

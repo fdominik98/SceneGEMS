@@ -3,7 +3,8 @@
 import pytest
 from kubernetes.client.exceptions import ApiException
 
-from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, KUBERNETES_NAME_MAX, WORKER_NODE_LABEL, WORKER_NODE_NAME_MAX, InstanceScope
+from scenegems_tool.cluster.scope_names import WORKER_NODE_NAME_MAX
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL, KUBERNETES_NAME_MAX, WORKER_NODE_LABEL, InstanceScope
 from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import Kind
 from scenegems_tool.cluster.worker_node.launchers.pooled.design_space_exploration_pool import DesignSpaceExplorationPool
 from scenegems_tool.cluster.worker_node.launchers.pooled.monitoring_pool import MonitoringPool

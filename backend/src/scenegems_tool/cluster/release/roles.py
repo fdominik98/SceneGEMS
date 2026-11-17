@@ -15,6 +15,9 @@ Fields of both ways:
                      with `items` is a list (components, or job types with slots), and
                      `items.images` names the extra images each item needs; an item has an
                      amount after `items.key_separator` when the parameter names one
+    name_pattern     optional: a regular expression its instance names must match, tighter than the
+                     release's `name_pattern` (the worker node: at most 28 characters, since the names of
+                     its objects in the Kubernetes cluster start with it); the tool checks both
 
 Kubernetes: the tool installs the release's chart (release.json `chart`: folder, helm_release, namespace and
 values) into a Kubernetes cluster with one values file built from the cluster's members. A member is a role on
@@ -77,7 +80,7 @@ machine), {machine.vpn_ip}, {machine.name}, {release.revision}, {control-node.vp
 {control-node.<parameter>} (the VPN address and a parameter value, default included, of the machine that holds
 the cluster's control node, deployed or not) and, in outputs, {dependent.name} (the instance name of the role
 that requires the output). Cluster ids and instance names follow `name_pattern`, because they become MQTT topic
-levels, Docker names and Kubernetes names.
+levels, Docker names and Kubernetes names, and an instance name also its role's `name_pattern` when it has one.
 
 Every image SceneGEMS builds is named with the release's image tag (release_image_tag): the
 revision, with -dirty when built from uncommitted changes. Both roles pass it as
@@ -92,7 +95,7 @@ from typing import Any, Dict, List, Optional
 from scenegems_tool.cluster.fingerprints.components import SIMULATION_IMAGE, SUBSYSTEM_IMAGES, check_runner_stacks, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.release.manifest import ReleaseChart
-from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN
+from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN, WORKER_NODE_NAME_PATTERN
 from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem
 from utils.image_names import DEFAULT_IMAGE_TAG, IMAGE_TAG_VARIABLE, image_repository, tagged, with_tag
 
@@ -295,6 +298,7 @@ def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
     role: Dict[str, Any] = {
         "description": "Worker node: the worker node daemon, which leases jobs from its control node and runs them in subsystem containers; it needs no deployed control node",
         "count": "many",
+        "name_pattern": WORKER_NODE_NAME_PATTERN.pattern,  # the daemon and the control node refuse a longer name
         "stack": "worker_node",
         "project": "scenegems-{cluster}-{name}",
         "images": [tagged(WORKER_NODE_REPOSITORY, image_tag)],

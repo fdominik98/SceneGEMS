@@ -12,7 +12,7 @@ never share even when their short names do) and the worker node (WORKER_NODE_LAB
 earlier process of its own left by the two together.
 
 Names in Kubernetes are at most 63 characters (KUBERNETES_NAME_MAX). The bound is set once, on the worker node's
-name: at most WORKER_NODE_NAME_MAX characters (28), so that its daemon's Deployment (worker-node-<name>) and the
+name: at most scope_names.WORKER_NODE_NAME_MAX characters (28), so that its daemon's Deployment (worker-node-<name>) and the
 Deployment of its pool with the longest subsystem name fit whole. The daemon's configuration refuses a longer
 name. A name that is still too long (a run's attempt past 9999, an id that did not pass the daemon's check) is
 cut and ends in a hash of the whole name (kubernetes_name), so it stays valid and unique.
@@ -83,8 +83,7 @@ def subsystem_name(subsystem: str) -> str:
     return f"{docker_word(_require_id('subsystem', subsystem))}{SUBSYSTEM_SUFFIX}"
 
 
-# The longest worker node name with which the Deployment of every pool fits in a Kubernetes name whole
-WORKER_NODE_NAME_MAX = KUBERNETES_NAME_MAX - 1 - max(len(subsystem_name(subsystem.value)) for subsystem in Subsystem)
+# WORKER_NODE_NAME_MAX (cluster/scope_names.py) is 63 - 1 - len("design-space-exploration-subsystem"): every pool's Deployment fits whole
 
 
 def daemon_deployment_name(worker_node_id: str) -> str:
