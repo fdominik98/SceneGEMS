@@ -8,7 +8,7 @@ Variables (the chart's worker node template sets them; deploy/worker_node/.env.e
     SCENEGEMS_BROKER_HOST         optional, the host of the cluster broker (the control node's host, from SCENEGEMS_CONTROL_NODE_URL)
     SCENEGEMS_BROKER_PORT         optional, the port of the cluster broker (1883)
     SCENEGEMS_WORKER_NODE_NAME           this worker node's name and worker node id on the control node, and the start of its objects' names
-                                  in the cluster: 1 to 28 lowercase letters, digits and hyphens (instance_scope.WORKER_NODE_NAME_MAX)
+                                  in the cluster: 1 to 28 lowercase letters, digits and hyphens (scope_names.WORKER_NODE_NAME_MAX)
     SCENEGEMS_WORKER_NODE_SLOTS          job types with slots, for example simulation:4,scene_generation:1
     SCENEGEMS_WORKER_NODE_COMPONENTS     what the worker node runs, comma separated (cluster/fingerprints/components.py), for example
                                   asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation
@@ -43,9 +43,8 @@ from urllib.parse import urlsplit
 
 from scenegems_tool.cluster.fingerprints.components import COMPONENTS, JOB_TYPE_COMPONENTS, SIMULATION_LAYER_PREFIX, STACK_COMPONENTS, is_component
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.scope_names import is_scope_name
+from scenegems_tool.cluster.scope_names import WORKER_NODE_NAME_MAX, is_scope_name, is_worker_node_name
 from scenegems_tool.cluster.worker_node.daemon.configuration.env_file import EnvFileError, read_env_file
-from scenegems_tool.cluster.worker_node.instance_scope import WORKER_NODE_NAME_MAX
 
 ENV_FILE_VARIABLE = "SCENEGEMS_ENV_FILE"  # read from the process environment only
 DEFAULT_ENV_FILE = ".env"
@@ -150,7 +149,7 @@ class WorkerNodeConfiguration:
         if control_node_id and not is_scope_name(control_node_id):
             problems.append(f"SCENEGEMS_CONTROL_NODE_ID: {control_node_id!r} is not a control node id (1 to 63 lowercase letters, digits and hyphens)")
         worker_node_name = required("SCENEGEMS_WORKER_NODE_NAME")
-        if worker_node_name and (not is_scope_name(worker_node_name) or len(worker_node_name) > WORKER_NODE_NAME_MAX):
+        if worker_node_name and not is_worker_node_name(worker_node_name):
             problems.append(
                 f"SCENEGEMS_WORKER_NODE_NAME: {worker_node_name!r} must be 1 to {WORKER_NODE_NAME_MAX} lowercase letters, digits and hyphens, "
                 "since the names of its Deployments in the cluster start with it and Kubernetes takes at most 63 characters"

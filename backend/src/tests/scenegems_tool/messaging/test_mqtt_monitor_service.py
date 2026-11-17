@@ -128,11 +128,11 @@ def test_a_series_that_cannot_be_judged_fails_its_task_with_the_reason():
     service = service_of()
     start(service, "r1")
     service.pool.step()
-    signal(service, "scenes", "r1", {"index": 1, "first-timestamp": 3, "scenes": scenes()[3:]})
+    signal(service, "scenes", "r1", {"index": 0, "first-timestamp": 3, "scenes": scenes()[3:]})
     service.processes["r1"].work()
     service.pool.step()
     [failure] = [message for message in published(service, "exec/response") if message["response"] == "failed"]
-    assert failure["fail-reason"] == "SeriesError: batch 1 arrived before batch 0" and published(service, "sensor/monitor_result") == []
+    assert failure["fail-reason"] == "SeriesError: batch 0 starts at 3, but the series is at 0" and published(service, "sensor/monitor_result") == []
 
 
 def test_the_advice_to_stop_goes_out_as_feedback_of_the_running_task(monkeypatch):

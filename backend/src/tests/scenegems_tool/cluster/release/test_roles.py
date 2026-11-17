@@ -1,5 +1,7 @@
 import re
 
+import pytest
+
 from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SIMULATION_IMAGE, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.release.roles import (
@@ -119,6 +121,22 @@ def test_cluster_ids_and_names_are_single_scope_names():
     pattern = re.compile(NAME_PATTERN)
     assert pattern.fullmatch("control-node-1") and pattern.fullmatch("worker-2")
     assert not pattern.fullmatch("ControlNode_1") and not pattern.fullmatch("a/b")
+
+
+def test_worker_node_names_are_bounded_by_the_roles_own_pattern_as_the_daemon_bounds_them():
+    from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import ConfigurationError, WorkerNodeConfiguration
+
+    roles = scenegems_roles()
+    pattern = re.compile(roles["worker-node"]["name_pattern"])
+    assert pattern.fullmatch("w" * 28) and not pattern.fullmatch("w" * 29), "the tool refuses a name the daemon would refuse at its start"
+    assert re.compile(NAME_PATTERN).fullmatch("w" * 29), "the release's pattern for cluster ids stays at 63"
+    assert "name_pattern" not in roles["control-node"]
+    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://10.88.0.2:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab", "SCENEGEMS_WORKER_NODE_STATE_DIR": "/state"}
+    values.update({"SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:1", "SCENEGEMS_WORKER_NODE_COMPONENTS": "scene_generation", "SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems"})
+    values.update({"SCENEGEMS_KUBERNETES_NODE": "lab-pc-3", "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/w/runtime", "SCENEGEMS_RELEASE_MANIFEST": "/etc/scenegems/release.json"})
+    assert WorkerNodeConfiguration.from_values({**values, "SCENEGEMS_WORKER_NODE_NAME": "w" * 28}).worker_node_name == "w" * 28
+    with pytest.raises(ConfigurationError):
+        WorkerNodeConfiguration.from_values({**values, "SCENEGEMS_WORKER_NODE_NAME": "w" * 29})
 
 
 def test_the_worker_node_reports_its_machine_from_the_machine_name():

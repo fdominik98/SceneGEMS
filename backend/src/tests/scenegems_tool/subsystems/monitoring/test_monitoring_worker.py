@@ -115,16 +115,49 @@ def test_a_batch_delivered_twice_is_judged_once():
     assert [payload["index"] for payload, _ in channel.of(MONITORED_SCENE_STREAM)] == [0, 1]
 
 
+def judged_in_order(channel) -> List[tuple]:
+    return [(message["index"], message["monitored-scenes"]) for message, _ in channel.of(MONITORED_SCENE_STREAM)]
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        [batch(2, 5, STEPS), batch(1, 3, 5), batch(0, 0, 3), close(3)],
+        [batch(1, 3, 5), batch(0, 0, 3), batch(2, 5, STEPS), close(3)],
+        [batch(0, 0, 3), close(3), batch(2, 5, STEPS), batch(1, 3, 5)],
+        [close(3), batch(2, 5, STEPS), batch(0, 0, 3), batch(2, 5, STEPS), batch(1, 3, 5)],
+    ],
+    ids=["reversed", "first_two_swapped", "closed_before_its_last_batches", "closed_first_and_a_batch_twice"],
+)
+def test_batches_and_the_close_in_any_order_give_the_verdict_of_the_series_in_order(script):
+    """The broker does not keep a request's signals in order: a batch ahead of its turn is held, and judged as soon as the batches before it are in."""
+    in_order = run([batch(0, 0, 3), batch(1, 3, 5), batch(2, 5, STEPS), close(3)], include_frames=True)
+    shuffled = run(script, include_frames=True)
+    assert judged_in_order(shuffled) == judged_in_order(in_order) == [(0, 3), (1, 5), (2, STEPS)], "judged in the series' order whatever the arrival"
+    assert shuffled.of(MONITORED_SCENE_STREAM) == in_order.of(MONITORED_SCENE_STREAM), "the same frames"
+    assert shuffled.of(MONITOR_RESULT_STREAM) == in_order.of(MONITOR_RESULT_STREAM)
+
+
+def test_a_held_batch_is_not_judged_before_its_turn():
+    channel = ScriptedChannel([batch(1, 3, 5)])
+    with pytest.raises(SeriesError):
+        monitor_series(task(), channel, idle_limit_s=1.0, clock=lambda: channel.waited)
+    assert channel.of(MONITORED_SCENE_STREAM) == [], "batch 0 never came, so batch 1 was never judged"
+
+
 @pytest.mark.parametrize(
     "script, reason",
     [
-        ([batch(0, 0, 3), batch(2, 5, STEPS)], "batch 2 arrived before batch 1"),
+        ([batch(0, 0, 3), batch(2, 5, STEPS)], "batch 1 did not arrive within 1 s, though 1 later batches did"),
         ([batch(0, 0, 3), batch(1, 3, 5, **{"first-timestamp": 4})], "batch 1 starts at 4, but the series is at 3"),
-        ([batch(0, 0, 3), close(2)], "the series was closed after 1 of its 2 batches"),
+        ([batch(0, 0, 3), close(2)], "the series was closed after 1 of its 2 batches, and batch 1 did not arrive within 1 s"),
+        ([close(2), batch(2, 5, STEPS)], "batch 2 arrived after the series was closed with 2 batches"),
+        ([batch(0, 0, 3), batch(1, 3, 5), close(1)], "the series was closed with 1 batches, but batch 1 arrived"),
+        ([batch(0, 0, 3), batch(2, 5, STEPS), close()], "closed without its batch count while batch 1 was missing"),
     ],
-    ids=["a_gap", "a_wrong_time", "closed_early"],
+    ids=["a_batch_that_never_comes", "a_wrong_time", "closed_and_a_batch_never_comes", "a_batch_beyond_the_close", "a_close_short_of_the_batches", "a_gap_at_an_uncounted_close"],
 )
-def test_a_series_out_of_order_fails_with_the_reason(script, reason):
+def test_a_series_that_cannot_be_judged_fails_with_the_reason(script, reason):
     with pytest.raises(SeriesError, match=reason):
         run(script)
 
