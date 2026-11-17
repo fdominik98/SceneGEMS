@@ -1,9 +1,9 @@
 """The control node process: its two listeners in one event loop (api/control_node_apps.py says why two).
 
-    python -m scenegems_tool.cluster.control_node [--env-file deploy/control_node/.env]
+    python -m scenegems_tool.cluster.control_node [--env-file <file of KEY=VALUE lines>]
 
 The database must be migrated first (`python -m scenegems_tool.persistence.migrate upgrade
-head`; the compose service does both). Worker nodes and the control node trust each other on the VPN: there
+head`; the image's command does both). Worker nodes and the control node trust each other on the VPN: there
 is no security folder, certificate or credential to set up.
 """
 

@@ -1,0 +1,14 @@
+{{- include "scenegems.checks" . }}
+# release.json of the release this chart came with: the control node reads the image fingerprints it requires of
+# worker nodes from it, and every daemon reports the fingerprints in it (SCENEGEMS_RELEASE_MANIFEST). The release
+# bundle puts a copy into the chart folder, since a chart reads only its own files.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "scenegems.releaseConfigMap" . }}
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: release-manifest
+data:
+  release.json: |
+    {{- .Files.Get "release.json" | nindent 4 }}

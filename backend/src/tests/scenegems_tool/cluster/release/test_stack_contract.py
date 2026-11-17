@@ -1,231 +1,361 @@
-"""The roles of release.json agree with the stacks they install and the .env templates."""
+"""The chart agrees with the roles of release.json and with the code it deploys.
 
+The chart (deploy/kubernetes/chart) is rendered with `helm template` from the values the reference builder makes of
+the roles for a sample cluster (chart_values_builder.py, the way Machine Hub builds them) and from a hand-written
+values file (the local cluster's). The rendered objects must be the workloads and services the roles' `ready` and
+`forwards` name, set every variable the control node's settings and the daemon's configuration require (both are
+parsed from the rendered environment), name only images of the release, and give the two service accounts exactly
+the rights of the design log's K4 results. The values schema must refuse what the daemon would refuse.
+
+The rendering tests need helm (SCENEGEMS_HELM or the PATH) and carry the kubernetes marker; the checks of the schema
+against the code run in the default suite.
+"""
+
+import copy
+import json
 import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional
 
 import pytest
 import yaml
 
-from scenegems_tool.cluster.release.bundle import STACK_COMPOSE_FILES
-from scenegems_tool.cluster.release.roles import CONTROL_NODE_COMPOSE_FILE, POSTGRES_IMAGE, scenegems_roles
+from scenegems_tool.cluster.control_node.api.control_node_apps import HEALTH_PATH
+from scenegems_tool.cluster.control_node.settings import ControlNodeSettings
+from scenegems_tool.cluster.fingerprints.components import COMPONENTS
+from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.release.roles import CONTROL_NODE_API_SERVICE, POSTGRES_IMAGE, scenegems_roles, worker_node_image_variables
+from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN, WORKER_NODE_NAME_PATTERN
+from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import WorkerNodeConfiguration
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RUN_COMPONENT, RUN_COMPONENT_LABEL
+from scenegems_tool.vessel_stack.contracts.stack_services import MAX_VESSELS, PORT_RANGES
+from tests.scenegems_tool.cluster.release.chart_values_builder import build_values, member_context, needed_images, render
+from tests.scenegems_tool.cluster.release.test_chart_values import CLUSTER, MEMBERS, REVISION, _pushed, _release_json
+from tests.scenegems_tool.cluster.worker_node.k3d_cluster import K3dUnavailable, helm_executable
 
 REPO_ROOT = Path(__file__).resolve().parents[6]
-ENV_TEMPLATES = {"control-node": "deploy/control_node/.env.example", "worker-node": "deploy/worker_node/.env.example"}
-_INTERPOLATION = re.compile(r"(?<!\$)\$\{([A-Z_][A-Z0-9_]*)(:?[-?][^}]*)?\}")
+CHART = REPO_ROOT / "deploy" / "kubernetes" / "chart"
+SCHEMA = json.loads((CHART / "values.schema.json").read_text(encoding="utf-8"))
+NAMESPACE = "scenegems"
+
+# The rights of the two service accounts, as the K4 results of the design log give them
+RIGHTS = {
+    "worker-node": [
+        {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list", "create", "update", "delete"]},
+        {"apiGroups": [""], "resources": ["pods", "services"], "verbs": ["list", "delete"]},
+    ],
+    "simulation-subsystem": [
+        {"apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list", "create", "delete"]},
+        {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
+        {"apiGroups": [""], "resources": ["services"], "verbs": ["get", "list", "create", "update", "delete"]},
+    ],
+}
 
 
-def _compose_text(role: str) -> str:
-    """Every compose file of the role's stack, one after the other."""
-    return "\n".join((REPO_ROOT / compose_file).read_text(encoding="utf-8") for compose_file in STACK_COMPOSE_FILES[role])
+# The schema against the code (default suite)
 
 
-def _compose_file(path: str) -> dict:
-    return yaml.safe_load((REPO_ROOT / path).read_text(encoding="utf-8"))
+def test_the_schema_lists_the_components_job_types_and_image_variables_of_the_code():
+    definitions = SCHEMA["definitions"]
+    assert definitions["component"]["enum"] == sorted(COMPONENTS)
+    assert definitions["jobType"]["enum"] == [job_type.value for job_type in JobType]
+    assert sorted(SCHEMA["properties"]["workerNodeImages"]["properties"]) == sorted(worker_node_image_variables().values())
 
 
-def _compose(role: str) -> dict:
-    """The role's compose files merged as compose merges them: maps updated, volume and host lists appended."""
-    merged: dict = {"services": {}, "volumes": {}}
-    for compose_file in STACK_COMPOSE_FILES[role]:
-        compose = _compose_file(compose_file)
-        merged["volumes"].update(compose.get("volumes") or {})
-        for name, service in compose["services"].items():
-            target = merged["services"].setdefault(name, {})
-            for key, value in service.items():
-                if isinstance(value, dict):
-                    target[key] = {**target.get(key, {}), **value}
-                elif isinstance(value, list) and key != "command":
-                    target[key] = target.get(key, []) + value
-                else:
-                    target[key] = value
-    return merged
+def test_the_schema_bounds_names_as_the_code_does():
+    assert SCHEMA["definitions"]["workerNodeName"]["pattern"] == WORKER_NODE_NAME_PATTERN.pattern
+    assert SCHEMA["definitions"]["scopeName"]["pattern"] == SCOPE_NAME_PATTERN.pattern
+    assert scenegems_roles()["worker-node"]["name_pattern"] == WORKER_NODE_NAME_PATTERN.pattern
 
 
-def _role_keys(role: dict) -> set:
-    return set(role["env"]) | set(role["parameters"]) | set(role["secrets"]) | set(role.get("requires", {}).get("keys", []))
+def test_the_schema_knows_every_value_of_values_yaml_and_nothing_else():
+    defaults = yaml.safe_load((CHART / "values.yaml").read_text(encoding="utf-8"))
+    assert set(SCHEMA["properties"]) == set(defaults) and SCHEMA["additionalProperties"] is False
+    for key in ("images", "workerNodeImages", "controlNode", "networkPolicy"):
+        assert set(SCHEMA["properties"][key]["properties"]) == set(defaults[key]), key
+    assert set(SCHEMA["definitions"]["workerNodeFields"]["properties"]) == set(defaults["workerNodeDefaults"])
 
 
-def _template_keys(role: str) -> set:
-    lines = (REPO_ROOT / ENV_TEMPLATES[role]).read_text(encoding="utf-8").splitlines()
-    return {line.split("=", 1)[0] for line in lines if re.match(r"^[A-Z_][A-Z0-9_]*=", line)}
+def test_nothing_of_the_compose_deploy_is_left_in_deploy():
+    deploy = REPO_ROOT / "deploy"
+    assert not [path for path in deploy.rglob("*") if path.name in ("docker-compose.yml", ".env.example")]
+    assert not (deploy / "control_node").exists() and not (deploy / "worker_node").exists()
 
 
-def _compose_variables(role: str):
-    """(name, has_default) for every ${...} the compose file interpolates."""
-    for match in _INTERPOLATION.finditer(_compose_text(role)):
-        yield match.group(1), bool(match.group(2)) and match.group(2).lstrip(":").startswith("-")
+# Rendering the chart (kubernetes marker: needs helm)
 
 
-@pytest.mark.parametrize("role_name", sorted(STACK_COMPOSE_FILES))
-def test_every_variable_without_a_default_is_written_by_the_role(role_name):
-    role = scenegems_roles()[role_name]
-    needed = {name for name, has_default in _compose_variables(role_name) if not has_default}
-    assert needed <= _role_keys(role)
+def _helm() -> str:
+    try:
+        return helm_executable()
+    except K3dUnavailable as error:
+        pytest.fail(str(error), pytrace=False)
 
 
-@pytest.mark.parametrize("role_name", sorted(ENV_TEMPLATES))
-def test_the_env_template_lists_every_key_the_role_writes_and_nothing_unknown(role_name):
-    role = scenegems_roles()[role_name]
-    template = _template_keys(role_name)
-    assert _role_keys(role) <= template
-    known = _role_keys(role) | {name for name, _ in _compose_variables(role_name)}
-    assert template <= known
+def _chart_with_release(folder: Path, release: Mapping[str, Any]) -> Path:
+    """The chart as a release bundle holds it: with a copy of release.json."""
+    chart = folder / "chart"
+    shutil.copytree(CHART, chart)
+    (chart / "release.json").write_text(json.dumps(release, indent=2), encoding="utf-8")
+    return chart
 
 
-@pytest.mark.parametrize("role_name", sorted(STACK_COMPOSE_FILES))
-def test_ready_services_exist(role_name):
-    services = _compose(role_name)["services"]
-    ready = scenegems_roles()[role_name]["ready"]
-    assert set(ready.get("healthy", [])) | set(ready.get("running", [])) <= set(services)
-    for name in ready.get("healthy", []):
-        assert "healthcheck" in services[name], name
+def _render(chart: Path, values: Mapping[str, Any], folder: Path) -> subprocess.CompletedProcess:
+    values_file = folder / "values.yaml"
+    values_file.write_text(yaml.safe_dump(dict(values)), encoding="utf-8")
+    return subprocess.run([_helm(), "template", "scenegems", str(chart), "--namespace", NAMESPACE, "-f", str(values_file)], capture_output=True, text=True, timeout=120)
 
 
-def _settings_of(compose: dict) -> str:
-    """The environment, volumes and ports of every service: what a stack is configured with, without its comments."""
-    parts = []
-    for service in compose["services"].values():
-        parts += [str(key) for key in service.get("environment", {})] + [str(volume) for volume in service.get("volumes", [])] + [str(port) for port in service.get("ports", [])]
-    return " ".join(parts).lower()
+def _objects(chart: Path, values: Mapping[str, Any], folder: Path) -> List[Dict[str, Any]]:
+    rendered = _render(chart, values, folder)
+    assert rendered.returncode == 0, rendered.stderr
+    return [document for document in yaml.safe_load_all(rendered.stdout) if document]
 
 
-def test_the_control_node_stack_has_no_security_tool_certificates_or_tokens():
-    compose = _compose("control-node")
-    assert set(compose["services"]) == {"postgres", "cluster-broker", "control-node-api"}
-    settings = _settings_of(compose)
-    for word in ("security", "pairing", "certificate", "auth_hook", "broker_control_node", "8883"):
-        assert word not in settings, word
-    role = scenegems_roles()["control-node"]
-    assert role["setup"] == [] and role["outputs"] == {}
+def _of_kind(objects: List[Dict[str, Any]], kind: str) -> Dict[str, Dict[str, Any]]:
+    return {item["metadata"]["name"]: item for item in objects if item["kind"] == kind}
 
 
-def test_postgres_is_the_same_image_everywhere():
-    assert _compose("control-node")["services"]["postgres"]["image"] == POSTGRES_IMAGE
-    build_script = (REPO_ROOT / "deploy" / "scripts" / "build.sh").read_text(encoding="utf-8")
-    assert f'RELEASE_PULLED_IMAGES=("{POSTGRES_IMAGE}")' in build_script
+def _containers(workload: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    spec = workload["spec"]["template"]["spec"]
+    return list(spec.get("initContainers", [])) + list(spec["containers"])
 
 
-def test_stacks_mount_no_checkout():
-    for role_name in STACK_COMPOSE_FILES:
-        for service in _compose(role_name)["services"].values():
-            for volume in service.get("volumes", []):
-                assert not str(volume).startswith(".."), volume
+def _environment(container: Mapping[str, Any], namespace: str = NAMESPACE, secret: str = "generated") -> Dict[str, str]:
+    """The container's variables as the kubelet sets them: a Secret's key, the pod's namespace, $(VAR) expanded."""
+    values: Dict[str, str] = {}
+    for variable in container.get("env", []):
+        if "value" in variable:
+            values[variable["name"]] = re.sub(r"\$\(([A-Za-z_][A-Za-z0-9_]*)\)", lambda match: values.get(match.group(1), match.group(0)), variable["value"])
+        elif "secretKeyRef" in variable["valueFrom"]:
+            values[variable["name"]] = secret
+        else:
+            assert variable["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.namespace", variable
+            values[variable["name"]] = namespace
+    return values
 
 
-def _example_env(role_name: str) -> str:
-    role = scenegems_roles()[role_name]
-    values = {key: "value" for key in _role_keys(role)}
-    values.update({key: parameter["default"] for key, parameter in role["parameters"].items()})
-    values.update(
-        {
-            key: text.replace("{cluster}", "lab")
-            .replace("{name}", "worker-1")
-            .replace("{machine.vpn_ip}", "10.88.0.2")
-            .replace("{release.revision}", "abc")
-            .replace("{control-node.vpn_ip}", "10.88.0.2")
-            .replace("{control-node.SCENEGEMS_API_PORT}", "8443")
-            .replace("{control-node.SCENEGEMS_BROKER_PORT}", "1883")
-            for key, text in role["env"].items()
-        }
+def _images(objects: List[Dict[str, Any]]) -> List[str]:
+    """Every image a pod of the chart runs, and every image a daemon is told to start."""
+    images = []
+    for workload in list(_of_kind(objects, "Deployment").values()) + list(_of_kind(objects, "StatefulSet").values()):
+        for container in _containers(workload):
+            images.append(container["image"])
+            images += [value for name, value in _environment(container).items() if name.endswith("_IMAGE")]
+    return images
+
+
+@pytest.fixture(scope="module")
+def release() -> Dict[str, Any]:
+    return _release_json()
+
+
+@pytest.fixture(scope="module")
+def sample(tmp_path_factory, release):
+    """The sample cluster of test_chart_values.py rendered: a control node and two worker nodes, every needed image pushed."""
+    folder = tmp_path_factory.mktemp("chart")
+    chart = _chart_with_release(folder, release)
+    values = build_values(release, CLUSTER, MEMBERS, {image: _pushed(image) for image in needed_images(release, CLUSTER, MEMBERS)})
+    return chart, values, _objects(chart, values, folder)
+
+
+def _local_values(release: Mapping[str, Any], **entry: Any) -> Dict[str, Any]:
+    """A hand-written values file like the local cluster's: the release's values, a control node and one worker node, no image named."""
+    values = json.loads(render(json.dumps(release["chart"]["values"]), {"cluster": "local", "release.revision": release["revision"]}, "chart values"))
+    values["controlNode"] = {"enabled": True, "node": "k3d-local-server-0"}
+    values["workerNodes"] = [{"name": "local", "node": "k3d-local-server-0", **entry}]
+    return values
+
+
+@pytest.mark.kubernetes
+def test_the_workloads_and_services_are_the_ones_the_roles_name(sample, release):
+    _, _, objects = sample
+    expected_deployments, expected_stateful_sets = set(), set()
+    for member in MEMBERS:
+        ready = release["roles"][member.role]["ready"]
+        context = member_context(release, CLUSTER, member)
+        expected_deployments |= {render(name, context, "ready") for name in ready["deployments"]}
+        expected_stateful_sets |= {render(name, context, "ready") for name in ready.get("stateful_sets", [])}
+    assert set(_of_kind(objects, "Deployment")) == expected_deployments == {"control-node-api", "cluster-broker", "worker-node-gazebo-1", "worker-node-worker-a"}
+    assert set(_of_kind(objects, "StatefulSet")) == expected_stateful_sets == {"postgres"}
+    services = {name: {port["port"] for port in service["spec"]["ports"]} for name, service in _of_kind(objects, "Service").items()}
+    assert services == {"postgres": {5432}, "cluster-broker": {1883}, "control-node-api": {8443, 5174}}
+    for forward in release["roles"]["control-node"]["forwards"]:
+        assert forward["port"] in services[forward["service"]] and forward["service"] == CONTROL_NODE_API_SERVICE
+    for service in _of_kind(objects, "Service").values():
+        assert service["spec"].get("type", "ClusterIP") == "ClusterIP", "nothing is published outside the cluster"
+
+
+@pytest.mark.kubernetes
+def test_the_control_node_gets_every_setting_it_needs_from_its_values(sample):
+    _, values, objects = sample
+    deployment = _of_kind(objects, "Deployment")["control-node-api"]
+    (container,) = deployment["spec"]["template"]["spec"]["containers"]
+    environment = _environment(container)
+    settings = ControlNodeSettings.from_environment(environment)
+    control_node = values["controlNode"]
+    assert settings.control_node_id == CLUSTER and settings.database_url == "postgresql+psycopg://scenegems:generated@postgres:5432/scenegems"
+    assert (settings.worker_node_api.port, settings.operator.host, settings.operator.port) == (8443, "0.0.0.0", 5174)
+    assert settings.operator_allowed_origins == tuple(control_node["operatorAllowedOrigins"].split(","))
+    assert (settings.artifacts.max_bytes, settings.artifacts.sweep_interval_s, settings.artifacts.sweep_grace_s) == (
+        control_node["artifactMaxBytes"],
+        control_node["artifactSweepIntervalS"],
+        control_node["artifactSweepGraceS"],
     )
-    return "".join(f"{key}={value}\n" for key, value in sorted(values.items()))
+    assert settings.broker is not None and (settings.broker.host, settings.broker.port) == ("cluster-broker", 1883)
+    mounts = {mount["mountPath"]: mount for mount in container["volumeMounts"]}
+    assert mounts[settings.release_manifest.as_posix()]["subPath"] == "release.json" and settings.artifacts.folder.as_posix() in mounts
+    spec = deployment["spec"]["template"]["spec"]
+    assert spec["nodeSelector"] == {"kubernetes.io/hostname": "pc-1"} and spec["automountServiceAccountToken"] is False
+    assert container["readinessProbe"]["httpGet"] == {"path": HEALTH_PATH, "port": "operator-api"}, "available when the operator API answers"
+    for name in ("cluster-broker",):
+        assert _of_kind(objects, "Deployment")[name]["spec"]["template"]["spec"]["nodeSelector"] == {"kubernetes.io/hostname": "pc-1"}
+    assert _of_kind(objects, "StatefulSet")["postgres"]["spec"]["template"]["spec"]["nodeSelector"] == {"kubernetes.io/hostname": "pc-1"}
 
 
-@pytest.mark.docker
-@pytest.mark.parametrize("role_name", sorted(STACK_COMPOSE_FILES))
-def test_docker_compose_accepts_the_stack_with_the_role_env(role_name, tmp_path):
-    if shutil.which("docker") is None:
-        pytest.skip("needs the docker CLI")
-    for compose_file in STACK_COMPOSE_FILES[role_name]:
-        shutil.copyfile(REPO_ROOT / compose_file, tmp_path / Path(compose_file).name)
-    (tmp_path / ".env").write_text(_example_env(role_name), encoding="utf-8")
-    (tmp_path / "release.json").write_text("{}", encoding="utf-8")
-    completed = subprocess.run(["docker", "compose", "--profile", "tools", "config", "-q"], cwd=tmp_path, capture_output=True, text=True)
-    assert completed.returncode == 0, completed.stderr
+@pytest.mark.kubernetes
+def test_the_postgres_password_is_generated_kept_and_never_a_value(sample):
+    _, values, objects = sample
+    secret = _of_kind(objects, "Secret")["postgres"]
+    assert secret["metadata"]["annotations"]["helm.sh/resource-policy"] == "keep"
+    assert "password" in secret["data"] and "password" not in json.dumps(values).lower()
+    assert _of_kind(objects, "PersistentVolumeClaim")["control-node-artifacts"]["metadata"]["annotations"]["helm.sh/resource-policy"] == "keep"
 
 
-def test_the_control_node_keeps_artifacts_on_their_own_volume():
-    compose = _compose("control-node")
-    service = compose["services"]["control-node-api"]
-    folder = service["environment"]["SCENEGEMS_ARTIFACT_DIR"]
-    assert f"artifacts:{folder}" in service["volumes"]
-    assert compose["volumes"]["artifacts"]["name"] == "scenegems-${SCENEGEMS_CONTROL_NODE_ID}-artifacts"
-    for key in ("SCENEGEMS_ARTIFACT_MAX_BYTES", "SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S", "SCENEGEMS_ARTIFACT_SWEEP_GRACE_S"):
-        assert service["environment"][key] == f"${{{key}:-{scenegems_roles()['control-node']['parameters'][key]['default']}}}"
+@pytest.mark.kubernetes
+def test_each_worker_node_s_daemon_gets_its_configuration_from_its_entry(sample):
+    _, values, objects = sample
+    deployments = _of_kind(objects, "Deployment")
+    for entry in values["workerNodes"]:
+        deployment = deployments[f"worker-node-{entry['name']}"]
+        spec = deployment["spec"]["template"]["spec"]
+        (container,) = spec["containers"]
+        configuration = WorkerNodeConfiguration.from_values(_environment(container))
+        assert configuration.worker_node_name == entry["name"] and configuration.control_node_id == CLUSTER
+        assert configuration.control_node_url == "http://control-node-api:8443" and (configuration.broker_host, configuration.broker_port) == ("cluster-broker", 1883)
+        assert sorted(configuration.components) == sorted(entry["components"])
+        assert {job_type.value: count for job_type, count in configuration.slots.items()} == entry["slots"]
+        assert configuration.labels == {key: str(value) for key, value in entry["labels"].items()}
+        assert configuration.machine == entry["machine"] and configuration.software_revision == REVISION
+        assert configuration.artifact_cache_max_bytes == entry["artifactCacheMaxBytes"]
+        assert (configuration.kubernetes_namespace, configuration.kubernetes_node) == (NAMESPACE, entry["node"])
+        runtime = f"{values.get('workerNodeHostPath', '/var/lib/scenegems')}/{entry['name']}/runtime"
+        assert configuration.runtime_host_path == runtime
+        assert spec["nodeSelector"] == {"kubernetes.io/hostname": entry["node"]} and spec["serviceAccountName"] == "worker-node"
+        assert INSTANCE_LABEL not in deployment["spec"]["template"]["metadata"]["labels"], "the daemon's pod is no instance of its own leftovers"
+        volumes = {volume["name"]: volume for volume in spec["volumes"]}
+        mounts = {mount["mountPath"]: mount["name"] for mount in container["volumeMounts"]}
+        assert volumes[mounts["/app/assets/runtime_assets"]]["hostPath"]["path"] == runtime
+        assert mounts[configuration.state_dir.as_posix()] == "state" and "hostPath" in volumes["state"]
+        assert configuration.artifact_cache_folder.is_relative_to(configuration.state_dir)
+        assert mounts[configuration.release_manifest.as_posix()] == "release-manifest"
+        environment = _environment(container)
+        assert {name: value for name, value in environment.items() if name.endswith("_IMAGE")} == {name: image for name, image in values["workerNodeImages"].items() if image}
+        assert environment["SCENEGEMS_IMAGE_TAG"] == values["imageTag"]
 
 
-def test_the_control_node_passes_the_allowed_origins_to_control_node_api_with_the_roles_default():
-    service = _compose("control-node")["services"]["control-node-api"]
-    default = scenegems_roles()["control-node"]["parameters"]["SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"]["default"]
-    assert service["environment"]["SCENEGEMS_OPERATOR_ALLOWED_ORIGINS"] == f"${{SCENEGEMS_OPERATOR_ALLOWED_ORIGINS:-{default}}}"
-    assert f"SCENEGEMS_OPERATOR_ALLOWED_ORIGINS={default}" in (REPO_ROOT / ENV_TEMPLATES["control-node"]).read_text(encoding="utf-8").splitlines()
+@pytest.mark.kubernetes
+def test_the_chart_names_only_images_of_the_release_by_their_pushed_reference(sample, release):
+    _, _, objects = sample
+    pushed = {_pushed(image) for image in release["images"]}
+    images = _images(objects)
+    assert images and set(images) <= pushed
 
 
-def test_the_worker_node_passes_its_machine_on_and_lists_it_in_its_env_template():
-    service = _compose("worker-node")["services"]["daemon"]
-    assert service["environment"]["SCENEGEMS_WORKER_NODE_MACHINE"] == "${SCENEGEMS_WORKER_NODE_MACHINE:-}"  # optional for a hand-written .env
-    assert "SCENEGEMS_WORKER_NODE_MACHINE" in _template_keys("worker-node") and "SCENEGEMS_WORKER_NODE_MACHINE" in scenegems_roles()["worker-node"]["env"]
+@pytest.mark.kubernetes
+def test_without_image_values_every_image_is_the_release_s_by_its_tag(tmp_path, release):
+    chart = _chart_with_release(tmp_path, release)
+    objects = _objects(chart, _local_values(release), tmp_path)
+    images = _images(objects)
+    assert {image for image in images} <= set(release["images"])
+    assert f"scenegems-worker-node:{REVISION}" in images and f"scenegems-control-node-api:{REVISION}" in images and POSTGRES_IMAGE in images
+    assert all(container["imagePullPolicy"] == "IfNotPresent" for workload in _of_kind(objects, "Deployment").values() for container in _containers(workload))
 
 
-def test_the_worker_node_caches_artifacts_in_its_state_volume():
-    service = _compose("worker-node")["services"]["daemon"]
-    state = service["environment"]["SCENEGEMS_WORKER_NODE_STATE_DIR"]
-    assert f"state:{state}" in service["volumes"]
-    assert service["environment"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_DIR"].startswith(state + "/")
-    default = scenegems_roles()["worker-node"]["parameters"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES"]["default"]
-    assert service["environment"]["SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES"] == f"${{SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES:-{default}}}"
+@pytest.mark.kubernetes
+def test_a_hand_written_entry_takes_the_defaults_as_a_whole_per_field(tmp_path, release):
+    chart = _chart_with_release(tmp_path, release)
+    objects = _objects(chart, _local_values(release, slots={"simulation": 1}, components=["asv_system/replay", "control_layer/none", "simulation_layer/kinematic"]), tmp_path)
+    (container,) = _of_kind(objects, "Deployment")["worker-node-local"]["spec"]["template"]["spec"]["containers"]
+    configuration = WorkerNodeConfiguration.from_values(_environment(container))
+    assert configuration.slots == {JobType.SIMULATION: 1}, "the entry's slots replace the defaults' and are not merged with them"
+    assert configuration.artifact_cache_max_bytes == 2 * 1024**3 and configuration.labels == {}
 
 
-def test_the_control_node_observes_the_plain_cluster_broker_on_the_compose_network():
-    compose = _compose("control-node")
-    environment = compose["services"]["control-node-api"]["environment"]
-    assert (environment["SCENEGEMS_BROKER_HOST"], environment["SCENEGEMS_BROKER_PORT"]) == ("cluster-broker", "1883")
-    default = scenegems_roles()["control-node"]["parameters"]["SCENEGEMS_BROKER_PORT"]["default"]
-    assert default == "1883"
-    ports = compose["services"]["cluster-broker"]["ports"]
-    assert ports == ["${SCENEGEMS_BROKER_BIND_ADDRESS:-0.0.0.0}:${SCENEGEMS_BROKER_PORT:-" + default + "}:1883"]
+@pytest.mark.kubernetes
+def test_a_cluster_of_worker_nodes_only_has_no_control_node(tmp_path, release):
+    chart = _chart_with_release(tmp_path, release)
+    values = build_values(release, CLUSTER, [member for member in MEMBERS if member.role == "worker-node"], {image: _pushed(image) for image in release["images"]})
+    objects = _objects(chart, values, tmp_path)
+    assert set(_of_kind(objects, "Deployment")) == {"worker-node-gazebo-1", "worker-node-worker-a"}
+    assert not _of_kind(objects, "StatefulSet") and not _of_kind(objects, "Secret") and set(_of_kind(objects, "Service")) == set()
+    assert set(_of_kind(objects, "ConfigMap")) == {"release-manifest"} and set(_of_kind(objects, "ServiceAccount")) == {"worker-node", "simulation-subsystem"}
 
 
-def test_the_worker_node_stack_has_no_pairing_token_ca_or_trust_volume_and_dials_the_control_node_url():
-    compose = _compose("worker-node")
-    service = compose["services"]["daemon"]
-    assert "SCENEGEMS_CONTROL_NODE_URL" in service["environment"] and "SCENEGEMS_BROKER_PORT" in service["environment"]
-    settings = _settings_of(compose)
-    for word in ("pairing", "ca_sha256", "trust", "token"):
-        assert word not in settings, word
-    assert set(compose["volumes"]) == {"runtime", "state"}
+@pytest.mark.kubernetes
+def test_the_service_accounts_have_exactly_the_rights_of_the_design(sample):
+    _, _, objects = sample
+    roles = _of_kind(objects, "Role")
+    assert {name: role["rules"] for name, role in roles.items()} == RIGHTS
+    for name, binding in _of_kind(objects, "RoleBinding").items():
+        assert binding["roleRef"]["name"] == name and binding["subjects"] == [{"kind": "ServiceAccount", "name": name, "namespace": NAMESPACE}]
+    assert set(_of_kind(objects, "ServiceAccount")) == set(RIGHTS)
 
 
-def test_the_control_node_has_no_docker_socket_and_starts_no_containers():
-    """Every subsystem runs on a worker node: the control node's stack is one compose file without Docker access, a runtime volume or a network for containers of its own."""
-    assert STACK_COMPOSE_FILES["control-node"] == (f"deploy/control_node/{CONTROL_NODE_COMPOSE_FILE}",)
-    assert not (REPO_ROOT / "deploy" / "control_node" / "docker-compose.live-sessions.yml").exists()
-    compose = _compose("control-node")
-    service = compose["services"]["control-node-api"]
-    assert not any("docker.sock" in str(volume) for volume in service["volumes"])
-    for key in ("SCENEGEMS_LIVE_SESSIONS", "SCENEGEMS_RUNTIME_VOLUME", "SCENEGEMS_DOCKER_NETWORK"):
-        assert key not in service["environment"], key
-    assert "extra_hosts" not in service and set(compose["volumes"]) == {"postgres_data", "broker_data", "artifacts"}
-    dockerfile = (REPO_ROOT / "deploy" / "images" / "control_node_api" / "Dockerfile").read_text(encoding="utf-8")
-    assert "download.docker.com" not in dockerfile and "docker/compose/releases" not in dockerfile, "the image carries no Docker CLI"
+@pytest.mark.kubernetes
+def test_a_run_reaches_only_the_broker_dns_and_external_brokers_and_is_reached_on_its_ground_control_ports(sample):
+    _, _, objects = sample
+    policy = _of_kind(objects, "NetworkPolicy")["simulation-runs"]["spec"]
+    assert policy["podSelector"] == {"matchLabels": {RUN_COMPONENT_LABEL: RUN_COMPONENT}} and policy["policyTypes"] == ["Ingress", "Egress"]
+    ground_control = PORT_RANGES["ground_control"]
+    assert policy["ingress"] == [{"ports": [{"protocol": "TCP", "port": ground_control.port(0), "endPort": ground_control.port(MAX_VESSELS - 1)}]}]
+    broker, dns, external = policy["egress"]
+    broker_labels = _of_kind(objects, "Deployment")["cluster-broker"]["spec"]["template"]["metadata"]["labels"]
+    assert broker["to"][0]["podSelector"]["matchLabels"].items() <= broker_labels.items() and broker["ports"] == [{"protocol": "TCP", "port": 1883}]
+    assert {port["port"] for port in dns["ports"]} == {53} and dns["to"][0]["podSelector"] == {"matchLabels": {"k8s-app": "kube-dns"}}
+    assert external == {"to": [{"ipBlock": {"cidr": "0.0.0.0/0"}}], "ports": [{"protocol": "TCP", "port": 8883}]}
 
 
-def test_the_role_names_the_one_compose_file_so_a_redeploy_corrects_an_older_env():
-    """A .env of an earlier release names the live sessions overlay in COMPOSE_FILE; the role writes the value, so it is no parameter an operator keeps."""
-    role = scenegems_roles()["control-node"]
-    assert role["env"]["COMPOSE_FILE"] == CONTROL_NODE_COMPOSE_FILE == "docker-compose.yml"
-    assert "COMPOSE_FILE" not in role["parameters"] and "COMPOSE_PATH_SEPARATOR" not in role["env"]
-    template = (REPO_ROOT / ENV_TEMPLATES["control-node"]).read_text(encoding="utf-8").splitlines()
-    assert "COMPOSE_FILE=docker-compose.yml" in template and not [line for line in template if line.startswith("COMPOSE_PATH_SEPARATOR")]
+def _refusal(tmp_path: Path, release: Mapping[str, Any], values: Mapping[str, Any], chart: Optional[Path] = None) -> str:
+    rendered = _render(chart or _chart_with_release(tmp_path, release), values, tmp_path)
+    assert rendered.returncode != 0, "the values were taken"
+    return rendered.stderr
 
 
-def test_every_image_scenegems_builds_carries_the_release_tag():
-    tag = "${SCENEGEMS_IMAGE_TAG:-latest}"
-    control_node, worker_node = _compose("control-node")["services"], _compose("worker-node")["services"]
-    assert control_node["control-node-api"]["image"] == f"scenegems-control-node-api:{tag}" and control_node["cluster-broker"]["image"] == f"scenegems-mqtt-broker:{tag}"
-    assert worker_node["daemon"]["image"] == f"scenegems-worker-node:{tag}"
-    assert worker_node["daemon"]["environment"]["SCENEGEMS_IMAGE_TAG"] == tag, "the worker node names its jobs' images with it"
-    roles = scenegems_roles("abc123")
-    assert roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123"
+@pytest.mark.kubernetes
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (lambda values: values["workerNodes"][0].update(name="w" * 29), "does not match pattern"),
+        (lambda values: values["workerNodes"][0].update(name="Worker-1"), "does not match pattern"),
+        (lambda values: values["workerNodes"][0].update(name="worker_1"), "does not match pattern"),
+        (lambda values: values["workerNodes"][0].pop("node"), "node"),
+        (lambda values: values["workerNodes"].append(copy.deepcopy(values["workerNodes"][0])), "given twice"),
+        (lambda values: values["workerNodes"][0].update(components=["simulation_layer/warp"]), "components"),
+        (lambda values: values["workerNodes"][0].update(slots={"simulation": 0}), "minimum"),
+        (lambda values: values["workerNodes"][0].update(slots={"simulation.kinematic": 1}), "simulation.kinematic"),
+        (lambda values: values.update(controlNodeId="Lab"), "does not match pattern"),
+        (lambda values: values.update(workerNode=[]), "additional properties"),
+    ],
+)
+def test_values_the_system_cannot_run_are_refused(tmp_path, release, change, message):
+    values = _local_values(release)
+    change(values)
+    assert message in _refusal(tmp_path, release, values)
+
+
+@pytest.mark.kubernetes
+def test_a_name_of_28_characters_is_taken(tmp_path, release):
+    chart = _chart_with_release(tmp_path, release)
+    objects = _objects(chart, _local_values(release) | {"workerNodes": [{"name": "w" * 28, "node": "k3d-local-server-0"}]}, tmp_path)
+    assert f"worker-node-{'w' * 28}" in _of_kind(objects, "Deployment")
+
+
+@pytest.mark.kubernetes
+def test_a_chart_without_release_json_is_refused(tmp_path, release):
+    chart = tmp_path / "chart"
+    shutil.copytree(CHART, chart)
+    assert "release.json" in _refusal(tmp_path, release, _local_values(release), chart)

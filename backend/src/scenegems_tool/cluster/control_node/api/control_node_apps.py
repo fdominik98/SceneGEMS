@@ -37,7 +37,7 @@ from scenegems_tool.cluster.control_node.live.topics import create_live_channel
 from scenegems_tool.cluster.control_node.settings import DEFAULT_OPERATOR_ALLOWED_ORIGINS
 from scenegems_tool.persistence.stores import AssuranceStores
 
-HEALTH_PATH = "/health"  # the compose healthcheck's and the deployment tool's ready check
+HEALTH_PATH = "/health"  # the chart's probes of control-node-api: ready when it answers
 
 
 @dataclass(frozen=True)

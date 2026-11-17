@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scenegems_tool.cluster.release.bundle import CHART_SOURCE, STACK_COMPOSE_FILES, InspectedImage, build_bundle
+from scenegems_tool.cluster.release.bundle import CHART_SOURCE, InspectedImage, build_bundle
 from scenegems_tool.cluster.release.manifest import FINGERPRINT_LABEL, ReleaseError, read_release
 from scenegems_tool.cluster.release.roles import POSTGRES_IMAGE, role_images, scenegems_chart, scenegems_roles
 
@@ -27,18 +27,14 @@ class _Tags:
         self.calls.append((source, target))
 
 
-def test_the_bundle_holds_the_release_and_the_stacks(tmp_path):
+def test_the_bundle_holds_the_release_and_the_chart_only(tmp_path):
     tags = _Tags()
     release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=True, inspect=_all_built, now=NOW, tag=tags)
     assert read_release(tmp_path / "release.json") == release
     assert release.revision == "abc123" and release.dirty and release.created_at == "2026-10-25T12:00:00+00:00"
     assert sorted(release.images) == role_images(scenegems_roles("abc123-dirty"))
     assert release.images[POSTGRES_IMAGE].fingerprint is None
-    for role, compose_files in STACK_COMPOSE_FILES.items():
-        for compose_file in compose_files:
-            stack = tmp_path / "stacks" / scenegems_roles()[role]["stack"] / Path(compose_file).name
-            assert stack.read_bytes() == (REPO_ROOT / compose_file).read_bytes()
-    assert sorted(path.name for path in (tmp_path / "stacks" / "control_node").iterdir()) == ["docker-compose.yml"], "one file: the control node starts no containers"
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["chart", "release.json"], "no compose stacks"
 
 
 def test_the_bundle_holds_the_chart_with_the_release_in_it(tmp_path):
@@ -70,19 +66,20 @@ def test_the_release_tags_the_latest_builds_with_its_revision(tmp_path):
     assert sorted(tags.calls) == sorted((image.replace(":abc123", ":latest"), image) for image in built)
     worker_node = "scenegems-worker-node:abc123"
     assert release.images[worker_node].image_id == "sha256:scenegems-worker-node:latest" and release.images[worker_node].fingerprint == "fp-scenegems-worker-node:latest"
-    assert release.roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123" and release.roles["worker-node"]["images"] == [worker_node]
+    assert release.chart.values["imageTag"] == "abc123" and release.roles["worker-node"]["images"] == [worker_node]
 
 
 def test_a_dirty_release_tags_its_images_dirty(tmp_path):
     release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=True, inspect=_all_built, now=NOW, tag=_Tags())
-    assert "scenegems-control-node-api:abc123-dirty" in release.images and release.roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc123-dirty"
+    assert "scenegems-control-node-api:abc123-dirty" in release.images and release.chart.values["imageTag"] == "abc123-dirty"
 
 
-def test_an_older_bundle_is_replaced(tmp_path):
-    stale = tmp_path / "stacks" / "old"
-    stale.mkdir(parents=True)
+def test_the_compose_stacks_of_an_older_bundle_are_removed(tmp_path):
+    stale = tmp_path / "stacks" / "worker_node" / "docker-compose.yml"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("old", encoding="utf-8")
     build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=False, inspect=_all_built, now=NOW, tag=_Tags())
-    assert not stale.exists()
+    assert not (tmp_path / "stacks").exists()
     assert json.loads((tmp_path / "release.json").read_text(encoding="utf-8"))["revision"] == "abc123"
 
 
@@ -102,3 +99,27 @@ def test_an_image_without_a_fingerprint_label_is_refused(tmp_path):
     with pytest.raises(ReleaseError, match=FINGERPRINT_LABEL):
         build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=False, inspect=unlabelled, now=NOW, tag=tags)
     assert tags.calls == []
+
+
+def test_images_built_under_a_tag_of_their_own_are_bundled_under_it_without_tagging(tmp_path):
+    """A test cluster bundles the images it built under its own tag as they are, and never touches :latest."""
+    inspected = []
+
+    def inspect(tag):
+        inspected.append(tag)
+        return _all_built(tag)
+
+    tags = _Tags()
+    release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=True, inspect=inspect, now=NOW, tag=tags, image_tag="k5", built_tag="k5")
+    built = [image for image in release.images if image != POSTGRES_IMAGE]
+    assert built and all(image.endswith(":k5") for image in built) and tags.calls == []
+    assert not [tag for tag in inspected if tag.endswith(":latest")]
+    assert release.chart.values["imageTag"] == "k5" and release.revision == "abc123" and release.dirty
+    assert release.images["scenegems-worker-node:k5"].fingerprint == "fp-scenegems-worker-node:k5"
+
+
+def test_images_built_under_one_tag_can_be_named_with_another(tmp_path):
+    tags = _Tags()
+    release = build_bundle(tmp_path, REPO_ROOT, "abc123", dirty=False, inspect=_all_built, now=NOW, tag=tags, built_tag="nightly")
+    built = [image for image in release.images if image != POSTGRES_IMAGE]
+    assert sorted(tags.calls) == sorted((image.replace(":abc123", ":nightly"), image) for image in built)

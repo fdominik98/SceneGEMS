@@ -19,7 +19,7 @@ from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeCon
 from scenegems_tool.messaging.mqtt_client import CLUSTER_TOPIC_ROOT, MQttConnectionInfo
 from scenegems_tool.vessel_stack.contracts.local_frame import Geofence
 from tests.scenegems_tool.cluster.worker_node.fake_kubernetes import FakeCluster
-from tests.scenegems_tool.cluster.worker_node.k3d_cluster import BROKER, K3dCluster, K3dUnavailable, start_test_cluster
+from tests.scenegems_tool.cluster.worker_node.k3d_cluster import BROKER
 
 
 def _vessel(vessel_id: int, is_os: bool, length: float = 30.0) -> ConcreteActor:
@@ -85,18 +85,7 @@ def placed_worker_node(fake_cluster, cluster_place) -> WorkerNodeContext:
     )
 
 
-# A real cluster (tests marked kubernetes): k3d_cluster.py
-
-
-@pytest.fixture(scope="session")
-def k3d_cluster() -> Iterator[K3dCluster]:
-    """The run's k3d cluster with the namespace, the rights, the broker and the images; it fails clearly when k3d, kubectl or an image is missing."""
-    try:
-        cluster = start_test_cluster()
-    except K3dUnavailable as error:
-        pytest.fail(str(error), pytrace=False)
-    yield cluster
-    cluster.stop()
+# A real cluster (tests marked kubernetes): k3d_cluster.py; the session's cluster is the fixture k3d_cluster of tests/scenegems_tool/conftest.py
 
 
 @pytest.fixture(scope="session")

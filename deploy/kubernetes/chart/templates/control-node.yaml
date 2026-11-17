@@ -1,0 +1,344 @@
+{{- if .Values.controlNode.enabled }}
+{{- $cn := .Values.controlNode }}
+{{- $secret := lookup "v1" "Secret" .Release.Namespace "postgres" }}
+{{- $password := "" }}
+{{- if and $secret $secret.data (index $secret.data "password") }}
+{{- $password = index $secret.data "password" | b64dec }}
+{{- else }}
+{{- $password = randAlphaNum 40 }}
+{{- end }}
+# The control node of the cluster: Postgres, the cluster broker and control-node-api. It starts no containers of its
+# own: every subsystem runs on a worker node. Control node and worker nodes trust the cluster's network: there are no
+# certificates, tokens or broker accounts.
+#
+# The Postgres password is generated on the first install and read back on every upgrade (lookup), so it never
+# changes and never passes through a values file. The Secret is kept when the release is uninstalled, like the volume
+# claim of Postgres's data, which it belongs to; a later install of the same release takes both up again. Removing
+# the control node with its data means deleting the claims and this Secret as well (or the namespace).
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  # Letters and digits only, since control-node-api puts it into a database URL
+  password: {{ $password | b64enc | quote }}
+---
+# Postgres: the job store and the worker node registry (scenegems_tool.persistence)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+spec:
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "scenegems.labels" . | nindent 8 }}
+        app.kubernetes.io/name: postgres
+    spec:
+      {{- include "scenegems.nodeSelector" $cn.node | nindent 6 }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: postgres
+          image: {{ include "scenegems.image" (list $ .Values.images.postgres "postgres") | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: scenegems
+            - name: POSTGRES_USER
+              value: scenegems
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+            # A folder below the claim's root, which some storage classes fill with lost+found
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U scenegems -d scenegems"]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U scenegems -d scenegems"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/part-of: scenegems
+          app.kubernetes.io/name: postgres
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if $cn.storage.className }}
+        storageClassName: {{ $cn.storage.className | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $cn.storage.postgres | quote }}
+---
+# The cluster broker: plain, anonymous MQTT for the worker nodes' pools and runs, and for the control node's live
+# channel, which observes the pools. It is reached by its service name inside the cluster only.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-broker
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: cluster-broker
+spec:
+  selector:
+    app.kubernetes.io/name: cluster-broker
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: mqtt
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-broker
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: cluster-broker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-broker
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "scenegems.labels" . | nindent 8 }}
+        app.kubernetes.io/name: cluster-broker
+    spec:
+      {{- include "scenegems.nodeSelector" $cn.node | nindent 6 }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      containers:
+        - name: broker
+          image: {{ include "scenegems.image" (list $ .Values.images.broker "scenegems-mqtt-broker") | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: mqtt
+              containerPort: 1883
+          readinessProbe:
+            tcpSocket:
+              port: mqtt
+            periodSeconds: 5
+          volumeMounts:
+            # The broker's log files; it keeps no messages over a restart
+            - name: data
+              mountPath: /data/broker
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+# The control node's artifact store: the content-addressed job inputs and results worker nodes up- and download
+# (scenegems_tool.persistence.artifacts); Postgres records what it holds. Kept when the release is uninstalled.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: control-node-artifacts
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: control-node-api
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if $cn.storage.className }}
+  storageClassName: {{ $cn.storage.className | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $cn.storage.artifacts | quote }}
+---
+# control-node-api: the worker node API on 8443 (plain HTTP: the control WebSocket and the artifacts), which the
+# daemons reach by this service's name, and the operator API with the workbench gateway on 5174, which the web console
+# reaches through a port forward to this service (kubectl port-forward service/control-node-api 5174:5174). Neither
+# port leaves the cluster otherwise: the operator API has no authentication.
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-node-api
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: control-node-api
+spec:
+  selector:
+    app.kubernetes.io/name: control-node-api
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - name: worker-node-api
+      port: 8443
+      targetPort: worker-node-api
+    - name: operator-api
+      port: 5174
+      targetPort: operator-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-node-api
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: control-node-api
+spec:
+  replicas: 1
+  # One control node at a time: the artifact claim is mounted by one pod, and two schedulers would both offer leases
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-node-api
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        {{- include "scenegems.labels" . | nindent 8 }}
+        app.kubernetes.io/name: control-node-api
+      annotations:
+        # A new release.json (another release) restarts the control node, which reads it at start
+        checksum/release-manifest: {{ .Files.Get "release.json" | sha256sum }}
+    spec:
+      {{- include "scenegems.nodeSelector" $cn.node | nindent 6 }}
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # The image's command migrates the database before it starts; it waits for Postgres first, as compose's
+      # depends_on did, so a fresh install does not begin with a crash loop.
+      initContainers:
+        - name: wait-for-postgres
+          image: {{ include "scenegems.image" (list $ .Values.images.postgres "postgres") | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["sh", "-c", "until pg_isready -h postgres -p 5432 -U scenegems -d scenegems; do sleep 2; done"]
+      containers:
+        - name: control-node-api
+          image: {{ include "scenegems.image" (list $ .Values.images.controlNodeApi "scenegems-control-node-api") | quote }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          ports:
+            - name: worker-node-api
+              containerPort: 8443
+            - name: operator-api
+              containerPort: 5174
+          env:
+            - name: PYTHONPATH
+              value: /app/src
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres
+                  key: password
+            - name: SCENEGEMS_DATABASE_URL
+              value: "postgresql+psycopg://scenegems:$(POSTGRES_PASSWORD)@postgres:5432/scenegems"
+            - name: SCENEGEMS_CONTROL_NODE_ID
+              value: {{ .Values.controlNodeId | quote }}
+            - name: SCENEGEMS_RELEASE_MANIFEST
+              value: {{ include "scenegems.releaseManifestPath" . | quote }}
+            - name: SCENEGEMS_API_LISTEN_HOST
+              value: "0.0.0.0"
+            - name: SCENEGEMS_API_LISTEN_PORT
+              value: "8443"
+            # In the pod, so the port forward and the service reach it; the service is inside the cluster only
+            - name: SCENEGEMS_OPERATOR_LISTEN_HOST
+              value: "0.0.0.0"
+            - name: SCENEGEMS_OPERATOR_LISTEN_PORT
+              value: "5174"
+            - name: SCENEGEMS_OPERATOR_ALLOWED_ORIGINS
+              value: {{ $cn.operatorAllowedOrigins | quote }}
+            - name: SCENEGEMS_ARTIFACT_DIR
+              value: /var/lib/scenegems/artifacts
+            - name: SCENEGEMS_ARTIFACT_MAX_BYTES
+              value: {{ $cn.artifactMaxBytes | int64 | quote }}
+            - name: SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S
+              value: {{ $cn.artifactSweepIntervalS | toString | quote }}
+            - name: SCENEGEMS_ARTIFACT_SWEEP_GRACE_S
+              value: {{ $cn.artifactSweepGraceS | toString | quote }}
+            # The cluster broker, which the live channel observes the pools on
+            - name: SCENEGEMS_BROKER_HOST
+              value: cluster-broker
+            - name: SCENEGEMS_BROKER_PORT
+              value: "1883"
+          volumeMounts:
+            - name: release-manifest
+              mountPath: {{ include "scenegems.releaseManifestPath" . }}
+              subPath: release.json
+              readOnly: true
+            - name: artifacts
+              mountPath: /var/lib/scenegems/artifacts
+          # Ready when the operator API answers its health path: the database is migrated, both listeners are up and
+          # the scheduler runs, so an install that waits for this Deployment is done when the system can take work.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: operator-api
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: operator-api
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: operator-api
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: release-manifest
+          configMap:
+            name: {{ include "scenegems.releaseConfigMap" . }}
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: control-node-artifacts
+{{- end }}

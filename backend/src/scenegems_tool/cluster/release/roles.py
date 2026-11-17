@@ -2,11 +2,10 @@
 
 A cluster is one control node and any number of worker nodes. Control node and worker nodes trust their network:
 there is no pairing, certificate or credential, so a worker node needs nothing from a deployed control node and
-starts, and retries its connection, before or after the control node. A role is the contract with the tool. It
-holds the fields of two ways to install it: Kubernetes, and Docker Compose, whose fields stay until the chart
-replaces the compose stacks.
-
-Fields of both ways:
+starts, and retries its connection, before or after the control node. A role is the contract with the tool: the tool
+installs the release's chart (release.json `chart`: folder, helm_release, namespace and values) into a Kubernetes
+cluster with one values file built from the cluster's members. A member is a role on a Kubernetes node, with an
+instance name and the operator's parameter values.
 
     description      shown to the operator
     count            "one" (one member per cluster) or "many"
@@ -18,18 +17,13 @@ Fields of both ways:
     name_pattern     optional: a regular expression its instance names must match, tighter than the
                      release's `name_pattern` (the worker node: at most 28 characters, since the names of
                      its objects in the Kubernetes cluster start with it); the tool checks both
-
-Kubernetes: the tool installs the release's chart (release.json `chart`: folder, helm_release, namespace and
-values) into a Kubernetes cluster with one values file built from the cluster's members. A member is a role on
-a Kubernetes node, with an instance name and the operator's parameter values.
-
     values           {"path", "entry"}: the chart values a member gives; the entry is a template (below).
                      Count "one": the entry is merged into the object at `path`. Count "many": `path` is a
                      list of the entries of every member, ordered by member name, [] without members
     image_values     image tag of the release to the dotted values path that takes that image, for
                      every image of the role and of its parameters' items
-    ready            beside the compose keys, `deployments` and `stateful_sets`: the names (with
-                     placeholders) of the workloads that must be available after the install
+    ready            `deployments` and `stateful_sets`: the names (with placeholders) of the workloads
+                     that must be available after the install
     forwards         ports the operator may forward to their PC: name, description, service, port
                      (the service's) and local_port (the one the web console expects)
 
@@ -41,8 +35,8 @@ the executable reference):
    The role's entry is rendered: a text gets its placeholders replaced; a number, boolean or null stays; a list
    is rendered item by item; an object with the key "$parameter" becomes the member's value of that parameter,
    converted (below); any other object is rendered key by key. The result goes to `values.path` by the count.
-3. The images the cluster needs (each member's role images and the item images its list parameters name, as
-   for compose) are pushed, and each one's `image_values` path is set to the pushed reference
+3. The images the cluster needs (each member's role images and the item images its list parameters name) are
+   pushed, and each one's `image_values` path is set to the pushed reference
    registry/repository@sha256:<digest>. An image no member needs is not pushed and its value is not written,
    so the chart's default stays.
 4. The parts are merged: objects key by key; a path two parts set must get equal values, else the deploy fails.
@@ -62,31 +56,13 @@ machine of that node as the operator knows it) and {release.revision}. Values pa
 no key of the chart's values holds a dot. No secret is a value: the chart generates the Postgres password in the
 cluster and keeps it over upgrades, so nothing secret passes through the tool or the release.
 
-Docker Compose: for each role the tool installs `stacks/<stack>/` plus release.json into a folder on the
-machine, writes its `.env`, runs the setup commands and starts the compose project.
-
-    stack            folder under stacks/ with the compose file
-    project          compose project name
-    env              values the tool writes into .env
-    secrets          .env keys generated once on the machine (random) and kept afterwards
-    requires         another role whose output's KEY=VALUE lines go into this role's .env,
-                     kept afterwards like secrets (unused by this release: no role needs one)
-    outputs          commands run in the role's folder whose stdout is secret KEY=VALUE lines
-    setup            commands run in the role's folder before the project starts (idempotent)
-    ready            `running` and `healthy`: services that must be running, or healthy, after the start
-
-Text in env, parameters, commands and project may use {cluster}, {name} (the role's instance name on that
-machine), {machine.vpn_ip}, {machine.name}, {release.revision}, {control-node.vpn_ip} and
-{control-node.<parameter>} (the VPN address and a parameter value, default included, of the machine that holds
-the cluster's control node, deployed or not) and, in outputs, {dependent.name} (the instance name of the role
-that requires the output). Cluster ids and instance names follow `name_pattern`, because they become MQTT topic
-levels, Docker names and Kubernetes names, and an instance name also its role's `name_pattern` when it has one.
+Cluster ids and instance names follow `name_pattern`, because they become MQTT topic levels and Kubernetes names,
+and an instance name also its role's `name_pattern` when it has one.
 
 Every image SceneGEMS builds is named with the release's image tag (release_image_tag): the
-revision, with -dirty when built from uncommitted changes. Both roles pass it as
-SCENEGEMS_IMAGE_TAG, which their compose files and the worker node's job stacks name the images with
-(utils/image_names.py), and the chart gets it as its value imageTag. Without a release the tag is latest,
-the tag ./build.sh builds.
+revision, with -dirty when built from uncommitted changes. The chart gets it as its value imageTag and gives it to
+every daemon as SCENEGEMS_IMAGE_TAG, which the worker node names its pools' and runs' images with when the values
+name no image (utils/image_names.py). Without a release the tag is latest, the tag ./build.sh builds.
 """
 
 import re
@@ -97,7 +73,7 @@ from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.cluster.release.manifest import ReleaseChart
 from scenegems_tool.cluster.scope_names import SCOPE_NAME_PATTERN, WORKER_NODE_NAME_PATTERN
 from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES, Subsystem
-from utils.image_names import DEFAULT_IMAGE_TAG, IMAGE_TAG_VARIABLE, image_repository, tagged, with_tag
+from utils.image_names import DEFAULT_IMAGE_TAG, image_repository, tagged, with_tag
 
 CONTROL_NODE_API_REPOSITORY = "scenegems-control-node-api"
 BROKER_REPOSITORY = "scenegems-mqtt-broker"
@@ -118,10 +94,6 @@ DEFAULT_ARTIFACT_MAX_BYTES = str(256 * 1024 * 1024)
 DEFAULT_ARTIFACT_SWEEP_INTERVAL_S = "600"
 DEFAULT_ARTIFACT_SWEEP_GRACE_S = "3600"
 DEFAULT_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES = str(2 * 1024 * 1024 * 1024)
-# The control node's stack is one compose file (cluster/release/bundle.py STACK_COMPOSE_FILES). The role sets COMPOSE_FILE
-# to it, so a .env that still names the former live sessions overlay is overwritten on a redeploy: the control node
-# starts no containers and has no Docker socket.
-CONTROL_NODE_COMPOSE_FILE = "docker-compose.yml"
 
 # The chart (deploy/kubernetes/chart, the folder `chart` of a bundle). The placeholders of the values a member gives
 # and of the chart's own values; deploy/kubernetes/chart/values.yaml holds every value a role names, with its default.
@@ -224,38 +196,17 @@ def control_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
     return {
         "description": "Control node: worker node API, scheduler, Postgres and the cluster broker",
         "count": "one",
-        "stack": "control_node",
-        "project": "scenegems-{cluster}",
         "images": [tagged(CONTROL_NODE_API_REPOSITORY, image_tag), tagged(BROKER_REPOSITORY, image_tag), POSTGRES_IMAGE],
-        "env": {
-            "COMPOSE_PROJECT_NAME": "scenegems-{cluster}",
-            "COMPOSE_FILE": CONTROL_NODE_COMPOSE_FILE,
-            "SCENEGEMS_CONTROL_NODE_ID": "{cluster}",
-            IMAGE_TAG_VARIABLE: image_tag,
-            "POSTGRES_DB": "scenegems",
-            "POSTGRES_USER": "scenegems",
-        },
         "parameters": {
-            "SCENEGEMS_API_PORT": {"default": "8443", "description": "HTTP port of the worker node API"},
-            "SCENEGEMS_BROKER_PORT": {"default": "1883", "description": "MQTT port of the cluster broker"},
-            "SCENEGEMS_OPERATOR_PORT": {"default": "5174", "description": "operator API and workbench gateway, published on 127.0.0.1 only"},
             "SCENEGEMS_OPERATOR_ALLOWED_ORIGINS": {
                 "default": DEFAULT_OPERATOR_ALLOWED_ORIGINS,
                 "description": "browser origins the operator API allows (CORS), comma separated: where the web UI is served from",
             },
-            "POSTGRES_HOST_PORT": {"default": "5432", "description": "Postgres, published on 127.0.0.1 only"},
-            "SCENEGEMS_API_BIND_ADDRESS": {"default": "0.0.0.0", "description": "host address the worker node API is published on"},
-            "SCENEGEMS_BROKER_BIND_ADDRESS": {"default": "0.0.0.0", "description": "host address the cluster broker is published on"},
             "SCENEGEMS_ARTIFACT_MAX_BYTES": {"default": DEFAULT_ARTIFACT_MAX_BYTES, "description": "largest artifact a worker node may upload, uncompressed, in bytes"},
             "SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S": {"default": DEFAULT_ARTIFACT_SWEEP_INTERVAL_S, "description": "seconds between sweeps of unreferenced artifacts; 0 turns the sweep off"},
             "SCENEGEMS_ARTIFACT_SWEEP_GRACE_S": {"default": DEFAULT_ARTIFACT_SWEEP_GRACE_S, "description": "seconds an unreferenced artifact is kept after its last use"},
         },
-        "secrets": ["POSTGRES_PASSWORD"],
-        "setup": [],
-        "outputs": {},
         "ready": {
-            "healthy": ["control-node-api"],
-            "running": ["postgres", "cluster-broker"],
             "deployments": list(CONTROL_NODE_DEPLOYMENTS),
             "stateful_sets": list(CONTROL_NODE_STATEFUL_SETS),
         },
@@ -296,21 +247,10 @@ def worker_node_image_values(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, st
 
 def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
     role: Dict[str, Any] = {
-        "description": "Worker node: the worker node daemon, which leases jobs from its control node and runs them in subsystem containers; it needs no deployed control node",
+        "description": "Worker node: the worker node daemon, which leases jobs from its control node and runs them in subsystem pools on its Kubernetes node; it needs no deployed control node",
         "count": "many",
         "name_pattern": WORKER_NODE_NAME_PATTERN.pattern,  # the daemon and the control node refuse a longer name
-        "stack": "worker_node",
-        "project": "scenegems-{cluster}-{name}",
         "images": [tagged(WORKER_NODE_REPOSITORY, image_tag)],
-        "env": {
-            "SCENEGEMS_CONTROL_NODE_ID": "{cluster}",
-            "SCENEGEMS_CONTROL_NODE_URL": "http://{control-node.vpn_ip}:{control-node.SCENEGEMS_API_PORT}",
-            "SCENEGEMS_BROKER_PORT": "{control-node.SCENEGEMS_BROKER_PORT}",
-            "SCENEGEMS_WORKER_NODE_NAME": "{name}",
-            "SCENEGEMS_WORKER_NODE_MACHINE": "{machine.name}",
-            "SCENEGEMS_SOFTWARE_REVISION": "{release.revision}",
-            IMAGE_TAG_VARIABLE: image_tag,
-        },
         "parameters": {
             "SCENEGEMS_WORKER_NODE_COMPONENTS": {
                 "default": DEFAULT_WORKER_NODE_COMPONENTS,
@@ -328,10 +268,7 @@ def worker_node_role(image_tag: str = DEFAULT_IMAGE_TAG) -> Dict[str, Any]:
                 "description": "bound of the worker node's artifact cache in bytes; 0 turns it off",
             },
         },
-        "secrets": [],
-        "setup": [],
-        "outputs": {},
-        "ready": {"running": ["daemon"], "deployments": [WORKER_NODE_DEPLOYMENT]},
+        "ready": {"deployments": [WORKER_NODE_DEPLOYMENT]},
         "image_values": {tagged(WORKER_NODE_REPOSITORY, image_tag): "images.workerNode", **worker_node_image_values(image_tag)},
         "forwards": [],
     }
