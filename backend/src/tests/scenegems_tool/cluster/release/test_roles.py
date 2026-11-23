@@ -1,58 +1,65 @@
 import re
 
+import pytest
+
 from scenegems_tool.cluster.fingerprints.components import COMPONENTS, SIMULATION_IMAGE, component_images
 from scenegems_tool.cluster.protocol.jobs import JobType
-from scenegems_tool.cluster.release.roles import NAME_PATTERN, POSTGRES_IMAGE, WORKER_NODE_IMAGE, component_item_images, role_images, scenegems_roles, slot_item_images
+from scenegems_tool.cluster.release.roles import (
+    NAME_PATTERN,
+    PARAMETER_KEY,
+    POSTGRES_IMAGE,
+    VALUE_TYPES,
+    VALUES_PLACEHOLDERS,
+    WORKER_NODE_IMAGE,
+    WORKER_NODE_IMAGES_VALUES_PATH,
+    component_item_images,
+    role_images,
+    scenegems_chart,
+    scenegems_roles,
+    slot_item_images,
+    worker_node_image_variables,
+)
+from tests.scenegems_tool.cluster.release.chart_values_builder import placeholders
 from tests.scenegems_tool.cluster.stack_images import GAZEBO_IMAGE, SITL_IMAGE
 
-FIELDS = {"description", "count", "stack", "project", "images", "env", "parameters", "secrets", "setup", "outputs", "ready"}
-PLACEHOLDERS = {"cluster", "name", "machine.vpn_ip", "machine.name", "release.revision", "dependent.name"}
-# {<role>.vpn_ip} and {<role>.<parameter>}: the machine of another role of the cluster
-CONTROL_NODE_PLACEHOLDERS = {"control-node.vpn_ip"} | {f"control-node.{key}" for key in scenegems_roles()["control-node"]["parameters"]}
+FIELDS = {"description", "count", "images", "parameters", "ready", "values", "image_values", "forwards"}
+OPTIONAL_FIELDS = {"name_pattern"}
+# The fields of the compose deploy, which went with the compose stacks
+COMPOSE_FIELDS = {"stack", "project", "env", "secrets", "requires", "outputs", "setup"}
 
 
-def _texts(role):
-    yield role["project"]
-    yield from role["env"].values()
-    yield from (parameter["default"] for parameter in role["parameters"].values())
-    for command in role["setup"]:
-        yield from command
-    for output in role["outputs"].values():
-        yield from output["command"]
-
-
-def test_every_role_has_the_contract_fields():
+def test_every_role_has_the_contract_fields_and_no_others():
     for name, role in scenegems_roles().items():
-        assert FIELDS <= set(role), name
+        assert FIELDS <= set(role) <= FIELDS | OPTIONAL_FIELDS, name
+        assert not COMPOSE_FIELDS & set(role), name
         assert role["count"] in ("one", "many")
 
 
-def test_placeholders_are_the_documented_ones():
-    for role in scenegems_roles().values():
-        for text in _texts(role):
-            assert set(re.findall(r"\{([^{}]+)\}", text)) <= PLACEHOLDERS | CONTROL_NODE_PLACEHOLDERS, text
+def test_parameter_defaults_use_only_the_values_placeholders():
+    for name, role in scenegems_roles().items():
+        for parameter in role["parameters"].values():
+            assert set(re.findall(r"\{([^{}]+)\}", parameter["default"])) <= set(VALUES_PLACEHOLDERS), name
 
 
-def test_secrets_parameters_and_fixed_values_do_not_overlap():
+def test_no_parameter_is_a_port_or_an_address_of_the_compose_deploy():
+    """Pods reach each other by service name on fixed ports; nothing is published on a host."""
     for role in scenegems_roles().values():
-        env, parameters, secrets = set(role["env"]), set(role["parameters"]), set(role["secrets"])
-        required = set(role.get("requires", {}).get("keys", []))
-        groups = [env, parameters, secrets, required]
-        assert sum(len(group) for group in groups) == len(set().union(*groups))
+        assert not [key for key in role["parameters"] if key.endswith(("_PORT", "_BIND_ADDRESS"))], role["description"]
 
 
 def test_the_worker_node_needs_nothing_from_a_deployed_control_node():
+    """Its values name the cluster and itself only: the daemon finds the control node by its service name in the cluster."""
     roles = scenegems_roles()
-    assert "requires" not in roles["worker-node"] and roles["control-node"]["outputs"] == {} and roles["control-node"]["setup"] == []
-    assert roles["control-node"]["count"] == "one"  # {control-node.*} names the one control node of the cluster
-    env = roles["worker-node"]["env"]
-    assert env["SCENEGEMS_CONTROL_NODE_ID"] == "{cluster}"
-    assert env["SCENEGEMS_CONTROL_NODE_URL"] == "http://{control-node.vpn_ip}:{control-node.SCENEGEMS_API_PORT}"
-    assert env["SCENEGEMS_BROKER_PORT"] == "{control-node.SCENEGEMS_BROKER_PORT}"
+    assert roles["control-node"]["count"] == "one"
+    entry = roles["worker-node"]["values"]["entry"]
+    assert not [name for name in placeholders(entry) if name.startswith("control-node")]
+    assert (entry["name"], entry["node"], entry["machine"]) == ("{name}", "{node}", "{machine.name}")
 
 
-def test_there_are_no_secrets_but_the_database_password():
-    assert scenegems_roles()["control-node"]["secrets"] == ["POSTGRES_PASSWORD"] and scenegems_roles()["worker-node"]["secrets"] == []
+def test_no_role_holds_a_secret():
+    """The chart generates the Postgres password in the cluster."""
+    for role in scenegems_roles().values():
+        assert "secrets" not in role and not [key for key in role["parameters"] if "PASSWORD" in key]
 
 
 def test_component_items_are_the_catalog_with_its_images():
@@ -105,15 +112,34 @@ def test_cluster_ids_and_names_are_single_scope_names():
     assert not pattern.fullmatch("ControlNode_1") and not pattern.fullmatch("a/b")
 
 
+def test_worker_node_names_are_bounded_by_the_roles_own_pattern_as_the_daemon_bounds_them():
+    from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import ConfigurationError, WorkerNodeConfiguration
+
+    roles = scenegems_roles()
+    pattern = re.compile(roles["worker-node"]["name_pattern"])
+    assert pattern.fullmatch("w" * 28) and not pattern.fullmatch("w" * 29), "the tool refuses a name the daemon would refuse at its start"
+    assert re.compile(NAME_PATTERN).fullmatch("w" * 29), "the release's pattern for cluster ids stays at 63"
+    assert "name_pattern" not in roles["control-node"]
+    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://10.88.0.2:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab", "SCENEGEMS_WORKER_NODE_STATE_DIR": "/state"}
+    values.update({"SCENEGEMS_WORKER_NODE_SLOTS": "scene_generation:1", "SCENEGEMS_WORKER_NODE_COMPONENTS": "scene_generation", "SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems"})
+    values.update({"SCENEGEMS_KUBERNETES_NODE": "lab-pc-3", "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/w/runtime", "SCENEGEMS_RELEASE_MANIFEST": "/etc/scenegems/release.json"})
+    assert WorkerNodeConfiguration.from_values({**values, "SCENEGEMS_WORKER_NODE_NAME": "w" * 28}).worker_node_name == "w" * 28
+    with pytest.raises(ConfigurationError):
+        WorkerNodeConfiguration.from_values({**values, "SCENEGEMS_WORKER_NODE_NAME": "w" * 29})
+
+
 def test_the_worker_node_reports_its_machine_from_the_machine_name():
     from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configuration import WorkerNodeConfiguration
 
     worker_node = scenegems_roles()["worker-node"]
-    assert worker_node["env"]["SCENEGEMS_WORKER_NODE_MACHINE"] == "{machine.name}"
-    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://10.88.0.2:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab"}
+    assert worker_node["values"]["entry"]["machine"] == "{machine.name}"
+    values = {"SCENEGEMS_CONTROL_NODE_URL": "http://control-node-api:8443", "SCENEGEMS_CONTROL_NODE_ID": "lab"}
     values.update({"SCENEGEMS_WORKER_NODE_NAME": "worker-1", "SCENEGEMS_WORKER_NODE_STATE_DIR": "/state"})
     values.update({key: worker_node["parameters"][key]["default"] for key in ("SCENEGEMS_WORKER_NODE_SLOTS", "SCENEGEMS_WORKER_NODE_COMPONENTS")})
-    values["SCENEGEMS_WORKER_NODE_MACHINE"] = worker_node["env"]["SCENEGEMS_WORKER_NODE_MACHINE"].replace("{machine.name}", "lab-pc-3")
+    values["SCENEGEMS_WORKER_NODE_MACHINE"] = worker_node["values"]["entry"]["machine"].replace("{machine.name}", "lab-pc-3")
+    # The chart's worker node template turns the entry into the daemon's variables (test_stack_contract.py)
+    values.update({"SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems", "SCENEGEMS_KUBERNETES_NODE": "lab-pc-3", "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/worker-1/runtime"})
+    values["SCENEGEMS_RELEASE_MANIFEST"] = "/etc/scenegems/release.json"
     assert WorkerNodeConfiguration.from_values(values).machine == "lab-pc-3"
 
 
@@ -144,13 +170,90 @@ def test_a_release_s_images_carry_its_tag_and_the_pulled_one_keeps_its_own():
     roles = scenegems_roles("abc")
     images = role_images(roles)
     assert POSTGRES_IMAGE in images and all(image.endswith(":abc") for image in images if image != POSTGRES_IMAGE)
-    assert roles["control-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == roles["worker-node"]["env"]["SCENEGEMS_IMAGE_TAG"] == "abc"
+    assert scenegems_chart("abc").values["imageTag"] == "abc", "the chart names the images it is not given with the release's tag"
     assert all(image.endswith(":abc") for images in roles["worker-node"]["parameters"]["SCENEGEMS_WORKER_NODE_COMPONENTS"]["items"]["images"].values() for image in images)
     assert scenegems_roles()["worker-node"]["images"] == [WORKER_NODE_IMAGE] and WORKER_NODE_IMAGE.endswith(":latest")
 
 
-def test_the_control_node_role_names_its_one_compose_file():
-    """Fixed, not a parameter: a redeploy overwrites a .env that still names the former live sessions overlay."""
-    control_node = scenegems_roles()["control-node"]
-    assert control_node["env"]["COMPOSE_FILE"] == "docker-compose.yml"
-    assert "COMPOSE_FILE" not in control_node["parameters"] and "COMPOSE_PATH_SEPARATOR" not in control_node["env"]
+def _parameter_values(template):
+    """Every $parameter object of a values entry."""
+    if isinstance(template, dict):
+        if PARAMETER_KEY in template:
+            yield template
+        else:
+            for value in template.values():
+                yield from _parameter_values(value)
+    elif isinstance(template, list):
+        for item in template:
+            yield from _parameter_values(item)
+
+
+def _item_images(role):
+    return {image for parameter in role["parameters"].values() for images in parameter.get("items", {}).get("images", {}).values() for image in images}
+
+
+def test_values_text_and_ready_names_use_only_the_values_placeholders():
+    for name, role in scenegems_roles().items():
+        texts = [role["values"]["entry"], role["ready"]["deployments"], role["ready"].get("stateful_sets", [])]
+        assert set(placeholders(texts)) <= set(VALUES_PLACEHOLDERS), name
+        assert role["values"]["path"] and "{" not in role["values"]["path"]
+
+
+def test_every_parameter_a_values_entry_names_is_a_parameter_of_its_role():
+    for name, role in scenegems_roles().items():
+        for value in _parameter_values(role["values"]["entry"]):
+            assert value[PARAMETER_KEY] in role["parameters"], name
+            assert set(value) <= {PARAMETER_KEY, "type", "split", "pair"} and value.get("type", "text") in VALUE_TYPES
+            assert "pair" not in value or "split" in value
+            items = role["parameters"][value[PARAMETER_KEY]].get("items")
+            if items:
+                assert (value.get("split"), value.get("pair")) == (items["separator"], items.get("key_separator")), "a list parameter splits as its items do"
+
+
+def test_every_image_of_a_role_and_its_items_takes_a_value():
+    roles = scenegems_roles("abc")
+    for name, role in roles.items():
+        assert set(role["image_values"]) == set(role["images"]) | _item_images(role), name
+    paths = {}
+    for role in roles.values():
+        for image, path in role["image_values"].items():
+            assert paths.setdefault(path, image) == image, f"{path} takes one image"
+    assert set().union(*(role["image_values"] for role in roles.values())) == set(role_images(roles))
+
+
+def test_the_worker_node_images_go_to_the_variables_the_code_reads_them_from():
+    from scenegems_tool.cluster.worker_node.launchers.pooled.simulation_pool import image_overrides
+    from scenegems_tool.cluster.worker_node.subsystem import IMAGE_ENVIRONMENT_VARIABLES
+
+    variables = worker_node_image_variables()
+    assert set(IMAGE_ENVIRONMENT_VARIABLES.values()) <= set(variables.values())
+    assert variables["scenegems-ardupilot-sitl"] == "SITL_IMAGE" and variables["scenegems-gazebo-harmonic"] == "GAZEBO_IMAGE"
+    assert image_overrides({variable: "x" for variable in variables.values()}) == {variable: "x" for variable in variables.values()}, "the daemon passes every one to the simulation pool"
+    image_values = scenegems_roles("abc")["worker-node"]["image_values"]
+    assert image_values[WORKER_NODE_IMAGE.replace(":latest", ":abc")] == "images.workerNode"
+    assert image_values["scenegems-ardupilot-sitl:abc"] == f"{WORKER_NODE_IMAGES_VALUES_PATH}.SITL_IMAGE"
+
+
+def test_ready_names_the_workloads_of_each_role():
+    roles = scenegems_roles()
+    for name, role in roles.items():
+        ready = role["ready"]
+        assert set(ready) <= {"deployments", "stateful_sets"} and ready["deployments"], name
+        names = ready["deployments"] + ready.get("stateful_sets", [])
+        assert all(isinstance(workload, str) and workload for workload in names) and len(names) == len(set(names))
+        rendered = [workload.replace("{name}", "worker-1") for workload in names]
+        assert all(re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", workload) for workload in rendered), rendered
+        if role["count"] == "many":
+            assert all("{name}" in workload for workload in names), "each member has workloads of its own"
+    assert roles["control-node"]["ready"]["stateful_sets"] == ["postgres"] and roles["worker-node"]["ready"]["deployments"] == ["worker-node-{name}"]
+
+
+def test_the_operator_api_is_the_one_forward():
+    from scenegems_tool.cluster.control_node.settings import ControlNodeSettings
+
+    roles = scenegems_roles()
+    assert roles["worker-node"]["forwards"] == []
+    (forward,) = roles["control-node"]["forwards"]
+    assert set(forward) == {"name", "description", "service", "port", "local_port"} and forward["description"]
+    assert forward["port"] == forward["local_port"] == ControlNodeSettings.operator.port == 5174
+    assert forward["service"] in roles["control-node"]["ready"]["deployments"], "the service of the control-node-api Deployment"

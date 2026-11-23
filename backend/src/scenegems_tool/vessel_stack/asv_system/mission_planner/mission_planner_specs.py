@@ -4,7 +4,7 @@ Two adapters connect it to ArduPilot:
 
 - mission_planner_gcs_port (the default, WP7): MAVProxy on the vessel's SITL SERIAL1 with one
   TCP ground control station endpoint per vessel, published on a host port Docker assigns
-  and reported in the simulation status. No ArduAgent: the operator flies the vessel, and
+  (container port stack_services.gcs_container_port(vessel id)) and reported in the simulation status. No ArduAgent: the operator flies the vessel, and
   the lockstep runner only watches it on SERIAL0 so the other vessels see it.
 - mission_planner_mavlink_port (Phase 1, the alternative for instances with real vessels,
   which run through ArduAgent): ArduAgent sends the vessel toward the last waypoint of its
@@ -36,8 +36,6 @@ MISSION_PLANNER_MAVLINK_PORT = AdapterSpec(
     provides_ports=frozenset({Port.MAVLINK}),
     containers=(MAVPROXY_CONTAINER, ARDUAGENT_CONTAINER),
 )
-
-GCS_CONTAINER_PORT = 5770  # MAVProxy's TCP endpoint for the ground control station, inside its container
 
 MISSION_PLANNER_GCS_PORT = AdapterSpec(
     id="mission_planner_gcs_port",

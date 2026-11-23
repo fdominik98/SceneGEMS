@@ -3,6 +3,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import pytest
@@ -13,9 +14,14 @@ from scenegems_tool.cluster.worker_node.daemon.configuration.worker_node_configu
 from scenegems_tool.cluster.worker_node.daemon.control.reconnect_backoff import ReconnectBackoff
 from scenegems_tool.cluster.worker_node.daemon.resource_probe import ResourceProbe
 from scenegems_tool.cluster.worker_node.daemon.worker_node_daemon import WorkerNodeDaemon
+from scenegems_tool.cluster.worker_node.daemon.worker_node_runtime import build_worker_node_context
+from scenegems_tool.cluster.worker_node.instance_scope import daemon_deployment_name
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import Kind
 from scenegems_tool.cluster.worker_node.launchers.pooled.pooled_service import PooledService
+from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from tests.scenegems_tool.cluster.worker_node.daemon.fake_control_node import FakeControlNode
+from tests.scenegems_tool.cluster.worker_node.fake_kubernetes import FakeCluster
 
 TIMEOUT_S = 10.0
 FINGERPRINTS = {"scenegems-simulation-subsystem:latest": "f" * 64}
@@ -23,12 +29,12 @@ FINGERPRINTS = {"scenegems-simulation-subsystem:latest": "f" * 64}
 
 @pytest.fixture(autouse=True)
 def pools_without_docker(monkeypatch):
-    """The daemon starts its worker node's pools after the Welcome; here a pool is only built, and starting, checking and removing it touch no container.
+    """The daemon starts its worker node's pools after the Welcome; here a pool is only built, and starting, checking and removing it touch no cluster.
 
     Yields what happened to the pools: ("start" or "destroy", the pool's name on the broker).
     """
     events: List[tuple] = []
-    monkeypatch.setattr(PooledService, "_run_container_lifecycle_startup", lambda self, compose: events.append(("start", self.service_name)))
+    monkeypatch.setattr(PooledService, "_start_deployment", lambda self, deployment: events.append(("start", self.service_name)))
     monkeypatch.setattr(PooledService, "is_running", lambda self: True)
     monkeypatch.setattr(PooledService, "destroy", lambda self: events.append(("destroy", self.service_name)))
     return events
@@ -137,6 +143,10 @@ def worker_node_values(control_node: FakeControlNode, state_dir, **overrides) ->
         "SCENEGEMS_WORKER_NODE_LABELS": "site=lab",
         "SCENEGEMS_WORKER_NODE_STATE_DIR": str(state_dir),
         "SCENEGEMS_SOFTWARE_REVISION": "test-revision",
+        "SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems",
+        "SCENEGEMS_KUBERNETES_NODE": "k3d-lab-agent-0",
+        "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/test-worker-node/runtime",
+        "SCENEGEMS_RELEASE_MANIFEST": str(Path(state_dir).parent / "release.json"),
     }
     values.update({key: value for key, value in overrides.items() if value is not None})
     return {key: value for key, value in values.items() if value != ""}
@@ -156,11 +166,24 @@ def jobs() -> ScriptedJobs:
 
 
 @pytest.fixture
-def start_daemon(tmp_path, jobs):
-    """Start a WorkerNodeDaemon with scripted jobs and fast reconnects; every started daemon is stopped at the end."""
+def daemon_cluster() -> FakeCluster:
+    """The fake cluster API the started daemons create their pools through; it holds the Deployment of each one's daemon."""
+    return FakeCluster()
+
+
+@pytest.fixture
+def start_daemon(tmp_path, jobs, daemon_cluster):
+    """Start a WorkerNodeDaemon with scripted jobs and fast reconnects, in the fake cluster; every started daemon is stopped at the end."""
     started: List[DaemonThread] = []
 
+    def in_the_fake_cluster(configuration: WorkerNodeConfiguration) -> WorkerNodeContext:
+        owner = daemon_deployment_name(configuration.worker_node_id)
+        if daemon_cluster.get(Kind.DEPLOYMENT, owner) is None:
+            daemon_cluster.add(Kind.DEPLOYMENT, {"metadata": {"name": owner}})
+        return build_worker_node_context(configuration, daemon_cluster.api(configuration.kubernetes_namespace))
+
     def start(configuration: WorkerNodeConfiguration, **options) -> DaemonThread:
+        options.setdefault("worker_node_context", in_the_fake_cluster)
         options.setdefault("run", jobs)
         options.setdefault("probe", ResourceProbe(disk_path=tmp_path))
         options.setdefault("fingerprints", lambda: dict(FINGERPRINTS))

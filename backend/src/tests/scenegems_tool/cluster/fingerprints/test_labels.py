@@ -1,62 +1,47 @@
-import io
-import uuid
+"""The fingerprints a worker node reports come from the release manifest it is deployed with, keyed as the control node compares them."""
 
 import pytest
 
-from scenegems_tool.cluster.fingerprints.labels import FINGERPRINT_LABEL, read_image_fingerprints
+from scenegems_tool.cluster.fingerprints.comparison import find_mismatches
+from scenegems_tool.cluster.fingerprints.labels import FINGERPRINT_LABEL, release_fingerprints
+from scenegems_tool.cluster.release.manifest import Release, ReleaseError, ReleaseImage, read_release, write_release
 
 
-class _Image:
-    def __init__(self, tags, labels):
-        self.tags = tags
-        self.labels = labels
+def write_manifest(path, images) -> None:
+    write_release(path, Release(name="scenegems", revision="abc123", dirty=False, created_at="2026-11-16T12:00:00+00:00", images=images))
 
 
-class _Client:
-    def __init__(self, images):
-        self.images = self
-        self._images = images
-
-    def list(self):
-        return self._images
-
-
-def test_reads_the_label_of_every_image_by_repository():
-    client = _Client([_Image(["a:latest", "a:v1"], {FINGERPRINT_LABEL: "abc"}), _Image(["b:latest"], {FINGERPRINT_LABEL: "def"})])
-    assert read_image_fingerprints(client, tag="latest") == {"a": "abc", "b": "def"}
-
-
-def test_the_image_of_the_worker_node_s_tag_wins_over_other_tags_of_its_repository():
-    client = _Client([_Image(["a:latest"], {FINGERPRINT_LABEL: "old"}), _Image(["a:rev2", "a:x"], {FINGERPRINT_LABEL: "new"})])
-    assert read_image_fingerprints(client, tag="rev2") == {"a": "new"}
-    assert read_image_fingerprints(client, tag="latest") == {"a": "old"}
+def test_every_fingerprinted_image_of_the_release_is_reported_by_repository(tmp_path):
+    manifest = tmp_path / "release.json"
+    write_manifest(
+        manifest,
+        {
+            "scenegems-simulation-subsystem:abc123": ReleaseImage("sha256:1", "fp-simulation"),
+            "scenegems-monitoring-subsystem:abc123": ReleaseImage("sha256:2", "fp-monitoring"),
+            "postgres:16.10-alpine": ReleaseImage("sha256:3"),  # not built by SceneGEMS: no fingerprint
+        },
+    )
+    assert release_fingerprints(manifest) == {"scenegems-simulation-subsystem": "fp-simulation", "scenegems-monitoring-subsystem": "fp-monitoring"}
+    assert release_fingerprints(str(manifest)) == release_fingerprints(manifest)
 
 
-def test_a_repository_only_under_other_tags_still_reports_its_fingerprint():
-    client = _Client([_Image(["a:rev1"], {FINGERPRINT_LABEL: "abc"})])
-    assert read_image_fingerprints(client, tag="rev2") == {"a": "abc"}
+def test_a_worker_node_of_the_control_nodes_release_matches_it(tmp_path):
+    """The control node requires the fingerprints of its own release.json (fingerprint_policy.ExpectedFingerprints.of_release), keyed by tag."""
+    manifest = tmp_path / "release.json"
+    write_manifest(manifest, {"scenegems-simulation-subsystem:abc123": ReleaseImage("sha256:1", "fp-simulation")})
+    required = read_release(manifest).fingerprints()
+    assert find_mismatches(release_fingerprints(manifest), required) == []
+    assert find_mismatches({"scenegems-simulation-subsystem": "fp-older"}, required)[0].image == "scenegems-simulation-subsystem"
 
 
-def test_the_tag_defaults_to_scenegems_image_tag(monkeypatch):
-    client = _Client([_Image(["a:latest"], {FINGERPRINT_LABEL: "old"}), _Image(["a:rev2"], {FINGERPRINT_LABEL: "new"})])
-    monkeypatch.setenv("SCENEGEMS_IMAGE_TAG", "rev2")
-    assert read_image_fingerprints(client) == {"a": "new"}
+def test_an_unreadable_manifest_fails_with_the_releases_error(tmp_path):
+    with pytest.raises(ReleaseError, match="cannot read the release file"):
+        release_fingerprints(tmp_path / "missing.json")
+    broken = tmp_path / "release.json"
+    broken.write_text('{"format": 1}', encoding="utf-8")
+    with pytest.raises(ReleaseError, match="format"):
+        release_fingerprints(broken)
 
 
-def test_images_without_the_label_or_a_tag_are_skipped():
-    client = _Client([_Image(["plain:latest"], {}), _Image(["none:latest"], None), _Image([], {FINGERPRINT_LABEL: "abc"})])
-    assert read_image_fingerprints(client) == {}
-
-
-@pytest.mark.docker
-def test_reads_the_label_from_a_real_image():
-    import docker
-
-    client = docker.from_env()
-    tag = f"scenegems-fingerprint-test:{uuid.uuid4().hex[:8]}"
-    dockerfile = io.BytesIO(f"FROM scratch\nLABEL {FINGERPRINT_LABEL}=deadbeef\n".encode())
-    client.images.build(fileobj=dockerfile, tag=tag)
-    try:
-        assert read_image_fingerprints(client, tag=tag.split(":")[1])["scenegems-fingerprint-test"] == "deadbeef"
-    finally:
-        client.images.remove(tag, force=True)
+def test_the_label_is_the_one_the_release_records():
+    assert FINGERPRINT_LABEL == "org.scenegems.fingerprint"

@@ -1,4 +1,4 @@
-"""The gazebo_custom runner of the simulation job: the per-job Gazebo stack as compose content without Docker, and the run against a fake actuator link."""
+"""The gazebo_custom runner of the simulation job: the per-job Gazebo stack and the pod it becomes, without a cluster, and the run against a fake actuator link."""
 
 import os
 import re
@@ -15,10 +15,11 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_job import SimulationPay
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import STACK_NETWORK
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.gazebo_custom_runner import GazeboCustomSimulationPayload, build_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RUNNER_SERVICE
 from scenegems_tool.vessel_stack.simulation_layers.gazebo import gz_lockstep_runner
 from scenegems_tool.vessel_stack.simulation_layers.gazebo.gz_transport_actuator import DEFAULT_PORT
 from tests.scenegems_tool.vessel_stack.simulation_layers.gazebo.fake_hull_link import hull_link
+from utils.file_system_utils import RUNTIME_ASSETS_FOLDER
 
 WIND = [0.0, 3.0, 0.0]
 WAVES = {"amplitude": 0.5, "period": 5.0, "steepness": 0.0, "direction": [1.0, 0.0]}
@@ -37,7 +38,7 @@ def stack_for(worker_node, make_job, head_on_trajectories, job_id="sim-1", **fie
 def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="usv_navigation")
     services = stack.compose["services"]
-    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
+    own_ship, target = services["os-asv-system"], services["ts1-asv-system"]
     assert "scenegems-usv-navigation" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.usv_navigation.usv_navigation_server"
     assert "scenegems-simulation-subsystem" in target["image"], "the other vessel replays"
 
@@ -45,9 +46,9 @@ def test_usv_navigation_runs_in_its_own_image(instances_folder, worker_node, mak
 def test_moos_ivp_runs_in_its_own_image(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = stack_for(worker_node, make_job, head_on_trajectories, mode="moos_ivp")
     services = stack.compose["services"]
-    own_ship, target = services["os_asv_system"], services["ts1_asv_system"]
+    own_ship, target = services["os-asv-system"], services["ts1-asv-system"]
     assert "scenegems-moos-ivp" in own_ship["image"] and own_ship["command"][2] == "scenegems_tool.vessel_stack.asv_system.moos_ivp.moos_ivp_server"
-    assert "scenegems-simulation-subsystem" in target["image"] and "os_controller" in services, "the other vessel replays, and the helm's heading and speed go to the own ship's controller"
+    assert "scenegems-simulation-subsystem" in target["image"] and "os-controller" in services, "the other vessel replays, and the helm's heading and speed go to the own ship's controller"
 
 
 def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -56,28 +57,30 @@ def test_moos_ivp_parameters_that_contradict_the_scenes_fail_the_stack_for_good(
     assert not failure.value.retryable and "Simulation payload rejected" in str(failure.value) and "the distances must be ordered" in str(failure.value)
 
 
-def test_the_stack_is_the_paused_world_a_controller_and_asv_system_per_vessel_and_the_runner(instances_folder, worker_node, make_job, head_on_trajectories):
+def test_the_run_is_one_pod_of_the_paused_world_a_controller_and_asv_system_per_vessel_and_the_runner(instances_folder, placed_worker_node, make_job, head_on_trajectories):
     """No SITL: Gazebo starts paused with the actuator listening, every vessel has its controller and its replay container, and the runner steps them."""
-    job, stack = stack_for(worker_node, make_job, head_on_trajectories)
-    scope = worker_node.job_scope(job)
+    job, stack = stack_for(placed_worker_node, make_job, head_on_trajectories)
+    scope = placed_worker_node.job_scope(job)
     services = stack.compose["services"]
-    vessel_services = {f"{vessel}_{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv_system")}
+    vessel_services = {f"{vessel}-{layer}" for vessel in ("os", "ts1") for layer in ("controller", "asv-system")}
     assert set(services) == {"gazebo", RUNNER_SERVICE} | vessel_services
     for name in vessel_services:
         assert services[name]["image"].endswith("scenegems-simulation-subsystem:latest}") and services[name]["networks"] == [STACK_NETWORK]
-    assert services["os_controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "11420"]
-    assert services["os_asv_system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "11410"]
+    assert services["os-controller"]["command"][-3:] == ["scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server", "--port", "12100"]
+    assert services["os-asv-system"]["command"][-3:] == ["scenegems_tool.vessel_stack.asv_system.replay.replay_server", "--port", "12000"]
     gazebo = services["gazebo"]
     assert gazebo["image"].endswith("scenegems-gazebo-harmonic:latest}") or "scenegems-gazebo-harmonic" in gazebo["image"]
     assert gazebo["environment"]["GZ_START_PAUSED"] == "1" and gazebo["environment"]["GZ_ACTUATOR_PORT"] == str(DEFAULT_PORT)
     assert "depends_on" not in gazebo
-    for key, service in services.items():
-        assert service["container_name"] == scope.container_name(key)
-        assert "ports" not in service
-    runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-simulation-subsystem:latest"
-    assert runner["networks"] == [STACK_NETWORK] and set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
-    assert stack.project.name == scope.compose_project
+    pod = stack.manifest()
+    assert pod["metadata"]["name"] == scope.name
+    sidecars = {sidecar["name"]: sidecar for sidecar in pod["spec"]["initContainers"]}
+    assert set(sidecars) == set(services) - {RUNNER_SERVICE} and not any("ports" in sidecar for sidecar in sidecars.values())
+    assert sidecars["gazebo"]["image"] == "scenegems-gazebo-harmonic:latest" and {"name": "GZ_START_PAUSED", "value": "1"} in sidecars["gazebo"]["env"]
+    assert sidecars["gazebo"]["volumeMounts"] == [{"name": "runtime", "mountPath": RUNTIME_ASSETS_FOLDER, "readOnly": True}], "the world and the models from the runtime folder"
+    [runner] = pod["spec"]["containers"]
+    assert runner["name"] == RUNNER_SERVICE and runner["image"] == "scenegems-simulation-subsystem:latest"
+    assert "gazebo" in pod["spec"]["hostAliases"][0]["hostnames"], "the name the runner dials the actuator by"
 
 
 def test_the_world_and_the_models_go_to_the_job_folder(instances_folder, worker_node, make_job, head_on_trajectories):

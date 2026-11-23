@@ -60,7 +60,7 @@ def test_every_service_joins_the_maritime_network(stacks, case):
 
 
 def test_a_stack_is_only_generated_never_started_from_here():
-    """A simulation job starts the stack it generated (cluster/worker_node/launchers/per_job/job_stack.py); nothing runs one on its own."""
+    """A simulation job runs the stack it generated as a pod (cluster/worker_node/launchers/per_job/run_pod.py); nothing runs one on its own."""
     for name in ("run_simulation_docker_stack_startup", "destroy_simulation_docker_stack", "SIMULATION_COMPOSE_PROJECT"):
         assert not hasattr(simulation_docker_stack, name), name
 
@@ -90,14 +90,14 @@ def test_an_unsupported_environment_is_rejected_before_anything_is_generated():
 
 def _arduagent_environments(instance, connection):
     _, compose = build_simulation_docker_stack_artifacts(instance, encounter_trajectories("head_on", 20), connection, GEOFENCE)
-    return {key: dict(item.split("=", 1) for item in service["environment"]) for key, service in compose["services"].items() if key.endswith("_arduagent")}
+    return {key: dict(item.split("=", 1) for item in service["environment"]) for key, service in compose["services"].items() if key.endswith("-arduagent")}
 
 
 def test_arduagent_containers_get_no_topic_prefix_and_no_ground_station_address():
     """An agent is told apart by the name in its topics, and a ground station connects to MAVProxy's TCP port: nothing is sent to the Docker host."""
     instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
     environments = _arduagent_environments(instance, mqtt_connection())
-    assert set(environments) == {"agent_0_arduagent", "agent_1_arduagent"}
+    assert set(environments) == {"agent_0-arduagent", "agent_1-arduagent"}
     for environment in environments.values():
         assert not {"MQTT_TOPIC_PREFIX", "GCS_1", "LOCAL_BRIDGE"} & set(environment)
 
@@ -108,8 +108,8 @@ def test_a_real_vessel_brings_its_own_arduagent():
     instance.vessels["1"].stack = VesselStackConfig(AsvSystemId.REPLAY, ControlLayerId.REAL_VESSEL, SimulationLayerId.REAL_VESSEL)
     instance.vessels["1"].adapter_ids = ("replay_arduagent_real_vessel",)
     environments = _arduagent_environments(instance, mqtt_connection())
-    assert list(environments) == ["agent_0_arduagent"], "the real vessel runs its own ArduAgent"
-    assert environments["agent_0_arduagent"]["OTHER_POSITIONS_TOPICS"] == "waraps/unit/surface/agent_1/sensor/position", "the simulated vessel still takes its position"
+    assert list(environments) == ["agent_0-arduagent"], "the real vessel runs its own ArduAgent"
+    assert environments["agent_0-arduagent"]["OTHER_POSITIONS_TOPICS"] == "waraps/unit/surface/agent_1/sensor/position", "the simulated vessel still takes its position"
 
 
 def test_gazebo_has_no_fixed_container_name_and_no_host_port(stacks):

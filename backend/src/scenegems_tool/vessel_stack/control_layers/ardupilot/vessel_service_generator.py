@@ -5,8 +5,8 @@ import numpy as np
 
 from scenegems_tool.messaging.mqtt_agent_client import MqttAgentClient
 from scenegems_tool.messaging.topic_layout import SIMULATION_CONTEXT, SURFACE_DOMAIN, WARAPS_TOPIC_ROOT, parse_unit_topic
-from scenegems_tool.vessel_stack.asv_system.mission_planner.mission_planner_specs import GCS_CONTAINER_PORT
 from scenegems_tool.vessel_stack.contracts.local_frame import to_true_north
+from scenegems_tool.vessel_stack.contracts.stack_services import arduagent_port, gcs_container_port
 from scenegems_tool.vessel_stack.control_layers.ardupilot.ardupilot_specs import ARDUAGENT_CONTAINER, MAVPROXY_CONTAINER, SITL_CONTAINER
 from utils.file_system_utils import SITL_ENTRYPOINT_CONTAINER_PATH, docker_volume_path, runtime_assets_volume_mount
 
@@ -47,16 +47,18 @@ def generate_vessel_service(
     topics, come from the client's topic when it is a simulated unit's in the WARA-PS layout (messaging/topic_layout.py);
     any other topic leaves the agent the client's name under waraps, as before. other_position_topics are the base
     topics of the instance's other vessels: the agent takes positions from those only, not from every unit on the broker.
-    MAVProxy listens on GCS_CONTAINER_PORT for a ground control station; the stack that runs the vessel says whether
+    MAVProxy listens on the vessel's gcs_container_port for a ground control station and on its arduagent_port for ArduAgent (stack_services.py: every vessel has ports of its own); the stack that runs the vessel says whether
     that port is published (a job keeps it for a Mission Planner vessel, on a host port Docker assigns).
     """
     mqtt_connection = mqtt_client.mqtt_connection
-    mavproxy = f"{mqtt_client.name}_mavproxy"
-    arduagent = f"{mqtt_client.name}_arduagent"
+    mavproxy = gcs_mavproxy_service_name(mqtt_client.name)
+    arduagent = arduagent_service_name(mqtt_client.name)
     ardupilot = mqtt_client.name
 
     reference_geofence = mqtt_client.reference_geofence
-    arduagent_port = 14551
+    vessel_id = int(mqtt_client.actor.id)
+    mavproxy_arduagent_port = arduagent_port(vessel_id)
+    mavproxy_gcs_port = gcs_container_port(vessel_id)
     sim_port = str(5760 + int(mqtt_client.actor.id) * 10)
 
     if is_ardupilot_sim:
@@ -84,14 +86,14 @@ def generate_vessel_service(
         "MQTT_PASSWORD": mqtt_connection.password,
         "FCS_SERIAL": "/dev/serial0",
         "BAUD_RATE": "57600",
-        "CONNECTION_STRING": f"tcp:{mavproxy}:{arduagent_port}",
+        "CONNECTION_STRING": f"tcp:{mavproxy}:{mavproxy_arduagent_port}",
         "SIM_PORT": sim_port,
         "SPEEDUP": str(speed_factor),
         "VEHICLE": "Rover",
         "MODEL": sitl_frame,
         "VEHICLE_PARAMS": sitl_frame,
         # Bind tcpin on all interfaces inside the mavproxy container; arduagent uses the service hostname.
-        "MAVPROXY": f"tcpin:{mavproxy}:{arduagent_port}",
+        "MAVPROXY": f"tcpin:{mavproxy}:{mavproxy_arduagent_port}",
     }
     if unit is not None and unit.root != WARAPS_TOPIC_ROOT:
         agent_env["MQTT_TOPIC_ROOT"] = unit.root
@@ -126,7 +128,7 @@ def generate_vessel_service(
         f"--default-modules={_MAVPROXY_DEFAULT_MODULES}",
         f"--master=tcp:{ardupilot}:{sim_port}",
         f"--out={agent_env['MAVPROXY']}",
-        f"--out=tcpin:0.0.0.0:{GCS_CONTAINER_PORT}",
+        f"--out=tcpin:0.0.0.0:{mavproxy_gcs_port}",
     ]
     docker_services = {
         ardupilot: {
@@ -150,7 +152,7 @@ def generate_vessel_service(
             "environment": env_list,
             "networks": ["maritime_net"],
             # The ground control station's TCP endpoint, on a host port Docker assigns (a job's stack keeps it only for a Mission Planner vessel)
-            "ports": [str(GCS_CONTAINER_PORT)],
+            "ports": [str(mavproxy_gcs_port)],
             "command": _retried(shlex.join(mavproxy_command), GCS_MAVPROXY_RETRY_S),
         },
         arduagent: {
@@ -166,7 +168,13 @@ def generate_vessel_service(
 
 
 def gcs_mavproxy_service_name(agent_name: str) -> str:
-    return f"{agent_name}_mavproxy"
+    """The MAVProxy service of a vessel: a host name on the stack's network, so an RFC 1123 name."""
+    return f"{agent_name}-mavproxy"
+
+
+def arduagent_service_name(agent_name: str) -> str:
+    """The ArduAgent service of a vessel, named as its MAVProxy is."""
+    return f"{agent_name}-arduagent"
 
 
 def generate_gcs_mavproxy_service(agent_name: str, vessel_id: int) -> dict:
@@ -187,7 +195,7 @@ def generate_gcs_mavproxy_service(agent_name: str, vessel_id: int) -> dict:
         "--non-interactive",
         f"--default-modules={_MAVPROXY_DEFAULT_MODULES}",
         f"--master=tcp:{agent_name}:{SITL_SERIAL1_BASE_PORT + 10 * int(vessel_id)}",
-        f"--out=tcpin:0.0.0.0:{GCS_CONTAINER_PORT}",
+        f"--out=tcpin:0.0.0.0:{gcs_container_port(vessel_id)}",
     ]
     return {
         gcs_mavproxy_service_name(agent_name): {
@@ -196,7 +204,7 @@ def generate_gcs_mavproxy_service(agent_name: str, vessel_id: int) -> dict:
             "stdin_open": True,
             "restart": "unless-stopped",
             "networks": ["maritime_net"],
-            "ports": [str(GCS_CONTAINER_PORT)],
+            "ports": [str(gcs_container_port(vessel_id))],
             "command": _retried(shlex.join(mavproxy), GCS_MAVPROXY_RETRY_S),
         }
     }

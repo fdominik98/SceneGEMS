@@ -23,6 +23,10 @@ VALID = {
     "SCENEGEMS_WORKER_NODE_SLOTS": "simulation:4,scene_generation:1",
     "SCENEGEMS_WORKER_NODE_COMPONENTS": "asv_system/replay,control_layer/none,simulation_layer/kinematic,scene_generation",
     "SCENEGEMS_WORKER_NODE_STATE_DIR": "/var/lib/scenegems-worker-node",
+    "SCENEGEMS_KUBERNETES_NAMESPACE": "scenegems",
+    "SCENEGEMS_KUBERNETES_NODE": "k3d-lab-agent-0",
+    "SCENEGEMS_RUNTIME_HOST_PATH": "/var/lib/scenegems/worker-1/runtime",
+    "SCENEGEMS_RELEASE_MANIFEST": "/etc/scenegems/release.json",
 }
 
 
@@ -47,7 +51,10 @@ def test_a_complete_configuration_parses():
     assert configuration.labels == {"gpu": "true", "site": "lab"}
     assert configuration.state_dir == Path("/var/lib/scenegems-worker-node")
     assert configuration.reference_geofence == DEFAULT_REFERENCE_GEOFENCE
-    assert configuration.docker_name == "scenegems-lab-control-node-worker-1"
+    assert (configuration.kubernetes_namespace, configuration.kubernetes_node) == ("scenegems", "k3d-lab-agent-0")
+    assert configuration.runtime_host_path == "/var/lib/scenegems/worker-1/runtime"
+    assert configuration.release_manifest == Path("/etc/scenegems/release.json")
+    assert not hasattr(configuration, "docker_name") and not hasattr(configuration, "docker_network")
 
 
 def test_the_machine_is_optional_and_trimmed():
@@ -91,10 +98,14 @@ def test_every_problem_is_reported_at_once():
                 SCENEGEMS_WORKER_NODE_SLOTS="unknown:1",
                 SCENEGEMS_WORKER_NODE_COMPONENTS="gpu",
                 SCENEGEMS_WORKER_NODE_STATE_DIR=None,
+                SCENEGEMS_KUBERNETES_NAMESPACE=None,
+                SCENEGEMS_KUBERNETES_NODE=None,
+                SCENEGEMS_RUNTIME_HOST_PATH=None,
+                SCENEGEMS_RELEASE_MANIFEST=None,
             )
         )
     problems = raised.value.problems
-    assert len(problems) == 6
+    assert len(problems) == 10
     message = str(raised.value)
     for name in (
         "SCENEGEMS_CONTROL_NODE_URL",
@@ -103,14 +114,58 @@ def test_every_problem_is_reported_at_once():
         "SCENEGEMS_WORKER_NODE_SLOTS",
         "SCENEGEMS_WORKER_NODE_COMPONENTS",
         "SCENEGEMS_WORKER_NODE_STATE_DIR",
+        "SCENEGEMS_KUBERNETES_NAMESPACE",
+        "SCENEGEMS_KUBERNETES_NODE",
+        "SCENEGEMS_RUNTIME_HOST_PATH",
+        "SCENEGEMS_RELEASE_MANIFEST",
     ):
         assert name in message
 
 
-@pytest.mark.parametrize("name", ["Worker_1", "-worker", "worker.1", "w" * 64])
-def test_worker_node_names_must_be_docker_and_topic_safe(name):
-    with pytest.raises(ConfigurationError, match="SCENEGEMS_WORKER_NODE_NAME"):
+@pytest.mark.parametrize("name", ["Worker_1", "-worker", "worker.1", "w" * 29, "w" * 64])
+def test_worker_node_names_must_be_topic_safe_and_short_enough_for_the_names_of_its_deployments(name):
+    with pytest.raises(ConfigurationError, match="SCENEGEMS_WORKER_NODE_NAME.*1 to 28"):
         WorkerNodeConfiguration.from_values(values(SCENEGEMS_WORKER_NODE_NAME=name))
+
+
+def test_a_worker_node_name_of_28_characters_is_taken():
+    """worker-node-<name> and <name>-design-space-exploration-subsystem then both fit in 63 characters (scope_names.WORKER_NODE_NAME_MAX)."""
+    assert WorkerNodeConfiguration.from_values(values(SCENEGEMS_WORKER_NODE_NAME="w" * 28)).worker_node_name == "w" * 28
+
+
+@pytest.mark.parametrize(
+    "variable, value",
+    [
+        ("SCENEGEMS_KUBERNETES_NAMESPACE", "SceneGEMS"),
+        ("SCENEGEMS_KUBERNETES_NAMESPACE", "n" * 64),
+        ("SCENEGEMS_KUBERNETES_NODE", "Node 1"),
+        ("SCENEGEMS_KUBERNETES_NODE", "-node"),
+        ("SCENEGEMS_RUNTIME_HOST_PATH", "var/lib/scenegems"),
+        ("SCENEGEMS_RUNTIME_HOST_PATH", "C:/scenegems"),
+        ("SCENEGEMS_BROKER_HOST", "mqtt://cluster-broker"),
+        ("SCENEGEMS_BROKER_HOST", "cluster-broker:1883"),
+    ],
+)
+def test_the_place_in_the_cluster_and_the_broker_host_are_checked(variable, value):
+    with pytest.raises(ConfigurationError, match=variable):
+        WorkerNodeConfiguration.from_values(values(**{variable: value}))
+
+
+def test_a_node_name_may_be_a_dotted_host_name_and_the_host_path_loses_a_trailing_slash():
+    configuration = WorkerNodeConfiguration.from_values(values(SCENEGEMS_KUBERNETES_NODE="lab-pc-3.mesh", SCENEGEMS_RUNTIME_HOST_PATH="/var/lib/scenegems/worker-1/runtime/"))
+    assert (configuration.kubernetes_node, configuration.runtime_host_path) == ("lab-pc-3.mesh", "/var/lib/scenegems/worker-1/runtime")
+
+
+def test_the_broker_host_is_the_control_nodes_unless_set():
+    assert WorkerNodeConfiguration.from_values(VALID).broker_host == "192.168.1.10"
+    configuration = WorkerNodeConfiguration.from_values(values(SCENEGEMS_BROKER_HOST="cluster-broker"))
+    assert configuration.broker_host == "cluster-broker", "the broker's service in the cluster"
+    assert WorkerNodeConfiguration.from_values(values(SCENEGEMS_BROKER_HOST="")).broker_host == "192.168.1.10"
+
+
+def test_the_docker_variables_are_no_longer_read():
+    configuration = WorkerNodeConfiguration.from_values(values(SCENEGEMS_DOCKER_NETWORK="scenegems-lab", SCENEGEMS_RUNTIME_VOLUME="scenegems-lab-runtime"))
+    assert configuration == WorkerNodeConfiguration.from_values(VALID)
 
 
 def test_a_control_node_id_must_be_a_scope_name():
@@ -121,12 +176,10 @@ def test_a_control_node_id_must_be_a_scope_name():
 def test_optional_values_are_read():
     configuration = WorkerNodeConfiguration.from_values(
         values(
-            SCENEGEMS_DOCKER_NETWORK="scenegems-worker-node-lab-control-node-worker-1",
             SCENEGEMS_WORKER_NODE_REFERENCE_GEOFENCE="57.7, 11.9, 2000",
             SCENEGEMS_SOFTWARE_REVISION="abc123",
         )
     )
-    assert configuration.docker_network == "scenegems-worker-node-lab-control-node-worker-1"
     assert configuration.reference_geofence == (57.7, 11.9, 2000.0)
     assert configuration.software_revision == "abc123"
 

@@ -1,0 +1,87 @@
+# The two accounts that talk to the cluster API, with rights in this namespace only (design log, K3 and K4 results).
+# Every other pod of the chart, the pools other than simulation and the runs mount no token.
+#
+# worker-node: the daemons. They create, read, replace and delete their pools' Deployments, read their own Deployment
+# as the pools' owner, and delete the pods and services of leftover instances.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: worker-node
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: worker-node
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: worker-node
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: worker-node
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "services"]
+    verbs: ["list", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: worker-node
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: worker-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: worker-node
+subjects:
+  - kind: ServiceAccount
+    name: worker-node
+    namespace: {{ .Release.Namespace }}
+---
+# simulation-subsystem: the simulation pools. They create each run as a pod, read it at an interval and follow its
+# runner's log, create the NodePort services of an attended run's ground control ports, and delete both.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: simulation-subsystem
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: simulation-subsystem
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: simulation-subsystem
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: simulation-subsystem
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "create", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: simulation-subsystem
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: simulation-subsystem
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: simulation-subsystem
+subjects:
+  - kind: ServiceAccount
+    name: simulation-subsystem
+    namespace: {{ .Release.Namespace }}

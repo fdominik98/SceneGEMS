@@ -1,18 +1,20 @@
-"""How a per-job runner container receives its job and hands back its result.
+"""How a run's runner container receives its job and hands back its result.
 
-The launcher copies the job document into the created container before it starts and
-copies the result document out after it stops, so the caller needs only the Docker CLI,
-not a volume shared with the container. While it runs, the container writes status lines
-to stdout with STATUS_LINE_PREFIX; every other line is a log line. A status may carry a detail:
-a small object that says more than the message, such as the phase of an attended simulation
-or the ports its stack published (the keys are in cluster/protocol/messages.py).
+The job folder is shared: it is the run's job folder on the worker node's runtime folder, mounted at
+JOB_FOLDER in the runner (launchers/per_job/run_pod.py), so nothing is copied. The simulation subsystem
+writes the job document there before the run's pod is created and reads the result document there
+after the runner ended. While it runs, the container writes status lines to stdout with
+STATUS_LINE_PREFIX; every other line is a log line. A status may carry a detail: a small object that
+says more than the message, such as the phase of an attended simulation or the ports its pod got on the
+node (the keys are in cluster/protocol/messages.py).
 
 Observation (live simulations), through the job folder and the container's output, so it needs no network:
-    in   the launcher copies OBSERVE_DOCUMENT into JOB_FOLDER whenever the control node's request
-         changes (observe on or off, a speed, the operator's Start of an attended simulation); the
-         runner reads it between steps and while it waits for the Start, at most a few times a second;
+    in   the subsystem writes OBSERVE_DOCUMENT into the job folder (a temporary file, then a rename)
+         whenever the control node's request changes (observe on or off, a speed, the operator's
+         Start of an attended simulation); the runner reads it between steps and while it waits for
+         the Start, at most a few times a second;
     out  while observed, the runner writes each frame as one stdout line with FRAME_LINE_PREFIX,
-         which the launcher's log follower takes out of the log and hands to the job's
+         which the subsystem's log follower takes out of the log and hands to the job's
          observation. Nothing is written while nobody observes.
 """
 

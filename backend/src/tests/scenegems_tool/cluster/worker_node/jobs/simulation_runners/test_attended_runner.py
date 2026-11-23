@@ -16,7 +16,7 @@ from scenegems_tool.cluster.worker_node.jobs.simulation_runners import attended_
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.attended_runner import AttendedSimulationPayload, simulation_instance
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.vessel_job_stack import build_vessel_job_stack, ground_control_ports
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import OBSERVE_DOCUMENT, ObservationControl, parse_frame_line
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, project_compose
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RUNNER_SERVICE
 from scenegems_tool.subsystems.simulation.arduagent_simulation_driver import ArduAgentRun, VesselsNotReady
 from scenegems_tool.vessel_stack.simulation_layers.kinematic.kinematic_runner import run_kinematic_replay
 
@@ -130,18 +130,19 @@ def stack_of(worker_node, make_job, head_on_trajectories, simulation):
 
 def test_a_kinematic_attended_stack_is_the_stack_of_the_kinematic_job(instances_folder, worker_node, make_job, head_on_trajectories):
     instance, stack = stack_of(worker_node, make_job, head_on_trajectories, setup())
-    assert set(stack.compose["services"]) == {"kinematic_sim", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE}
+    assert set(stack.compose["services"]) == {"kinematic-sim", "os-asv-system", "ts1-asv-system", RUNNER_SERVICE}
     assert ground_control_ports(instance) == {} and not any("ports" in service for service in stack.compose["services"].values())
 
 
-def test_mission_planners_port_stays_published_and_is_what_the_job_reports(instances_folder, worker_node, make_job, head_on_trajectories):
-    instance, stack = stack_of(worker_node, make_job, head_on_trajectories, setup("ArduPilot Sim", agent_0={"asvSystem": "mission_planner"}))
-    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 5770)}, "by agent id: the service and the container port a ground control station reaches"
+def test_mission_planners_port_is_the_one_the_run_publishes(instances_folder, placed_worker_node, make_job, head_on_trajectories):
+    instance, stack = stack_of(placed_worker_node, make_job, head_on_trajectories, setup("ArduPilot Sim", agent_0={"asvSystem": "mission_planner"}))
+    assert ground_control_ports(instance) == {"0": ("os-mavproxy", 12200)}, "by agent id: the service and the container port a ground control station reaches"
     services = stack.compose["services"]
-    assert services["os_mavproxy"]["ports"] == ["5770"], "Docker assigns the host port"
-    assert [key for key, service in services.items() if "ports" in service] == ["os_mavproxy"], "no other port of the stack is published"
-    document = project_compose(stack.scope, stack.compose)
-    assert "ports" in document["services"][stack.scope.service_key("os_mavproxy")]
+    assert services["os-mavproxy"]["ports"] == ["12200"]
+    assert [key for key, service in services.items() if "ports" in service] == ["os-mavproxy"], "no other service of the stack names a port"
+    service = stack.ground_control_service("0", "os-mavproxy", 12200, None)
+    assert service["spec"]["type"] == "NodePort" and service["spec"]["ports"][0]["port"] == service["spec"]["ports"][0]["targetPort"] == 12200
+    assert service["spec"]["selector"] == stack.scope.labels, "the run's pod and nothing else"
 
 
 def test_an_unattended_job_still_refuses_mission_planner(instances_folder, worker_node, make_job, head_on_trajectories):
@@ -275,23 +276,23 @@ def environment_of(service: dict) -> dict:
 def test_beside_a_real_vessel_a_simulated_one_has_an_arduagent_on_the_cluster_broker(instances_folder, worker_node, make_job, head_on_trajectories):
     instance, stack = real_stack(worker_node, make_job, head_on_trajectories, real_setup())
     services = stack.compose["services"]
-    assert set(services) == {"os", "os_mavproxy", "os_arduagent", RUNNER_SERVICE}, "the real vessel has no container"
-    agent = environment_of(services["os_arduagent"])
+    assert set(services) == {"os", "os-mavproxy", "os-arduagent", RUNNER_SERVICE}, "the real vessel has no container"
+    agent = environment_of(services["os-arduagent"])
     assert (agent["NAME"], agent["REAL_SIM"], agent["MQTT_TOPIC_ROOT"]) == ("os-job-1", "simulation", "scenegems"), "the vessel and the job, under the cluster's first level"
     assert agent["OTHER_POSITIONS_TOPICS"] == f"{REAL_TOPIC}/sensor/position", "it takes the positions of its own run's vessels only"
     assert (agent["BROKER"], agent["PORT"]) == ("broker", "1883")
     runner = environment_of(services[RUNNER_SERVICE])
     assert (runner["MQTT_BROKER"], runner["MQTT_PORT"], runner["MQTT_SERVICE_NAME"]) == ("broker", "1883", "simulation-subsystem-job-1")
-    on_the_broker_network = sorted(name for name, service in services.items() if "scenegems_broker" in service.get("networks", []))
-    assert on_the_broker_network == ["os_arduagent", "os_mavproxy", RUNNER_SERVICE], "what talks to the broker joins its network; SITL does not"
-    assert stack.compose["networks"]["scenegems_broker"]["external"] is True
-    assert ground_control_ports(instance) == {} and not any("ports" in service for service in services.values()), "no Mission Planner, no published port"
+    talking_to_the_broker = sorted(name for name, service in services.items() if {"BROKER", "MQTT_BROKER"} & set(environment_of(service)))
+    assert talking_to_the_broker == ["os-arduagent", "os-mavproxy", RUNNER_SERVICE], "what talks to the broker is given it in its environment; SITL is not"
+    assert "scenegems_broker" not in stack.compose["networks"], "the pod reaches the cluster's broker by its service name"
+    assert ground_control_ports(instance) == {}, "no Mission Planner, so the run gets no port on the node"
 
 
-def test_an_external_broker_is_dialled_from_the_stacks_own_network(instances_folder, worker_node, make_job, head_on_trajectories):
+def test_an_external_broker_is_dialled_from_the_runs_pod(instances_folder, worker_node, make_job, head_on_trajectories):
     _, stack = real_stack(worker_node, make_job, head_on_trajectories, real_setup(), broker=BROKER)
     services = stack.compose["services"]
-    agent = environment_of(services["os_arduagent"])
+    agent = environment_of(services["os-arduagent"])
     assert (agent["BROKER"], agent["PORT"], agent["TLS_CERTIFICE"], agent["MQTT_USER"], agent["MQTT_PASSWORD"]) == ("broker.waraps.org", "8883", "1", "lab", "secret")
     assert agent["NAME"] == "os-job-1" and "MQTT_TOPIC_ROOT" not in agent, "waraps is the agent's own default"
     runner = environment_of(services[RUNNER_SERVICE])
@@ -301,10 +302,10 @@ def test_an_external_broker_is_dialled_from_the_stacks_own_network(instances_fol
 
 def test_mission_planner_beside_a_real_vessel_reaches_its_vessel_through_the_arduagent_mavproxy(instances_folder, worker_node, make_job, head_on_trajectories):
     instance, stack = real_stack(worker_node, make_job, head_on_trajectories, real_setup(asvSystem="mission_planner"))
-    assert ground_control_ports(instance) == {"0": ("os_mavproxy", 5770)}
+    assert ground_control_ports(instance) == {"0": ("os-mavproxy", 12200)}
     services = stack.compose["services"]
-    assert services["os_mavproxy"]["ports"] == ["5770"] and "--out=tcpin:0.0.0.0:5770" in services["os_mavproxy"]["command"][-1]
-    assert [key for key, service in services.items() if "ports" in service] == ["os_mavproxy"]
+    assert services["os-mavproxy"]["ports"] == ["12200"] and "--out=tcpin:0.0.0.0:12200" in services["os-mavproxy"]["command"][-1]
+    assert [key for key, service in services.items() if "ports" in service] == ["os-mavproxy"]
 
 
 def test_a_stack_of_simulated_vessels_talks_to_no_broker(instances_folder, worker_node, make_job, head_on_trajectories):

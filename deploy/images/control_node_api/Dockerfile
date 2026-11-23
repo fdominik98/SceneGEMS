@@ -34,7 +34,7 @@ RUN pip install --no-cache-dir --no-deps -e .
 
 ENV PYTHONPATH=/app/src
 
-# Worker node API and the operator API with the workbench gateway (deploy/control_node/docker-compose.yml)
+# Worker node API and the operator API with the workbench gateway (the service control-node-api of deploy/kubernetes/chart)
 EXPOSE 8443 5174
 
 CMD ["sh", "-c", "python -m scenegems_tool.persistence.migrate upgrade head && exec python -m scenegems_tool.cluster.control_node"]

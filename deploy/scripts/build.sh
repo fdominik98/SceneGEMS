@@ -49,8 +49,10 @@ Options:
                           Postgres, tag the release's images with the revision
                           (<commit>, or <commit>-dirty with uncommitted changes)
                           and write the release bundle into <folder>: release.json
-                          with those tags, and the control node and worker node stacks.
-                          Machine Hub installs the bundle on the machines.
+                          with those tags and the Helm chart (chart/).
+                          Machine Hub installs the chart into a Kubernetes cluster;
+                          deploy/kubernetes/scripts/local_cluster.sh installs it into
+                          a k3d cluster on this PC.
 
   --fingerprints          Print "image fingerprint" for every image of this checkout
                           and exit; builds nothing and needs no Docker engine

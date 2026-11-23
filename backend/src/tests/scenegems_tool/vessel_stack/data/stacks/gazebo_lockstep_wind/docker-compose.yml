@@ -31,14 +31,14 @@ services:
     - host.docker.internal:host-gateway
     networks:
     - maritime_net
-  agent_0_asv_system:
+  agent_0-asv-system:
     image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
     - scenegems_tool.vessel_stack.asv_system.replay.replay_server
     - --port
-    - '11410'
+    - '12000'
     environment:
       PYTHONUNBUFFERED: '1'
     networks:
@@ -75,14 +75,14 @@ services:
     - host.docker.internal:host-gateway
     networks:
     - maritime_net
-  agent_1_asv_system:
+  agent_1-asv-system:
     image: ${SIMULATION_IMAGE:-scenegems-simulation-subsystem:latest}
     command:
     - python
     - -m
     - scenegems_tool.vessel_stack.asv_system.replay.replay_server
     - --port
-    - '11410'
+    - '12001'
     environment:
       PYTHONUNBUFFERED: '1'
     networks:

@@ -86,7 +86,7 @@ def _put(client, worker_node, data: bytes = DOCUMENT, sha256: str = None, gzippe
 
 
 def test_both_worker_node_routes_need_a_worker_node_id(client, worker_node):
-    for headers in ({}, {WORKER_NODE_ID_HEADER: "Lab 1"}, {WORKER_NODE_ID_HEADER: "lab/../x"}, {WORKER_NODE_ID_HEADER: "#"}):
+    for headers in ({}, {WORKER_NODE_ID_HEADER: "Lab 1"}, {WORKER_NODE_ID_HEADER: "lab/../x"}, {WORKER_NODE_ID_HEADER: "#"}, {WORKER_NODE_ID_HEADER: "w" * 29}):
         assert client.get(_url(), headers=headers).status_code == 400
         assert client.put(_url(), params={"kind": "trajectories"}, content=DOCUMENT, headers=headers).status_code == 400
     assert _put(client, worker_node).status_code == 201

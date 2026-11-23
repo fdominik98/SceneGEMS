@@ -1,20 +1,21 @@
-"""The ardupilot runner of the simulation job: the generated per-job stack, checked as compose content without Docker, and the run with a fake SITL."""
+"""The ardupilot runner of the simulation job: the generated stack and the pod it becomes, checked without a cluster, and the run with a fake SITL."""
 
 import os
 
 import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobType
+from scenegems_tool.cluster.worker_node.instance_scope import INSTANCE_LABEL
 from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from scenegems_tool.cluster.worker_node.jobs.in_container.run_observation import RunObserver
 from scenegems_tool.cluster.worker_node.jobs.job_payload import parse_payload
 from scenegems_tool.cluster.worker_node.jobs.simulation_job import SimulationPayload, execute
 from scenegems_tool.cluster.worker_node.jobs.simulation_runners.ardupilot_runner import STACK_NETWORK, ArduPilotSimulationPayload, build_job_stack
 from scenegems_tool.cluster.worker_node.launchers.per_job.job_container_io import ObservationControl
-from scenegems_tool.cluster.worker_node.launchers.per_job.job_stack import RUNNER_SERVICE, project_compose
+from scenegems_tool.cluster.worker_node.launchers.per_job.run_pod import RUNNER_SERVICE
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_link import StampedState
 from scenegems_tool.vessel_stack.control_layers.ardupilot.mavlink_lockstep_runner import MavlinkRunResult
-from utils.file_system_utils import RUNTIME_ASSETS_VOLUME
+from utils.file_system_utils import RUNTIME_ASSETS_FOLDER, RUNTIME_ASSETS_VOLUME
 
 GEOFENCE = {"latitude": 57.7, "longitude": 11.9, "radius_meters": 2000.0}
 
@@ -26,25 +27,27 @@ def stack_for(layer, worker_node, make_job, head_on_trajectories, job_id="sim-1"
 
 
 @pytest.mark.parametrize("layer", ["ardupilot_sim", "gazebo"])
-def test_stack_is_scoped_to_the_job(instances_folder, worker_node, make_job, head_on_trajectories, layer):
-    job, stack = stack_for(layer, worker_node, make_job, head_on_trajectories)
-    scope = worker_node.job_scope(job)
+def test_the_run_is_one_pod_of_the_job(instances_folder, placed_worker_node, make_job, head_on_trajectories, layer):
+    job, stack = stack_for(layer, placed_worker_node, make_job, head_on_trajectories)
+    scope = placed_worker_node.job_scope(job)
     services = stack.compose["services"]
     vessel_services = [key for key in services if key.startswith(("os", "ts"))]
-    assert sorted(vessel_services) == ["os", "os_asv_system", "ts1", "ts1_asv_system"], "SITL and a replay container per vessel"
-    for key, service in services.items():
-        assert service["container_name"] == scope.container_name(key)
-        assert "ports" not in service and "restart" not in service
-    runner = services[RUNNER_SERVICE]
-    assert runner["image"] == "scenegems-simulation-subsystem:latest"
-    assert runner["networks"] == [STACK_NETWORK]
-    assert set(runner["depends_on"]) == set(services) - {RUNNER_SERVICE}
-    # The stack network has no fixed name, so compose scopes it by the project name.
+    assert sorted(vessel_services) == ["os", "os-asv-system", "ts1", "ts1-asv-system"], "SITL and a replay container per vessel"
     assert stack.compose["networks"] == {STACK_NETWORK: {"driver": "bridge"}}
     assert stack.compose["volumes"] == {RUNTIME_ASSETS_VOLUME: {"external": True}}
-    assert stack.project.name == scope.compose_project
+    pod = stack.manifest()
+    assert pod["metadata"]["name"] == scope.name
+    spec = pod["spec"]
+    sidecars = {sidecar["name"]: sidecar for sidecar in spec["initContainers"]}
+    assert set(sidecars) == set(services) - {RUNNER_SERVICE} and all(sidecar["restartPolicy"] == "Always" for sidecar in sidecars.values())
+    [runner] = spec["containers"]
+    assert runner["name"] == RUNNER_SERVICE and runner["image"] == "scenegems-simulation-subsystem:latest"
+    for sitl in ("os", "ts1"):
+        assert sidecars[sitl]["image"] == "scenegems-ardupilot-sitl:latest", "the image of the stack, its variable taken as compose takes it"
+        assert sidecars[sitl]["volumeMounts"] == [{"name": "runtime", "mountPath": RUNTIME_ASSETS_FOLDER, "readOnly": True}], "SITL reads its parameters from the runtime folder"
     if layer == "gazebo":
-        assert "gazebo" in services
+        order = list(sidecars)
+        assert order.index("gazebo") > max(order.index("os"), order.index("ts1")), "Gazebo after the SITLs it depends on"
     else:
         assert "gazebo" not in services
 
@@ -59,17 +62,14 @@ def test_generated_files_go_to_the_job_folder(instances_folder, worker_node, mak
     assert stack.compose["services"]["gazebo"]["environment"]["WORLD_SDF"].endswith(f"{gen_folder}/ocean_world.sdf")
 
 
-def test_two_jobs_get_disjoint_stacks(instances_folder, worker_node, make_job, head_on_trajectories):
-    _, first = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="a")
-    _, second = stack_for("ardupilot_sim", worker_node, make_job, head_on_trajectories, job_id="b")
-    first_names = {service["container_name"] for service in first.compose["services"].values()}
-    second_names = {service["container_name"] for service in second.compose["services"].values()}
-    assert not first_names & second_names
-    assert first.project.name == second.project.name == "scenegems-m1-n1", "both stacks are in the worker node's project"
-    first_document, second_document = project_compose(first.scope, first.compose), project_compose(second.scope, second.compose)
-    assert not set(first_document["services"]) & set(second_document["services"]), "so compose needs their service keys to differ"
-    assert not set(first_document["networks"]) & set(second_document["networks"]), "and their network keys, or one stack would take the other's network away"
-    assert first.project.instance != second.project.instance, "and each is removed by its own label"
+def test_two_jobs_get_disjoint_pods(instances_folder, placed_worker_node, make_job, head_on_trajectories):
+    _, first = stack_for("ardupilot_sim", placed_worker_node, make_job, head_on_trajectories, job_id="a")
+    _, second = stack_for("ardupilot_sim", placed_worker_node, make_job, head_on_trajectories, job_id="b")
+    first_pod, second_pod = first.manifest(), second.manifest()
+    assert first_pod["metadata"]["name"] != second_pod["metadata"]["name"]
+    assert first_pod["metadata"]["labels"][INSTANCE_LABEL] != second_pod["metadata"]["labels"][INSTANCE_LABEL], "each is removed by its own label"
+    assert first.job_sub_path() != second.job_sub_path() and first.scope.folder != second.scope.folder
+    assert [container["name"] for container in first_pod["spec"]["initContainers"]] == [container["name"] for container in second_pod["spec"]["initContainers"]], "the same names inside each pod"
 
 
 def usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer="ardupilot_sim", **fields):
@@ -83,11 +83,11 @@ def test_usv_navigation_gets_a_sitl_and_its_asv_system_per_vessel(instances_fold
     """Every vessel has a SITL service and its ASV system container (USV Navigation's own image for the own ship, replay for the other), and no MAVProxy or ArduAgent."""
     _, stack = usv_navigation_stack(worker_node, make_job, head_on_trajectories, layer)
     services = stack.compose["services"]
-    expected = {"os", "ts1", "os_asv_system", "ts1_asv_system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
+    expected = {"os", "ts1", "os-asv-system", "ts1-asv-system", RUNNER_SERVICE} | ({"gazebo"} if layer == "gazebo" else set())
     assert set(services) == expected
     assert services["os"]["image"] == services["ts1"]["image"]
-    assert "scenegems-usv-navigation" in services["os_asv_system"]["image"]
-    assert "scenegems-simulation-subsystem" in services["ts1_asv_system"]["image"]
+    assert "scenegems-usv-navigation" in services["os-asv-system"]["image"]
+    assert "scenegems-simulation-subsystem" in services["ts1-asv-system"]["image"]
 
 
 def test_an_unknown_own_ship_fails_for_good(instances_folder, worker_node, make_job, head_on_trajectories):

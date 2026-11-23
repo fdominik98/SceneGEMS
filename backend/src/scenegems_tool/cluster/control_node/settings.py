@@ -1,6 +1,6 @@
-"""The control node's settings, from the environment (deploy/control_node/.env through compose, or --env-file).
+"""The control node's settings, from the environment (the chart's control-node-api Deployment sets it, or --env-file).
 
-The compose service sets the listeners and folders itself; the database password comes from the .env file.
+The chart sets the listeners and folders itself, and the database URL with the password from its Secret.
 Worker nodes and the control node trust each other on the VPN, so there are no certificates, credentials or broker accounts.
 
     SCENEGEMS_CONTROL_NODE_ID               the control node's id, also the cluster id (required)
@@ -15,7 +15,7 @@ Worker nodes and the control node trust each other on the VPN, so there are no c
     SCENEGEMS_ARTIFACT_MAX_BYTES      largest artifact a worker node may upload, uncompressed (default 256 MiB)
     SCENEGEMS_ARTIFACT_SWEEP_INTERVAL_S  how often unreferenced artifacts are deleted (default 600; 0 turns the sweep off)
     SCENEGEMS_ARTIFACT_SWEEP_GRACE_S  how long an unreferenced artifact is kept after its last use (default 3600)
-    SCENEGEMS_BROKER_HOST, _PORT      the cluster broker as the control node dials it (compose: cluster-broker, 1883); when
+    SCENEGEMS_BROKER_HOST, _PORT      the cluster broker as the control node dials it (the chart: cluster-broker, 1883); when
                                       the host is set the live channel observes pools
 
 The control node starts no containers: it has no Docker socket, and every subsystem runs on a worker node.
@@ -132,7 +132,7 @@ def _number(environ: Mapping[str, str], name: str, default, parse):
 def _required(environ: Mapping[str, str], name: str) -> str:
     value = environ.get(name, "").strip()
     if not value:
-        raise SettingMissing(f"{name} is not set; see deploy/control_node/.env.example")
+        raise SettingMissing(f"{name} is not set; the chart's control-node-api Deployment sets it (deploy/kubernetes/chart)")
     return value
 
 

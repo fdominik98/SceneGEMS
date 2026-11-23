@@ -9,7 +9,7 @@ the trajectory over as a waypoint mission, which the controller's line-of-sight 
 
 Entry point of the container:
 
-    python -m scenegems_tool.vessel_stack.asv_system.replay.replay_server --port 11410
+    python -m scenegems_tool.vessel_stack.asv_system.replay.replay_server --port 12000
 """
 
 from typing import Any, Dict, Optional, Sequence, Tuple
@@ -22,7 +22,7 @@ from scenegems_tool.vessel_stack.asv_system.replay.replay_follower import Replay
 from scenegems_tool.vessel_stack.contracts.clock import LockstepParticipant
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_ASV_SYSTEM, Message, serve_component, state_row
 from scenegems_tool.vessel_stack.contracts.ports import Port
-from scenegems_tool.vessel_stack.contracts.stack_services import ASV_SYSTEM_PORT
+from scenegems_tool.vessel_stack.contracts.stack_services import asv_system_port
 
 IMPLEMENTATION = "replay"
 
@@ -60,7 +60,7 @@ class ReplaySession(ParticipantSession):
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, ReplaySession, argv, default_port=ASV_SYSTEM_PORT)
+    serve_component(ROLE_ASV_SYSTEM, IMPLEMENTATION, ReplaySession, argv, default_port=asv_system_port(0))
 
 
 if __name__ == "__main__":

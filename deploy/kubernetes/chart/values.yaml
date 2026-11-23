@@ -1,0 +1,132 @@
+# Values of the SceneGEMS chart: one cluster, its control node and its worker nodes, in one namespace.
+#
+# The deployment tool (Machine Hub) does not know these values: it builds a values file from release.json
+# (backend/src/scenegems_tool/cluster/release/roles.py has the rules): the release's chart values, the values of
+# each member of the cluster's roles, and one image reference per image it pushed to the cluster's registry.
+# Values it does not write keep the defaults below. The roles name the values they write, and a test keeps
+# them in agreement with this file (tests/scenegems_tool/cluster/release/test_chart_values.py).
+#
+# No secret is a value: the chart generates the Postgres password in the cluster and keeps it over upgrades.
+
+# The cluster's name, which is its control node id: SCENEGEMS_CONTROL_NODE_ID of every pod. Set by the release ({cluster}).
+controlNodeId: ""
+# The commit the release was built from: SCENEGEMS_SOFTWARE_REVISION of the worker nodes. Set by the release ({release.revision}).
+revision: ""
+# The tag of the release's images: SCENEGEMS_IMAGE_TAG of every pod. An image below that is left empty is
+# <repository>:<imageTag>, the name a test cluster imports the release's images under. Set by the release.
+imageTag: latest
+# Pull policy of every container; IfNotPresent also runs images imported into the nodes by tag.
+imagePullPolicy: IfNotPresent
+
+# The images of the control node and of the worker node daemon. The deployment tool sets each one it pushed to
+# registry/repository@sha256:<digest>; empty means <repository>:<imageTag>.
+images:
+  # Repository scenegems-control-node-api: the control node's API, scheduler and pipeline engine
+  controlNodeApi: ""
+  # Repository scenegems-mqtt-broker: the cluster broker
+  broker: ""
+  # Postgres is pulled, not built, and keeps its own tag (roles.POSTGRES_IMAGE)
+  postgres: postgres:16.10-alpine
+  # Repository scenegems-worker-node: the daemon of every worker node
+  workerNode: ""
+
+# Every image a worker node can run, by the environment variable the code names it with
+# (cluster/worker_node/subsystem.py for the subsystem pools, the ContainerSpec image references of the vessel stack
+# for the containers of a run). Each one is given to every daemon as an environment variable; the daemon starts
+# its pools with the subsystem images and passes all of them to the simulation pool (simulation_pool.image_overrides).
+# The deployment tool sets the images it pushed, which are those of the components its worker nodes offer; empty
+# means the code's default, <repository>:<imageTag>, which a worker node without that component never runs.
+workerNodeImages:
+  # Repository scenegems-design-space-exploration-subsystem: component design_space_exploration
+  DESIGN_SPACE_EXPLORATION_IMAGE: ""
+  # Repository scenegems-scene-generation-subsystem: component scene_generation
+  SCENE_GENERATION_IMAGE: ""
+  # Repository scenegems-trajectory-generation-subsystem: component trajectory_generation
+  TRAJECTORY_GENERATION_IMAGE: ""
+  # Repository scenegems-monitoring-subsystem: component monitoring
+  MONITORING_IMAGE: ""
+  # Repository scenegems-simulation-subsystem: the simulation pool and the runner of every run; components of every
+  # simulation layer, asv_system/replay, control_layer/custom and calibration
+  SIMULATION_IMAGE: ""
+  # Repository scenegems-ardupilot-sitl: component control_layer/ardupilot
+  SITL_IMAGE: ""
+  # Repository scenegems-mavproxy: components asv_system/mission_planner and control_layer/real_vessel
+  MAVPROXY_IMAGE: ""
+  # Repository scenegems-arduagent: component control_layer/real_vessel
+  ARDUAGENT_IMAGE: ""
+  # Repository scenegems-gazebo-harmonic: component simulation_layer/gazebo
+  GAZEBO_IMAGE: ""
+  # Repository scenegems-usv-navigation: component asv_system/usv_navigation
+  USV_NAVIGATION_IMAGE: ""
+  # Repository scenegems-moos-ivp: component asv_system/moos_ivp
+  MOOS_IVP_IMAGE: ""
+
+# The control node: Postgres (a StatefulSet), the cluster broker and control-node-api (Deployments), release.json as
+# a ConfigMap. Written by the deployment tool from the member of the control-node role.
+controlNode:
+  # Whether the chart installs the control node; the member of the control-node role sets it. Worker nodes without
+  # a control node start and retry their connection until one is installed.
+  enabled: false
+  # The Kubernetes node the control node's pods are pinned to; empty lets Kubernetes choose.
+  node: ""
+  # Browser origins the operator API allows (CORS), comma separated: where the web console is served from
+  operatorAllowedOrigins: http://localhost:5173,http://127.0.0.1:5173
+  # Largest artifact a worker node may upload, uncompressed, in bytes
+  artifactMaxBytes: 268435456
+  # Seconds between sweeps of unreferenced artifacts; 0 turns the sweep off
+  artifactSweepIntervalS: 600
+  # Seconds an unreferenced artifact is kept after its last use
+  artifactSweepGraceS: 3600
+  # The volume claims of Postgres and of the artifact store; an empty class is the cluster's default storage class
+  storage:
+    className: ""
+    postgres: 8Gi
+    artifacts: 20Gi
+
+# Folder on each worker node's Kubernetes node under which the worker node keeps the files of its runs
+# (<workerNodeHostPath>/<worker node name>/runtime, a host path mounted in its simulation pool and its runs' pods).
+workerNodeHostPath: /var/lib/scenegems
+
+# The network policy of the simulation runs' pods (templates/network-policy.yaml): a run reaches the cluster broker,
+# DNS and, for a run with a real vessel on an external broker, these TCP ports at any address; it is reached only on
+# the ground control ports of an attended run. Chart-only values, which no role writes.
+networkPolicy:
+  enabled: true
+  # The ports of the external brokers a run with a real vessel may name (WARA-PS: 8883 with TLS)
+  externalBrokerPorts:
+    - 8883
+
+# The fields of an entry of workerNodes with their defaults: an entry is merged over these, so a hand-written
+# values file may leave out what it does not change. The deployment tool writes every field.
+workerNodeDefaults:
+  # The worker node's name (SCENEGEMS_WORKER_NODE_NAME), unique in the cluster, following the release's name_pattern
+  name: ""
+  # The Kubernetes node its daemon, pools and runs are pinned to
+  node: ""
+  # The machine it runs on, as the operator knows it (SCENEGEMS_WORKER_NODE_MACHINE)
+  machine: ""
+  # What it runs: vessel stack layers and subsystems (SCENEGEMS_WORKER_NODE_COMPONENTS, joined with commas)
+  components:
+    - asv_system/replay
+    - asv_system/usv_navigation
+    - control_layer/none
+    - simulation_layer/kinematic
+    - design_space_exploration
+    - scene_generation
+    - trajectory_generation
+    - monitoring
+  # How many jobs of each type run at once (SCENEGEMS_WORKER_NODE_SLOTS, joined as type:slots with commas)
+  slots:
+    simulation: 2
+    design_space_exploration: 1
+    scene_generation: 1
+    trajectory_generation: 1
+    monitoring.post_hoc: 1
+  # Labels jobs can require (SCENEGEMS_WORKER_NODE_LABELS, joined as key=value with commas)
+  labels: {}
+  # Bound of its artifact cache in bytes; 0 turns the cache off (SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES)
+  artifactCacheMaxBytes: 2147483648
+
+# The worker nodes: one daemon Deployment each, pinned to its node. Written by the deployment tool, one entry per
+# member of the worker-node role, ordered by name.
+workerNodes: []

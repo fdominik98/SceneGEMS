@@ -81,7 +81,7 @@ class ContainerHosting:
     def asv_system(self, request: ParticipantRequest) -> LockstepParticipant:
         from scenegems_tool.vessel_stack.asv_system.asv_system_link import AsvSystemLink
 
-        endpoint = self._endpoint(asv_system_service_name(request.agent_name), asv_system_endpoint(request.agent_name))
+        endpoint = self._endpoint(asv_system_service_name(request.agent_name), asv_system_endpoint(request.agent_name, request.vessel.id))
         return self._connected(AsvSystemLink(endpoint, request))
 
     def kinematic_simulation(self, initial_scene: ConcreteScene, dt: float, participant_ids: Iterable[str]) -> Any:
@@ -92,7 +92,7 @@ class ContainerHosting:
     def custom_control(self, request: ParticipantRequest, gains: Any) -> Tuple[LockstepParticipant, Any]:
         from scenegems_tool.vessel_stack.control_layers.custom.custom_controller_link import CustomControllerLink, MissionGuidance
 
-        endpoint = self._endpoint(controller_service_name(request.agent_name), controller_endpoint(request.agent_name))
+        endpoint = self._endpoint(controller_service_name(request.agent_name), controller_endpoint(request.agent_name, request.vessel.id))
         controller = self._connected(CustomControllerLink(endpoint, request.vessel, gains))
         asv_system = self.asv_system(request)
         return (MissionGuidance(asv_system, controller) if request.hands_over_mission else asv_system), controller

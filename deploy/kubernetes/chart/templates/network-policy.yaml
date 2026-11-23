@@ -1,0 +1,59 @@
+{{- if .Values.networkPolicy.enabled }}
+# What a simulation run's pod may reach (design log, K4 results, finding 4). The containers of a run talk to each
+# other over the pod's own loopback, which a policy does not touch; beyond that a run reaches only:
+# - the cluster broker on 1883: a run judged live asks the monitoring pool over it, and a run with a real vessel on
+#   the cluster's broker has its runner, MAVProxy and ArduAgent on it;
+# - DNS, to find the broker by its name;
+# - an external broker of a run with a real vessel (WARA-PS: 8883 with TLS) on the ports of networkPolicy.externalBrokerPorts,
+#   at any address, since the address is the job's;
+# and is reached only on the ground control ports of an attended run (MAVProxy's endpoints, 12200 plus the vessel id),
+# which Mission Planner reaches through the run's NodePort services. A run mounts no token and reaches no cluster API.
+# The pods select themselves by the label the simulation pool gives every run (run_pod.py RUN_COMPONENT).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: simulation-runs
+  labels:
+    {{- include "scenegems.labels" . | nindent 4 }}
+    app.kubernetes.io/name: simulation-runs
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: simulation-run
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 12200
+          endPort: 12299
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: cluster-broker
+      ports:
+        - protocol: TCP
+          port: 1883
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- with .Values.networkPolicy.externalBrokerPorts }}
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        {{- range . }}
+        - protocol: TCP
+          port: {{ . }}
+        {{- end }}
+    {{- end }}
+{{- end }}

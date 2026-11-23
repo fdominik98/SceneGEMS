@@ -55,12 +55,12 @@ def test_a_worker_node_connects_without_any_credential_and_the_hello_names_it(ma
     assert stores.worker_nodes.get(worker_node.worker_node_id).worker_node_id == worker_node.worker_node_id
 
 
-@pytest.mark.parametrize("worker_node_id", ["Lab 1", "lab/1", "lab+", "#", "-lab", ""])
+@pytest.mark.parametrize("worker_node_id", ["Lab 1", "lab/1", "lab+", "#", "-lab", "", "w" * 29])
 def test_a_hello_with_an_unusable_worker_node_id_is_refused(make_worker_node, stores, worker_node_id):
     worker_node = make_worker_node("lab 1")
     worker_node.hello_frame = worker_node.hello_frame.model_copy(update={"worker_node_id": worker_node_id})
     worker_node.open()
-    worker_node.send(worker_node.hello_frame)  # the id becomes a topic level and part of Docker names
+    worker_node.send(worker_node.hello_frame)  # the id becomes a topic level and the start of the worker node's names in the cluster (at most 28 characters)
     error = worker_node.expect(ProtocolError)
     assert error.code == ProtocolErrorCode.MALFORMED_FRAME and "worker node id" in error.message
     assert worker_node.expect_close() == CLOSE_PROTOCOL_ERROR

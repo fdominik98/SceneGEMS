@@ -1,7 +1,7 @@
 # Python build metadata
 *.egg-info/
 
-# Real env files hold secrets (control node, worker node); only the .env.example templates are tracked
+# Real env files may hold secrets; none is tracked
 .env
 
 # npm installs, at any depth (frontend/, frontend/website/, or a stray one anywhere else)

@@ -1,0 +1,7 @@
+apiVersion: v2
+name: scenegems
+description: A SceneGEMS cluster on Kubernetes - one control node (Postgres, the cluster broker, control-node-api) and its worker nodes, one daemon per Kubernetes node it is given
+type: application
+# The chart's own version. A release bundle carries the chart of its revision (release.json names the revision);
+# the deployment tool installs the chart from the bundle and never from a chart repository.
+version: 0.1.0

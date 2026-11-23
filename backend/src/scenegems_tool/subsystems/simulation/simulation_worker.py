@@ -2,10 +2,10 @@
 
 A run-simulation request carries a simulation job's payload. The worker hands it to the runner the payload
 names (cluster/worker_node/jobs/simulation_runners/), which resolves the stack, writes its generated files,
-starts its containers (the simulator, per vessel a controller and an ASV system, and the runner container that
-owns the run's clock), waits for the operator's Start when the run is attended, follows the run and removes the
-stack. The simulation subsystem is the one subsystem that starts containers: its own container holds the Docker
-socket, and the stacks it starts sit next to it in the worker node's compose project.
+starts its containers as one pod (the simulator, per vessel a controller and an ASV system, and the runner container
+that owns the run's clock), waits for the operator's Start when the run is attended, follows the run and removes the
+pod. The simulation subsystem is the one pool that creates objects in the cluster: its pod runs under a service
+account of its own, and the pods of its runs are owned by it, on its node (cluster_from_environment).
 
 The runner talks to a report and an observation, as it did when the worker node's daemon called it. Here both
 are the task's channel:
@@ -13,8 +13,8 @@ are the task's channel:
     status           exec/feedback, with its detail (the phase of an attended run, what its vessels lack, its ports)
     log lines        sensor/simulation_log, in batches
     frames           sensor/simulation_frames, in batches, while somebody observes
-    observe, start   the task's signals set the observation, which the stack passes into the runner container
-    cancel           ends the wait for the runner; the stack is removed
+    observe, start   the task's signals set the observation, which the run's pod passes into the runner's job folder
+    cancel           ends the wait for the runner; the pod is removed
 
 A compare-repeats task is the subsystem's other kind of work: it starts no container and compares the
 trajectories of finished repeats in the worker itself (compare_repeats).
@@ -25,21 +25,25 @@ whether another attempt can succeed: the requester has to hear the reason and th
 dies fails its task.
 """
 
+import logging
 import os
 import threading
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from scenegems_tool.cluster.protocol.jobs import JobSpec, JobType
 from scenegems_tool.cluster.protocol.messages import LogStream
 from scenegems_tool.cluster.worker_node.job_observation import JobObservation
 from scenegems_tool.cluster.worker_node.job_report import JobFailed, JobResultData
 from scenegems_tool.cluster.worker_node.launchers.container_environment import geofence_from_environment
+from scenegems_tool.cluster.worker_node.launchers.kubernetes_api import ClusterPlace, KubernetesApi
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
 from scenegems_tool.messaging.mqtt_client import MQttConnectionInfo, service_name_from_environment
 from scenegems_tool.subsystems.simulation.simulation_types import (
-    BROKER_NETWORK_VARIABLE,
     CONTROL_NODE_VARIABLE,
+    KUBERNETES_NAMESPACE_VARIABLE,
+    KUBERNETES_NODE_VARIABLE,
     OBSERVE_SIGNAL,
+    RUNTIME_HOST_PATH_VARIABLE,
     SIMULATION_FRAMES_STREAM,
     SIMULATION_LOG_STREAM,
     SIMULATION_RESULT_STREAM,
@@ -50,6 +54,9 @@ from scenegems_tool.subsystems.simulation.simulation_types import (
     RunSimulationTask,
 )
 
+_logger = logging.getLogger(__name__)
+
+POD_NAME_VARIABLE = "HOSTNAME"  # the pod's name, which the kubelet sets in every container of a pod that names no hostname
 RELAY_INTERVAL_S = 0.05  # how often the worker passes signals in and frames and log lines out
 LOG_BATCH_LINES = 200  # at most this many lines per log message
 
@@ -62,18 +69,45 @@ def worker_node_number(service_name: str) -> int:
     return int(number) if number.isdigit() and int(number) >= 1 else 1
 
 
+def cluster_from_environment(environ: Optional[Mapping[str, str]] = None, connect: Callable[[str], KubernetesApi] = KubernetesApi.connect) -> Tuple[Optional[ClusterPlace], Optional[KubernetesApi]]:
+    """The place in the cluster the subsystem's runs go to, and the cluster API they are created through; (None, None) outside a cluster.
+
+    The place is what the launcher put into the pod's environment (namespace, node, the runtime folder's path on the
+    node). The owner of the runs is the subsystem's own pod, named by HOSTNAME as in every pod, so a pool that goes
+    takes its runs with it; when it cannot be read, the runs go without an owner and a warning says why (the
+    subsystem's and the daemon's leftover removal still find them by their labels).
+    """
+    environ = os.environ if environ is None else environ
+    namespace = environ.get(KUBERNETES_NAMESPACE_VARIABLE, "").strip()
+    if not namespace:
+        return None, None
+    api = connect(namespace)
+    owner = None
+    pod_name = environ.get(POD_NAME_VARIABLE, "").strip()
+    try:
+        owner = api.pod_owner_reference(pod_name) if pod_name else None
+    except Exception as error:
+        _logger.warning("The runs of this simulation subsystem have no owner: its pod %r could not be read: %s", pod_name, error)
+    if owner is None and not pod_name:
+        _logger.warning("The runs of this simulation subsystem have no owner: %s names no pod", POD_NAME_VARIABLE)
+    place = ClusterPlace(namespace, environ[KUBERNETES_NODE_VARIABLE], environ[RUNTIME_HOST_PATH_VARIABLE].rstrip("/"), owner)
+    return place, api
+
+
 def context_from_environment() -> WorkerNodeContext:
     """What a runner needs of the worker node, as the subsystem's launcher configured the container (launchers/pooled/simulation_pool.py).
 
     The worker node's number names its other subsystems on the broker: a run that is judged while it runs is told the monitoring subsystem by it.
     """
+    cluster, kubernetes = cluster_from_environment()
     return WorkerNodeContext(
         control_node_id=os.environ[CONTROL_NODE_VARIABLE],
         worker_node_id=os.environ[WORKER_NODE_VARIABLE],
         mqtt_connection=MQttConnectionInfo.from_environment(),
         reference_geofence=geofence_from_environment(),
-        broker_network=os.environ.get(BROKER_NETWORK_VARIABLE, "").strip() or None,
         instance_number=worker_node_number(service_name_from_environment(SIMULATION_SERVICE_NAME)),
+        cluster=cluster,
+        kubernetes=kubernetes,
     )
 
 

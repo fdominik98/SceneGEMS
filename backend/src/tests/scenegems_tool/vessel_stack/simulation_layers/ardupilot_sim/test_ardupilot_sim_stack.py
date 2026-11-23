@@ -11,7 +11,7 @@ from tests.scenegems_tool.vessel_stack.sdf import parse_params, parse_sdf, plugi
 
 
 def test_there_is_no_simulator_service(ardupilot_sim_stack):
-    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_0_asv_system", "agent_1", "agent_1_asv_system"], "SITL and the replay container of each vessel"
+    assert list(ardupilot_sim_stack.compose["services"]) == ["agent_0", "agent_0-asv-system", "agent_1", "agent_1-asv-system"], "SITL and the replay container of each vessel"
     assert "gazebo" not in ardupilot_sim_stack.compose["services"]
 
 
@@ -53,7 +53,7 @@ class TestSteeringType:
     def test_the_arduagent_containers_are_told_the_same_frame(self):
         instance = stack_instance(SimulationLayerId.ARDUPILOT_SIM, [0, 1], adapter_ids=["replay_arduagent_follower"])
         _, compose = build_steered_stack(instance, {0: "rudder", 1: "skid"})
-        for service, frame in (("agent_0_arduagent", "motorboat"), ("agent_0_mavproxy", "motorboat"), ("agent_1_arduagent", "motorboat-skid")):
+        for service, frame in (("agent_0-arduagent", "motorboat"), ("agent_0-mavproxy", "motorboat"), ("agent_1-arduagent", "motorboat-skid")):
             environment = environment_of(compose, service)
             assert (environment["MODEL"], environment["VEHICLE_PARAMS"]) == (frame, frame), service
 
@@ -93,46 +93,46 @@ def test_calm_environment_leaves_the_wind_and_waves_parameters_at_zero(ardupilot
 
 def test_workbench_stack_has_sitl_mavproxy_and_arduagent_per_autonomous_vessel(arduagent_stack):
     services = arduagent_stack.compose["services"]
-    assert list(services) == ["agent_0", "agent_0_mavproxy", "agent_0_arduagent", "agent_1", "agent_1_mavproxy", "agent_1_arduagent"]
+    assert list(services) == ["agent_0", "agent_0-mavproxy", "agent_0-arduagent", "agent_1", "agent_1-mavproxy", "agent_1-arduagent"]
 
 
 def test_arduagent_depends_on_its_mavproxy_and_mavproxy_reaches_its_sitl(arduagent_stack):
     services = arduagent_stack.compose["services"]
-    assert services["agent_0_arduagent"]["depends_on"] == ["agent_0_mavproxy"]
-    assert "--master=tcp:agent_0:5760" in services["agent_0_mavproxy"]["command"][-1]
-    assert "--master=tcp:agent_1:5770" in services["agent_1_mavproxy"]["command"][-1], "the SITL port is 5760 + 10 * vessel id"
+    assert services["agent_0-arduagent"]["depends_on"] == ["agent_0-mavproxy"]
+    assert "--master=tcp:agent_0:5760" in services["agent_0-mavproxy"]["command"][-1]
+    assert "--master=tcp:agent_1:5770" in services["agent_1-mavproxy"]["command"][-1], "the SITL port is 5760 + 10 * vessel id"
 
 
 def test_mavproxy_and_arduagent_start_again_inside_their_containers(arduagent_stack):
     """A job's containers have no restart policy, so what exits while SITL or MAVProxy comes up is started again by a shell loop."""
     services = arduagent_stack.compose["services"]
-    for name, program in (("agent_0_mavproxy", "MAVProxy.mavproxy"), ("agent_0_arduagent", "/app/main.py")):
+    for name, program in (("agent_0-mavproxy", "MAVProxy.mavproxy"), ("agent_0-arduagent", "/app/main.py")):
         shell, flag, loop = services[name]["command"]
         assert (shell, flag) == ("sh", "-c") and loop.startswith("while true; do ") and loop.endswith("; sleep 2; done") and program in loop
 
 
 def test_mavproxy_has_a_tcp_endpoint_for_a_ground_control_station(arduagent_stack):
-    mavproxy = arduagent_stack.compose["services"]["agent_0_mavproxy"]
-    assert "--out=tcpin:0.0.0.0:5770" in mavproxy["command"][-1] and mavproxy["ports"] == ["5770"], "on a host port Docker assigns"
+    mavproxy = arduagent_stack.compose["services"]["agent_0-mavproxy"]
+    assert "--out=tcpin:0.0.0.0:12200" in mavproxy["command"][-1] and mavproxy["ports"] == ["12200"], "on a host port Docker assigns"
 
 
 def test_an_arduagent_takes_the_positions_of_its_instances_other_vessels_only(arduagent_stack):
     services = arduagent_stack.compose["services"]
-    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position" in services["agent_0_arduagent"]["environment"]
-    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position" in services["agent_1_arduagent"]["environment"]
-    assert "NAME=agent_0" in services["agent_0_arduagent"]["environment"], "a topic outside the unit layout leaves the agent its name"
+    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_1/sensor/position" in services["agent_0-arduagent"]["environment"]
+    assert "OTHER_POSITIONS_TOPICS=waraps/unit/surface/agent_0/sensor/position" in services["agent_1-arduagent"]["environment"]
+    assert "NAME=agent_0" in services["agent_0-arduagent"]["environment"], "a topic outside the unit layout leaves the agent its name"
 
 
 def test_mavproxy_sends_nothing_to_the_docker_host(arduagent_stack):
     """A ground control station connects to the TCP endpoint; the UDP stream to a typed port on the Docker host is gone."""
-    for name in ("agent_0_mavproxy", "agent_1_mavproxy"):
+    for name in ("agent_0-mavproxy", "agent_1-mavproxy"):
         service = arduagent_stack.compose["services"][name]
         assert "host.docker.internal" not in service["command"][-1]
         assert not [item for item in service["environment"] if item.startswith(("GCS_1=", "LOCAL_BRIDGE="))]
 
 
 def test_agent_environment_carries_the_broker_and_credentials(arduagent_stack):
-    environment = arduagent_stack.compose["services"]["agent_0_arduagent"]["environment"]
+    environment = arduagent_stack.compose["services"]["agent_0-arduagent"]["environment"]
     assert "BROKER=broker" in environment
     assert "PORT=1883" in environment
     assert "MQTT_USER=user" in environment
@@ -149,18 +149,19 @@ class TestMissionPlannerGroundStation:
         return compose["services"]
 
     def test_each_vessel_has_sitl_and_mavproxy_only(self, services):
-        assert sorted(services) == ["agent_0", "agent_0_mavproxy", "agent_1", "agent_1_mavproxy"]
+        assert sorted(services) == ["agent_0", "agent_0-mavproxy", "agent_1", "agent_1-mavproxy"]
 
     def test_mavproxy_takes_serial1_and_leaves_serial0_to_the_runner(self, services):
-        assert "--master=tcp:agent_1:5772" in services["agent_1_mavproxy"]["command"][-1]
+        assert "--master=tcp:agent_1:5772" in services["agent_1-mavproxy"]["command"][-1]
 
     def test_the_ground_station_endpoint_is_published_on_a_port_docker_assigns(self, services):
-        assert "--out=tcpin:0.0.0.0:5770" in services["agent_0_mavproxy"]["command"][-1]
-        assert services["agent_0_mavproxy"]["ports"] == ["5770"]
+        assert "--out=tcpin:0.0.0.0:12200" in services["agent_0-mavproxy"]["command"][-1]
+        assert services["agent_0-mavproxy"]["ports"] == ["12200"]
+        assert "--out=tcpin:0.0.0.0:12201" in services["agent_1-mavproxy"]["command"][-1], "every vessel has a ground control port of its own"
 
     def test_mavproxy_restarts_inside_its_container_so_the_published_port_stays(self, services):
         """Docker gives a restarted container a new host port; MAVProxy exits until SITL has booted."""
-        shell, flag, loop = services["agent_0_mavproxy"]["command"]
+        shell, flag, loop = services["agent_0-mavproxy"]["command"]
         assert (shell, flag) == ("sh", "-c")
         assert loop.startswith("while true; do python3 -m MAVProxy.mavproxy --non-interactive ")
         assert loop.endswith("; sleep 2; done")

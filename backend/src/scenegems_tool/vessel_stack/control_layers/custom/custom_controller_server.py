@@ -20,7 +20,7 @@ thrust. With a mission, the controller's line-of-sight follower
 
 Entry point of the container:
 
-    python -m scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server --port 11420
+    python -m scenegems_tool.vessel_stack.control_layers.custom.custom_controller_server --port 12100
 """
 
 from typing import Optional, Sequence
@@ -30,7 +30,7 @@ from concrete_level.models.concrete_actors import ConcreteActor, ConcreteVessel
 from scenegems_tool.vessel_stack.contracts.clock import StepRequest
 from scenegems_tool.vessel_stack.contracts.lockstep_wire import ROLE_CONTROLLER, Message, Session, WireError, serve_component
 from scenegems_tool.vessel_stack.contracts.ports import VesselStateObservation
-from scenegems_tool.vessel_stack.contracts.stack_services import CONTROLLER_PORT
+from scenegems_tool.vessel_stack.contracts.stack_services import controller_port
 from scenegems_tool.vessel_stack.control_layers.custom.los_waypoint_follower import LosWaypointFollower
 from scenegems_tool.vessel_stack.control_layers.custom.twin_thrust_autopilot import AutopilotGains, HullObservation, TwinThrustAutopilot
 
@@ -81,7 +81,7 @@ class CustomControllerSession(Session):
 
 
 def main(argv: Optional[Sequence[str]] = None) -> None:
-    serve_component(ROLE_CONTROLLER, IMPLEMENTATION, CustomControllerSession, argv, default_port=CONTROLLER_PORT)
+    serve_component(ROLE_CONTROLLER, IMPLEMENTATION, CustomControllerSession, argv, default_port=controller_port(0))
 
 
 if __name__ == "__main__":

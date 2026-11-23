@@ -39,7 +39,8 @@ dependencies = [
     "scenic",
     "matplotlib",
     "mypy",
-    "docker",
+    "docker",  # the calibration tool and the Docker-marked tests
+    "kubernetes==36.0.3",  # the cluster API (cluster/worker_node/launchers/kubernetes_api.py), also in the worker node image
     "paho-mqtt",
     "haversine",
     "paramiko",
@@ -144,9 +145,10 @@ known_third_party = ["pandas", "numpy", "matplotlib", "scipy", "seaborn"]
 [tool.pytest.ini_options]
 testpaths = ["src/tests"]
 pythonpath = ["src"]
-addopts = "-m 'not docker and not postgres and not slow'"
+addopts = "-m 'not docker and not kubernetes and not postgres and not slow'"
 markers = [
     "docker: needs a running Docker engine and the project images",
+    "kubernetes: needs k3d, kubectl, Docker and the project images; starts a k3d cluster of its own",
     "postgres: needs a Postgres database",
     "slow: runs longer than a few seconds",
 ]

@@ -296,3 +296,30 @@ class TestRuntime:
         trajectories = encounter_trajectories("head_on", 100)
         with pytest.raises(RuntimeError, match="MOOS-IvP runs only in its container"):
             asv_system_runtime(AsvSystemId.MOOS_IVP).in_process(moos_ivp_request(trajectories))
+
+
+class TestMoosdbPorts:
+    """Every vessel's MOOSDB has a port of its own (the stack's generator gives --moosdb-port), and a run takes the next one of the vessel's window."""
+
+    @pytest.fixture(autouse=True)
+    def helm_ports(self, monkeypatch):
+        monkeypatch.setattr(moos_ivp_server.HelmProcesses, "first_port", moos_ivp_server.DEFAULT_MOOSDB_PORT)
+        monkeypatch.setattr(moos_ivp_server.HelmProcesses, "_runs", 0)
+
+    def test_runs_take_consecutive_ports_from_the_first_and_come_round_after_a_window(self):
+        moos_ivp_server.HelmProcesses.first_port = 12432
+        ports = [moos_ivp_server.HelmProcesses.take_port() for _ in range(moos_ivp_server.MOOSDB_PORTS_PER_VESSEL + 2)]
+        assert ports[:3] == [12432, 12433, 12434] and ports[-3:] == [12447, 12432, 12433]
+        assert max(ports) < 12432 + moos_ivp_server.MOOSDB_PORTS_PER_VESSEL, "never into the next vessel's window"
+
+    def test_the_servers_arguments_set_the_moosdb_port_and_leave_the_rest_to_the_wire_protocol(self, monkeypatch):
+        served = {}
+        monkeypatch.setattr(moos_ivp_server, "serve_component", lambda role, implementation, factory, argv, *, default_port: served.update(argv=argv, default_port=default_port))
+        moos_ivp_server.main(["--port", "12002", "--moosdb-port", "12432"])
+        assert served == {"argv": ["--port", "12002"], "default_port": moos_ivp_server.DEFAULT_PORT}
+        assert moos_ivp_server.HelmProcesses.first_port == 12432
+
+    def test_without_the_argument_the_moosdb_port_is_vessel_0_s(self, monkeypatch):
+        monkeypatch.setattr(moos_ivp_server, "serve_component", lambda *args, **kwargs: None)
+        moos_ivp_server.main(["--port", "12000"])
+        assert moos_ivp_server.HelmProcesses.first_port == moos_ivp_server.DEFAULT_MOOSDB_PORT
