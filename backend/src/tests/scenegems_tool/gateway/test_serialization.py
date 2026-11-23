@@ -155,10 +155,10 @@ class TestEncounterRules:
         keys = [key(rule) for rule in encounter["rules"]]
         assert keys == sorted(keys)
 
-    def test_the_paragraphs_of_rule_8_come_in_order_before_rule_16_and_17(self, frame):
+    def test_the_paragraphs_of_rule_8_come_in_order_before_rules_15_to_17(self, frame):
         (encounter,) = frame["ruleResults"]
         numbers = list(dict.fromkeys(rule["ruleNumber"] for rule in encounter["rules"]))
-        assert numbers == ["8(a)", "8(b)", "8(c)", "8(d)", "16", "17(a)(i)", ""]
+        assert numbers == ["8(a)", "8(b)", "8(c)", "8(d)", "15", "16", "17(a)(i)", "17(c)", ""]
 
     def test_a_rule_number_orders_by_its_number_then_its_paragraph(self):
         def order(number):

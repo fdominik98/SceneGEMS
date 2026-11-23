@@ -1,6 +1,8 @@
 from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import (
     GiveWayEarlyActionRule,
+    GiveWayPassesAsternRule,
     GoAroundCollisionDomainSuggestion,
+    HeadOnPortToPortRule,
     HoldAvoidanceCourseRule,
     NoNewSituationRule,
     PersistingCourseAfterCourseChangeRule,
@@ -9,9 +11,12 @@ from concrete_level.colregs_monitoring.colregs_rules.colregs_rules import (
     ReadilyApparentSpeedChangeRule,
     SafeDistanceRule,
     StandOnCoursePersistenceRule,
+    StandOnNoPortTurnRule,
 )
 from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_early_action_condition import GiveWayEarlyActionCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.give_way_passes_astern_condition import GiveWayPassesAsternCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.go_around_collision_domain_condition import GoAroundCollisionDomainCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.head_on_port_to_port_condition import HeadOnPortToPortCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.hold_avoidance_course_condition import HoldAvoidanceCourseCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.no_new_situation_condition import NoNewSituationCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.persisting_course_after_course_change_condition import PersistingCourseAfterCourseChangeCondition
@@ -21,6 +26,7 @@ from concrete_level.colregs_monitoring.colregs_rules.conditions.readily_apparent
 from concrete_level.colregs_monitoring.colregs_rules.conditions.rule_condition import COLREGSRuleConditionMap, COLREGSRuleConditionMapSet
 from concrete_level.colregs_monitoring.colregs_rules.conditions.safe_distance_condition import SafeDistanceCondition
 from concrete_level.colregs_monitoring.colregs_rules.conditions.stand_on_course_persistence_condition import StandOnCoursePersistenceCondition
+from concrete_level.colregs_monitoring.colregs_rules.conditions.stand_on_no_port_turn_condition import StandOnNoPortTurnCondition
 from concrete_level.colregs_monitoring.maneuver_context import ManeuverContext, ManeuverContextSet
 from concrete_level.colregs_monitoring.situation_context import COLREGSType, SituationContext, SituationContextSet
 
@@ -38,6 +44,7 @@ def make_maneuver_default_rules(maneuver_context: ManeuverContext) -> COLREGSRul
             PersistingCourseAfterCourseChangeRule(actor, colregs_constants): PersistingCourseAfterCourseChangeCondition(relation, actor, colregs_constants),
             NoNewSituationRule(actor, colregs_constants): NoNewSituationCondition(relation, actor, colregs_constants),
             StandOnCoursePersistenceRule(actor, colregs_constants): StandOnCoursePersistenceCondition(relation, actor, colregs_constants),
+            StandOnNoPortTurnRule(actor, colregs_constants): StandOnNoPortTurnCondition(relation, actor, colregs_constants),
             # overturning_suggestion: OverturningCondition(maneuver_context.relation, maneuver_context.vessel),
         }
     )
@@ -51,6 +58,7 @@ def make_head_on_situation_default_rules(situation_context: SituationContext) ->
     return COLREGSRuleConditionMap(
         {
             SafeDistanceRule(relation, colregs_constants): SafeDistanceCondition(relation, colregs_constants),
+            HeadOnPortToPortRule(relation, colregs_constants): HeadOnPortToPortCondition(relation, colregs_constants),
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
             HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
@@ -99,6 +107,7 @@ def make_crossing_from_port_situation_default_rules(situation_context: Situation
             GiveWayEarlyActionRule(actor1, colregs_constants): GiveWayEarlyActionCondition(relation, actor1, colregs_constants),
             GoAroundCollisionDomainSuggestion(actor1, colregs_constants): GoAroundCollisionDomainCondition(relation, actor1, colregs_constants),
             HoldAvoidanceCourseRule(actor1, colregs_constants): HoldAvoidanceCourseCondition(relation, actor1, colregs_constants),
+            GiveWayPassesAsternRule(actor1, colregs_constants): GiveWayPassesAsternCondition(relation, actor1, colregs_constants),
         }
     )
 

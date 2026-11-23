@@ -344,17 +344,22 @@ class TestCorridorSearch:
     def _closest_approach(nodes, vessels):
         return min(float(np.linalg.norm(node.scene[vessels["os"]].p - node.scene[vessels["ts2"]].p)) for node in nodes)
 
-    def test_the_default_corridor_fails_the_safe_distance(self, monitor):
+    def test_the_default_corridor_crosses_ahead_and_then_fails_the_safe_distance(self, monitor):
+        """The own ship crosses TS2's heading line ahead of it (Rule 15) at node 103, three steps before it enters TS2's domain (Rule 8(d))."""
         nodes = build_seed_nodes(monitor, self.TIME_STEP, self.HORIZON)
         vessels = {vessel.name: vessel for vessel in nodes[0].scene.vessels}
-        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
-        failed = nodes[106].monitor_result_map_set.get_failed_rules()
-        assert [rule.rule_number for rules in failed.values() for rule in rules] == ["8(d)"]
+        assert (len(nodes), first_failure_index(nodes)) == (165, 103)
+
+        def failed_numbers(index):
+            return [rule.rule_number for rules in nodes[index].monitor_result_map_set.get_failed_rules().values() for rule in rules]
+
+        assert failed_numbers(103) == ["15"]
+        assert "8(d)" not in failed_numbers(105) and "8(d)" in failed_numbers(106)
         assert self._closest_approach(nodes, vessels) < vessels["ts2"].safety_radius
 
     def test_a_seed_cut_at_its_first_failure_ends_there(self, monitor):
         nodes = build_seed_nodes(monitor, self.TIME_STEP, self.HORIZON, stop_at_first_failure=True)
-        assert len(nodes) == 107 and first_failure_index(nodes) == 106
+        assert len(nodes) == 104 and first_failure_index(nodes) == 103
 
     def test_the_search_gives_a_seed_that_fails_no_rule(self, searched):
         nodes, _, _, _ = searched
@@ -396,7 +401,7 @@ class TestCorridorSearch:
         monkeypatch.setattr(seed_trajectory, "SEARCH_MAX_BUILDS", 0)
         nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON)
         assert shapes == {}
-        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
+        assert (len(nodes), first_failure_index(nodes)) == (165, 103)
 
     def test_a_shape_that_gains_too_little_is_not_taken(self, monitor, monkeypatch):
         """No shape moves the failure a thousand steps on, so every shape is tried and none is kept."""
@@ -405,7 +410,7 @@ class TestCorridorSearch:
         monkeypatch.setattr(seed_trajectory, "CORRIDOR_WIDTH_FACTORS", (1.0, 1.5))
         nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON)
         assert shapes == {}
-        assert (len(nodes), first_failure_index(nodes)) == (165, 106)
+        assert (len(nodes), first_failure_index(nodes)) == (165, 103)
 
     def test_a_stop_signal_ends_the_search_at_once(self, monitor):
         nodes, shapes = search_seed_corridors(monitor, self.TIME_STEP, self.HORIZON, should_stop=lambda: True)

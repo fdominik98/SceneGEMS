@@ -212,6 +212,46 @@ class StandOnCoursePersistenceRule(COLREGSRule):
         )
 
 
+class HeadOnPortToPortRule(COLREGSRule):
+    def __init__(self, relation: Relation, colregs_constants: COLREGSConstraints):
+        super().__init__(
+            relation,
+            "14(a)",
+            "Head-On Vessels Pass Port to Port",
+            "When two power-driven vessels meet on reciprocal or nearly reciprocal courses, each alters course to starboard so that each passes on the port side of the other. "
+            "Judged at the closest point of approach: the vessels fail when they pass starboard to starboard.",
+            RULE_KIND,
+        )
+
+
+class GiveWayPassesAsternRule(COLREGSRule):
+    def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
+        super().__init__(
+            Relation(actor, actor),
+            "15",
+            "Give-Way Vessel Does Not Cross Ahead",
+            "In a crossing situation the vessel that has the other on her own starboard side keeps out of the way and, if the circumstances of the case admit, avoids crossing ahead of the other vessel. "
+            "It fails when it crosses the stand-on vessel's heading line ahead of her.",
+            RULE_KIND,
+            actor.id,
+            actor.name,
+        )
+
+
+class StandOnNoPortTurnRule(COLREGSRule):
+    def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
+        super().__init__(
+            Relation(actor, actor),
+            "17(c)",
+            "Stand-On Vessel Does Not Turn to Port",
+            "A stand-on vessel in a crossing situation that acts to avoid collision under Rule 17(a)(ii) does not, if the circumstances of the case admit, alter course to port for a vessel on her own port side. "
+            "A course change to port fails while the vessel stands on in a crossing from port. The encounter ends when a safety domain is violated, so the rule does not judge the action Rule 17(b) asks for.",
+            RULE_KIND,
+            actor.id,
+            actor.name,
+        )
+
+
 class HoldAvoidanceCourseRule(COLREGSRule):
     def __init__(self, actor: ConcreteActor, colregs_constants: COLREGSConstraints):
         super().__init__(
