@@ -7,7 +7,7 @@ import { showCampaignResults } from "../results/showResults";
 import { formatDateTime, plural, runDuration } from "../campaigns/campaignFormat";
 import { baseSeed, campaignProgress, isFinalState, runNames, stepMonitored } from "./campaignModel";
 import { EmptyState, ProgressBar, StateBadge, Tile, ToneBadge } from "./campaignParts";
-import { ConfigPanel } from "./ConfigPanel";
+import { ConfigPanel, type ConfigVersion } from "./ConfigPanel";
 import { ControlsBar } from "./ControlsBar";
 import { CoverageTable } from "./CoverageTable";
 import { DeleteEntry } from "./DeleteEntry";
@@ -18,6 +18,7 @@ import { MadeFrom } from "./historyParts";
 import { StepOutputs } from "./StepOutputs";
 import { useCampaignConfig, useCampaignEvents, useCampaignFeed, useStartBlocker } from "./useCampaignFeed";
 import { useKnownEntryNames } from "./useHistoryData";
+import { useLoadIntoWizard } from "./useLoadIntoWizard";
 
 function useNow(intervalMs: number, ticking: boolean): number {
   const [now, setNow] = useState(() => Date.now());
@@ -143,6 +144,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
   const { detail } = feed;
   const startBlocker = useStartBlocker(config.data);
   const knownNames = useKnownEntryNames();
+  const wizard = useLoadIntoWizard();
 
   const back = (
     <button type="button" className="camp-back" onClick={onBack}>
@@ -182,6 +184,11 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
   const seed = baseSeed(config.data);
   const isCampaign = kind === "campaign";
   const final = isFinalState(detail.actual_state);
+  // A campaign's config can start a new campaign in the wizard; a workbench run is run again on its workbench page
+  const stored = config.data;
+  const currentConfig = stored?.versions.find((version) => version.version === stored.current_version);
+  const loadVersion = (version: ConfigVersion) => wizard.load(version.config, { name: detail.name, version: version.version });
+  const loadBlocker = wizard.blocker ?? (currentConfig ? null : config.isLoading ? "Reading the config" : "The config did not load");
 
   return (
     <div className="camp-detail">
@@ -277,6 +284,16 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
           <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor result summaries, cases and recorded runs are in the Results section">
             Open the results
           </button>
+          {isCampaign && (
+            <button
+              type="button"
+              disabled={loadBlocker !== null}
+              title={loadBlocker ?? "Start a new campaign from this config in the Campaigns section: run it again, or adjust it first"}
+              onClick={() => currentConfig && loadVersion(currentConfig)}
+            >
+              Load the config into the wizard
+            </button>
+          )}
           {final && <DeleteEntry entry={detail} onDeleted={onBack} />}
         </div>
       </div>
@@ -300,7 +317,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
       <Disclosure id="campaign:events" title="Activity log" hint={`${events.length} ${events.length === 1 ? "event" : "events"}${feed.source === "live" ? ", live" : ""}`} headingLevel={3}>
         <EventsFeed events={events} live={feed.source === "live"} />
       </Disclosure>
-      <ConfigPanel config={config.data} error={config.error} loading={config.isLoading} />
+      <ConfigPanel config={config.data} error={config.error} loading={config.isLoading} onLoad={isCampaign ? loadVersion : undefined} loadBlocker={wizard.blocker} />
     </div>
   );
 }

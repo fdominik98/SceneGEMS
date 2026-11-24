@@ -83,6 +83,7 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const storedStep = useWizardStore((state) => state.step);
   const draft = useWizardStore((state) => state.draft);
   const visited = useWizardStore((state) => state.visited);
+  const notice = useWizardStore((state) => state.notice);
   const setStep = useWizardStore((state) => state.setStep);
   const update = useWizardStore((state) => state.update);
   const replaceDraft = useWizardStore((state) => state.replaceDraft);
@@ -328,6 +329,11 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
             setCreateMessage(null);
           }}
         />
+        {notice && (
+          <p className="meta" role="status">
+            {notice}
+          </p>
+        )}
       </header>
       <section className="wiz-map panel" aria-label={mapShown ? "Campaign map" : "Wizard pages"}>
         <div className="wiz-map-bar">

@@ -6,7 +6,9 @@ import { useUiStore } from "../../app/uiStore";
 import { resetLiveChannels } from "../../domain/cluster/liveChannels";
 import { sampleCampaignDetail } from "../../test/fixtures/clusterViews";
 import { sampleCampaignRow, sampleHistoryRows, sampleMonitorVerdict, sampleRunningWorkbenchRow, sampleTrajectoryOutput, sampleWorkbenchRow } from "../../test/fixtures/historyViews";
+import { sampleCatalogStacks } from "../../test/fixtures/campaignCatalog";
 import { MockWebSocket } from "../../test/mockWebSocket";
+import { useWizardStore } from "../campaigns/wizard/wizardState";
 import { useWorkbenchTargetStore } from "../workbench/pages/workbenchTarget";
 import { HistorySection } from "./HistorySection";
 import { INITIAL_LIST_VIEW } from "./campaignModel";
@@ -25,6 +27,25 @@ let deleteStatus = 204;
 let outputs: Record<string, unknown>[] = [];
 /** What the config route answers; null answers 404. */
 let entryConfig: Record<string, unknown> | null = null;
+/** Whether the control node answers its stack catalog (it answers 404 otherwise). */
+let stacksServed = true;
+
+const CLUSTER_DOMAIN = { colregs_constants: "A: 1\n", vessel_types: "Ferry: {}\n", obstacle_types: "Buoy: {}\n" };
+
+/** The config of the campaign c1 as the control node stores it: every default filled in, the cluster's domain contents written in. */
+const STORED_CAMPAIGN_CONFIG = {
+  format: 3,
+  name: "head-on sweep",
+  description: "",
+  steps: ["scene_generation", "trajectory_generation"],
+  scope: [{ fecs: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 5, failure_budget: 1 }],
+  input: { functional_scenarios: [], items: [] },
+  domain: { ...CLUSTER_DOMAIN, scene_generation_timeout_s: 90, enforce_low_tcpa: false },
+  scene_generation: { monitor: "post_hoc" },
+  trajectories: { generator: "straight", params: {}, timespan_s: 600.0, timeout_s: 1800.0, monitor: "post_hoc" },
+  resources: { worker_nodes: [], required_labels: {}, queue_depth: { generate_scene: 16, generate_trajectories: 16, simulate: 32, monitor: 32, calibrate: 8 }, priority: 0 },
+  policy: { retention: "all", keep_frames: false, seed: 7, stop: { max_cases: null, max_failed_verdicts: null, max_duration_s: null } },
+};
 
 function json(body: unknown, total?: number, status = 200): Response {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -60,6 +81,12 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   if (parts[3] === "config" && entryConfig !== null) {
     return json({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-28T10:00:00+00:00", config: entryConfig }] });
   }
+  if (url.pathname === "/cluster/catalog/stacks" && stacksServed) {
+    return json(sampleCatalogStacks);
+  }
+  if (url.pathname === "/cluster/domain") {
+    return json({ ...CLUSTER_DOMAIN, saved: true, updated_at: null, editable: true });
+  }
   if (parts[3] === "events" || url.pathname === "/cluster/worker-nodes") {
     return json([], 0);
   }
@@ -90,6 +117,8 @@ beforeEach(() => {
   deleteStatus = 204;
   outputs = [sampleTrajectoryOutput()];
   entryConfig = null;
+  stacksServed = true;
+  useWizardStore.getState().reset();
   MockWebSocket.reset();
   resetLiveChannels({ createSocket: MockWebSocket.factory });
   vi.stubGlobal("fetch", vi.fn(fakeFetch));
@@ -280,5 +309,90 @@ describe("Campaign History in the DOM", () => {
     await user.click(screen.getByRole("tab", { name: "Scene generation" }));
     expect(useHistoryStore.getState().step).toBe("scene_generation");
     expect(sampleCampaignRow().campaign_id).toBe("c1");
+  });
+});
+
+describe("loading a campaign's config into the wizard", () => {
+  const loadButton = () => screen.findByRole("button", { name: "Load the config into the wizard" });
+
+  it("puts the config into the wizard as a draft and opens the Campaigns section", async () => {
+    const user = userEvent.setup();
+    entryConfig = STORED_CAMPAIGN_CONFIG;
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    await waitFor(async () => expect(await loadButton()).toBeEnabled());
+    await user.click(await loadButton());
+
+    expect(useUiStore.getState().section).toBe("campaigns");
+    const { draft, step, notice } = useWizardStore.getState();
+    expect(step).toBe("steps");
+    expect(notice).toBe('Started from the config of "head-on sweep" (version 1). Adjust it, then create the campaign.');
+    expect(draft).toMatchObject({
+      name: "head-on sweep",
+      steps: ["scene_generation", "trajectory_generation"],
+      sceneMonitor: "post_hoc",
+      trajectoryMonitor: "post_hoc",
+      scope: [{ classes: ["2vessel_0obstacle_scenarios/fec1"], quota: 5, failureBudget: 1 }],
+      // The stored contents are the cluster's domain configuration: the draft uses the cluster's
+      domain: { custom: false, sceneGenerationTimeoutS: 90 },
+      trajectories: { generator: "straight", parameters: { timespan_s: 600 } },
+      resources: { fullUsage: true },
+      policy: { seed: 7 },
+    });
+  });
+
+  it("loads the version shown in the config panel", async () => {
+    const user = userEvent.setup();
+    entryConfig = STORED_CAMPAIGN_CONFIG;
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    const inPanel = await screen.findByRole("button", { name: "Load version 1 into the wizard" });
+    await waitFor(() => expect(inPanel).toBeEnabled());
+    await user.click(inPanel);
+    expect(useWizardStore.getState().draft.name).toBe("head-on sweep");
+    expect(useUiStore.getState().section).toBe("campaigns");
+  });
+
+  it("asks before it replaces a draft that holds entries, and leaves it when the operator declines", async () => {
+    const user = userEvent.setup();
+    entryConfig = STORED_CAMPAIGN_CONFIG;
+    useWizardStore.getState().update((draft) => {
+      draft.name = "half done";
+    });
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    await waitFor(async () => expect(await loadButton()).toBeEnabled());
+    await user.click(await loadButton());
+    expect(confirm).toHaveBeenCalledWith('Replace the draft in the wizard with the config of "head-on sweep"?');
+    expect(useWizardStore.getState().draft.name).toBe("half done");
+    expect(useUiStore.getState().section).toBe("history");
+
+    confirm.mockReturnValue(true);
+    await user.click(await loadButton());
+    expect(useWizardStore.getState().draft.name).toBe("head-on sweep");
+    expect(useUiStore.getState().section).toBe("campaigns");
+  });
+
+  it("waits for the control node's stacks, and says so when they cannot be read", async () => {
+    const user = userEvent.setup();
+    entryConfig = STORED_CAMPAIGN_CONFIG;
+    stacksServed = false;
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    const button = await loadButton();
+    await waitFor(() => expect(button).toHaveAttribute("title", "The control node's stacks could not be read, so the config's runs cannot be matched."));
+    expect(button).toBeDisabled();
+  });
+
+  it("is not offered for a workbench run", async () => {
+    const user = userEvent.setup();
+    entryConfig = { trajectories: { monitor: "empty" } };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    await screen.findByRole("heading", { name: "Trajectory generation", level: 3 });
+    await waitFor(() => expect(screen.getByText(/version 1 of 1/)).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /into the wizard/ })).not.toBeInTheDocument();
   });
 });

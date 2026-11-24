@@ -68,6 +68,24 @@ describe("wizard store", () => {
     expect(JSON.parse(storage.getItem(WIZARD_STORAGE_KEY) as string).state.draft.name).toBe("");
   });
 
+  it("starts over from another draft on the first page, with a notice of where it came from that is not stored", () => {
+    const { store, storage } = storeWith();
+    store.getState().setStep("policy");
+    const loaded = { ...emptyDraft(), name: "from history" };
+    store.getState().replaceDraft(loaded, "Started from the config of a campaign.");
+    expect(store.getState()).toMatchObject({ step: "steps", visited: [], notice: "Started from the config of a campaign." });
+    expect(store.getState().draft.name).toBe("from history");
+    expect(JSON.parse(storage.getItem(WIZARD_STORAGE_KEY) as string).state.notice).toBeUndefined();
+    expect(storeWith(storage).store.getState().notice).toBeNull();
+
+    // A draft from elsewhere (a preset) and a reset drop the notice
+    store.getState().replaceDraft(emptyDraft());
+    expect(store.getState().notice).toBeNull();
+    store.getState().replaceDraft(loaded, "again");
+    store.getState().reset();
+    expect(store.getState().notice).toBeNull();
+  });
+
   it("ignores a stored step it does not know", () => {
     const storage = new MemoryStorage();
     storage.setItem(WIZARD_STORAGE_KEY, JSON.stringify({ state: { step: "teleport", draft: { name: "kept" }, visited: ["scope", "bogus"] }, version: 1 }));

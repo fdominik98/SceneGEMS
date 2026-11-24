@@ -59,8 +59,8 @@ export interface ScenarioFileDraft {
   ref: ConfigArtifactRef;
   quota: number | null;
   failureBudget: FailureBudgetDraft;
-  /** When the file was uploaded (ms since the epoch); it expires 24 hours later unless a campaign uses it. */
-  uploadedAt: number;
+  /** When the file was uploaded (ms since the epoch); it expires 24 hours later unless a campaign uses it. Null for a file of an entry of Campaign History, which the control node keeps. */
+  uploadedAt: number | null;
 }
 
 /** A scene (trajectory generation) or a trajectory set (simulation) a campaign starts from. */
@@ -261,11 +261,13 @@ export interface WizardState {
   draft: WizardDraft;
   /** Steps the operator has left at least once (they show their problems in the stepper). */
   visited: WizardStepId[];
+  /** Where the draft came from when another section put it here (the config of an entry of Campaign History); not stored. */
+  notice: string | null;
   setStep: (step: WizardStepId) => void;
   /** Applies a change to the draft; the function gets a copy it may change in place. */
   update: (change: (draft: WizardDraft) => void) => void;
-  /** Starts over from another draft (a preset): the first page, nothing visited yet. */
-  replaceDraft: (draft: WizardDraft) => void;
+  /** Starts over from another draft (a preset, a stored config): the first page, nothing visited yet. `notice` says where it came from. */
+  replaceDraft: (draft: WizardDraft, notice?: string) => void;
   reset: () => void;
 }
 
@@ -345,6 +347,7 @@ export function createWizardStore(storage?: StateStorage) {
         step: "steps",
         draft: emptyDraft(),
         visited: [],
+        notice: null,
         setStep: (step) =>
           set((state) => ({ step, visited: state.visited.includes(state.step) ? state.visited : [...state.visited, state.step] })),
         update: (change) =>
@@ -353,8 +356,8 @@ export function createWizardStore(storage?: StateStorage) {
             change(draft);
             return { draft };
           }),
-        replaceDraft: (draft) => set({ step: "steps", draft: clone(draft), visited: [] }),
-        reset: () => set({ step: "steps", draft: emptyDraft(), visited: [] }),
+        replaceDraft: (draft, notice) => set({ step: "steps", draft: clone(draft), visited: [], notice: notice ?? null }),
+        reset: () => set({ step: "steps", draft: emptyDraft(), visited: [], notice: null }),
       }),
       {
         name: WIZARD_STORAGE_KEY,

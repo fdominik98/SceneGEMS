@@ -32,12 +32,25 @@ Filter the list by kind, by state, by step and by a part of the name. The kind, 
 
 Clicking a row opens the entry:
 
-- **Header**: the name, the kind, the state, who made it, what it was made from and its input. **Open the results** shows its findings in Results; **Delete** removes a finished entry. **Entry details** has the id, the times and the config version.
+- **Header**: the name, the kind, the state, who made it, what it was made from and its input. **Open the results** shows its findings in Results; **Load the config into the wizard** (campaigns only) starts a new campaign from its config, see below; **Delete** removes a finished entry. **Entry details** has the id, the times and the config version.
 - **Controls** (campaigns only): Start, Pause, Drain, Resume and Stop, each with what it does. A stop is confirmed and cannot be undone.
 - **Numbers**: complete cases against the quota, cases in flight and dropped, and the monitor result summaries.
 - **Outputs per step**: a tab per executed step with its outputs, a page of 20 at a time.
 - **Coverage** (campaigns only): the FECs (functional equivalence classes) with their progress, failure budgets and monitor result summaries per run. A campaign that explores lists `exploration`, labeled as the design space exploration itself, and then the FECs it found as `explored/<index>`. A campaign that only explores shows a tile with the number of explored FECs and says they need no cases.
 - **Activity log** and **Config**: the entry's events and its config versions as YAML.
+
+### Loading a campaign's config into the wizard
+
+**Load the config into the wizard** in a campaign's header puts the config the campaign runs with into the [campaign wizard](./campaign-wizard.md) as its draft and opens the Campaigns page, to run the campaign again or to adjust it first. The wizard asks before it replaces a draft that has entries, and says above its pages which campaign and config version the draft came from. To start from an earlier version, choose it under **Config** and use **Load version N into the wizard** there. Nothing changes in the entry itself: creating the draft makes a new campaign.
+
+The draft holds what the config says, written the way the wizard writes it:
+
+- The input comes along: uploaded scenario files and the scenes or trajectories picked from other entries. The control node keeps those files for as long as an entry uses them; when an entry they came from was deleted, the Review page reports the item.
+- Domain contents equal to the cluster's domain configuration become "the cluster's configuration", so a later change of the cluster's configuration applies. Contents that differ stay the campaign's own.
+- A campaign that named no worker nodes uses every worker node, with the queue caps sized to the cluster as it is now. One that named worker nodes keeps them and its queue caps.
+- A run whose stack this control node does not offer needs another stack on the Simulation page; the notice counts such runs.
+
+The button waits for the control node's stack catalog and domain configuration, which it needs to read the config. Workbench runs have no such button: run them again on their workbench page.
 
 ### Outputs of the exploration
 

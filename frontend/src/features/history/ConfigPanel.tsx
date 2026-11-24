@@ -1,11 +1,23 @@
 import { useMemo, useState } from "react";
 import { describeOperatorError } from "../../domain/cluster/operatorApi";
 import type { CampaignConfig } from "../../domain/cluster/schemas";
+
+export type ConfigVersion = CampaignConfig["versions"][number];
 import { shortHash } from "../cluster/clusterFormat";
 import { configYaml, formatDateTime } from "../campaigns/campaignFormat";
 
-/** The campaign's config as YAML, read-only, with its versions. */
-export function ConfigPanel({ config, error, loading }: { config: CampaignConfig | undefined; error: unknown; loading: boolean }) {
+export interface ConfigPanelProps {
+  config: CampaignConfig | undefined;
+  error: unknown;
+  loading: boolean;
+  /** Loads the shown version into the create wizard; absent for an entry that is not a campaign. */
+  onLoad?: (version: ConfigVersion) => void;
+  /** Why the version cannot be loaded yet, or null. */
+  loadBlocker?: string | null;
+}
+
+/** The campaign's config as YAML, read-only, with its versions; a campaign's version can be loaded into the create wizard. */
+export function ConfigPanel({ config, error, loading, onLoad, loadBlocker = null }: ConfigPanelProps) {
   const [chosen, setChosen] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const version = useMemo(() => {
@@ -55,6 +67,11 @@ export function ConfigPanel({ config, error, loading }: { config: CampaignConfig
             <button type="button" onClick={copy}>
               {copied ? "Copied" : "Copy YAML"}
             </button>
+            {onLoad && (
+              <button type="button" disabled={loadBlocker !== null} title={loadBlocker ?? "Start a new campaign from this version in the Campaigns section"} onClick={() => onLoad(version)}>
+                Load version {version.version} into the wizard
+              </button>
+            )}
           </div>
           <pre className="camp-yaml" tabIndex={0} aria-label={`Config version ${version.version} as YAML`}>
             {text}

@@ -88,6 +88,16 @@ describe("the wizard's pages follow the chosen steps", () => {
     expect(screen.getByText("Page 5 of 7")).toBeVisible();
   });
 
+  it("says where a draft loaded from Campaign History came from, until the draft is discarded", async () => {
+    useWizardStore.getState().replaceDraft({ ...emptyDraft(), name: "head-on sweep" }, 'Started from the config of "head-on sweep" (version 1).');
+    const { user } = renderWizard();
+    expect(screen.getByText('Started from the config of "head-on sweep" (version 1).')).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("head-on sweep");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    await user.click(screen.getByRole("button", { name: "Discard the draft" }));
+    expect(screen.queryByText(/Started from the config/)).not.toBeInTheDocument();
+  });
+
   it("falls back to the first page when the stored page is no longer part of the steps", () => {
     useWizardStore.setState({ step: "runs", draft: { ...emptyDraft(), steps: ["scene_generation"] } });
     renderWizard();
