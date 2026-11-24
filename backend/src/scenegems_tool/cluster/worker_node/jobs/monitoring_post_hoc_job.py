@@ -8,7 +8,8 @@ judges as many series at once as the worker node has monitoring.post_hoc slots, 
 never at the same time: the later one waits. A job that names no scenario is a scenario of its own.
 
 The result lists, per vessel pair and rule, when each outcome first held (subsystems/monitoring/rule_outcomes.py,
-the same summary as the live monitor of a kinematic simulation); the monitored frames are added on request.
+the same summary as the live monitor of a kinematic simulation); the monitored frames are added on request, as a
+series without the sections that repeat from frame to frame (gateway/frame_series.py).
 
 The payload names exactly one of trajectories (a state log or planned trajectories) and
 scene (a generated scene: a scene generation's EvaluationData, a scene, or a document with
@@ -37,6 +38,7 @@ from scenegems_tool.cluster.worker_node.jobs.job_payload import TrajectoriesInpu
 from scenegems_tool.cluster.worker_node.jobs.pool_client import request_id_of, run_pool_request
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
 from scenegems_tool.cluster.worker_node.worker_node_context import WorkerNodeContext
+from scenegems_tool.gateway.frame_series import encode_frames
 from scenegems_tool.subsystems.monitoring.monitoring_types import CLOSE_SIGNAL, MONITOR_RESULT_STREAM, MONITOR_SCENARIO_TASK, MONITORED_SCENE_STREAM, SCENES_PER_BATCH, SCENES_SIGNAL
 
 SCENE_KEYS = ("best_scene", "scene", "initial_scene")  # where a document keeps its scene (EvaluationData uses best_scene)
@@ -52,7 +54,7 @@ class PostHocMonitoringPayload(ProtocolModel):
     colregs_constraints_content: Optional[str] = None  # COLREGS constants YAML; the general maritime defaults when None
     # scenarioId of the returned frames, and what orders the series of one scenario; the job's request id when None
     scenario_id: Optional[str] = Field(default=None, min_length=1)
-    include_frames: bool = False  # add every monitored frame in the workbench's wire format
+    include_frames: bool = False  # add every monitored frame in the workbench's wire format, as a series of gateway/frame_series.py
     timeout_s: float = Field(default=600.0, gt=0.0)  # for the whole series, its wait in the pool's queue included
 
     @model_validator(mode="after")
@@ -169,5 +171,6 @@ def run(job: JobSpec, worker_node: WorkerNodeContext, report: JobReport, cancel:
         "seed": reply.seed,
     }
     if payload.include_frames:
-        data["frames"] = series.frames()
+        # Without the sections that repeat from frame to frame, which are most of a long series (gateway/frame_series.py)
+        data["frames"] = encode_frames(series.frames())
     return data

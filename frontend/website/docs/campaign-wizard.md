@@ -44,6 +44,10 @@ Ticking several values of a filter shows the presets with any of them (Steps and
 
 **Save this draft as a preset** stores the current draft on the control node under a name, with a description; tick **Replace a saved preset of the same name** to overwrite one. A preset keeps the steps, scope, domain, trajectories, runs, resources and policy, but no input: uploaded files and picked outputs belong to one campaign, so you pick them again each time. A saved preset can be deleted; the shipped ones cannot.
 
+## What is left to do
+
+Under the header, the wizard lists what the draft still misses before the campaign can be created: the pages that miss something, in page order, each with the first thing it misses and a button that opens the page. The list names every open item at once, also on pages you have not opened yet, and an item goes as soon as it is done. Most pages have defaults that work, so a new campaign usually needs a name and an input and nothing else. When nothing is missing, the list says so and **Go to the review** opens the Review page, which says itself what is missing and what the control node made of the config.
+
 ## Campaign map
 
 Above the pages, the campaign map draws the campaign as a graph of what it does, as set so far. The chain runs left to right: the input, each step the campaign runs, one box per simulation run inside the simulation frame (every case goes through each run), and the review. Arrows show what each part hands on. A step the campaign does not run is a dashed box marked "Not run". Under the chain, a row holds what applies to the whole campaign: Steps, Domain, Resources and Policy.
@@ -69,7 +73,7 @@ The wizard shows only the pages the chosen steps need. Each step the campaign ru
 | Scene generation | scene generation is a step | The monitor after scene generation, the scene generation timeout and the low TCPA option |
 | Trajectory generation | trajectory generation is a step | The trajectory generator and its parameters, and the monitor after trajectory generation |
 | Simulation | simulation is a step | The simulation runs: stack (the kinematic layer, ArduPilot on SITL or Gazebo, or the custom controller on Gazebo, each with replay, or with USV Navigation or MOOS-IvP on the own ship), environment, seed, repeats and monitor |
-| Resources | always | The machines the campaign may use, with the needs of the chosen steps checked against them. Only the queues of the steps that run are listed |
+| Resources | always | What the chosen steps need and the machines of the cluster that give it. There is nothing to set: a campaign uses every machine that can take jobs, also machines that join later, and each job goes to the first machine with a free slot for it. The page says whether the cluster can run the campaign at all |
 | Policy | always | Retention, frames, the base seed and stop conditions |
 | Review | always | The generated YAML (config format 3, which lists a scope entry's FECs under `fecs`), the control node's check of it and the buttons that create the campaign |
 

@@ -118,7 +118,8 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                       <ToneBadge tone={CLASS_STATE_TONE[entry.state]} title={entry.state_reason ?? undefined}>
                         {CLASS_STATE_LABEL[entry.state]}
                       </ToneBadge>
-                      {entry.state_reason && <span className="camp-reason">{entry.state_reason}</span>}
+                      {/* A complete FEC needs no reason on the page (it is in the badge's tooltip); an open or abandoned one does */}
+                      {entry.state_reason && entry.state !== "complete" && <span className="camp-reason">{entry.state_reason}</span>}
                     </td>
                     <td className="camp-cell-progress">
                       <ProgressBar
@@ -142,8 +143,9 @@ export function CoverageTable({ classes, runNames }: { classes: readonly ClassVi
                         unlimited
                       </td>
                     ) : (
-                      <td className={`camp-num${entry.failure_budget_left === 0 && entry.failure_budget > 0 ? " camp-num--bad" : ""}`}>
-                        {entry.failure_budget_left} <span className="camp-num-of">of {entry.failure_budget}</span>
+                      // The control node counts below zero for the loss that abandoned the FEC: nothing is left then, not "-1"
+                      <td className={`camp-num${entry.failure_budget_left <= 0 && (entry.failure_budget > 0 || entry.state === "abandoned") ? " camp-num--bad" : ""}`}>
+                        {Math.max(0, entry.failure_budget_left)} <span className="camp-num-of">of {entry.failure_budget}</span>
                       </td>
                     )}
                     <td className="camp-num">{entry.in_flight}</td>

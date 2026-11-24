@@ -115,18 +115,8 @@ describe("checkDraft", () => {
     expect(checkDraft(draft, null)).toEqual([]);
   });
 
-  it("flags a label value without a name", () => {
-    const draft = validDraft();
-    draft.resources.labels = [{ key: "", value: "lab" }];
-    expect(messages(draft)).toEqual(["resources/-/required_labels"]);
-  });
-
-  it("asks for a machine when the machines are chosen by hand", () => {
-    const draft = validDraft();
-    draft.resources.fullUsage = false;
-    expect(messages(draft)).toEqual(["resources/-/worker_nodes"]);
-    draft.resources.workerNodes = ["worker-node-a"];
-    expect(messages(draft)).toEqual([]);
+  it("has nothing to check about the machines: the campaign uses every one", () => {
+    expect(messages(validDraft()).filter((message) => message.startsWith("resources/"))).toEqual([]);
   });
 });
 

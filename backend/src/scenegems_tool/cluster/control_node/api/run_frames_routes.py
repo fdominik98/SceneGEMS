@@ -7,7 +7,7 @@ routes (campaign_routes.py), without authentication like them.
     POST CAMPAIGNS_PATH/<id>/run-records/<run record id>/frames
          submits a monitoring.post_hoc job with include_frames over the run's state log (the
          campaign's COLREGS constants, labels and pinned fingerprints), or finds the newest one
-         of the run record: 201 when submitted, 200 when it existed. 404 for an unknown campaign
+         of that state log: 201 when submitted, 200 when it existed. 404 for an unknown campaign
          or run record, 409 when the run's state log is not kept (retention removed it, or the
          run never stored one), 503 while the control node's expected fingerprints are not available,
          422 when the control node refuses the payload
@@ -19,9 +19,13 @@ routes (campaign_routes.py), without authentication like them.
 
 Both answer {"run_record_id", "job": the job view, "frames": the frames artifact reference once
 the job succeeded, else null}; the frames download from the artifact route (artifact_routes.py).
-The jobs of a run record are keyed frames:<run record id> (the first), then frames:<id>:2, :3
+The job belongs to the state log, not to the run record: the repeats of a run on a repeatable
+stack have one state log, and judging it once serves them all. Its key is frames:<campaign id>:
+v<config version of the case>:<sha256 of the state log> (the first), then that key with :2, :3
 and so on, one per retry; the newest is the one submitted last. Two retries at once name the
 same next key, so they create one job. Without retry a failed or cancelled job is returned as it is.
+A job made under the key of before, frames:<run record id> (and :2, :3), is still found for its
+run record while the state log has no job under its own key.
 """
 
 from functools import partial
@@ -38,7 +42,7 @@ from scenegems_tool.cluster.fingerprints.components import MONITORING, images_of
 from scenegems_tool.cluster.protocol.artifacts import ArtifactKind, ArtifactRef, is_reference
 from scenegems_tool.cluster.protocol.jobs import JobRequirements, JobState, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.routes import CAMPAIGNS_PATH
-from scenegems_tool.persistence.stores import AssuranceStores, JobRecord, RunRecord
+from scenegems_tool.persistence.stores import AssuranceStores, ConfigVersionRecord, JobRecord, RunRecord
 
 FRAMES_PATH = CAMPAIGNS_PATH + "/{campaign_id}/run-records/{run_record_id}/frames"
 FRAMES_PRIORITY = 100  # ahead of campaign work: an operator waits for it
@@ -46,9 +50,15 @@ STATE_LOG_ROLE = "state_log"
 RETRYABLE_STATES = (JobState.FAILED, JobState.CANCELLED)
 
 
-def frames_key(run_record_id: int, attempt: int = 1) -> str:
-    """The first request of a run record keeps frames:<id>; a request after a failed or cancelled one is frames:<id>:<n>."""
-    return f"frames:{run_record_id}" if attempt <= 1 else f"frames:{run_record_id}:{attempt}"
+def frames_key(campaign_id: str, config_version: int, state_log_sha256: str, attempt: int = 1) -> str:
+    """The key of the frames job of a state log, judged with a config version of a campaign; a request after a failed or cancelled one adds :<n>."""
+    base = f"frames:{campaign_id}:v{config_version}:{state_log_sha256}"
+    return base if attempt <= 1 else f"{base}:{attempt}"
+
+
+def run_record_frames_key(run_record_id: int) -> str:
+    """The key of before: one job per run record (frames:<id>, then frames:<id>:<n>). Read only, for the jobs made under it."""
+    return f"frames:{run_record_id}"
 
 
 async def _run(function: Callable[..., Any], *arguments: Any) -> Any:
@@ -90,13 +100,27 @@ def _state_log(stores: AssuranceStores, plane: ControlPlane, record: RunRecord) 
     return ArtifactRef(sha256=sha256, size_bytes=artifact.size_bytes, kind=ArtifactKind.TRAJECTORIES, media_type=artifact.media_type).model_dump(mode="json")
 
 
+def _config_version(stores: AssuranceStores, campaign_id: str, record: RunRecord) -> Optional[ConfigVersionRecord]:
+    """The config version the run's case ran with; the campaign's current one for a run record without its case."""
+    case = stores.cases.get_case(record.case_id)
+    return stores.campaigns.config_version(campaign_id, None if case is None else case.config_version)
+
+
+def _base_key(stores: AssuranceStores, campaign_id: str, record: RunRecord) -> Optional[str]:
+    """The key of the first frames job of the run's state log; None for a run that kept no state log."""
+    sha256 = record.artifacts.get(STATE_LOG_ROLE)
+    if not sha256:
+        return None
+    version = _config_version(stores, campaign_id, record)
+    return frames_key(campaign_id, 0 if version is None else version.version, sha256)
+
+
 def _submission(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, run_record_id: int, attempt: int = 1) -> JobSubmission:
     """The post-hoc job with frames over the run's state log, with the campaign's COLREGS constants, labels and pinned fingerprints."""
     record = _run_record(stores, campaign_id, run_record_id)
     trajectories = _state_log(stores, plane, record)
     campaign = stores.campaigns.get_campaign(campaign_id)
-    case = stores.cases.get_case(record.case_id)
-    version = stores.campaigns.config_version(campaign_id, None if case is None else case.config_version)
+    version = _config_version(stores, campaign_id, record)
     config = {} if version is None else version.config
     payload = {
         "trajectories": trajectories,
@@ -113,25 +137,35 @@ def _submission(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, 
         payload=payload,
         requirements=JobRequirements(labels=labels, components=[MONITORING], fingerprints=fingerprints),
         priority=FRAMES_PRIORITY,
-        idempotency_key=frames_key(run_record_id, attempt),
+        idempotency_key=frames_key(campaign_id, 0 if version is None else version.version, trajectories["sha256"], attempt),
         allowed_worker_nodes=list(resources.get("worker_nodes", [])),
     )
 
 
-def _attempt_of(run_record_id: int, key: str) -> int:
-    """The request number a frames key names: 1 for the base key, n for frames:<id>:<n>."""
-    return 1 if key == frames_key(run_record_id) else int(key.rsplit(":", 1)[1])
+def _attempt_of(base_key: str, key: str) -> int:
+    """The request number a frames key names: 1 for the base key, n for <base key>:<n>."""
+    return 1 if key == base_key else int(key.rsplit(":", 1)[1])
 
 
 def _requested(stores: AssuranceStores, plane: ControlPlane, campaign_id: str, run_record_id: int) -> Optional[Tuple[JobRecord, int]]:
-    """The newest frames job of the run record with its request number, if one was requested."""
-    _run_record(stores, campaign_id, run_record_id)
+    """The newest frames job of the run's state log with its request number, if one was requested.
+
+    A job made under the run record's own key (before the jobs belonged to the state log) is found
+    while the state log has none; its request number is 0, so the next request is the state log's first.
+    """
+    record = _run_record(stores, campaign_id, run_record_id)
+    base_key = _base_key(stores, campaign_id, record)
+    number = 0
     with stores.transaction() as session:
-        newest = latest_job_by_key_family(session, frames_key(run_record_id))
+        newest = None if base_key is None else latest_job_by_key_family(session, base_key)
+        if newest is not None:
+            number = _attempt_of(base_key, newest[1])
+        else:
+            newest = latest_job_by_key_family(session, run_record_frames_key(run_record_id))
     if newest is None:
         return None
     job = plane.jobs.get(newest[0])
-    return None if job is None else (job, _attempt_of(run_record_id, newest[1]))
+    return None if job is None else (job, number)
 
 
 def run_frames_router(stores: AssuranceStores, plane: ControlPlane) -> APIRouter:

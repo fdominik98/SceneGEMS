@@ -8,6 +8,7 @@ function run(setup: Partial<LoadedRun["setup"]>): LoadedRun {
     runRecord: {} as LoadedRun["runRecord"],
     scenario: null,
     frames: [],
+    monitored: true,
     setup: { simulationLayer: "kinematic", controlLayer: null, mode: "replay", speedup: null, windVector: [0, 0, 0], waves: null, ...setup },
     input: null,
     caseIndex: 0,

@@ -26,7 +26,7 @@ A campaign or workbench run executes one or more consecutive steps of the chain 
 The findings panel of a step shows:
 
 - **Monitor result summaries**: how many cases passed and how many failed, when a monitor judged the step.
-- **Valid and complete outputs**: how many scenes, trajectory sets or simulated runs the step produced, how many were valid and, for trajectories and runs, how many were complete. A trajectory set can be incomplete; when trajectory generation is the last step of an entry, the incomplete set is kept so you can inspect it.
+- **Valid and complete outputs**: how many scenes, trajectory sets or simulated runs the step produced. When every one is valid and complete, the Outputs line says so in a word; when some are not, a tile counts the valid ones and, for trajectories and runs, the complete ones. A trajectory set can be incomplete; when trajectory generation is the last step of an entry, the incomplete set is kept so you can inspect it.
 - **Cases by state**: complete, active, dropped, failed or cancelled cases that reached the step.
 - **Generation time**: the median and the 90th percentile of the jobs that produced the step's output.
 - **Which rules failed**: the rules ranked by the number of monitor result summaries they failed in, each with the earliest failure time and the median of the first failure times. A rule that failed for several vessel pairs counts once per monitor result summary.
@@ -39,7 +39,7 @@ A step is monitored only when the campaign asked for a monitor after it. For a s
 
 ## Monitor result summary table
 
-Below the findings, the table lists the monitor result summaries of the shown step, one row per case (scene and trajectory steps) or per run (simulation). You can filter by FEC, state, run and sensitivity, sort by FEC, case and run, page through the rows, and download the filtered rows as CSV. For the simulation step, a second panel counts the monitor result summaries of the filtered rows per run. Select a row to open its case.
+Below the findings, the table lists the monitor result summaries of the shown step, one row per case (scene and trajectory steps) or per run (simulation). You can filter by FEC, state, run and sensitivity, sort by FEC, case and run, page through the rows, and download the filtered rows as CSV. For the simulation step, a second panel appears where it adds to the findings: with a filter set, it counts what the filter left, by state and per run, and ranks the rules that failed there; without a filter, it compares the runs when the step has more than one. Select a row to open its case.
 
 ## Case page
 

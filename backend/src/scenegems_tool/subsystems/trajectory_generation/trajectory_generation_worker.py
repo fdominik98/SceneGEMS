@@ -14,6 +14,7 @@ from concrete_level.trajectory_generation.trajectory_builder import TrajectoryBu
 from concrete_level.trajectory_generation.trajectory_data import MONITOR_FRAMES_KEY, TrajectoryData
 from concrete_level.trajectory_generation.trajectory_generator import TIME_STEP as DEFAULT_TIME_STEP
 from logical_level.constraint_satisfaction.evaluation_data import EvaluationData
+from scenegems_tool.gateway.frame_series import encode_frames
 from scenegems_tool.gateway.serialization import serialize_monitored_trajectory
 from scenegems_tool.subsystems.pool.pool_task import TaskChannel
 from scenegems_tool.subsystems.trajectory_generation.straight_trajectory_generator import straight_trajectory_data
@@ -80,7 +81,9 @@ def _make_trajectory_data_factory(scenario_content: str, start_time: datetime, s
 def _trajectory_payload(trajectory_data: TrajectoryData, monitored: Optional[MonitoredTrajectory]) -> dict:
     """Serialized trajectory plus the monitor output recorded for each of its scenes.
 
-    `monitor_frames` is index-aligned with `trajectories.scene_list`. It is omitted
+    `monitor_frames` is index-aligned with `trajectories.scene_list` and written as a
+    series without the sections that repeat from scene to scene (gateway/frame_series.py):
+    with them a plan of 1600 scenes is 59 MB, without them 18 MB. It is omitted
     when the run disabled monitor results or the monitored path could not be
     serialized, and consumers treat it as optional.
     """
@@ -91,7 +94,7 @@ def _trajectory_payload(trajectory_data: TrajectoryData, monitored: Optional[Mon
         monitor_frames = serialize_monitored_trajectory(monitored)
     except Exception:
         return payload
-    payload[MONITOR_FRAMES_KEY] = monitor_frames
+    payload[MONITOR_FRAMES_KEY] = encode_frames(monitor_frames)
     return payload
 
 

@@ -635,7 +635,12 @@ class ExecutionConfig(ConfigModel):
 
 
 class QueueDepthCaps(ConfigModel):
-    """Queued jobs of the campaign per stage; a new case starts only while every stage is under its cap."""
+    """Queued jobs of the campaign per stage; a new case starts only while every stage is under its cap.
+
+    These numbers are the least a cap is: the pipeline engine raises the cap of a stage to the slots the
+    campaign's worker nodes offer for it now (assurance/pipeline/coverage_controller.py, ClusterCaps), so
+    a number below the cluster's slots does not hold the campaign back.
+    """
 
     generate_scene: int = Field(default=16, ge=1)
     generate_trajectories: int = Field(default=16, ge=1)

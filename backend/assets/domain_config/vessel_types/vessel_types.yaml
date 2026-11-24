@@ -149,3 +149,48 @@ MilitaryVessel:
     block_coefficient: 0.5
     length_to_beam: 8.5
     beam_to_draft: 3.2
+
+
+# Panamax container ship: built to the old locks of the Panama Canal (294.13 m long, 32.31 m wide, 12.04 m of draft at most). Every size of it can take the preset vessel model hanjin_pretoria.
+PanamaxContainerShip:
+    min_length: 230
+    max_length: 294
+    max_speed: 12.346667
+    min_beam: 32.0
+    max_beam: 32.3
+    max_angular_speed: 0.007     # ~0.40 deg/s
+    max_acceleration: 0.06
+    steering_type: rudder
+    block_coefficient: 0.65
+    length_to_beam: 8.1
+    beam_to_draft: 2.7
+
+
+# Panamax bulk carrier. Every size of it can take the preset vessel model csl_spirit.
+PanamaxBulkCarrier:
+    min_length: 200
+    max_length: 230
+    max_speed: 7.459438
+    min_beam: 32.0
+    max_beam: 32.3
+    max_angular_speed: 0.006     # ~0.34 deg/s
+    max_acceleration: 0.04
+    steering_type: rudder
+    block_coefficient: 0.82
+    length_to_beam: 7.0
+    beam_to_draft: 2.7
+
+
+# Panamax cruise ship, after the Statendam of the Transportation Safety Board of Canada's report M96W0187: 219.4 m long, 30.8 m wide, 7.55 m of draft, 21.7 knots at full sea speed, a crash stop from 20.57 knots in 171 s and a final turning diameter of 258 m. Every size of it can take the preset vessel model statendam.
+PanamaxCruiseShip:
+    min_length: 200
+    max_length: 250
+    max_speed: 11.163444
+    min_beam: 30.8
+    max_beam: 32.3
+    max_angular_speed: 0.04      # ~2.3 deg/s
+    max_acceleration: 0.06
+    steering_type: rudder
+    block_coefficient: 0.6
+    length_to_beam: 7.12
+    beam_to_draft: 4.08

@@ -2,11 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse } from "yaml";
 import { OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import { caseDetailSchema, jobDetailSchema } from "../../../domain/cluster/schemas";
-import { useScenePlaybackStore, useTrajectoryPlaybackStore } from "../../../domain/playback/playbackStore";
+import { usePlaybackStore, useScenePlaybackStore, useTrajectoryPlaybackStore } from "../../../domain/playback/playbackStore";
 import type { ParsedServerMessage } from "../../../domain/simulation/protocol";
 import { useTrajectoryGenerationStore } from "../../../domain/trajectoryGeneration/trajectoryGenerationStore";
-import { sampleCampaignDetail, sampleCampaignSummary, sampleCase } from "../../../test/fixtures/clusterViews";
-import { useScenePageStore, useTrajectoryPageStore } from "../pages/pageStore";
+import { sampleCampaignDetail, sampleCampaignSummary, sampleCase, sampleRunRecord } from "../../../test/fixtures/clusterViews";
+import { sampleFrames } from "../../../test/fixtures/sampleFrames";
+import { useScenePageStore, useSimulationPageStore, useTrajectoryPageStore } from "../pages/pageStore";
 import { useClusterRunStore } from "./clusterRunStore";
 import { attendedRunDetail, WorkbenchJobDriver, type ClusterAccess } from "./workbenchJobDriver";
 
@@ -308,6 +309,82 @@ describe("workbench job driver", () => {
     useScenePageStore.getState().setLoaded(target, null);
     await new WorkbenchJobDriver(() => access(client)).loadTarget(target, { quiet: true });
     expect(useScenePageStore.getState().loaded).toMatchObject({ campaignId: "wb9" });
+  });
+});
+
+describe("a recorded run opened on the simulation page", () => {
+  const STATE_LOG = "e".repeat(64);
+  const target = { page: "simulation" as const, campaignId: "c1", caseId: 5, step: "simulation" as const, runRecordId: 11 };
+  const stateLog = { scene_list: [sceneOf(0), sceneOf(10), sceneOf(20)], time_step: 1 };
+
+  function runClient() {
+    return {
+      getCase: async () =>
+        caseDetailSchema.parse({ ...sampleCase, stage: "verdict", state: "complete", progress: {}, jobs: [], verdicts: [], run_records: [{ ...sampleRunRecord, artifacts: { state_log: STATE_LOG } }] }),
+      artifactUrl: (sha256: string) => `http://control-node/cluster/artifacts/${sha256}`,
+    } as unknown as OperatorClient;
+  }
+
+  beforeEach(() => {
+    useSimulationPageStore.setState({ input: null, loaded: null, output: null, status: "idle", message: null, activeEntryId: null, note: null });
+    usePlaybackStore.getState().clearSimulationTrajectories();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => (String(input).endsWith(STATE_LOG) ? new Response(JSON.stringify(stateLog)) : new Response("missing", { status: 404 })))
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("shows the run from its state log while the monitor judges it, then takes the judged frames", async () => {
+    const driver = new WorkbenchJobDriver(() => access(runClient()));
+    let judged: (frames: typeof sampleFrames) => void = () => undefined;
+    const said: string[] = [];
+    driver.runFrames = (_client, _campaignId, _runRecordId, _signal, onProgress) => {
+      onProgress?.("The monitor is judging the run...");
+      said.push(useSimulationPageStore.getState().note?.text ?? "");
+      return new Promise((resolve) => {
+        judged = resolve;
+      });
+    };
+    const loading = driver.loadTarget(target);
+    await vi.waitFor(() => expect(said).toHaveLength(1));
+    // The run is on the page before the monitor answered: three recorded scenes, no judgment.
+    expect(useSimulationPageStore.getState()).toMatchObject({ status: "shown", loaded: { campaignId: "c1", runRecordId: 11 } });
+    expect(usePlaybackStore.getState().simulationFrames.map((frame) => frame.timestamp)).toEqual([0, 1, 2]);
+    expect(said[0]).toMatch(/is judging the run.*shown as it was recorded/);
+    judged(sampleFrames.slice(0, 2));
+    await loading;
+    expect(usePlaybackStore.getState().simulationFrames).toHaveLength(2);
+    expect(useSimulationPageStore.getState().note).toBeNull();
+  });
+
+  it("keeps the recorded run and says so when the monitor's judgment does not come", async () => {
+    const driver = new WorkbenchJobDriver(() => access(runClient()));
+    driver.runFrames = async () => {
+      throw new Error("The run's frames are not available: no worker node monitors");
+    };
+    await driver.loadTarget(target);
+    expect(usePlaybackStore.getState().simulationFrames).toHaveLength(3);
+    expect(useSimulationPageStore.getState()).toMatchObject({ status: "shown", note: { tone: "warning" } });
+    expect(useSimulationPageStore.getState().note?.text).toMatch(/without the monitor's judgment: .*no worker node monitors/);
+  });
+
+  it("drops the judgment of a run the page no longer shows", async () => {
+    const driver = new WorkbenchJobDriver(() => access(runClient()));
+    let judged: (frames: typeof sampleFrames) => void = () => undefined;
+    driver.runFrames = () =>
+      new Promise((resolve) => {
+        judged = resolve;
+      });
+    const loading = driver.loadTarget(target);
+    await vi.waitFor(() => expect(useSimulationPageStore.getState().note?.tone).toBe("busy"));
+    useSimulationPageStore.getState().setLoaded({ ...target, runRecordId: 12 }, null);
+    judged(sampleFrames.slice(0, 2));
+    await loading;
+    expect(usePlaybackStore.getState().simulationFrames).toHaveLength(3);
   });
 });
 

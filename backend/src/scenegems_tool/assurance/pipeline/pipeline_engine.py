@@ -14,7 +14,7 @@ parts.
      cursor;
    - each campaign's actual state converges on its desired state (below), the coverage
      controller completes, cuts and closes classes, and running campaigns start new cases
-     under backpressure;
+     under backpressure, whose caps follow the slots the campaign's worker nodes offer now;
    - intents not linked to a job are collected for submission (an intent of a case that ended
      before its submission is retired);
    - the cursor advances to the batch's position.
@@ -82,11 +82,11 @@ from sqlalchemy.orm import Session
 from scenegems_tool.assurance.campaign.class_catalog import ClassCatalog
 from scenegems_tool.assurance.pipeline.campaign_context import CampaignContext, CampaignContexts
 from scenegems_tool.assurance.pipeline.case_machine import CaseMachine, StepOutbox
-from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, decide_class, plan_new_cases
+from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, ClusterCaps, decide_class, plan_new_cases
 from scenegems_tool.assurance.pipeline.engine_leadership import EngineLeadership, LeadershipLost
 from scenegems_tool.assurance.pipeline.payload_builder import required_fingerprints
 from scenegems_tool.assurance.pipeline.pipeline_queries import UNFINISHED_JOB_STATES, case_states, delete_intent, job_id_by_key, next_case_indexes, pin_fingerprints, unfinished_jobs_of_final_cases
-from scenegems_tool.assurance.pipeline.stage_graph import JobNeed
+from scenegems_tool.assurance.pipeline.stage_graph import JOB_STAGES, JobNeed
 from scenegems_tool.cluster.fingerprints.comparison import find_mismatches
 from scenegems_tool.cluster.protocol.jobs import JobSubmission, JobType
 from scenegems_tool.persistence.clock import Clock, utc_now
@@ -98,6 +98,7 @@ from scenegems_tool.persistence.schema import (
     CampaignOrigin,
     CaseState,
     JobEventKind,
+    PipelineStage,
     VerdictState,
     WorkerNodeStatus,
 )
@@ -454,7 +455,7 @@ class PipelineEngine:
             return
         if campaign.origin == CampaignOrigin.LIVE_SESSION:
             return  # a recorded live session of an earlier release: nothing runs for it
-        self._start_cases(machine, session, context, queued)
+        self._start_cases(machine, session, context, queued, worker_nodes)
 
     def _start_campaign(self, session: Session, campaign: CampaignRecord, now: datetime) -> Optional[CampaignRecord]:
         pinned = dict(campaign.pinned_fingerprints)
@@ -583,7 +584,24 @@ class PipelineEngine:
             return f"running for {stop.max_duration_s:.0f} s (max_duration_s)"
         return None
 
-    def _start_cases(self, machine: CaseMachine, session: Session, context: CampaignContext, queued) -> None:
+    @staticmethod
+    def _stage_slots(context: CampaignContext, worker_nodes: Sequence[WorkerNodeAvailability]) -> Dict[PipelineStage, int]:
+        """Per stage of the campaign, the slots of its job type on the worker nodes that may run its jobs now (as the stall check decides it)."""
+        labels = context.config.resources.required_labels
+        allowed = frozenset(context.config.resources.worker_nodes)
+        slots: Dict[PipelineStage, int] = {}
+        for stage in JOB_STAGES:
+            needs = context.graph.stage_needs(stage)
+            total = 0
+            for worker_node in worker_nodes:
+                # A worker node that runs several of the stage's needs (two stacks of the simulation) offers its slots once
+                job_types = {job_type for job_type, components in needs if worker_node.runs(job_type, components, required_fingerprints(components, context.pinned), labels, allowed)}
+                total += sum(worker_node.record.slots[job_type].slots for job_type in job_types)
+            if total:
+                slots[stage] = total
+        return slots
+
+    def _start_cases(self, machine: CaseMachine, session: Session, context: CampaignContext, queued, worker_nodes: Sequence[WorkerNodeAvailability] = ()) -> None:
         classes = self.stores.cases.list_classes(context.campaign_id, [CampaignClassState.OPEN], session=session)
         exploring = [record for record in classes if record.class_id == EXPLORATION_CLASS_ID] if context.graph.explores else []
         if exploring:
@@ -591,7 +609,9 @@ class PipelineEngine:
         first_stage = context.graph.first_stage(EXPLORATION_CLASS_ID if exploring else None)
         if first_stage is None:
             return  # the campaign only explores, and the exploration has run
-        backpressure = Backpressure(context.config.resources.queue_depth, dict(queued), first_stage)
+        # The caps follow the cluster as it is now: a config's numbers are from when it was written, and worker nodes join and leave
+        caps = ClusterCaps(context.config.resources.queue_depth, self._stage_slots(context, worker_nodes))
+        backpressure = Backpressure(caps, dict(queued), first_stage)
         room = min(backpressure.room_for_new_cases(), self.settings.max_new_cases_per_tick)
         max_cases = context.config.policy.stop.max_cases
         if max_cases is not None:

@@ -13,7 +13,8 @@ import { CoverageTable } from "./CoverageTable";
 import { DeleteEntry } from "./DeleteEntry";
 import { EventsFeed } from "./EventsFeed";
 import { ExploredFecOutputs } from "./ExploredFecOutputs";
-import { entryKind, entrySteps, initialStep, KIND_LABELS, originLabel, STEP_LABELS, STEP_OUTPUT_NOUNS } from "./historyModel";
+import { FailureReasons } from "./FailureReasons";
+import { entryKind, entrySteps, initialStep, KIND_LABELS, originLabel, STEP_LABELS, STEP_OUTPUT_NOUNS, stepsRangeLabel } from "./historyModel";
 import { MadeFrom } from "./historyParts";
 import { StepOutputs } from "./StepOutputs";
 import { useCampaignConfig, useCampaignEvents, useCampaignFeed, useStartBlocker } from "./useCampaignFeed";
@@ -63,6 +64,8 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
       </div>
     );
   }
+  // The totals count the scenarios' cases, not the exploration's own: until it found its FECs there is nothing to count
+  const exploring = detail.steps?.[0] === "design_space_exploration" && !isFinalState(detail.actual_state) && !detail.fecs.some((entry) => isExploredFec(entry.fec_id));
   return (
     <>
       <div className="stat-tiles camp-tiles">
@@ -72,10 +75,15 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
             {progress.complete} <span className="camp-tile-of">of {progress.quota}</span>
           </span>
           <ProgressBar fraction={progress.fraction} tone={detail.actual_state === "completed" ? "ok" : "info"} />
-          <span className="stat-tile-detail">
-            {progress.inFlight} in flight
-            {progress.dropped > 0 ? `, ${progress.dropped} dropped (they count against the failure budgets)` : ""}
-          </span>
+          {exploring ? (
+            <span className="stat-tile-detail">The design space exploration is finding the FECs; their cases follow.</span>
+          ) : (
+            <span className="stat-tile-detail">
+              {progress.inFlight} in flight
+              {/* The control node's count holds the dropped and the failed cases */}
+              {progress.dropped > 0 ? `, ${progress.dropped} dropped or failed (they count against the failure budgets)` : ""}
+            </span>
+          )}
         </div>
         <Tile
           label="Monitor result summaries"
@@ -88,7 +96,7 @@ function Totals({ detail }: { detail: CampaignDetailView }) {
       <Disclosure id="campaign:more-numbers" variant="link" headingLevel={null} title="More numbers" openTitle="Fewer numbers">
         <div className="stat-tiles camp-tiles">
           <Tile label="In flight" value={progress.inFlight} detail="cases being worked on" />
-          <Tile label="Dropped" value={progress.dropped} detail="count against the failure budgets" tone={progress.dropped > 0 ? "warn" : undefined} />
+          <Tile label="Dropped or failed" value={progress.dropped} detail="count against the failure budgets" tone={progress.dropped > 0 ? "warn" : undefined} />
           <Tile
             label="FECs"
             value={totals.fecs}
@@ -133,9 +141,11 @@ export interface EntryDetailProps {
 }
 
 /**
- * One entry of Campaign History: the header (kind, origin, made-from links, controls of a
- * campaign, delete once final), a tab per executed step with its outputs, and for campaigns the
- * coverage per class, the activity log and the config. The numbers follow `campaign:<id>`.
+ * One entry of Campaign History, what matters first: its name and state with the way to its
+ * results, the controls that apply to a campaign now, the numbers, why cases did not complete, a
+ * tab per executed step with its outputs, and for campaigns the coverage per class, the activity
+ * log and the config. Who made the entry, its input, seed, id and times are under Entry details.
+ * The numbers follow `campaign:<id>`.
  */
 export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, onOpenEntry }: EntryDetailProps) {
   const feed = useCampaignFeed(campaignId);
@@ -184,6 +194,7 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
   const seed = baseSeed(config.data);
   const isCampaign = kind === "campaign";
   const final = isFinalState(detail.actual_state);
+  const madeFrom = detail.made_from ?? [];
   // A campaign's config can start a new campaign in the wizard; a workbench run is run again on its workbench page
   const stored = config.data;
   const currentConfig = stored?.versions.find((version) => version.version === stored.current_version);
@@ -205,48 +216,63 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
             {feed.source === "live" ? "live" : feed.liveStatus === "error" ? "polling, live channel refused" : "polling"}
           </span>
         </div>
-        <dl className="camp-facts history-origin">
-          <div>
-            <dt>Made by</dt>
-            <dd>{originLabel(detail.origin)}</dd>
-          </div>
-          <div>
-            <dt>Made from</dt>
-            <dd>
-              <MadeFrom ids={detail.made_from ?? []} names={knownNames} onOpen={onOpenEntry} />
-            </dd>
-          </div>
-          <div>
-            <dt>Input</dt>
-            <dd>
-              {detail.input && detail.input.item_count > 0
-                ? `${plural(detail.input.item_count, "item")} for ${STEP_LABELS[detail.input.first_step].toLowerCase()}`
-                : steps[0] === "design_space_exploration"
-                  ? "the FECs of the design space exploration"
-                  : steps[0] === "scene_generation"
-                    ? "catalog FECs or scenarios"
-                    : "not reported"}
-            </dd>
-          </div>
-          <div title="Case k of every FEC runs with this seed + k in every step">
-            <dt>Base seed</dt>
-            <dd className="mono">{seed ?? (config.isLoading ? "loading" : "not reported")}</dd>
-          </div>
-        </dl>
+        <p className="history-entry-line">
+          {stepsRangeLabel(steps)}, <RunDuration startedAt={detail.started_at} finishedAt={detail.finished_at} prefix={final ? "ran for " : "running for "} />
+          {madeFrom.length > 0 && (
+            <>
+              , made from <MadeFrom ids={madeFrom} names={knownNames} onOpen={onOpenEntry} />
+            </>
+          )}
+        </p>
         {detail.state_reason && (
           <p className={`camp-state-reason camp-state-reason--${detail.actual_state}`} role="status">
             <strong>{detail.actual_state === "stalled" ? "Why it is stalled." : "State reason."}</strong> {detail.state_reason}
           </p>
         )}
-        <Disclosure
-          id="campaign:details"
-          variant="link"
-          headingLevel={null}
-          title="Entry details"
-          openTitle="Hide entry details"
-          hint={<RunDuration startedAt={detail.started_at} finishedAt={detail.finished_at} prefix="ran for " />}
-        >
+        <div className="camp-results-link">
+          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor result summaries, cases and recorded runs are in the Results section">
+            Open the results
+          </button>
+          {isCampaign && (
+            <button
+              type="button"
+              disabled={loadBlocker !== null}
+              title={loadBlocker ?? "Start a new campaign from this config in the Campaigns section: run it again, or adjust it first"}
+              onClick={() => currentConfig && loadVersion(currentConfig)}
+            >
+              Load the config into the wizard
+            </button>
+          )}
+          {final && <DeleteEntry entry={detail} onDeleted={onBack} />}
+        </div>
+        <Disclosure id="campaign:details" variant="link" headingLevel={null} title="Entry details" openTitle="Hide entry details" hint="origin, input, seed, id, times">
           <dl className="camp-facts">
+            <div>
+              <dt>Made by</dt>
+              <dd>{originLabel(detail.origin)}</dd>
+            </div>
+            <div>
+              <dt>Made from</dt>
+              <dd>
+                <MadeFrom ids={madeFrom} names={knownNames} onOpen={onOpenEntry} />
+              </dd>
+            </div>
+            <div>
+              <dt>Input</dt>
+              <dd>
+                {detail.input && detail.input.item_count > 0
+                  ? `${plural(detail.input.item_count, "item")} for ${STEP_LABELS[detail.input.first_step].toLowerCase()}`
+                  : steps[0] === "design_space_exploration"
+                    ? "the FECs of the design space exploration"
+                    : steps[0] === "scene_generation"
+                      ? "catalog FECs or scenarios"
+                      : "not reported"}
+              </dd>
+            </div>
+            <div title="Case k of every FEC runs with this seed + k in every step">
+              <dt>Base seed</dt>
+              <dd className="mono">{seed ?? (config.isLoading ? "loading" : "not reported")}</dd>
+            </div>
             <div>
               <dt>Entry id</dt>
               <dd>
@@ -280,26 +306,11 @@ export function EntryDetail({ campaignId, step: rememberedStep, onStep, onBack, 
             </div>
           </dl>
         </Disclosure>
-        <div className="camp-results-link">
-          <button type="button" className="primary-btn accent" onClick={() => showCampaignResults(campaignId)} title="Findings, monitor result summaries, cases and recorded runs are in the Results section">
-            Open the results
-          </button>
-          {isCampaign && (
-            <button
-              type="button"
-              disabled={loadBlocker !== null}
-              title={loadBlocker ?? "Start a new campaign from this config in the Campaigns section: run it again, or adjust it first"}
-              onClick={() => currentConfig && loadVersion(currentConfig)}
-            >
-              Load the config into the wizard
-            </button>
-          )}
-          {final && <DeleteEntry entry={detail} onDeleted={onBack} />}
-        </div>
       </div>
       {feed.error && <p className="meta warning">The numbers may be stale: {describeOperatorError(feed.error)}</p>}
       {isCampaign && <ControlsBar campaign={detail} onChanged={feed.applySummary} startBlocker={startBlocker} />}
       <Totals detail={detail} />
+      <FailureReasons campaignId={campaignId} count={detail.totals.dropped} running={!final} />
       <section className="panel history-steps" aria-label="Outputs per step">
         <StepTabs steps={steps} step={step} onSelect={onStep} />
         <div id="history-step-panel" role="tabpanel" aria-labelledby={`history-tab-${step}`}>

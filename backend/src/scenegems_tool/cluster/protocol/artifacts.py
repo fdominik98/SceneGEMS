@@ -36,7 +36,7 @@ class ArtifactKind(str, Enum):
     SCENE = "scene"  # a scene or the scene generation's EvaluationData
     TRAJECTORY_DATA = "trajectory_data"  # trajectory generation's TrajectoryData payload
     TRAJECTORIES = "trajectories"  # Trajectories: generated trajectories or a run's state log
-    FRAMES = "frames"  # monitored frames in the workbench's wire format
+    FRAMES = "frames"  # monitored frames in the workbench's wire format, as a series of gateway/frame_series.py (a list, or its carry_forward form)
     CALIBRATION = "calibration"  # a calibration result
 
 

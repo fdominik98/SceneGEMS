@@ -23,6 +23,7 @@ export function PageEntryStatus({ store }: { store: PageStore }) {
   const status = useStore(store, (s) => s.status);
   const message = useStore(store, (s) => s.message);
   const activeEntryId = useStore(store, (s) => s.activeEntryId);
+  const note = useStore(store, (s) => s.note);
 
   if (status === "failed" && message) {
     return (
@@ -46,10 +47,18 @@ export function PageEntryStatus({ store }: { store: PageStore }) {
   }
   if (loaded !== null) {
     return (
-      <p className="step-line page-entry-status">
-        {loaded.step === "design_space_exploration" ? "The exploration" : loaded.caseIndex !== undefined ? `Case ${loaded.caseIndex + 1}` : "A case"}
-        {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""} of <EntryLink campaignId={loaded.campaignId} />
-      </p>
+      <>
+        <p className="step-line page-entry-status">
+          {loaded.step === "design_space_exploration" ? "The exploration" : loaded.caseIndex !== undefined ? `Case ${loaded.caseIndex + 1}` : "A case"}
+          {loaded.runRecordId !== undefined ? `, run record ${loaded.runRecordId}` : ""} of <EntryLink campaignId={loaded.campaignId} />
+        </p>
+        {note !== null && (
+          <p className={`step-line page-entry-status page-entry-note${note.tone === "warning" ? " warning" : ""}`} role="status">
+            {note.tone === "busy" && <span className="status-dot status-dot--busy" aria-hidden="true" />}
+            {note.text}
+          </p>
+        )}
+      </>
     );
   }
   return message ? <p className="step-line page-entry-status">{message}</p> : null;

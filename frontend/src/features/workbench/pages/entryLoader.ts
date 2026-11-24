@@ -1,6 +1,6 @@
 import { readResultField } from "../../../domain/cluster/clusterJobs";
 import type { ConfigArtifactRef } from "../../../domain/cluster/campaignApi";
-import { createFramesApi, parseFrames, runFramesFlow } from "../../../domain/cluster/framesApi";
+import { createFramesApi, parseFrames, runFramesFlow, type FramesPhase } from "../../../domain/cluster/framesApi";
 import { listOutputs, type OutputRow } from "../../../domain/cluster/historyApi";
 import { exploredFecsOfResult, parseExplorationResult, type ExplorationResult, type ExploredFec } from "../../../domain/designSpace/explorationResult";
 import { OperatorApiError, type OperatorClient } from "../../../domain/cluster/operatorApi";
@@ -28,6 +28,9 @@ export interface LoaderOptions {
   /** A run's monitor frames; the frames route (a post-hoc job over its state log) by default. */
   runFrames?: (client: LoaderClient, campaignId: string, runRecordId: number, signal?: AbortSignal) => Promise<SimulationFrame[]>;
 }
+
+/** How far the monitor's judgment of a recorded run is, in words for the page that waits for it. */
+export type RunFramesProgress = (message: string) => void;
 
 export interface LoadedScene {
   step: "scene_generation";
@@ -72,7 +75,13 @@ export interface LoadedRun {
   runRecord: RunRecord;
   /** The run's input as a full trajectory scenario (`{trajectories: ...}`), null when it is not kept. */
   scenario: Record<string, unknown> | null;
+  /**
+   * The run's frames: as its state log recorded them, which is there at once, or with the monitor's
+   * judgment when the state log could not be read (`monitored`).
+   */
   frames: SimulationFrame[];
+  /** Whether `frames` carry the monitor's judgment; when false, `framesOfRun` gives the judged frames (a job of the monitor, which takes a while). */
+  monitored: boolean;
   setup: LoadedRunSetup;
   /** The run's input trajectories, as the page's input to run it again. */
   input: PageOutput | null;
@@ -151,9 +160,36 @@ export async function stageMonitorFrames(client: LoaderClient, detail: CaseDetai
   return parseFrames(await readResultField(client, result.frames, { signal: options.signal, fetch: options.fetch }));
 }
 
+/** What the page says while the monitor's job over a run's state log is under way. */
+export function framesProgressMessage(phase: FramesPhase): string | null {
+  switch (phase.phase) {
+    case "submitting":
+      return "Asking the monitor to judge the run...";
+    case "submitted":
+      return "The monitor's job waits for a free monitoring slot...";
+    case "running":
+      return "The monitor is judging the run...";
+    case "downloading":
+      return phase.sizeBytes === null ? "Reading the monitor's frames..." : `Reading the monitor's frames (${megabytes(phase.sizeBytes)})...`;
+    default:
+      return null;
+  }
+}
+
+function megabytes(bytes: number): string {
+  const value = bytes / (1024 * 1024);
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} MB`;
+}
+
 /** A run's frames through the frames route: the control node's post-hoc job over the stored state log. */
-export async function framesOfRun(client: LoaderClient, campaignId: string, runRecordId: number, signal?: AbortSignal): Promise<SimulationFrame[]> {
-  const phase = await runFramesFlow(createFramesApi(client, campaignId, runRecordId), { signal });
+export async function framesOfRun(client: LoaderClient, campaignId: string, runRecordId: number, signal?: AbortSignal, onProgress?: RunFramesProgress): Promise<SimulationFrame[]> {
+  const onUpdate = (update: FramesPhase) => {
+    const message = framesProgressMessage(update);
+    if (message !== null) {
+      onProgress?.(message);
+    }
+  };
+  const phase = await runFramesFlow(createFramesApi(client, campaignId, runRecordId), { signal, onUpdate });
   if (phase.phase === "done") {
     return phase.frames;
   }
@@ -247,13 +283,38 @@ async function loadTrajectories(client: LoaderClient, target: WorkbenchTarget, d
   };
 }
 
+/** The frames of a run's state log, without the monitor's judgment; none when the state log is not kept or holds no scenes. */
+async function recordedFrames(client: LoaderClient, runRecord: RunRecord, options: LoaderOptions): Promise<SimulationFrame[]> {
+  const sha256 = runRecord.artifacts.state_log ?? null;
+  if (!sha256) {
+    return [];
+  }
+  try {
+    const { document } = await fetchArtifact(client, sha256, options);
+    const scenario = trajectoryScenarioOf(document);
+    return scenario === null ? [] : buildFramesFromTrajectoryData({ trajectories: scenario.trajectories });
+  } catch (error) {
+    if (options.signal?.aborted) {
+      throw error;
+    }
+    // A state log that is gone or unreadable leaves the frames route, which says why the run cannot be shown.
+    return [];
+  }
+}
+
 async function loadRun(client: LoaderClient, target: WorkbenchTarget, detail: CaseDetail, options: LoaderOptions): Promise<LoadedRun> {
   const runRecord = (target.runRecordId === undefined ? detail.run_records[0] : detail.run_records.find((record) => record.run_record_id === target.runRecordId)) ?? null;
   if (runRecord === null) {
     throw new EntryEndedError(detail.state === "active" ? "The run has not ended yet." : "The case has no recorded run.", target.runRecordId !== undefined && detail.state !== "active");
   }
-  const runFrames = options.runFrames ?? framesOfRun;
-  const frames = await gone(() => runFrames(client, target.campaignId, runRecord.run_record_id, options.signal), "The run");
+  // The state log shows the run at once; the monitor's judgment of it is a job that takes a while,
+  // which the page asks for once the run is on the canvas.
+  let frames = await recordedFrames(client, runRecord, options);
+  const monitored = frames.length === 0;
+  if (monitored) {
+    const runFrames = options.runFrames ?? framesOfRun;
+    frames = await gone(() => runFrames(client, target.campaignId, runRecord.run_record_id, options.signal), "The run");
+  }
   const inputSha = runRecord.artifacts.trajectories ?? null;
   let scenario: Record<string, unknown> | null = null;
   let input: PageOutput | null = null;
@@ -275,7 +336,7 @@ async function loadRun(client: LoaderClient, target: WorkbenchTarget, detail: Ca
       }
     }
   }
-  return { step: "simulation", runRecord, scenario, frames, setup: runSetupOf(runRecord), input, caseIndex: detail.case_index };
+  return { step: "simulation", runRecord, scenario, frames, monitored, setup: runSetupOf(runRecord), input, caseIndex: detail.case_index };
 }
 
 const OUTPUT_PAGE = 500;

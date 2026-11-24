@@ -36,7 +36,7 @@ On the Simulation page the input and the run share the canvas, so a new input re
 - An exploration loads with its FECs, and its specification, scope and limits become the page's input.
 - A scene loads with the scene monitor's judgment of it.
 - Trajectories load with the trajectory monitor's frames, as planned.
-- A simulated run loads as a replay of its frames with the monitor, and fills the setup (simulator, vessel stacks, wind and waves) and the input trajectories, so **Run on the cluster** runs it again.
+- A simulated run loads at once as a replay of the frames its state log recorded. The monitor's judgment of the run is a job on a worker node that takes a while: the page says how far it is, and the judged frames replace the recorded ones when they are there (or the page says why they did not come). The run also fills the setup (simulator, vessel stacks, wind and waves) and the input trajectories, so **Run on the cluster** runs it again.
 
 **Watch live** on a running entry opens its page and follows the job: the exploration's progress, scene previews, trajectory previews, or the simulation at the **Watch at** speed. When the job ends, the page shows the entry's output.
 

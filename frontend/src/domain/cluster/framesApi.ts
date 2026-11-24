@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseFrame } from "../simulation/protocol";
+import { decodeFrameSeries, frameSeriesParser } from "../simulation/frameSeries";
 import type { SimulationFrame } from "../simulation/types";
 import type { OperatorClient } from "./operatorApi";
 import { describeOperatorError, OperatorApiError } from "./operatorApi";
@@ -113,16 +113,22 @@ export class FramesParseError extends Error {
   }
 }
 
-/** The frames artifact (a JSON array, or an object with `frames`) as ordered `SimulationFrame`s. */
+/**
+ * The frames artifact as ordered `SimulationFrame`s: a series of frames as the backend writes it
+ * (`frameSeries.ts`: a JSON array, or its carry_forward form without what repeats from frame to
+ * frame), or an object with the array under `frames`.
+ */
 export function parseFrames(raw: unknown): SimulationFrame[] {
-  const list = Array.isArray(raw) ? raw : raw && typeof raw === "object" && Array.isArray((raw as { frames?: unknown }).frames) ? (raw as { frames: unknown[] }).frames : null;
+  const list = decodeFrameSeries(raw) ?? (raw && typeof raw === "object" && Array.isArray((raw as { frames?: unknown }).frames) ? (raw as { frames: unknown[] }).frames : null);
   if (list === null) {
     throw new FramesParseError("the frames artifact is not a list of frames", -1);
   }
   const frames: SimulationFrame[] = [];
+  // A section the series carried forward is parsed once and shared by the frames that have it
+  const parse = frameSeriesParser();
   list.forEach((entry, index) => {
     try {
-      frames.push(parseFrame(entry));
+      frames.push(parse(entry));
     } catch (error) {
       if (error instanceof z.ZodError) {
         const issue = error.issues[0];

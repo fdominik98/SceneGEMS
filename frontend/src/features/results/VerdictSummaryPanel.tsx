@@ -19,8 +19,49 @@ function Tile({ label, count, whole, tone }: { label: string; count: number; who
   );
 }
 
-/** Verdict counts per run and state, and the failed rules ranked by the verdicts they failed in. */
+/** The failed rules of the summarized verdicts, the most frequent first. */
+function FailedRulesRank({ summary }: { summary: VerdictSummary }) {
+  const mostFailures = Math.max(1, ...summary.failedRules.map((rule) => rule.verdicts));
+  return (
+    <Disclosure
+      id="results:failed-rules"
+      title="Which rules failed"
+      hint={summary.failedRules.length === 0 ? "none" : `${summary.failedRules.length} ${summary.failedRules.length === 1 ? "rule" : "rules"}, most often first`}
+      defaultOpen={summary.byState.failed > 0}
+      variant="plain"
+      headingLevel={4}
+    >
+      {summary.failedRules.length === 0 ? (
+        <p className="meta">No rule failed in these monitor result summaries.</p>
+      ) : (
+        <ol className="results-rules-rank">
+          {summary.failedRules.slice(0, 8).map((rule) => (
+            <li key={rule.rule} title={rule.relations.length > 0 ? `vessel pairs: ${rule.relations.join(", ")}` : undefined}>
+              <span className="results-rule-name">{rule.rule}</span>
+              <span className="results-bar">
+                <span className="results-bar-fill results-bar-fill--failed" style={{ width: `${(rule.verdicts / mostFailures) * 100}%` }} />
+              </span>
+              <span className="mono results-rule-count">{rule.verdicts}</span>
+              <span className="meta">earliest {formatSeconds(rule.earliestFailureS)}</span>
+            </li>
+          ))}
+          {summary.failedRules.length > 8 && <li className="meta">and {summary.failedRules.length - 8} more rules</li>}
+        </ol>
+      )}
+    </Disclosure>
+  );
+}
+
+/**
+ * Verdict counts per run and state, and the failed rules ranked by the verdicts they failed in.
+ * Without a filter the findings above say the same of the whole step, so only what they do not
+ * have is shown: the counts per run, when the step has more than one run. With a filter the panel
+ * is the summary of what the filter left.
+ */
 export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSummaryPanelProps) {
+  if (!filtered && (!summary || summary.byRun.length < 2)) {
+    return null;
+  }
   if (!summary) {
     return (
       <section className="results-panel" aria-label="Counts of the monitor result summaries">
@@ -31,11 +72,10 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
     );
   }
   const whole = summary.analyzed;
-  const mostFailures = Math.max(1, ...summary.failedRules.map((rule) => rule.verdicts));
   return (
     <section className="results-panel" aria-label="Counts of the monitor result summaries" aria-busy={loading}>
       <header className="results-panel-head">
-        <h3>Runs</h3>
+        <h3>{filtered ? "Filtered runs" : "Runs compared"}</h3>
         <span className="meta">
           {filtered ? "of the filtered monitor result summaries" : "of all monitor result summaries"}
           {summary.partial ? `: the first ${summary.analyzed} of ${summary.total}` : `: ${summary.analyzed}`}
@@ -48,16 +88,19 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
         <p className="meta warning">The ranking and the counts below read the first {summary.analyzed} monitor result summaries only; narrow the filters for an exact picture.</p>
       )}
       <div className="results-summary-grid">
-        <div className="results-tiles">
-          <Tile label="Passed" count={summary.byState.passed} whole={whole} tone="passed" />
-          <Tile label="Failed" count={summary.byState.failed} whole={whole} tone="failed" />
-          <Tile label="Unmonitored" count={summary.byState.unmonitored} whole={whole} tone="unmonitored" />
-        </div>
+        {filtered && (
+          <div className="results-tiles">
+            <Tile label="Passed" count={summary.byState.passed} whole={whole} tone="passed" />
+            <Tile label="Failed" count={summary.byState.failed} whole={whole} tone="failed" />
+            <Tile label="Unmonitored" count={summary.byState.unmonitored} whole={whole} tone="unmonitored" />
+          </div>
+        )}
 
         <Disclosure
           id="results:per-run"
           title="Counts per run"
           hint={`${summary.byRun.length} ${summary.byRun.length === 1 ? "run" : "runs"}`}
+          defaultOpen={!filtered}
           variant="plain"
           headingLevel={4}
         >
@@ -95,32 +138,7 @@ export function VerdictSummaryPanel({ summary, loading, filtered }: VerdictSumma
           )}
         </Disclosure>
 
-        <Disclosure
-          id="results:failed-rules"
-          title="Which rules failed"
-          hint={summary.failedRules.length === 0 ? "none" : `${summary.failedRules.length} ${summary.failedRules.length === 1 ? "rule" : "rules"}, most often first`}
-          defaultOpen={summary.byState.failed > 0}
-          variant="plain"
-          headingLevel={4}
-        >
-          {summary.failedRules.length === 0 ? (
-            <p className="meta">No rule failed in these monitor result summaries.</p>
-          ) : (
-            <ol className="results-rules-rank">
-              {summary.failedRules.slice(0, 8).map((rule) => (
-                <li key={rule.rule} title={rule.relations.length > 0 ? `vessel pairs: ${rule.relations.join(", ")}` : undefined}>
-                  <span className="results-rule-name">{rule.rule}</span>
-                  <span className="results-bar">
-                    <span className="results-bar-fill results-bar-fill--failed" style={{ width: `${(rule.verdicts / mostFailures) * 100}%` }} />
-                  </span>
-                  <span className="mono results-rule-count">{rule.verdicts}</span>
-                  <span className="meta">earliest {formatSeconds(rule.earliestFailureS)}</span>
-                </li>
-              ))}
-              {summary.failedRules.length > 8 && <li className="meta">and {summary.failedRules.length - 8} more rules</li>}
-            </ol>
-          )}
-        </Disclosure>
+        {filtered && <FailedRulesRank summary={summary} />}
       </div>
     </section>
   );

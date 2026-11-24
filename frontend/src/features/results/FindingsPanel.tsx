@@ -109,6 +109,8 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
   }
   const view = describeFindings(findings);
   const judged = view.verdicts?.judged ?? 0;
+  const someInvalid = view.outputs.valid < view.outputs.count;
+  const someIncomplete = view.showComplete && view.outputs.complete < view.outputs.count;
   return (
     <section className="results-panel" aria-label="Findings of the step" aria-busy={loading}>
       <header className="results-panel-head">
@@ -136,8 +138,9 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
             {view.verdicts.unmonitored > 0 && <Tile label="Unmonitored" count={view.verdicts.unmonitored} tone="unmonitored" detail="without a monitor result summary" />}
           </>
         )}
-        <Tile label={`Valid ${STEP_OUTPUT[view.step]}`} count={view.outputs.valid} detail={share(view.outputs.valid, view.outputs.count)} />
-        {view.showComplete && <Tile label="Complete" count={view.outputs.complete} detail={share(view.outputs.complete, view.outputs.count)} />}
+        {/* Every output valid and complete is the usual case: it is a word of the Outputs line below, and a tile only when some are not */}
+        {someInvalid && <Tile label={`Valid ${STEP_OUTPUT[view.step]}`} count={view.outputs.valid} detail={share(view.outputs.valid, view.outputs.count)} />}
+        {someIncomplete && <Tile label="Complete" count={view.outputs.complete} detail={share(view.outputs.complete, view.outputs.count)} />}
       </div>
 
       <dl className="results-facts">
@@ -159,6 +162,7 @@ export function FindingsPanel({ findings, loading, error }: FindingsPanelProps) 
           <dt>Outputs</dt>
           <dd>
             {view.outputs.count} {STEP_OUTPUT[view.step]} stored
+            {view.outputs.count > 0 && !someInvalid && !someIncomplete ? (view.showComplete ? ", all valid and complete" : ", all valid") : ""}
           </dd>
         </div>
         <div>

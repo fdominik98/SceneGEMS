@@ -29,7 +29,9 @@ from scenegems_tool.subsystems.pool.pool_task import TaskState, draw_seed
 
 _logger = logging.getLogger(__name__)
 CANCEL_FLUSH_TIMEOUT_S = 2.0  # how long the job waits for the broker to take its cancel before it disconnects
-RESULT_GRACE_S = 2.0  # how long a finished task's result may still be on its way
+# How long a finished task's result may still be on its way. The state is a small message and the result of a
+# trajectory search tens of megabytes through the same broker, so the state can be here many seconds first.
+RESULT_GRACE_S = 60.0
 
 POOL_STARTUP_TIMEOUT_S = 180.0  # a cold pool: container start, imports and the broker handshake
 HEARTBEAT_LOST_S = 30.0  # how long a pool may be silent, beyond a heartbeat's validity, before its tasks count as lost
@@ -149,7 +151,7 @@ class _FollowedRequest:
             self.ended = (state, reason)
             self.done.set()
         elif state == TaskState.FINISHED:
-            # The result is published before the state; it gets a moment in case the broker handed them over the other way round
+            # The result is published before the state, but a large one arrives after it: the job waits for it, and stops waiting the moment it is there (on_stream)
             self.ended = (state, "it finished without a result")
             timer = threading.Timer(RESULT_GRACE_S, self.done.set)
             timer.daemon = True

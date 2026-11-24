@@ -26,7 +26,14 @@ import { simulationInputToRestore, storedTrajectoryContent } from "../../feature
 import { OperatorApiError } from "../cluster/operatorApi";
 import { useSimulationPageStore, type PageInput } from "../../features/workbench/pages/pageStore";
 import type { WorkbenchTarget } from "../../features/workbench/pages/workbenchTarget";
-import { isFullTrajectoryScenario } from "../sceneGeneration/parseEvaluationDataFile";
+import {
+  GATEWAY_SCENARIO_LIMIT_BYTES,
+  gatewayClosedMessage,
+  gatewayScenarioContent,
+  gatewayTooLargeMessage,
+  hasMonitorFrames,
+  isFullTrajectoryScenario,
+} from "../sceneGeneration/parseEvaluationDataFile";
 import { NO_TRAJECTORIES_MESSAGE } from "./trajectoryGuard";
 
 let simulationModelsToken = 0;
@@ -121,6 +128,10 @@ export function useSimulationWorkflow() {
   const loadedScenarioContentRef = useRef<string | null>(null);
   // A loaded run's frames, waiting for the gateway's initial state of its scenario.
   const pendingReplayRef = useRef<{ scenarioId: string; frames: SimulationFrame[] } | null>(null);
+  // The judged preview of a scenario that carries the monitor's frames, waiting for the same.
+  const pendingPreviewRef = useRef<{ scenarioId: string; frames: SimulationFrame[] } | null>(null);
+  // The scenario file the gateway was sent and has not answered for yet, with its size: a socket that closes meanwhile took it down.
+  const pendingLoadRef = useRef<{ scenarioId: string; bytes: number } | null>(null);
   const handleTransportError = useCallback(
     (message: string) => {
       if (message === "WebSocket transport issue.") {
@@ -150,8 +161,17 @@ export function useSimulationWorkflow() {
           // The gateway holds the scenario now: which preset vessel models each of its vessels can take.
           // The reset above dropped the former scenario's list; the answer names this one.
           clientRef.current?.send({ type: "query_vessel_model_presets" });
+          const loadedScenarioId = usePlaybackStore.getState().activeScenarioId;
+          pendingLoadRef.current = null;
+          const preview = pendingPreviewRef.current;
+          if (preview !== null && preview.scenarioId === loadedScenarioId) {
+            // The file's own monitor frames are the judged preview: the gateway's plain chunks that follow are dropped.
+            pendingPreviewRef.current = null;
+            usePlaybackStore.getState().setTrajectoryPreviewFrames(preview.frames);
+            usePlaybackStore.getState().setPreviewMonitor({ status: "done", scenarioId: preview.scenarioId, message: null });
+          }
           const replay = pendingReplayRef.current;
-          if (replay !== null && replay.scenarioId === usePlaybackStore.getState().activeScenarioId) {
+          if (replay !== null && replay.scenarioId === loadedScenarioId) {
             pendingReplayRef.current = null;
             ingestSimulationFrames(replay.frames);
           }
@@ -275,6 +295,8 @@ export function useSimulationWorkflow() {
         }
         case "error":
           if (!isUnknownVesselModelPresetsQuery(message.message)) {
+            // The gateway answered, also for a scenario file it could not load
+            pendingLoadRef.current = null;
             setError(message.message);
           }
           break;
@@ -347,6 +369,14 @@ export function useSimulationWorkflow() {
           // The gateway's scenario session is gone with the socket. Jobs on the cluster do not
           // depend on it: they keep running and keep reporting.
           usePlaybackStore.getState().setActiveScenarioId(null);
+          const unanswered = pendingLoadRef.current;
+          if (unanswered !== null) {
+            // The socket closed over the scenario file: nothing will answer for it, so the page says so instead of waiting
+            pendingLoadRef.current = null;
+            pendingReplayRef.current = null;
+            pendingPreviewRef.current = null;
+            useSimulationPageStore.getState().setStatus("failed", gatewayClosedMessage(unanswered.bytes), null);
+          }
         }
       },
       onError: handleTransportError,
@@ -376,22 +406,42 @@ export function useSimulationWorkflow() {
       const scenarioId = crypto.randomUUID();
       setActiveScenarioId(scenarioId);
       pendingReplayRef.current = options.replayFrames && options.replayFrames.length > 0 ? { scenarioId, frames: options.replayFrames } : null;
+      pendingPreviewRef.current = null;
       const fileContent = await file.text();
       loadedScenarioContentRef.current = fileContent;
+      let raw: unknown = null;
       try {
-        const raw: unknown = JSON.parse(fileContent);
-        loadedTrajectoriesRef.current = isFullTrajectoryScenario(raw) ? (raw as { trajectories: Record<string, unknown> }).trajectories : null;
+        raw = JSON.parse(fileContent);
       } catch {
-        loadedTrajectoriesRef.current = null;
+        raw = null;
       }
+      loadedTrajectoriesRef.current = isFullTrajectoryScenario(raw) ? (raw as { trajectories: Record<string, unknown> }).trajectories : null;
+      // The gateway gets the file without the monitor's frames: with them a planned trajectory is larger than its socket takes.
+      const gatewayContent = gatewayScenarioContent(raw, fileContent);
+      const gatewayBytes = new Blob([gatewayContent]).size;
+      if (gatewayBytes > GATEWAY_SCENARIO_LIMIT_BYTES) {
+        pendingReplayRef.current = null;
+        setActiveScenarioId(null);
+        pendingLoadRef.current = null;
+        setError(gatewayTooLargeMessage(gatewayBytes));
+        return;
+      }
+      pendingLoadRef.current = { scenarioId, bytes: gatewayBytes };
       clientRef.current?.send({
         type: "load_scenario_file",
         scenarioId,
         fileName: file.name,
         filePath: file.webkitRelativePath || file.name,
-        fileContent,
+        fileContent: gatewayContent,
       });
-      void driver.monitorPreview(scenarioId, fileContent, options.colregsConstraintsContent ?? "");
+      if (hasMonitorFrames(raw)) {
+        // The planner judged every scene already: no monitoring job for the preview.
+        driver.cancelPreviewMonitor();
+        usePlaybackStore.getState().setPreviewMonitor({ status: "idle", scenarioId, message: null });
+        pendingPreviewRef.current = { scenarioId, frames: buildFramesFromTrajectoryData(raw) };
+        return;
+      }
+      void driver.monitorPreview(scenarioId, raw, options.colregsConstraintsContent ?? "");
     },
     [
       driver,
@@ -488,6 +538,14 @@ export function useSimulationWorkflow() {
         loadedScenarioContentRef.current = content;
         clearSimulationTrajectories();
         ingestSimulationFrames(replayFrames);
+      },
+      replaceRunFrames: (frames) => {
+        // Frames still waiting for the gateway's initial state are replaced where they wait.
+        if (pendingReplayRef.current !== null) {
+          pendingReplayRef.current = { ...pendingReplayRef.current, frames };
+          return;
+        }
+        usePlaybackStore.getState().applyMergedSimulationFrames(frames);
       },
       fillSetup: (run) => useSimulationSetupRequestStore.getState().requestSetup(setupRequestOf(run)),
     });

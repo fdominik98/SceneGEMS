@@ -230,22 +230,12 @@ function buildRun(run: RunDraft, catalog: BuilderCatalog): ConfigObject {
   return result;
 }
 
-/** The labels every job needs, as the config writes them (named ones only). */
-export function requiredLabelsOf(draft: WizardDraft): Record<string, string> {
-  const labels: Record<string, string> = {};
-  for (const { key, value } of draft.resources.labels) {
-    if (key.trim()) {
-      labels[key.trim()] = value;
-    }
-  }
-  return labels;
-}
-
-/** The queue caps the config gets: full usage's from the cluster's slots, else the operator's. */
+/**
+ * The queue caps the config gets: sized to the cluster's slots, never below the config's defaults,
+ * so that no slot waits for work. The wizard offers no other allocation: a campaign uses every
+ * machine of the cluster, also machines that join later.
+ */
 export function effectiveQueueDepth(draft: WizardDraft, catalog: BuilderCatalog): Record<string, number | null> {
-  if (!draft.resources.fullUsage) {
-    return draft.resources.queueDepth;
-  }
   const layers = draft.runs.map((run) => findStack(catalog, run.stackId)?.simulation_layer);
   const simulators = [...new Set(layers.map((layer) => simulationJobType({ simulation_layer: layer })))];
   return fullUsageQueueDepth(catalog.slots ?? {}, simulators.length > 0 ? simulators : [KINEMATIC_JOB]);
@@ -266,14 +256,8 @@ export function stagesOf(draft: WizardDraft): string[] {
 }
 
 function buildResources(draft: WizardDraft, catalog: BuilderCatalog): ConfigObject {
+  // No worker nodes and no labels are named: every machine takes the campaign's jobs
   const resources: ConfigObject = {};
-  if (!draft.resources.fullUsage && draft.resources.workerNodes.length > 0) {
-    resources.worker_nodes = [...draft.resources.workerNodes].sort();
-  }
-  const labels = requiredLabelsOf(draft);
-  if (Object.keys(labels).length > 0) {
-    resources.required_labels = labels;
-  }
   const queueDepth: Record<string, number> = {};
   const depths = effectiveQueueDepth(draft, catalog);
   const used = new Set(stagesOf(draft));
@@ -289,7 +273,7 @@ function buildResources(draft: WizardDraft, catalog: BuilderCatalog): ConfigObje
   if (Object.keys(queueDepth).length > 0) {
     resources.queue_depth = queueDepth;
   }
-  resources.priority = draft.resources.priority ?? 0;
+  resources.priority = 0;
   return resources;
 }
 

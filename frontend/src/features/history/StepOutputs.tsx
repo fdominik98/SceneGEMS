@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { OutputRow } from "../../domain/cluster/historyApi";
+import { isLaterRepeat, type OutputRow } from "../../domain/cluster/historyApi";
 import { describeOperatorError, OperatorApiError } from "../../domain/cluster/operatorApi";
 import type { CampaignStep, CaseState } from "../../domain/cluster/schemas";
 import type { VesselRole } from "../workbench/monitor/encounterPairs";
@@ -9,18 +9,21 @@ import type { Tone } from "./campaignModel";
 import { EmptyState, ToneBadge } from "./campaignParts";
 import {
   canOpenOutput,
+  groupRepeats,
+  groupRunLabel,
   inputSourceLabel,
   isOutputRunning,
+  judgedRow,
   monitorSummary,
   OUTPUT_PAGE_SIZE,
   outputCaseLabel,
-  outputFlags,
+  outputProblemFlags,
   outputTarget,
-  runLabel,
   showsMonitorSummary,
   STEP_LABELS,
   STEP_OUTPUT_NOUNS,
   type MonitorEncounter,
+  type OutputGroup,
 } from "./historyModel";
 import { useStepOutputs } from "./useHistoryData";
 
@@ -100,6 +103,13 @@ function EncounterLine({ encounter }: { encounter: MonitorEncounter }) {
 
 /** The monitor result summary of an output, very brief: passed or failed and, per vessel pair, the encounter types, the vessels' roles and the rules that failed. */
 function MonitorSummaryCell({ row }: { row: OutputRow }) {
+  if (row.verdict === null && isLaterRepeat(row)) {
+    return (
+      <span className="meta" title="A run's monitor result summary judges its first repeat; the other repeats measure how repeatable the stack is.">
+        judged on repeat 1 of the run
+      </span>
+    );
+  }
   if (row.verdict === null) {
     return <span className="meta">{row.state === "active" ? "no monitor result summary yet" : "no monitor result summary"}</span>;
   }
@@ -129,21 +139,25 @@ function MonitorSummaryCell({ row }: { row: OutputRow }) {
 function OutputRowView({
   campaignId,
   step,
-  row,
+  group,
   showMonitor,
+  showSource,
   onOpenEntry,
 }: {
   campaignId: string;
   step: CampaignStep;
-  row: OutputRow;
+  group: OutputGroup;
   showMonitor: boolean;
+  showSource: boolean;
   onOpenEntry: (campaignId: string) => void;
 }) {
+  const [row, ...repeats] = group.rows;
   const caseLabel = outputCaseLabel(row);
   const source = inputSourceLabel(row.input_source);
-  const run = runLabel(row);
-  const flags = outputFlags(row);
+  const run = groupRunLabel(group);
+  const flags = outputProblemFlags(row);
   const running = isOutputRunning(row);
+  const openable = canOpenOutput(row);
   return (
     <tr>
       <td>
@@ -154,38 +168,35 @@ function OutputRowView({
         {run && <span className="meta history-run">{run}</span>}
       </td>
       <td>
-        <ToneBadge tone={CASE_STATE_TONES[row.state]}>{CASE_STATE_LABELS[row.state]}</ToneBadge>
+        <span className="history-flags">
+          <ToneBadge tone={CASE_STATE_TONES[row.state]}>{CASE_STATE_LABELS[row.state]}</ToneBadge>
+          {flags.map((flag) => (
+            <ToneBadge key={flag.label} tone={flag.tone} title={flag.title}>
+              {flag.label}
+            </ToneBadge>
+          ))}
+        </span>
         {row.reason && <span className="camp-reason">{row.reason}</span>}
-      </td>
-      <td>
-        {flags.length === 0 ? (
-          <span className="meta">{row.artifact ? "" : "no output yet"}</span>
-        ) : (
-          <span className="history-flags">
-            {flags.map((flag) => (
-              <ToneBadge key={flag.label} tone={flag.tone} title={flag.title}>
-                {flag.label}
-              </ToneBadge>
-            ))}
-          </span>
-        )}
       </td>
       {showMonitor && (
         <td>
-          <MonitorSummaryCell row={row} />
+          {/* Of folded repeats, the one the run's summary judged carries it */}
+          <MonitorSummaryCell row={judgedRow(group)} />
         </td>
       )}
-      <td>
-        {source === null ? (
-          <span className="meta">none</span>
-        ) : source.kind === "entry" ? (
-          <button type="button" className="camp-link" title={`Open entry ${source.campaignId}`} onClick={() => onOpenEntry(source.campaignId)}>
-            {source.text}
-          </button>
-        ) : (
-          <span>{source.text}</span>
-        )}
-      </td>
+      {showSource && (
+        <td>
+          {source === null ? (
+            <span className="meta">none</span>
+          ) : source.kind === "entry" ? (
+            <button type="button" className="camp-link" title={`Open entry ${source.campaignId}`} onClick={() => onOpenEntry(source.campaignId)}>
+              {source.text}
+            </button>
+          ) : (
+            <span>{source.text}</span>
+          )}
+        </td>
+      )}
       <td className="history-cell-actions">
         {running ? (
           <button type="button" onClick={() => openInWorkbench(outputTarget(campaignId, step, row, true))} title={`Follow the running job on the ${STEP_LABELS[step].toLowerCase()} page`}>
@@ -194,19 +205,40 @@ function OutputRowView({
         ) : (
           <button
             type="button"
-            disabled={!canOpenOutput(row)}
+            disabled={!openable}
             onClick={() => openInWorkbench(outputTarget(campaignId, step, row))}
-            title={canOpenOutput(row) ? `Load this ${STEP_OUTPUT_NOUNS[step].one} on the ${STEP_LABELS[step].toLowerCase()} page` : "This case has no output for the step"}
+            title={openable ? `Load this ${STEP_OUTPUT_NOUNS[step].one} on the ${STEP_LABELS[step].toLowerCase()} page` : "This case has no output for the step"}
           >
             Open in workbench
           </button>
+        )}
+        {repeats.length > 0 && openable && (
+          <span className="history-repeats">
+            <span className="meta">or repeat</span>
+            {repeats.map((repeat) => (
+              <button
+                key={repeat.run_record_id ?? repeat.repeat_index}
+                type="button"
+                className="camp-link"
+                title={`Load repeat ${(repeat.repeat_index ?? 0) + 1} on the ${STEP_LABELS[step].toLowerCase()} page`}
+                aria-label={`Open repeat ${(repeat.repeat_index ?? 0) + 1} in the workbench`}
+                onClick={() => openInWorkbench(outputTarget(campaignId, step, repeat))}
+              >
+                {(repeat.repeat_index ?? 0) + 1}
+              </button>
+            ))}
+          </span>
         )}
       </td>
     </tr>
   );
 }
 
-/** The outputs of one executed step, a page at a time, each with its state, flags, the monitor result summary of a monitored step and the way onto its workbench page. */
+/**
+ * The outputs of one executed step, a page at a time: each with its state, what is off about it,
+ * the monitor result summary of a monitored step and the way onto its workbench page. Repeats of a
+ * run that ended the same way share a line, and a column with nothing to say is left out.
+ */
 export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry }: StepOutputsProps) {
   const [page, setPage] = useState(0);
   const query = useStepOutputs(campaignId, step, page, running);
@@ -248,6 +280,9 @@ export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry 
   const known = total ?? page * OUTPUT_PAGE_SIZE + rows.length;
   const pages = Math.max(1, Math.ceil(known / OUTPUT_PAGE_SIZE));
   const showMonitor = showsMonitorSummary(monitored, rows);
+  // An entry that starts from its own input has no source to name: the column would say "none" in every row
+  const showSource = rows.some((row) => row.input_source !== null);
+  const groups = groupRepeats(rows);
   return (
     <div className="history-outputs">
       {query.error ? <p className="meta warning">The outputs may be stale: {describeOperatorError(query.error)}</p> : null}
@@ -257,24 +292,35 @@ export function StepOutputs({ campaignId, step, running, monitored, onOpenEntry 
             <tr>
               <th>Case</th>
               <th>State</th>
-              <th>Output</th>
               {showMonitor && <th>Monitor result summary</th>}
-              <th>Input from</th>
+              {showSource && <th>Input from</th>}
               <th>
                 <span className="sr-only">Actions</span>
               </th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <OutputRowView key={`${row.case_id}/${row.run_record_id ?? "-"}/${row.run_index ?? "-"}/${row.repeat_index ?? "-"}`} campaignId={campaignId} step={step} row={row} showMonitor={showMonitor} onOpenEntry={onOpenEntry} />
-            ))}
+            {groups.map((group) => {
+              const [row] = group.rows;
+              return (
+                <OutputRowView
+                  key={`${row.case_id}/${row.run_record_id ?? "-"}/${row.run_index ?? "-"}/${row.repeat_index ?? "-"}`}
+                  campaignId={campaignId}
+                  step={step}
+                  group={group}
+                  showMonitor={showMonitor}
+                  showSource={showSource}
+                  onOpenEntry={onOpenEntry}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>
       <div className="camp-paging">
         <span className="meta">
           {page * OUTPUT_PAGE_SIZE + 1} to {page * OUTPUT_PAGE_SIZE + rows.length} of {plural(known, nouns.one, nouns.many)}
+          {groups.length < rows.length ? ", identical repeats on one line" : ""}
         </span>
         <span className="camp-paging-controls">
           <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}>

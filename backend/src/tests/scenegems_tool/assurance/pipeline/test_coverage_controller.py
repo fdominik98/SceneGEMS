@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import pytest
 
 from scenegems_tool.assurance.campaign.campaign_config import QueueDepthCaps
-from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, decide_class, plan_new_cases, startable
+from scenegems_tool.assurance.pipeline.coverage_controller import Backpressure, ClusterCaps, decide_class, plan_new_cases, startable
 from scenegems_tool.persistence.schema import CampaignClassState, CaseState, PipelineStage
 from scenegems_tool.persistence.stores import CaseRecord, ClassRecord
 
@@ -178,6 +178,35 @@ def test_an_item_class_runs_its_one_case_once():
     assert startable(make_class(quota=1, budget=0, class_id="item/0")) == 1
     assert startable(make_class(quota=1, budget=0, class_id="item/0", in_flight=1)) == 0
     assert startable(make_class(quota=1, budget=0, class_id="item/0", dropped=1)) == 0  # never a second run of the same item
+
+
+def test_a_cap_follows_the_slots_of_the_cluster_and_never_goes_below_the_configs():
+    caps = QueueDepthCaps(generate_scene=16, generate_trajectories=16, simulate=32, monitor=32)
+    cluster = ClusterCaps(caps, {PipelineStage.GENERATE_SCENE: 64, PipelineStage.GENERATE_TRAJECTORIES: 4, PipelineStage.MONITOR_SCENE: 48})
+    assert cluster.cap(PipelineStage.GENERATE_SCENE) == 64, "more slots than the config's cap: a job for every slot"
+    assert cluster.cap(PipelineStage.GENERATE_TRAJECTORIES) == 16, "fewer slots: the config's cap stays"
+    assert cluster.cap(PipelineStage.SIMULATE) == 32, "no worker node offers the stage: the config's cap"
+    assert (cluster.cap(PipelineStage.MONITOR_SCENE), cluster.cap(PipelineStage.MONITOR)) == (48, 32), "each monitor stage by its own slots"
+    assert ClusterCaps(caps).cap(PipelineStage.GENERATE_SCENE) == 16
+
+
+def test_the_exploration_keeps_its_cap_of_one_whatever_the_cluster_offers():
+    cluster = ClusterCaps(QueueDepthCaps(), {PipelineStage.EXPLORE_DESIGN_SPACE: 8})
+    assert cluster.cap(PipelineStage.EXPLORE_DESIGN_SPACE) == 1
+    assert Backpressure(cluster, {}, PipelineStage.EXPLORE_DESIGN_SPACE).room_for_new_cases() == 1
+
+
+def test_backpressure_starts_a_case_for_every_free_slot_of_the_first_stage():
+    caps = QueueDepthCaps(generate_scene=16, generate_trajectories=16)
+    # A cluster with 64 scene slots: under the config's cap a tick started 16 cases and left 48 slots without work
+    assert Backpressure(caps, {}).room_for_new_cases() == 16
+    cluster = ClusterCaps(caps, {PipelineStage.GENERATE_SCENE: 64, PipelineStage.GENERATE_TRAJECTORIES: 64})
+    assert Backpressure(cluster, {}).room_for_new_cases() == 64
+    assert Backpressure(cluster, {PipelineStage.GENERATE_SCENE: 60}).room_for_new_cases() == 4
+    # A later stage holds new cases back only once it has a job queued for each of its slots
+    assert Backpressure(cluster, {PipelineStage.GENERATE_TRAJECTORIES: 20}).room_for_new_cases() == 64
+    pressure = Backpressure(cluster, {PipelineStage.GENERATE_TRAJECTORIES: 64})
+    assert pressure.full_stages() == [PipelineStage.GENERATE_TRAJECTORIES] and pressure.room_for_new_cases() == 0
 
 
 def test_backpressure_counts_new_cases_at_the_first_stage():

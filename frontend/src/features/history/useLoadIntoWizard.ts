@@ -4,7 +4,7 @@ import { plural } from "../campaigns/campaignFormat";
 import { useCatalogStacks } from "../campaigns/useCampaignData";
 import type { BuilderCatalog } from "../campaigns/wizard/configBuilder";
 import { draftHasEntries } from "../campaigns/wizard/presetDraft";
-import { draftFromStoredConfig, runsWithoutStack } from "../campaigns/wizard/storedConfigDraft";
+import { draftFromStoredConfig, namedAllocation, runsWithoutStack } from "../campaigns/wizard/storedConfigDraft";
 import { useWizardStore, type WizardDraft } from "../campaigns/wizard/wizardState";
 import { useClusterDomain } from "../domain/useClusterDomain";
 
@@ -15,7 +15,7 @@ export interface ConfigOrigin {
 }
 
 /** What the wizard says above its pages after a config was loaded into it. */
-export function loadedNotice(origin: ConfigOrigin, draft: WizardDraft): string {
+export function loadedNotice(origin: ConfigOrigin, draft: WizardDraft, allocation: readonly string[] = []): string {
   const parts = [`Started from the config of "${origin.name}" (version ${origin.version}).`];
   if (draft.input.scenarios.length > 0 || draft.input.items.length > 0) {
     parts.push("Its input is kept.");
@@ -23,6 +23,10 @@ export function loadedNotice(origin: ConfigOrigin, draft: WizardDraft): string {
   const missing = runsWithoutStack(draft);
   if (missing > 0) {
     parts.push(`${plural(missing, "run")} used a stack this control node does not offer: check the Simulation page.`);
+  }
+  if (allocation.length > 0) {
+    // The wizard offers no allocation: say what the campaign named and that the new one does not
+    parts.push(`It named ${allocation.join(", ")}; a campaign made here uses every machine automatically.`);
   }
   parts.push("Adjust it, then create the campaign.");
   return parts.join(" ");
@@ -57,7 +61,7 @@ export function useLoadIntoWizard(): LoadIntoWizard {
         return;
       }
       const draft = draftFromStoredConfig(config, catalog, { clusterDomain });
-      wizard.replaceDraft(draft, loadedNotice(origin, draft));
+      wizard.replaceDraft(draft, loadedNotice(origin, draft, namedAllocation(config)));
       useUiStore.getState().setSection("campaigns");
     },
     [catalog, clusterDomain]

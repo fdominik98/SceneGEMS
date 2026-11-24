@@ -39,6 +39,9 @@ logger = logging.getLogger(__name__)
 
 STARTUP_POLL_S = 0.1
 MAX_WORKER_NODE_FRAME_BYTES = 64 * 1024 * 1024  # the worker node daemon's limit; job results can exceed uvicorn's default of 16 MiB
+# The console's limit: a scenario file it loads through the gateway (load_scenario_file) is one message, and the planned
+# trajectories of a long run exceed uvicorn's default of 16 MiB, which closes the socket without an answer
+MAX_OPERATOR_FRAME_BYTES = 64 * 1024 * 1024
 
 
 class _Listener(uvicorn.Server):
@@ -120,7 +123,7 @@ def listeners(settings: ControlNodeSettings, apps: ControlNodeApps) -> List[uvic
             )
         ),
         # The workbench frontend expects no WebSocket pings
-        _Listener(uvicorn.Config(apps.operator, host=settings.operator.host, port=settings.operator.port, ws_ping_interval=None, **logging_options)),
+        _Listener(uvicorn.Config(apps.operator, host=settings.operator.host, port=settings.operator.port, ws_ping_interval=None, ws_max_size=MAX_OPERATOR_FRAME_BYTES, **logging_options)),
     ]
 
 

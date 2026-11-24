@@ -164,6 +164,31 @@ def test_a_task_that_finishes_without_a_result_fails_the_attempt(pool, worker_no
         scene_generation_job.run(scene_job(make_job, seed=1), worker_node, _Report())
 
 
+def test_a_result_behind_the_finished_state_is_waited_for_and_taken_the_moment_it_is_there(pool, worker_node, make_job, monkeypatch):
+    class _NeverFires:
+        """The grace timer of a finished task, recorded and never run: the job below ends by its result alone."""
+
+        waits = []
+        daemon = False
+
+        def __init__(self, interval, function):
+            type(self).waits.append(interval)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(pool_client.threading, "Timer", _NeverFires)
+
+    def answer(client, request):
+        client.state(request.request_id, TaskState.FINISHED)
+        client.scene(request.request_id, {"sample": 1})
+
+    pool(answer)
+    assert scene_generation_job.run(scene_job(make_job, seed=1), worker_node, _Report())["valid"]
+    assert _NeverFires.waits == [pool_client.RESULT_GRACE_S]
+    assert pool_client.RESULT_GRACE_S >= 60.0, "a result of tens of megabytes is many seconds behind its small state message"
+
+
 def test_another_requests_states_are_not_this_jobs(pool, worker_node, make_job):
     def answer(client, request):
         client.state("someone-else", TaskState.FAILED, "not ours")

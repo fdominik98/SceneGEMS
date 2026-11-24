@@ -126,16 +126,6 @@ export interface RunDraft {
   waves: ParamValues | null;
 }
 
-export interface ResourcesDraft {
-  /** Every worker node of the cluster, also worker nodes that join later, with the queue caps sized to its slots. */
-  fullUsage: boolean;
-  /** Worker node ids the campaign may use when it does not use every worker node. */
-  workerNodes: string[];
-  labels: { key: string; value: string }[];
-  queueDepth: Record<string, number | null>;
-  priority: number | null;
-}
-
 export type RetentionPolicy = "all" | "failures" | "verdicts_only";
 
 export interface PolicyDraft {
@@ -165,7 +155,6 @@ export interface WizardDraft {
   domain: DomainDraft;
   trajectories: TrajectoriesDraft;
   runs: RunDraft[];
-  resources: ResourcesDraft;
   policy: PolicyDraft;
 }
 
@@ -176,14 +165,6 @@ export const QUEUE_DEPTH_DEFAULTS: Record<string, number> = {
   simulate: 32,
   monitor: 32,
   calibrate: 8,
-};
-
-export const QUEUE_DEPTH_LABELS: Record<string, string> = {
-  generate_scene: "Scene generation",
-  generate_trajectories: "Trajectory generation",
-  simulate: "Simulation",
-  monitor: "Monitoring",
-  calibrate: "Calibration",
 };
 
 export const DEFAULT_SCENE_GENERATION_TIMEOUT_S = 60;
@@ -251,7 +232,6 @@ export function emptyDraft(): WizardDraft {
     },
     trajectories: { generator: "monitor_driven_rrt", parameters: {}, timeoutS: DEFAULT_TRAJECTORY_TIMEOUT_S },
     runs: [emptyRun()],
-    resources: { fullUsage: true, workerNodes: [], labels: [], queueDepth: { ...QUEUE_DEPTH_DEFAULTS }, priority: 0 },
     policy: { retention: "all", keepFrames: false, seed: DEFAULT_CAMPAIGN_SEED, maxCases: null, maxFailedVerdicts: null, maxDurationS: null },
   };
 }
@@ -300,11 +280,6 @@ export function normalizeDraft(stored: unknown): WizardDraft {
     domain: { ...base.domain, ...(draft.domain ?? {}) },
     trajectories: { ...base.trajectories, ...(draft.trajectories ?? {}) },
     runs: Array.isArray(draft.runs) && draft.runs.length > 0 ? draft.runs.map((run) => ({ ...emptyRun(), ...run })) : base.runs,
-    resources: {
-      ...base.resources,
-      ...(draft.resources ?? {}),
-      queueDepth: { ...base.resources.queueDepth, ...(draft.resources?.queueDepth ?? {}) },
-    },
     policy: { ...base.policy, ...(draft.policy ?? {}) },
   };
 }

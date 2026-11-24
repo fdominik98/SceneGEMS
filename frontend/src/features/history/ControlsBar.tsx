@@ -48,11 +48,19 @@ export interface ControlsBarProps {
   startBlocker?: string | null;
 }
 
-/** Start, pause, drain, resume and stop, each with what it does; a stop is confirmed, a refusal is shown in full. */
+/**
+ * The controls that apply to the campaign now, each with what it does: a running campaign offers
+ * pause, drain and stop, a paused one resume and stop, a finished one none, and then the bar is not
+ * shown. A control only the cluster's machines hold back (Start, Resume) stays, off, with the reason.
+ * A stop is confirmed, a refusal is shown in full.
+ */
 export function ControlsBar({ campaign, onChanged, startBlocker = null }: ControlsBarProps) {
   const [confirming, setConfirming] = useState<CampaignControl | null>(null);
   const mutation = useCampaignControl(campaign.campaign_id, onChanged);
   const availability = controlAvailability(campaign, startBlocker);
+  // What the campaign's state allows, whatever the machines can run now
+  const allowed = controlAvailability(campaign, null);
+  const specs = CONTROL_SPECS.filter((spec) => allowed[spec.control].enabled);
   const held = startBlocker !== null && !isFinalState(campaign.actual_state) && campaign.desired_state !== "running" && campaign.desired_state !== "stopped";
 
   const run = (control: CampaignControl) => {
@@ -72,10 +80,14 @@ export function ControlsBar({ campaign, onChanged, startBlocker = null }: Contro
   const pending = confirming ? CONTROL_SPECS.find((spec) => spec.control === confirming) : undefined;
   const failure = mutation.isError ? refusal(mutation.error) : null;
 
+  if (specs.length === 0 && failure === null && !mutation.isPending) {
+    return null;
+  }
+
   return (
     <section className="panel camp-controls" aria-label="Campaign controls">
       <div className="camp-controls-row">
-        {CONTROL_SPECS.map((spec) => (
+        {specs.map((spec) => (
           <ControlButton
             key={spec.control}
             spec={spec}
@@ -99,7 +111,7 @@ export function ControlsBar({ campaign, onChanged, startBlocker = null }: Contro
         openTitle="Hide the explanations"
       >
         <dl className="camp-control-help">
-          {CONTROL_SPECS.map((spec) => (
+          {specs.map((spec) => (
             <div key={spec.control}>
               <dt>{spec.label}</dt>
               <dd>{availability[spec.control].enabled ? spec.description : availability[spec.control].reason}</dd>

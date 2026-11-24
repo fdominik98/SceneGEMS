@@ -45,6 +45,60 @@
   border-top: 1px solid var(--border);
 }
 
+/* What is left to do: the pages that miss something, or that nothing is missing. */
+.wiz-guide {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-left: 3px solid var(--warn);
+}
+
+.wiz-guide--ready {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  border-left-color: var(--ok);
+}
+
+.wiz-guide-lead {
+  margin: 0;
+  font-size: var(--font-size-sm);
+}
+
+.wiz-guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wiz-guide-list li {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--font-size-sm);
+}
+
+.wiz-guide-page {
+  min-width: 11rem;
+  text-align: left;
+  font-weight: 600;
+}
+
+.wiz-guide-page[aria-current="step"] {
+  border-color: var(--accent);
+}
+
+.wiz-guide-message .meta {
+  margin: 0;
+}
+
 /* The campaign map, or the list of pages in its place */
 .wiz-map {
   display: flex;
@@ -1026,17 +1080,6 @@
   font-weight: 600;
 }
 
-.wiz-machine-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.wiz-machine-tools .meta {
-  margin: 0 auto 0 0;
-}
-
 .wiz-machines {
   list-style: none;
   margin: 0;
@@ -1071,12 +1114,6 @@
   gap: var(--space-3);
   min-height: var(--hit-target);
   cursor: pointer;
-}
-
-.wiz-machine-head input {
-  width: 20px;
-  height: 20px;
-  flex: none;
 }
 
 .wiz-machine-head input:disabled {
@@ -1135,32 +1172,6 @@
 
 .wiz-machine .wiz-hint {
   margin: 0;
-}
-
-.wiz-depths {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: var(--space-3);
-  margin: 0;
-}
-
-.wiz-depths div {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.wiz-depths dt {
-  font-size: var(--font-size-sm);
-}
-
-.wiz-depths dd {
-  margin: 0;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
 }
 
 .wiz-start-blocked {

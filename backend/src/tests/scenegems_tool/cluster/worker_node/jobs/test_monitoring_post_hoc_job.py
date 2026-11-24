@@ -4,6 +4,7 @@ The job talks to the real monitoring service and its real worker; only the broke
 replaced (in_process_subsystem.py), so what the job sends is what the subsystem takes.
 """
 
+import json
 import math
 import threading
 
@@ -17,6 +18,7 @@ from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from scenegems_tool.cluster.worker_node.jobs import monitoring_post_hoc_job
 from scenegems_tool.cluster.worker_node.jobs.job_payload import validate_structure
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
+from scenegems_tool.gateway.frame_series import ENCODED_FRAMES_KEY, decode_frames, is_encoded
 from scenegems_tool.messaging import mqtt_pool_client
 from scenegems_tool.messaging.mqtt_monitor_service import MqttMonitoringService
 from scenegems_tool.subsystems.pool.pool_task import MAX_SEED
@@ -92,13 +94,20 @@ def test_a_job_without_a_scenario_is_a_scenario_of_its_own(judge, subsystem, hea
     result = judge({"trajectories": head_on_trajectories.to_dict(), "include_frames": True}, job_id="abc", attempt=2)
     [(params, _)] = subsystem.requests()
     assert params["scenario-id"] == "abc-2"
-    assert {frame["scenarioId"] for frame in result["frames"]} == {"abc-2"}
+    assert {frame["scenarioId"] for frame in decode_frames(result["frames"])} == {"abc-2"}
 
 
 def test_frames_are_added_on_request_in_time_order(judge, head_on_trajectories):
     result = judge({"trajectories": head_on_trajectories.to_dict(), "include_frames": True, "scenario_id": "case-1"})
-    assert len(result["frames"]) == result["monitored_scenes"] == 121
-    assert [frame["timestamp"] for frame in result["frames"]] == list(range(121)) and {frame["scenarioId"] for frame in result["frames"]} == {"case-1"}
+    frames = decode_frames(result["frames"])
+    assert len(frames) == result["monitored_scenes"] == 121
+    assert [frame["timestamp"] for frame in frames] == list(range(121)) and {frame["scenarioId"] for frame in frames} == {"case-1"}
+    # The series leaves out what repeats: the vessels of every frame after the first, and the rule results of nearly all
+    assert is_encoded(result["frames"])
+    first, *later = result["frames"][ENCODED_FRAMES_KEY]
+    assert first == frames[0] and all("actors" not in frame and "timestamp" in frame for frame in later)
+    assert sum("ruleResults" in frame for frame in later) < len(later) / 2
+    assert len(json.dumps(result["frames"])) < len(json.dumps(frames)) / 2
     assert "frames" not in judge({"trajectories": head_on_trajectories.to_dict()}, job_id="job-2")
 
 
@@ -206,7 +215,7 @@ def test_a_scene_inside_the_head_on_domain_but_outside_the_circle_passes(judge):
 
 def test_a_scene_gets_its_frame_on_request(judge, head_on_trajectories):
     result = judge({"scene": _scene(head_on_trajectories), "include_frames": True, "scenario_id": "case-1#scene"})
-    assert len(result["frames"]) == result["monitored_scenes"] == 1
+    assert len(result["frames"]) == result["monitored_scenes"] == 1 and isinstance(result["frames"], list), "one frame has nothing to leave out"
 
 
 @pytest.mark.parametrize("payload", [{}, {"trajectories": "both", "scene": "both"}])

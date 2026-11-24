@@ -219,6 +219,14 @@ class TestShippedCatalog:
         vessel = vessel_of("ContainerShip", 266.0)
         assert "hanjin_pretoria" in [preset.id for preset in shipped.eligible(vessel)]
 
+    @pytest.mark.parametrize("type_name, preset_id", [("PanamaxContainerShip", "hanjin_pretoria"), ("PanamaxBulkCarrier", "csl_spirit"), ("PanamaxCruiseShip", "statendam")])
+    def test_every_vessel_of_a_panamax_type_can_take_the_preset_of_its_kind(self, shipped, type_name, preset_id):
+        vessel_type = VesselTypeMap()[type_name]
+        for length in (vessel_type.min_length, (vessel_type.min_length + vessel_type.max_length) / 2, vessel_type.max_length):
+            vessel = vessel_of(type_name, length)
+            assert shipped.get(preset_id).mismatches(vessel) == [], (type_name, length)
+            assert preset_id in [preset.id for preset in shipped.eligible(vessel)]
+
     def test_a_small_vessel_is_offered_no_ship(self, shipped):
         assert shipped.eligible(vessel_of("FishingShip", 12.0)) == []
 

@@ -7,6 +7,7 @@ from collections import Counter
 import pytest
 
 from scenegems_tool.assurance.campaign import ClassCatalog, campaign_config_from_dict, validate_campaign_config
+from scenegems_tool.cluster.protocol.jobs import JobType
 from scenegems_tool.persistence.schema import (
     ArtifactHolderKind,
     CampaignActualState,
@@ -23,7 +24,7 @@ from scenegems_tool.persistence.schema import (
 )
 from tests.scenegems_tool.assurance.pipeline.checks import assert_consistent
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, config_dict, format2_dict, input_ref
-from tests.scenegems_tool.assurance.pipeline.fake_executor import CaseScript
+from tests.scenegems_tool.assurance.pipeline.fake_executor import ALL_SLOTS, CaseScript
 from tests.scenegems_tool.cluster.payloads import trajectories_data
 
 pytestmark = pytest.mark.postgres
@@ -255,8 +256,10 @@ def test_a_format_1_campaign_keeps_its_chain_and_shapes(harness):
 
 
 def test_failed_scene_verdicts_count_toward_max_failed_verdicts(make_harness):
-    harness = make_harness(scripts={(CLASS_A, index): CaseScript(passed=False) for index in range(6)})
-    queue = {"queue_depth": {"generate_scene": 1, "monitor": 1}}  # one case at a time, so the stop comes before the quota
+    # One slot per job type and caps of one: one case at a time, so the stop comes before the quota
+    slots = {**ALL_SLOTS, JobType.SCENE_GENERATION: 1, JobType.MONITORING_POST_HOC: 1}
+    harness = make_harness(scripts={(CLASS_A, index): CaseScript(passed=False) for index in range(6)}, slots=slots)
+    queue = {"queue_depth": {"generate_scene": 1, "monitor": 1}}
     config = format2_dict(["scene_generation"], quota=6, failure_budget=0, scene_generation=POST_HOC, resources=queue, policy={"seed": 7, "stop": {"max_failed_verdicts": 1}})
     campaign = _create(harness, config)
     finished = harness.drive(campaign.campaign_id)

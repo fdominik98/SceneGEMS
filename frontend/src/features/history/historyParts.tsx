@@ -29,15 +29,15 @@ export function MadeFrom({ ids, names, onOpen }: { ids: readonly string[]; names
   );
 }
 
-/** The verdicts of each executed step: passed and failed counts. */
-export function VerdictChips({ lines }: { lines: readonly VerdictLine[] }) {
+/** The verdicts of executed steps: passed and failed counts per step. `title` adds to each line's tooltip (the steps not shown). */
+export function VerdictChips({ lines, title }: { lines: readonly VerdictLine[]; title?: string }) {
   if (lines.length === 0) {
     return null;
   }
   return (
     <span className="history-verdicts">
       {lines.map((line) => (
-        <span key={line.step} className="history-verdict-line" title={`Monitor result summaries of ${STEP_LABELS[line.step].toLowerCase()}`}>
+        <span key={line.step} className="history-verdict-line" title={`Monitor result summaries of ${STEP_LABELS[line.step].toLowerCase()}${title ? `\n${title}` : ""}`}>
           <span className="meta">{STEP_LABELS[line.step]}</span>
           {line.passed > 0 && <ToneBadge tone="ok">{line.passed} passed</ToneBadge>}
           {line.failed > 0 && <ToneBadge tone="bad">{line.failed} failed</ToneBadge>}

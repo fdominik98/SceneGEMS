@@ -159,8 +159,11 @@ class PoolService(MqttClient):
         return {"stamp": time.time(), "task_sender": self.name, "task-uuid": task_uuid, "request-id": request_id}
 
     def _publish(self, topic: str, message: Mapping[str, Any]) -> None:
-        if self.is_connected:
-            self.client.publish(topic, json.dumps(message), qos=1)
+        if not self.is_connected:
+            # Nothing sends it later: the job that waits for this message ends without it, and the log is where that shows
+            _logger.warning("Not connected to the broker: the message for request %s on %s is not sent", message.get("request-id"), topic)
+            return
+        self.client.publish(topic, json.dumps(message), qos=1)
 
     def publish_heartbeat_and_sensor_info(self) -> None:
         stamp = time.time()

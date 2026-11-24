@@ -217,7 +217,7 @@ describe("the settings of the whole campaign", () => {
     expect(map.settings.map((setting) => [setting.page, ...texts(setting.facts)])).toEqual([
       ["steps", "sweep", "Trajectory generation to simulation"],
       ["domain", "Customized for this campaign"],
-      ["resources", "Every machine, full capacity", "1 machine usable"],
+      ["resources", "Every machine, automatically", "1 machine usable"],
       ["policy", "Keep everything, base seed 7", "1 stop condition"],
     ]);
   });
@@ -241,14 +241,9 @@ describe("the settings of the whole campaign", () => {
   });
 
   it("says the machines are not read yet without a plan", () => {
-    const map = buildCampaignMap(
-      draftOf((draft) => {
-        draft.resources.fullUsage = false;
-        draft.resources.workerNodes = ["a", "b"];
-      }),
-      context()
-    );
-    expect(texts(map.settings[2].facts)).toEqual(["2 machines chosen", "Machines not read yet"]);
+    const map = buildCampaignMap(draftOf(), context());
+    // There is nothing to choose: the card says what the campaign runs on
+    expect(texts(map.settings[2].facts)).toEqual(["Every machine, automatically", "Machines not read yet"]);
   });
 });
 

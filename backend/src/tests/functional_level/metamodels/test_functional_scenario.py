@@ -58,11 +58,20 @@ def test_the_fsm_hash_tells_the_vessel_type_apart_and_the_fec_hash_does_not():
 
 def test_the_vessel_types_no_vessel_has_do_not_change_the_hash():
     text = CATALOG.get(f"{TWO_VESSELS}/fec0").read_content()
-    fewer_types = ModelParser.parse_problem(text.replace("SailingVessel, MilitaryVessel, MiniUSV}", "SailingVessel}"))
+    last_types = "PanamaxContainerShip, PanamaxBulkCarrier, PanamaxCruiseShip}"
+    assert last_types in text
+    fewer_types = ModelParser.parse_problem(text.replace(last_types, "PanamaxContainerShip}"))
     plain = ModelParser.parse_problem(text)
     assert len(fewer_types.vessel_types) == len(plain.vessel_types) - 2
     assert fewer_types.fsm_shape_hash() == plain.fsm_shape_hash()
     assert fewer_types.fec_shape_hash() == plain.fec_shape_hash()
+
+
+@pytest.mark.parametrize("vessel_type", ["PanamaxContainerShip", "PanamaxBulkCarrier", "PanamaxCruiseShip"])
+def test_the_own_ship_of_a_catalog_fec_can_be_a_panamax_ship(vessel_type):
+    scenario = _scenario(f"{TWO_VESSELS}/fec0", (OWN_SHIP_TYPE, f"vesselType(os, {vessel_type})"))
+    assert scenario.find_vessel_type_name(scenario.os_object) == vessel_type
+    assert scenario.fec_shape_hash() == _scenario(f"{TWO_VESSELS}/fec0").fec_shape_hash()
 
 
 @pytest.mark.parametrize("folder, size", [("2vessel_0obstacle_scenarios", 7), ("2vessel_1obstacle_scenarios", 7), ("3vessel_0obstacle_scenarios", 28), ("4vessel_0obstacle_scenarios", 84)])

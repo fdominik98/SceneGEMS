@@ -160,7 +160,8 @@ describe("the metamodel of a text", () => {
     expect(metamodel.classes[0]).toMatchObject({ abstract: true, superclasses: [] });
     expect(metamodel.classes[0].features.find((feature) => feature.name === "headOn")).toMatchObject({ type: "Vessel", multiplicity: "0..*", opposite: "headOn", target: "class" });
     expect(metamodel.classes[1]).toMatchObject({ superclasses: ["Vessel"], features: [expect.objectContaining({ name: "vesselType", target: "enum", multiplicity: "1" })] });
-    expect(metamodel.enums[0].literals).toHaveLength(10);
+    expect(metamodel.enums[0].literals).toHaveLength(13);
+    expect(metamodel.enums[0].literals.slice(-3)).toEqual(["PanamaxContainerShip", "PanamaxBulkCarrier", "PanamaxCruiseShip"]);
     expect(metamodel.predicates.filter((item) => !item.error).map((item) => item.name)).toEqual(["overtaking", "giveWay", "standOn", "ambiguous", "inCOLREGSSituationWith"]);
     expect(metamodel.predicates.filter((item) => item.error)).toHaveLength(7);
   });

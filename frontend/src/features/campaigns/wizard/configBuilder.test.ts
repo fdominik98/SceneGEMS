@@ -177,35 +177,17 @@ describe("buildCampaignConfig", () => {
     expect(supportsEnvironment(undefined)).toEqual({ wind: false, waves: false });
   });
 
-  it("writes only the resources that differ from the defaults", () => {
+  it("names no worker nodes, labels or priority of its own, and sizes the queues to the cluster's slots", () => {
     const draft = exitDraft();
-    draft.resources.fullUsage = false;
-    draft.resources.workerNodes = ["worker-node-b", "worker-node-a"];
-    draft.resources.labels = [
-      { key: "site", value: "lab" },
-      { key: "  ", value: "" },
-    ];
-    draft.resources.queueDepth.simulate = 64;
-    draft.resources.queueDepth.monitor = 32;
-    draft.resources.priority = 5;
-    expect(buildCampaignConfig(draft, catalog).resources).toEqual({ worker_nodes: ["worker-node-a", "worker-node-b"], required_labels: { site: "lab" }, queue_depth: { simulate: 64 }, priority: 5 });
-  });
-
-  it("names no worker nodes and sizes the queues to the cluster's slots in full usage", () => {
-    const draft = exitDraft();
-    draft.resources.workerNodes = ["worker-node-a"];
-    draft.resources.queueDepth.simulate = 4;
+    // Every machine takes the campaign's jobs: the config names none, so machines that join later count too
     expect(buildCampaignConfig(draft, catalog).resources).toEqual({ priority: 0 });
     const cluster: BuilderCatalog = { ...catalog, slots: { scene_generation: 40, simulation: 12, "monitoring.post_hoc": 64 } };
+    // A cap below the slots would leave slots without work: the caps follow the cluster, never below the defaults
     expect(buildCampaignConfig(draft, cluster).resources).toEqual({ queue_depth: { generate_scene: 40, monitor: 64 }, priority: 0 });
   });
 
-  it("keeps the operator's queue caps when the machines are chosen", () => {
-    const draft = exitDraft();
-    draft.resources.fullUsage = false;
-    draft.resources.workerNodes = ["worker-node-a"];
-    const cluster: BuilderCatalog = { ...catalog, slots: { scene_generation: 40 } };
-    expect(buildCampaignConfig(draft, cluster).resources).toEqual({ worker_nodes: ["worker-node-a"], priority: 0 });
+  it("holds no allocation settings in the draft", () => {
+    expect(Object.keys(exitDraft())).not.toContain("resources");
   });
 
   it("writes the stop conditions that are set", () => {

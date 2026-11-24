@@ -11,6 +11,8 @@ import {
   type CampaignRowTotals,
   type CampaignStep,
   type CampaignSummary,
+  type CaseView,
+  type PipelineStage,
   type VerdictState,
   type VerdictStep,
 } from "../../domain/cluster/schemas";
@@ -100,6 +102,15 @@ export function stepsLabel(steps: readonly CampaignStep[]): string {
   return steps.map((step, index) => (index === 0 ? STEP_LABELS[step] : STEP_LABELS[step].toLowerCase())).join(", ");
 }
 
+/** The steps as a list row says them: one step by its name, more as the stretch of the chain they cover ("Scene generation to simulation"). */
+export function stepsRangeLabel(steps: readonly CampaignStep[]): string {
+  if (steps.length === 0) {
+    return "";
+  }
+  const first = STEP_LABELS[steps[0]];
+  return steps.length === 1 ? first : `${first} to ${STEP_LABELS[steps[steps.length - 1]].toLowerCase()}`;
+}
+
 const CASE_STATE_ORDER = ["complete", "active", "dropped", "failed", "cancelled"];
 
 export interface VerdictLine {
@@ -144,6 +155,22 @@ function rank(state: string): number {
   return index === -1 ? CASE_STATE_ORDER.length : index;
 }
 
+function verdictLineText(line: VerdictLine): string {
+  const parts = [line.passed > 0 ? `${line.passed} passed` : null, line.failed > 0 ? `${line.failed} failed` : null, line.unmonitored > 0 ? `${line.unmonitored} unmonitored` : null];
+  return `${STEP_LABELS[line.step]}: ${parts.filter((part) => part !== null).join(", ")}`;
+}
+
+/**
+ * The verdicts a list row shows: those of the last step a monitor judged, which is what the entry
+ * was run for. The earlier steps' are in `others`, a line each for a tooltip.
+ */
+export function leadingVerdicts(lines: readonly VerdictLine[]): { shown: VerdictLine | null; others: string[] } {
+  if (lines.length === 0) {
+    return { shown: null, others: [] };
+  }
+  return { shown: lines[lines.length - 1], others: lines.slice(0, -1).map(verdictLineText) };
+}
+
 // The list
 
 /** Whether a row belongs in the list view: the route filters by kind, state and name, the step only here. */
@@ -161,14 +188,24 @@ export function matchesListView(row: CampaignRow, view: ListViewState): boolean 
   return q === "" || row.name.toLowerCase().includes(q);
 }
 
-/** The page as the live channel has it now: rows replaced by newer pushed ones, deleted ones and ones that left the filter dropped. */
+/**
+ * The row to show of a page's row and the one the live channel pushed for it. The pushed one wins
+ * unless the page's is newer, so also at the same `updated_at`: a campaign's totals change with its
+ * cases while its own row, and with it `updated_at`, stays as it is, and the channel pushes exactly
+ * those rows. Taking the page's row at a tie froze the totals of a running campaign.
+ */
+export function pushedOrPage(row: CampaignRow, pushed: CampaignRow): CampaignRow {
+  return newerSummary(pushed, row);
+}
+
+/** The page as the live channel has it now: rows replaced by pushed ones that are not older, deleted ones and ones that left the filter dropped. */
 export function mergeLiveRows(page: readonly CampaignRow[], live: CampaignsTopicState | null, view: ListViewState): CampaignRow[] {
   const rows = live
     ? page
         .filter((row) => !live.deleted.includes(row.campaign_id))
         .map((row) => {
           const pushed = live.rows[row.campaign_id];
-          return pushed ? newerSummary(row, pushed) : row;
+          return pushed ? pushedOrPage(row, pushed) : row;
         })
     : [...page];
   return rows.filter((row) => matchesListView(row, view));
@@ -253,6 +290,62 @@ export function outputFlags(row: OutputRow): OutputFlag[] {
     flags.push({ label: "incomplete", tone: "warn", title: "Not a complete plan, the best path the planner found: it ends early or still fails a COLREGS rule." });
   }
   return flags;
+}
+
+/** The flags of an output that say something is off: a valid and complete output, the usual case, has none. */
+export function outputProblemFlags(row: OutputRow): OutputFlag[] {
+  return outputFlags(row).filter((flag) => flag.tone !== "ok");
+}
+
+/** One line of the outputs table: an output, or the repeats of one run that ended the same way. */
+export interface OutputGroup {
+  /** The first row stands for the group; more than one row are repeats of its run with the same state, flags and monitor result summary. */
+  rows: OutputRow[];
+}
+
+function repeatSignature(row: OutputRow): string {
+  // The state log decides, not the monitor result summary: a run's summary judges its first repeat and only that repeat's row has it
+  return JSON.stringify([row.case_id, row.run_index, row.state, row.reason, row.valid, row.complete, row.artifact?.sha256 ?? null, row.input_source]);
+}
+
+/**
+ * The rows of a page with the repeats of a run folded into one line when they are the same run
+ * again: the same state log and state, which a repeatable stack gives. Three repeats then read as
+ * one result, not as three. Repeats whose state logs differ, and rows that are no repeats, keep a
+ * line each.
+ */
+export function groupRepeats(rows: readonly OutputRow[]): OutputGroup[] {
+  const groups: OutputGroup[] = [];
+  let signature: string | null = null;
+  for (const row of rows) {
+    const repeat = row.run_index !== null && row.repeat_index !== null;
+    const own = repeat ? repeatSignature(row) : null;
+    const last = groups[groups.length - 1];
+    if (own !== null && own === signature && last !== undefined) {
+      last.rows.push(row);
+    } else {
+      groups.push({ rows: [row] });
+    }
+    signature = own;
+  }
+  return groups;
+}
+
+/**
+ * The row of a line whose monitor result summary the line shows: the repeat the run's summary
+ * judged, which is the only one that carries it; the line's first row when none does.
+ */
+export function judgedRow(group: OutputGroup): OutputRow {
+  return group.rows.find((row) => row.verdict !== null) ?? group.rows[0];
+}
+
+/** The run of a line: "run 1, repeat 2" for one row, "run 1, 3 identical repeats" for folded repeats; null for other steps. */
+export function groupRunLabel(group: OutputGroup): string | null {
+  const [first] = group.rows;
+  if (group.rows.length === 1 || first.run_index === null) {
+    return runLabel(first);
+  }
+  return `run ${first.run_index + 1}, ${group.rows.length} identical repeats`;
 }
 
 /**
@@ -391,6 +484,61 @@ export function monitorSummary(verdict: OutputVerdict): MonitorSummary {
 /** Whether the outputs show the summary: the step has a monitor configured, or (the config not read yet, or changed since) a row says a monitor judged it. */
 export function showsMonitorSummary(monitored: boolean | null, rows: readonly OutputRow[]): boolean {
   return monitored === true || rows.some((row) => row.verdict !== null && row.verdict.state !== "unmonitored");
+}
+
+// Why cases did not complete
+
+/** What a case was doing when it stopped, in the words of the steps. */
+export const STAGE_LABELS: Record<PipelineStage, string> = {
+  explore_design_space: "design space exploration",
+  generate_scene: "scene generation",
+  monitor_scene: "monitoring of the scene",
+  generate_trajectories: "trajectory generation",
+  monitor_trajectories: "monitoring of the trajectories",
+  simulate: "simulation",
+  monitor: "monitoring of the run",
+  calibrate: "calibration",
+  verdict: "the verdict",
+};
+
+/** Cases that ended the same way: dropped or failed at one stage for one reason. */
+export interface FailureGroup {
+  state: "dropped" | "failed";
+  stage: PipelineStage;
+  /** The reason without what differs from case to case (the job and its id). */
+  reason: string;
+  count: number;
+  /** A case of the group, to open as an example. */
+  caseId: number;
+}
+
+const JOB_PREFIX = /^[a-z_]+(?::\d+)*\s+job\s+[0-9a-f-]{36}\s+failed:\s*/i;
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/** A case's reason as cases of the same cause share it: without the failed job's key and id. */
+export function commonReason(reason: string | null): string {
+  const text = (reason ?? "").replace(JOB_PREFIX, "").replace(UUID, "...").replace(/\s+/g, " ").trim();
+  return text === "" ? "no reason recorded" : text;
+}
+
+/** The dropped and failed cases by stage and reason, the most frequent first: what went wrong in an entry, in a few lines. */
+export function failureGroups(cases: readonly Pick<CaseView, "case_id" | "state" | "stage" | "reason">[]): FailureGroup[] {
+  const groups = new Map<string, FailureGroup>();
+  for (const entry of cases) {
+    if (entry.state !== "dropped" && entry.state !== "failed") {
+      continue;
+    }
+    const reason = commonReason(entry.reason);
+    const key = `${entry.state}|${entry.stage}|${reason}`;
+    const group = groups.get(key);
+    if (group) {
+      group.count += 1;
+    } else {
+      groups.set(key, { state: entry.state, stage: entry.stage, reason, count: 1, caseId: entry.case_id });
+    }
+  }
+  // Failed before dropped at the same count: a failed job is a fault of the system, a dropped case an output that did not qualify
+  return [...groups.values()].sort((a, b) => b.count - a.count || (a.state === b.state ? 0 : a.state === "failed" ? -1 : 1));
 }
 
 /** The tab a detail opens on: the remembered step when the entry runs it, else the last executed step. */

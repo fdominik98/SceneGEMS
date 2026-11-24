@@ -10,7 +10,7 @@ import { planKey, planResources, requiredCapabilities, slotsByJobType, startBloc
 import { useCatalogClasses, useCatalogStacks, useOperatorClient } from "../useCampaignData";
 import { buildCampaignMap, casesPerExploredFec, reviewStatusOf } from "./campaignMapModel";
 import { CampaignMap, type MapTarget } from "./CampaignMap";
-import { buildCampaignConfig, configToYaml, requiredLabelsOf, type BuilderCatalog } from "./configBuilder";
+import { buildCampaignConfig, configToYaml, type BuilderCatalog } from "./configBuilder";
 import { checkDraft } from "./draftChecks";
 import { DomainStep } from "./DomainStep";
 import { PolicyStep } from "./PolicyStep";
@@ -27,6 +27,8 @@ import { inputKindOf, visibleWizardSteps } from "./stepPlan";
 import type { CatalogState, ClusterResources, StepProps } from "./stepTypes";
 import { TrajectoriesStep } from "./TrajectoriesStep";
 import { useValidation, validationFromError } from "./useValidation";
+import { WizardGuide } from "./WizardGuide";
+import { wizardGuide } from "./guideModel";
 import { useWizardStore, WIZARD_STEP_LABELS, WIZARD_STEPS, type WizardStepId } from "./wizardState";
 import "./wizard.css";
 
@@ -35,6 +37,8 @@ const AUTO_CHECK_DELAY_MS = 700;
 const CLOCK_MS = 60_000;
 const EMPTY_BUILDER: BuilderCatalog = { stacks: [], generators: [] };
 const NO_WORKER_NODES: readonly WorkerNodeView[] = [];
+/** A campaign of the wizard requires no machine labels: every machine of the cluster takes its jobs. */
+const NO_LABELS: Readonly<Record<string, string>> = {};
 
 /** The plan as the previous render had it while it says the same (`planKey`): the map and the problem counts built from it are kept then. */
 function useSamePlan(plan: ResourcePlan | null): ResourcePlan | null {
@@ -75,8 +79,8 @@ function scrollToRun(runId: string) {
 /**
  * The create wizard: the steps of the chain to run, their input, the domain, a page per step the campaign runs
  * (scene generation, trajectory generation, the simulation runs), resources and policy, then a review that validates
- * the config on the control node. The campaign map above the pages draws the draft as a graph and opens the page of the box
- * clicked; the list of pages replaces it on request.
+ * the config on the control node. Above the pages, the guide lists what is still missing and leads to it, and the campaign map
+ * draws the draft as a graph and opens the page of the box clicked; the list of pages replaces the map on request.
  */
 export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const client = useOperatorClient();
@@ -119,9 +123,8 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const workerNodesError = useWorkerNodesStore((state) => state.error);
   const workerNodesLoaded = operatorUrl !== null && workerNodesUrl === operatorUrl && workerNodesReady;
   const workerNodes = workerNodesLoaded ? storeWorkerNodes : NO_WORKER_NODES;
-  const labels = useMemo(() => requiredLabelsOf(draft), [draft]);
   // Kept by content: heartbeats replace the worker node list every few seconds, the slots rarely change
-  const slotsKey = JSON.stringify(slotsByJobType(workerNodes, labels));
+  const slotsKey = JSON.stringify(slotsByJobType(workerNodes, NO_LABELS));
   const slots = useMemo(() => JSON.parse(slotsKey) as Record<string, number>, [slotsKey]);
 
   const builderCatalog = useMemo<BuilderCatalog>(
@@ -139,8 +142,8 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
   const localReasons = useMemo(() => checkDraft(draft, stacks.data ? builderCatalog : null, now), [draft, builderCatalog, stacks.data, now]);
 
   const freshPlan = useMemo(
-    () => (workerNodesLoaded ? planResources(requiredCapabilities(config), workerNodes, { workerNodes: draft.resources.fullUsage ? null : draft.resources.workerNodes, labels }) : null),
-    [workerNodesLoaded, config, workerNodes, draft.resources.fullUsage, draft.resources.workerNodes, labels]
+    () => (workerNodesLoaded ? planResources(requiredCapabilities(config), workerNodes, { workerNodes: null, labels: NO_LABELS }) : null),
+    [workerNodesLoaded, config, workerNodes]
   );
   // Kept by content: heartbeats replace the worker node views every few seconds, what the plan says rarely changes
   const plan = useSamePlan(freshPlan);
@@ -216,6 +219,9 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
     () => buildCampaignMap(draft, { stacks: stacks.data, classes: classes.data?.items, plan, problems, runProblems, review }),
     [draft, stacks.data, classes.data, plan, problems, runProblems, review]
   );
+
+  // What is left to do, whether or not its page was opened yet
+  const guide = useMemo(() => wizardGuide(pages, allReasons, plan?.missing.length ?? 0, review), [pages, allReasons, plan, review]);
 
   // A run card of the map opens the Simulation page at that run
   const pendingRun = useRef<string | null>(null);
@@ -335,6 +341,8 @@ export function CampaignWizard({ onClose, onCreated }: CampaignWizardProps) {
           </p>
         )}
       </header>
+      {/* The Review page lists what is missing and what the control node said itself */}
+      {step !== "review" && <WizardGuide guide={guide} current={step} onGoTo={setStep} />}
       <section className="wiz-map panel" aria-label={mapShown ? "Campaign map" : "Wizard pages"}>
         <div className="wiz-map-bar">
           <h4 className="wiz-map-title">{mapShown ? "Campaign map" : "Pages"}</h4>

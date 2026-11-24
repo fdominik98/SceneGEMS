@@ -17,6 +17,7 @@ from datetime import datetime
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Set
 
 from scenegems_tool.persistence.stores import (
+    EXPLORATION_CLASS_ID,
     CampaignEventRecord,
     CampaignRecord,
     CampaignTotals,
@@ -158,9 +159,14 @@ def classes_view(records: Sequence[ClassRecord], coverage: Iterable[ClassCoverag
 
 
 def campaign_detail_view(campaign: CampaignRecord, classes: List[Dict[str, Any]], config: Optional[Mapping[str, Any]] = None) -> Dict[str, Any]:
-    """The campaign with its FECs (counts and verdicts per run and state) and their totals; given its config, also steps, input and made_from."""
+    """The campaign with its FECs (counts and verdicts per run and state) and their totals; given its config, also steps, input and made_from.
+
+    The totals count the scenarios' FECs and cases: the class of a design space exploration, with its one case, is listed among the
+    FECs and left out of the totals, as the list row's totals and the outputs leave it out.
+    """
+    counted = [entry for entry in classes if entry["fec_id"] != EXPLORATION_CLASS_ID]
     verdicts: Dict[str, int] = {}
-    for entry in classes:
+    for entry in counted:
         for states in entry["verdicts"].values():
             for state, count in states.items():
                 verdicts[state] = verdicts.get(state, 0) + count
@@ -168,14 +174,14 @@ def campaign_detail_view(campaign: CampaignRecord, classes: List[Dict[str, Any]]
     if config is not None:
         view.update(config_view(config))
     view["totals"] = {
-        "fecs": len(classes),
-        "fecs_open": sum(1 for entry in classes if entry["state"] == "open"),
-        "fecs_complete": sum(1 for entry in classes if entry["state"] == "complete"),
-        "fecs_abandoned": sum(1 for entry in classes if entry["state"] == "abandoned"),
-        "quota": sum(entry["quota"] for entry in classes),
-        "complete": sum(entry["complete"] for entry in classes),
-        "dropped": sum(entry["dropped"] for entry in classes),
-        "in_flight": sum(entry["in_flight"] for entry in classes),
+        "fecs": len(counted),
+        "fecs_open": sum(1 for entry in counted if entry["state"] == "open"),
+        "fecs_complete": sum(1 for entry in counted if entry["state"] == "complete"),
+        "fecs_abandoned": sum(1 for entry in counted if entry["state"] == "abandoned"),
+        "quota": sum(entry["quota"] for entry in counted),
+        "complete": sum(entry["complete"] for entry in counted),
+        "dropped": sum(entry["dropped"] for entry in counted),
+        "in_flight": sum(entry["in_flight"] for entry in counted),
         "verdicts": verdicts,
     }
     view["fecs"] = classes

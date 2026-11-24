@@ -121,6 +121,13 @@ class TestHelmFiles:
             assert line in mission
         assert "domain = speed:0:20.0:51" in mission
 
+    @pytest.mark.parametrize("dt, app_tick", [(1.0, 2.0), (LEAD_IN_S, 1.0), (5.0, 1.0), (15.0, 1.0)])
+    def test_the_helms_period_is_within_the_lead_in_and_the_step(self, dt, app_tick):
+        """The helm's first pass is at BASE_TIME and the first step LEAD_IN_S later: with a period above that the helm is never due and the step times out."""
+        mission = mission_text(9003, dt, 8.0, 20.0)
+        assert f"AppTick = {app_tick!r}\n" in mission and f"CommsTick = {app_tick!r}\n" in mission
+        assert 1.0 / app_tick <= min(dt, LEAD_IN_S), "the clock moves at least one period before every pass"
+
     def test_the_behaviour_file_is_the_transit_and_the_avoidance_template(self):
         behaviours = behaviour_text(CONFIG)
         assert behaviours.count("Behavior = ") == 2 and "Behavior = BHV_Waypoint" in behaviours and "Behavior = BHV_AvdColregsV22" in behaviours
@@ -323,3 +330,28 @@ class TestMoosdbPorts:
         monkeypatch.setattr(moos_ivp_server, "serve_component", lambda *args, **kwargs: None)
         moos_ivp_server.main(["--port", "12000"])
         assert moos_ivp_server.HelmProcesses.first_port == moos_ivp_server.DEFAULT_MOOSDB_PORT
+
+
+class TestLogTail:
+    """What an error carries of a process's log: its last whole lines on one line, readable where the console shows the reason of a failed case."""
+
+    def test_the_colour_codes_of_a_terminal_are_left_out(self):
+        log = "\x1b[32mLoading behavior dynamic libraries specified in IVP_BEHAVIOR_DIRS...\n\x1b[0m  Environment variable IVP_BEHAVIOR_DIRS not set.\n\x1b[1;31mpHelmIvP is Running:\x1b[0m\n"
+        assert moos_ivp_server.log_tail(log) == "Loading behavior dynamic libraries specified in IVP_BEHAVIOR_DIRS... | Environment variable IVP_BEHAVIOR_DIRS not set. | pHelmIvP is Running:"
+
+    def test_a_long_log_gives_its_last_whole_lines(self):
+        log = "".join(f"line {index:03d} of the helm\n" for index in range(200))
+        tail = moos_ivp_server.log_tail(log, characters=70)
+        assert tail == "line 197 of the helm | line 198 of the helm | line 199 of the helm", "the line the cut went through is left out"
+        assert len(moos_ivp_server.log_tail(log)) <= moos_ivp_server.LOG_TAIL_CHARACTERS + 3 * 75
+
+    def test_a_short_log_is_given_whole_and_blank_lines_are_skipped(self):
+        assert moos_ivp_server.log_tail("first\n\n   \nsecond\n") == "first | second"
+        assert moos_ivp_server.log_tail("") == ""
+        assert moos_ivp_server.log_tail("one line without an end", characters=8) == "t an end", "a log of one long line keeps its end"
+
+    def test_an_error_names_its_cause_first_and_then_whose_log_follows(self, tmp_path):
+        helm = moos_ivp_server.HelmProcesses.__new__(moos_ivp_server.HelmProcesses)
+        helm._folder = str(tmp_path)
+        (tmp_path / "pHelmIvP.log").write_text("\x1b[32mpHelmIvP is Running:\x1b[0m\n|-Baseline AppTick   @ 0.4 Hz\n", encoding="utf-8")
+        assert helm._log_tail("pHelmIvP") == "The end of pHelmIvP's log: pHelmIvP is Running: | |-Baseline AppTick   @ 0.4 Hz"

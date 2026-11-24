@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { listHistory, listOutputs, type OutputRow } from "../../../domain/cluster/historyApi";
+import { isLaterRepeat, listHistory, listOutputs, type OutputRow } from "../../../domain/cluster/historyApi";
 import { describeOperatorError, type OperatorClient } from "../../../domain/cluster/operatorApi";
 import type { CampaignRow } from "../../../domain/cluster/schemas";
 import type { CampaignStep } from "../../../domain/cluster/schemas";
@@ -237,7 +237,7 @@ function OutputList({
                         <td title={row.fec_id}>{row.fec_id}</td>
                         <td>{row.state}</td>
                         <td>{problem ?? (flagsOf(row) || "available")}</td>
-                        <td>{row.verdict ? row.verdict.state : "none"}</td>
+                        <td>{row.verdict ? row.verdict.state : isLaterRepeat(row) ? "see repeat 1" : "none"}</td>
                         <td>
                           <button
                             type="button"

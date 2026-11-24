@@ -43,3 +43,10 @@
 .page-entry-status {
   margin: 0;
 }
+
+/* What is still on its way for the shown output (the monitor judging a loaded run). */
+.page-entry-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}

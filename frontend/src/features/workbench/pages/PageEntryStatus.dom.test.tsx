@@ -29,6 +29,13 @@ describe("PageEntryStatus", () => {
     expect(useHistoryStore.getState().entryId).toBe(ENTRY);
   });
 
+  it("says what is still on its way for the shown output", () => {
+    useTrajectoryPageStore.setState({ loaded: { page: "trajectoryGeneration", campaignId: ENTRY, caseId: 7, caseIndex: 0, step: "trajectory_generation" }, status: "shown", note: { tone: "busy", text: "The monitor is judging the run..." } });
+    render(<PageEntryStatus store={useTrajectoryPageStore} />);
+    expect(screen.getByText(/Case 1 of/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("The monitor is judging the run...");
+  });
+
   it("reports a failed load as an alert", () => {
     useTrajectoryPageStore.setState({ status: "failed", message: "The entry is gone." });
     render(<PageEntryStatus store={useTrajectoryPageStore} />);

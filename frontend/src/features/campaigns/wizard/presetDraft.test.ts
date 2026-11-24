@@ -54,7 +54,6 @@ describe("draftFromConfig", () => {
       ["usv navigation own ship", "kinematic.usv_navigation"],
     ]);
     expect(draft.domain).toMatchObject({ custom: false, sceneGenerationTimeoutS: 120 });
-    expect(draft.resources.fullUsage).toBe(true);
     expect(withoutIds(buildCampaignConfig(draft, catalog))).toEqual({ ...USV_PRESET, resources: { priority: 0 }, policy: { retention: "all", keep_frames: false, seed: 20261029 } });
   });
 
@@ -72,8 +71,9 @@ describe("draftFromConfig", () => {
     const [run] = draft.runs;
     expect(run).toMatchObject({ stackId: "ardupilot_sim.replay", repeats: 3, seed: 7, stackParameters: { speedup: 10 }, groups: { geofence: { radius_meters: 900 } } });
     expect(draft.domain).toMatchObject({ custom: true, colregsConstants: "A: 1\n" });
-    expect(draft.resources).toMatchObject({ fullUsage: false, workerNodes: ["worker-node-2"], labels: [{ key: "gpu", value: "yes" }], priority: 5 });
-    expect(draft.resources.queueDepth.simulate).toBe(4);
+    // What the config says about machines, queues and priority is not taken over: the wizard has no such settings
+    expect(Object.keys(draft)).not.toContain("resources");
+    expect(buildCampaignConfig(draft, catalog).resources).toEqual({ priority: 0 });
     expect(draft.policy).toMatchObject({ retention: "failures", keepFrames: true, seed: 3, maxCases: 10 });
     expect(draft.steps).toEqual(["simulation"]);
   });

@@ -20,6 +20,7 @@ from scenegems_tool.cluster.worker_node.job_report import JobFailed
 from scenegems_tool.cluster.worker_node.jobs.calibration_deviation_job import CalibrationDeviationPayload, compare
 from scenegems_tool.cluster.worker_node.jobs.job_runner import run_job
 from scenegems_tool.cluster.worker_node.subsystem import Subsystem
+from scenegems_tool.gateway.frame_series import decode_frames
 from scenegems_tool.subsystems.design_space_exploration.design_space import default_specification, parse_scope
 from scenegems_tool.subsystems.monitoring.monitoring_worker import SeriesMonitor
 from utils.file_system_utils import COLREGS_CONSTANTS_FOLDER, FUNCTIONAL_MODELS_FOLDER, STATIC_OBSTACLE_TYPES_FOLDER, VESSEL_TYPES_FOLDER
@@ -52,8 +53,9 @@ def test_post_hoc_monitoring_runs_on_the_monitoring_pool(k3d_worker_node, make_j
     for result in results:
         assert (result["scenes"], result["monitored_scenes"], result["time_step"]) == (121, 121, 1)
         assert {key: result[key] for key in ("rules", "failed_rules", "encounters", "encounter_roles", "passed")} == json.loads(json.dumps(in_process.summary()))
-    assert "frames" not in results[0] and [frame["timestamp"] for frame in results[1]["frames"]] == list(range(121))
-    assert {frame["scenarioId"] for frame in results[1]["frames"]} == {"monitor-1-1"}
+    frames = decode_frames(results[1]["frames"])
+    assert "frames" not in results[0] and [frame["timestamp"] for frame in frames] == list(range(121))
+    assert {frame["scenarioId"] for frame in frames} == {"monitor-1-1"}
 
 
 def test_the_design_space_exploration_pool_explores_and_refuses_what_does_not_parse(k3d_worker_node, make_job):

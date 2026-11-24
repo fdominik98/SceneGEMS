@@ -4,8 +4,17 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "../../app/uiStore";
 import { resetLiveChannels } from "../../domain/cluster/liveChannels";
-import { sampleCampaignDetail } from "../../test/fixtures/clusterViews";
-import { sampleCampaignRow, sampleHistoryRows, sampleMonitorVerdict, sampleRunningWorkbenchRow, sampleTrajectoryOutput, sampleWorkbenchRow } from "../../test/fixtures/historyViews";
+import { useResultsStore } from "../../domain/cluster/resultsStore";
+import { sampleCampaignDetail, sampleCase, sampleClass } from "../../test/fixtures/clusterViews";
+import {
+  sampleCampaignRow,
+  sampleHistoryRows,
+  sampleMonitorVerdict,
+  sampleRunningWorkbenchRow,
+  sampleSimulationOutput,
+  sampleTrajectoryOutput,
+  sampleWorkbenchRow,
+} from "../../test/fixtures/historyViews";
 import { sampleCatalogStacks } from "../../test/fixtures/campaignCatalog";
 import { MockWebSocket } from "../../test/mockWebSocket";
 import { useWizardStore } from "../campaigns/wizard/wizardState";
@@ -25,6 +34,11 @@ interface Call {
 let calls: Call[] = [];
 let deleteStatus = 204;
 let outputs: Record<string, unknown>[] = [];
+/** The cases the cases route lists by state. */
+let failedCases: Record<string, unknown>[] = [];
+let droppedCases: Record<string, unknown>[] = [];
+/** What the detail route answers differently from the sample detail. */
+let detailOverride: Record<string, unknown> = {};
 /** What the config route answers; null answers 404. */
 let entryConfig: Record<string, unknown> | null = null;
 /** Whether the control node answers its stack catalog (it answers 404 otherwise). */
@@ -57,7 +71,7 @@ function json(body: unknown, total?: number, status = 200): Response {
 
 function detailOf(row: Record<string, unknown>): Record<string, unknown> {
   const detail = sampleCampaignDetail();
-  return { ...row, totals: detail.totals, fecs: row.kind === "campaign" ? detail.fecs : [] };
+  return { ...row, totals: detail.totals, fecs: row.kind === "campaign" ? detail.fecs : [], ...detailOverride };
 }
 
 async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
@@ -77,6 +91,10 @@ async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
   }
   if (parts[3] === "outputs") {
     return json(outputs, outputs.length);
+  }
+  if (parts[3] === "cases" && parts.length === 4) {
+    const listed = url.searchParams.get("state") === "failed" ? failedCases : url.searchParams.get("state") === "dropped" ? droppedCases : [];
+    return json(listed, listed.length);
   }
   if (parts[3] === "config" && entryConfig !== null) {
     return json({ current_version: 1, versions: [{ version: 1, config_hash: "a", created_at: "2026-10-28T10:00:00+00:00", config: entryConfig }] });
@@ -116,6 +134,9 @@ beforeEach(() => {
   calls = [];
   deleteStatus = 204;
   outputs = [sampleTrajectoryOutput()];
+  failedCases = [];
+  droppedCases = [];
+  detailOverride = {};
   entryConfig = null;
   stacksServed = true;
   useWizardStore.getState().reset();
@@ -138,7 +159,11 @@ describe("Campaign History in the DOM", () => {
     const campaignRow = (await screen.findByRole("button", { name: "head-on sweep" })).closest("tr") as HTMLElement;
     expect(within(campaignRow).getByText("Campaign")).toBeInTheDocument();
     expect(within(campaignRow).getByText("from the wizard")).toBeInTheDocument();
-    expect(within(campaignRow).getByText("Scene generation, trajectory generation")).toBeInTheDocument();
+    // The steps as the stretch of the chain they cover; the full list is the cell's tooltip
+    expect(within(campaignRow).getByText("Scene generation to trajectory generation")).toHaveAttribute("title", "Scene generation, trajectory generation");
+    // An entry that starts from its own input does not say so
+    expect(within(campaignRow).queryByText(/its own input|made from/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Made from" })).not.toBeInTheDocument();
     expect(within(campaignRow).getByText("5 complete, 4 active, 1 dropped")).toBeInTheDocument();
     const workbenchRow = screen.getByRole("button", { name: "Trajectory generation" }).closest("tr") as HTMLElement;
     expect(within(workbenchRow).getByText("Workbench run")).toBeInTheDocument();
@@ -205,9 +230,13 @@ describe("Campaign History in the DOM", () => {
     expect(await screen.findByRole("heading", { name: "Trajectory generation", level: 3 })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Trajectory generation" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getAllByRole("tab")).toHaveLength(1);
-    expect(screen.getByText("the trajectory generation page")).toBeInTheDocument();
     // The name of the entry it was made from is known from the list
     expect(screen.getByRole("button", { name: "Made from head-on sweep" })).toBeInTheDocument();
+    // Who made the entry is a detail: it is there on request
+    expect(screen.queryByText("the trajectory generation page")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Entry details/ }));
+    expect(screen.getByText("the trajectory generation page")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Hide entry details/ }));
     // A workbench entry has no campaign controls
     expect(screen.queryByRole("region", { name: "Campaign controls" })).not.toBeInTheDocument();
 
@@ -300,6 +329,105 @@ describe("Campaign History in the DOM", () => {
     await waitFor(() => expect(calls.filter((call) => call.method === "DELETE" && call.path === "/cluster/campaigns/wb1")).toHaveLength(2));
   });
 
+  it("leaves out the column of the input's source when no output names one", async () => {
+    const user = userEvent.setup();
+    outputs = [sampleTrajectoryOutput({ input_source: null })];
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Trajectory generation" }));
+    expect(await screen.findByText("incomplete")).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Input from" })).not.toBeInTheDocument();
+    // What every output has says nothing: only the flag of what is off is shown
+    expect(screen.queryByText("valid")).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", { name: "Output" })).not.toBeInTheDocument();
+  });
+
+  it("folds the identical repeats of a run into one line, each still opening on the workbench", async () => {
+    const user = userEvent.setup();
+    const repeat = (index: number) => sampleSimulationOutput({ repeat_index: index, run_record_id: 30 + index, verdict: sampleMonitorVerdict() });
+    outputs = [repeat(0), repeat(1), repeat(2)];
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Simulation" }));
+    const line = (await screen.findByText("run 1, 3 identical repeats")).closest("tr") as HTMLElement;
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText(/1 to 3 of 3 runs, identical repeats on one line/)).toBeInTheDocument();
+    await user.click(within(line).getByRole("button", { name: "Open repeat 3 in the workbench" }));
+    expect(useWorkbenchTargetStore.getState().pending.simulation).toMatchObject({ campaignId: "wb2", caseId: 7, runRecordId: 32 });
+    act(() => useUiStore.getState().setSection("history"));
+    await user.click(within((await screen.findByText("run 1, 3 identical repeats")).closest("tr") as HTMLElement).getByRole("button", { name: "Open in workbench" }));
+    expect(useWorkbenchTargetStore.getState().pending.simulation).toMatchObject({ runRecordId: 30 });
+  });
+
+  it("shows the summary of the judged repeat on a folded line, and says where a later repeat on its own was judged", async () => {
+    const user = userEvent.setup();
+    const other = "9".repeat(64);
+    outputs = [
+      // The control node gives the run's summary to the repeat it judged, the first
+      sampleSimulationOutput({ repeat_index: 0, run_record_id: 30, verdict: sampleMonitorVerdict() }),
+      sampleSimulationOutput({ repeat_index: 1, run_record_id: 31, verdict: null }),
+      // A repeat with another state log keeps its own line
+      sampleSimulationOutput({ repeat_index: 2, run_record_id: 32, verdict: null, artifact: { sha256: other, size_bytes: 10, kind: "trajectories", media_type: "application/json", pointer: null } }),
+    ];
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "Simulation" }));
+    const folded = (await screen.findByText("run 1, 2 identical repeats")).closest("tr") as HTMLElement;
+    expect(within(folded).getByText("2 rules failed, first at 1 min 1 s")).toBeInTheDocument();
+    const alone = screen.getByText("run 1, repeat 3").closest("tr") as HTMLElement;
+    expect(within(alone).getByText("judged on repeat 1 of the run")).toBeInTheDocument();
+    expect(within(alone).queryByText(/no monitor result summary/)).not.toBeInTheDocument();
+  });
+
+  it("says why cases did not complete, the most frequent reason first", async () => {
+    const user = userEvent.setup();
+    const JOB = "69c13761-fcca-4d38-b1ff-9696bbc441f4";
+    failedCases = [
+      { ...sampleCase, case_id: 21, state: "failed", stage: "simulate", reason: `simulate:0:0 job ${JOB} failed: pHelmIvP did not acknowledge the tick` },
+      { ...sampleCase, case_id: 22, state: "failed", stage: "simulate", reason: "simulate:0:1 job e67af559-5178-4024-ad10-eb559e9f57d5 failed: pHelmIvP did not acknowledge the tick" },
+    ];
+    droppedCases = [{ ...sampleCase, case_id: 23, state: "dropped", stage: "generate_scene", reason: "the scene generation found no valid scene" }];
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    const panel = await screen.findByRole("region", { name: "Why cases did not complete" });
+    const reasons = await within(panel).findAllByRole("listitem");
+    expect(reasons).toHaveLength(2);
+    expect(reasons[0]).toHaveTextContent("2 failed");
+    expect(reasons[0]).toHaveTextContent("in simulation");
+    expect(reasons[0]).toHaveTextContent("pHelmIvP did not acknowledge the tick");
+    expect(reasons[0]).not.toHaveTextContent(JOB);
+    expect(reasons[1]).toHaveTextContent("1 dropped");
+    expect(reasons[1]).toHaveTextContent("in scene generation");
+    expect(calls.filter((call) => call.path === "/cluster/campaigns/c1/cases").map((call) => call.query.get("state")).sort()).toEqual(["dropped", "failed"]);
+    // A case of the reason opens in Results, where its jobs and their errors are
+    await user.click(within(reasons[0]).getByRole("button", { name: "Open a case" }));
+    expect(useUiStore.getState().section).toBe("results");
+    expect(useResultsStore.getState()).toMatchObject({ campaignId: "c1", caseId: 21 });
+  });
+
+  it("says that an entry which is still exploring has no cases to count yet", async () => {
+    const user = userEvent.setup();
+    outputs = [];
+    // The control node counts the scenarios' FECs and cases: while the exploration runs there are none
+    detailOverride = {
+      steps: ["design_space_exploration", "scene_generation"],
+      totals: { fecs: 0, fecs_open: 0, fecs_complete: 0, fecs_abandoned: 0, quota: 0, complete: 0, dropped: 0, in_flight: 0, verdicts: {} },
+      fecs: [sampleClass({ fec_id: "exploration", quota: 1, complete: 0, dropped: 0, in_flight: 1, vessel_count: 0, verdicts: {} })],
+    };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    expect(await screen.findByText("The design space exploration is finding the FECs; their cases follow.")).toBeInTheDocument();
+    expect(screen.queryByText(/0 in flight/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Why cases did not complete" })).not.toBeInTheDocument();
+  });
+
+  it("offers a running campaign the controls that apply to it, and a finished one none", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    const controls = await screen.findByRole("region", { name: "Campaign controls" });
+    expect(within(controls).getAllByRole("button").map((button) => button.textContent?.replace(/Holds.*|Lets.*|Ends.*/, "")).slice(0, 3)).toEqual(["Pause", "Drain", "Stop"]);
+    expect(within(controls).queryByRole("button", { name: /^Start/ })).not.toBeInTheDocument();
+    expect(within(controls).queryByRole("button", { name: /^Resume/ })).not.toBeInTheDocument();
+  });
+
   it("opens the campaign controls and the coverage for a campaign", async () => {
     const user = userEvent.setup();
     renderSection();
@@ -336,9 +464,22 @@ describe("loading a campaign's config into the wizard", () => {
       // The stored contents are the cluster's domain configuration: the draft uses the cluster's
       domain: { custom: false, sceneGenerationTimeoutS: 90 },
       trajectories: { generator: "straight", parameters: { timespan_s: 600 } },
-      resources: { fullUsage: true },
       policy: { seed: 7 },
     });
+    // The wizard has no allocation settings: a campaign made in it uses every machine
+    expect(Object.keys(draft)).not.toContain("resources");
+  });
+
+  it("says what a loaded config named about its machines, which the wizard does not take over", async () => {
+    const user = userEvent.setup();
+    entryConfig = { ...STORED_CAMPAIGN_CONFIG, resources: { ...STORED_CAMPAIGN_CONFIG.resources, worker_nodes: ["worker-node-2"], priority: 5 } };
+    renderSection();
+    await user.click(await screen.findByRole("button", { name: "head-on sweep" }));
+    await waitFor(async () => expect(await loadButton()).toBeEnabled());
+    await user.click(await loadButton());
+    expect(useWizardStore.getState().notice).toBe(
+      'Started from the config of "head-on sweep" (version 1). It named one chosen machine, priority 5; a campaign made here uses every machine automatically. Adjust it, then create the campaign.'
+    );
   });
 
   it("loads the version shown in the config panel", async () => {

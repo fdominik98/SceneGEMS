@@ -34,6 +34,12 @@ export interface PageOutput {
 /** idle: nothing loaded; running: the page's own run; following: a live entry; loading: fetching an entry's output. */
 export type PageStatus = "idle" | "running" | "following" | "loading" | "shown" | "failed";
 
+/** A line under the shown output: `busy` while something is still loading for it, `warning` when it did not come. */
+export interface PageNote {
+  tone: "busy" | "warning";
+  text: string;
+}
+
 export interface PageState {
   input: PageInput | null;
   loaded: WorkbenchTarget | null;
@@ -43,6 +49,9 @@ export interface PageState {
   message: string | null;
   /** The entry the running or followed job belongs to, while it runs. */
   activeEntryId: string | null;
+  /** What is still on its way for the shown output (the monitor judging a loaded run), or why it did not come; null otherwise. */
+  note: PageNote | null;
+  setNote: (note: PageNote | null) => void;
   setInput: (input: PageInput | null) => void;
   /** The page shows this entry's output now. */
   setLoaded: (target: WorkbenchTarget, output: PageOutput | null) => void;
@@ -137,12 +146,15 @@ export function createPageStore(page: WorkbenchPage, storage: () => Storage | nu
         status: "idle",
         message: null,
         activeEntryId: null,
+        note: null,
+        setNote: (note) => set({ note }),
         setInput: (input) => set({ input }),
-        setLoaded: (target, output) => set({ loaded: { ...target, live: undefined }, output, status: "shown", message: null, activeEntryId: null }),
-        setLocalOutput: (output) => set({ loaded: null, output, status: output === null ? "idle" : "shown", message: null }),
-        clearLoaded: (message) => set({ loaded: null, output: null, status: message === null ? "idle" : "failed", message, activeEntryId: null }),
+        setLoaded: (target, output) => set({ loaded: { ...target, live: undefined }, output, status: "shown", message: null, activeEntryId: null, note: null }),
+        setLocalOutput: (output) => set({ loaded: null, output, status: output === null ? "idle" : "shown", message: null, note: null }),
+        clearLoaded: (message) => set({ loaded: null, output: null, status: message === null ? "idle" : "failed", message, activeEntryId: null, note: null }),
+        // A note belongs to the shown output: any other state of the page (a run, a load, a failure) drops it.
         setStatus: (status, message = null, activeEntryId) =>
-          set((state) => ({ status, message, activeEntryId: activeEntryId === undefined ? state.activeEntryId : activeEntryId })),
+          set((state) => ({ status, message, activeEntryId: activeEntryId === undefined ? state.activeEntryId : activeEntryId, note: status === "shown" ? state.note : null })),
       }),
       {
         name: pageStorageKey(page),

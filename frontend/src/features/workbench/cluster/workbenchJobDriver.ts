@@ -130,6 +130,8 @@ export interface SimulationEntryRequest {
 export interface SimulationPageHooks {
   /** Loads trajectories on the simulation page (the gateway's scenario and the cluster's input); resolves once loaded. */
   loadSimulationInput: (scenarioContent: string, fileName: string, replayFrames: SimulationFrame[]) => Promise<void>;
+  /** Replaces the replayed frames of the loaded run (the monitor's judged frames, once they are there). */
+  replaceRunFrames: (frames: SimulationFrame[]) => void;
   /** Fills the setup from a loaded run's stack and environment. */
   fillSetup: (run: LoadedRun) => void;
 }
@@ -155,6 +157,7 @@ const NO_CLUSTER: ClusterAccess = {
 
 const NO_HOOKS: SimulationPageHooks = {
   loadSimulationInput: async () => undefined,
+  replaceRunFrames: (frames) => usePlaybackStore.getState().applyMergedSimulationFrames(frames),
   fillSetup: () => undefined,
 };
 
@@ -212,6 +215,8 @@ export class WorkbenchJobDriver {
   pollMs = 1000;
   /** Between two polls of a followed job without its live topic (`followJob` default when undefined); tests make it short. */
   jobPollMs: number | undefined = undefined;
+  /** The monitor's judged frames of a recorded run (the frames route); tests replace it. */
+  runFrames: typeof framesOfRun = framesOfRun;
 
   constructor(access: () => ClusterAccess = () => NO_CLUSTER, dispatch: (message: ParsedServerMessage) => void = () => undefined) {
     this.access = access;
@@ -636,13 +641,10 @@ export class WorkbenchJobDriver {
    * Monitors the trajectories loaded on the simulation page on the cluster and replaces the
    * preview's frames with the monitored ones, while the same scenario is still loaded.
    */
-  async monitorPreview(scenarioId: string, scenarioContent: string, colregsConstraintsContent: string): Promise<void> {
+  async monitorPreview(scenarioId: string, raw: unknown, colregsConstraintsContent: string): Promise<void> {
     this.previewMonitorJob?.abort();
     const playback = usePlaybackStore.getState();
-    let raw: unknown;
-    try {
-      raw = JSON.parse(scenarioContent);
-    } catch {
+    if (raw === null) {
       return;
     }
     if (!isFullTrajectoryScenario(raw)) {
@@ -684,6 +686,12 @@ export class WorkbenchJobDriver {
         this.previewMonitorJob = null;
       }
     }
+  }
+
+  /** The monitoring of a former preview no longer counts: another scenario is loaded, which needs none. */
+  cancelPreviewMonitor(): void {
+    this.previewMonitorJob?.abort();
+    this.previewMonitorJob = null;
   }
 
   // Trajectory generation
@@ -1164,8 +1172,12 @@ export class WorkbenchJobDriver {
     }
     try {
       const loaded = await loadEntryOutput(cluster.client, target, { signal: controller.signal });
-      if (!controller.signal.aborted) {
-        await this.showLoaded(target, loaded);
+      if (controller.signal.aborted) {
+        return;
+      }
+      await this.showLoaded(target, loaded);
+      if (loaded.step === "simulation" && !loaded.monitored && !controller.signal.aborted) {
+        await this.judgeLoadedRun(cluster, target, loaded, controller.signal);
       }
     } catch (error) {
       if (controller.signal.aborted || isAbort(error)) {
@@ -1207,6 +1219,40 @@ export class WorkbenchJobDriver {
         this.hooks.fillSetup(loaded);
         usePlaybackStore.getState().requestAutoFit();
         PAGE_STORES.simulation.getState().setLoaded({ ...target, runRecordId: loaded.runRecord.run_record_id, caseIndex: loaded.caseIndex }, null);
+      }
+    }
+  }
+
+  /**
+   * The monitor's judgment of a run the page already shows from its state log: a job of the monitor
+   * over the state log, which takes a while. The page says how far it is, and the judged frames
+   * replace the recorded ones. When they do not come, the run stays shown as it was recorded.
+   */
+  private async judgeLoadedRun(cluster: WorkbenchCluster, target: WorkbenchTarget, loaded: LoadedRun, signal: AbortSignal): Promise<void> {
+    const page = PAGE_STORES.simulation.getState();
+    const runRecordId = loaded.runRecord.run_record_id;
+    const shown = () => {
+      const now = PAGE_STORES.simulation.getState().loaded;
+      return !signal.aborted && now !== null && now.campaignId === target.campaignId && now.runRecordId === runRecordId;
+    };
+    const say = (text: string) => {
+      if (shown()) {
+        PAGE_STORES.simulation.getState().setNote({ tone: "busy", text: `${text} The run is shown as it was recorded meanwhile.` });
+      }
+    };
+    page.setNote({ tone: "busy", text: "Asking the monitor to judge the run... The run is shown as it was recorded meanwhile." });
+    try {
+      const frames = await this.runFrames(cluster.client, target.campaignId, runRecordId, signal, say);
+      if (shown()) {
+        this.hooks.replaceRunFrames(frames);
+        PAGE_STORES.simulation.getState().setNote(null);
+      }
+    } catch (error) {
+      if (signal.aborted || isAbort(error)) {
+        return;
+      }
+      if (shown()) {
+        PAGE_STORES.simulation.getState().setNote({ tone: "warning", text: `The run is shown without the monitor's judgment: ${describe(error)}` });
       }
     }
   }

@@ -101,6 +101,16 @@ export type InputSource = z.infer<typeof inputSourceSchema>;
 export type OutputVerdict = z.infer<typeof outputVerdictSchema>;
 export type OutputRow = z.infer<typeof outputRowSchema>;
 
+/**
+ * Whether an output is a repeat of a simulated run after the first. A run's verdict judges its first
+ * repeat (the others measure how repeatable the stack is), so the control node gives it to that
+ * repeat's row only and a later repeat has none of its own. A control node of before this showed
+ * the first repeat's verdict on every repeat.
+ */
+export function isLaterRepeat(row: Pick<OutputRow, "repeat_index">): boolean {
+  return row.repeat_index !== null && row.repeat_index > 0;
+}
+
 export interface OutputFilters {
   step: CampaignStep;
   state?: CaseState;

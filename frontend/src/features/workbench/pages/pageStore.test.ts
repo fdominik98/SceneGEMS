@@ -47,6 +47,20 @@ describe("page store", () => {
     expect(store.getState().input?.label).toBe("scene");
   });
 
+  it("keeps a note with the shown output only", () => {
+    const store = storeWith(new MemoryStorage(), "simulation");
+    const run: WorkbenchTarget = { page: "simulation", campaignId: "wb1", caseId: 3, step: "simulation", runRecordId: 11 };
+    store.getState().setLoaded(run, null);
+    store.getState().setNote({ tone: "busy", text: "The monitor is judging the run..." });
+    expect(store.getState().note?.text).toMatch(/judging/);
+    // Another run loaded, a run started or a failure: the note of the former output goes.
+    store.getState().setLoaded({ ...run, runRecordId: 12 }, null);
+    expect(store.getState().note).toBeNull();
+    store.getState().setNote({ tone: "warning", text: "The run is shown without the monitor's judgment." });
+    store.getState().setStatus("running", "Simulating");
+    expect(store.getState().note).toBeNull();
+  });
+
   it("drops the loaded target when the page shows a file", () => {
     const store = storeWith(new MemoryStorage(), "sceneGeneration");
     store.getState().setLoaded({ ...target, page: "sceneGeneration", step: "scene_generation" }, output);

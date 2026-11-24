@@ -177,6 +177,20 @@ def test_a_stream_the_subsystem_does_not_name_is_not_published(service):
     assert not [topic for topic, _ in service.client.published if "somewhere" in topic]
 
 
+def test_a_message_that_cannot_be_sent_is_named_in_the_log(service, caplog):
+    deliver(service, service.exec_command_topic, request())
+    service.pool.step()
+    sent = len(service.client.published)
+    service.connected_event.clear()  # the broker is gone while the task works
+    service.processes["r1"].work()
+    with caplog.at_level("WARNING", logger="scenegems_tool.messaging.mqtt_pool_service"):
+        service.pool.step()
+    assert len(service.client.published) == sent, "nothing is published while disconnected"
+    lost = [record.getMessage() for record in caplog.records if "is not sent" in record.getMessage()]
+    assert any(f"request r1 on {BASE}/sensor/result" in message for message in lost), "the lost result names its request and its topic"
+    assert any(f"request r1 on {BASE}/exec/response" in message for message in lost), "and so does the lost state"
+
+
 # A subsystem with more than one kind of request
 
 

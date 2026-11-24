@@ -208,11 +208,5 @@ export function checkDraft(draft: WizardDraft, catalog: BuilderCatalog | null, n
   if (runsStep(steps, "simulation") && draft.runs.length === 0) {
     reasons.push(local("runs", null, "runs", "Add at least one run."));
   }
-  if (!draft.resources.fullUsage && draft.resources.workerNodes.length === 0) {
-    reasons.push(local("resources", null, "worker_nodes", "Choose at least one machine, or use every machine."));
-  }
-  if (draft.resources.labels.some((label) => label.key.trim().length === 0 && label.value.length > 0)) {
-    reasons.push(local("resources", null, "required_labels", "A label value needs a name."));
-  }
   return reasons;
 }

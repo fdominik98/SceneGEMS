@@ -27,11 +27,14 @@ the selection below is too:
 
 Backpressure: a new case starts only while every stage has fewer queued jobs (and intents)
 of the campaign than its cap; how many start is bounded by the cap of the stage new cases
-start at (the first step cases run, or the exploration for the exploration case).
+start at (the first step cases run, or the exploration for the exploration case). The cap of
+a stage is the config's or, when that is larger, the slots the campaign's worker nodes offer
+for the stage now (ClusterCaps): a cap below the slots would start fewer cases in a tick than
+the cluster has free slots for, and leave them idle while work is left.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from scenegems_tool.assurance.campaign.campaign_config import QueueDepthCaps
 from scenegems_tool.assurance.pipeline.stage_graph import JOB_STAGES
@@ -90,11 +93,30 @@ def startable(record: ClassRecord) -> int:
     return max(0, record.quota - record.complete_count - record.in_flight_count)
 
 
-@dataclass
-class Backpressure:
-    """The campaign's queued jobs per stage against the config's caps."""
+@dataclass(frozen=True)
+class ClusterCaps:
+    """The config's caps raised to what the cluster runs at once.
+
+    slots are, per stage, the slots of the stage's job type on the worker nodes that may run the
+    campaign's jobs now. The cap of a stage is the larger of the two, so the queue of a stage can
+    always hold a job for every slot. The exploration keeps its cap of one: a campaign explores once.
+    """
 
     caps: QueueDepthCaps
+    slots: Mapping[PipelineStage, int] = field(default_factory=dict)
+
+    def cap(self, stage: PipelineStage) -> int:
+        configured = self.caps.cap(stage)
+        if stage == PipelineStage.EXPLORE_DESIGN_SPACE:
+            return configured
+        return max(configured, self.slots.get(stage, 0))
+
+
+@dataclass
+class Backpressure:
+    """The campaign's queued jobs per stage against the caps: the config's, or those raised to the cluster's slots."""
+
+    caps: Union[QueueDepthCaps, ClusterCaps]
     queued: Dict[PipelineStage, int] = field(default_factory=dict)
     first_stage: PipelineStage = PipelineStage.GENERATE_SCENE  # the stage new cases start at
 

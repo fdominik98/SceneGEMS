@@ -17,7 +17,7 @@ from scenegems_tool.persistence.schema import (
     StepKind,
     VerdictState,
 )
-from scenegems_tool.persistence.stores import CampaignStateConflict, CampaignTotals, ClassSpec, NewCase, NewRunRecord, NewVerdict, UnknownCampaign
+from scenegems_tool.persistence.stores import EXPLORATION_CLASS_ID, CampaignStateConflict, CampaignTotals, ClassSpec, NewCase, NewRunRecord, NewVerdict, UnknownCampaign
 from tests.scenegems_tool.persistence.stores.builders import CONFIG_HASH, START, make_class_spec, sha256_of
 from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B
 
@@ -258,6 +258,19 @@ def test_campaign_totals_count_cases_by_state_and_verdicts_by_step(stores, campa
     )
     assert totals[other.campaign_id] == CampaignTotals() == totals["missing"]
     assert stores.campaigns.campaign_totals([]) == {}
+
+
+def test_campaign_totals_leave_out_the_case_of_the_design_space_exploration(stores):
+    exploring = stores.campaigns.create_campaign(
+        "explore", {"name": "explore"}, CONFIG_HASH, [make_class_spec(EXPLORATION_CLASS_ID, quota=1, failure_budget=0, vessels=0), make_class_spec(CLASS_A, quota=1)]
+    )
+    (exploration,) = stores.cases.create_cases(exploring.campaign_id, [NewCase(EXPLORATION_CLASS_ID, 0, 7, stage=PipelineStage.EXPLORE_DESIGN_SPACE)])
+    assert stores.campaigns.campaign_totals([exploring.campaign_id])[exploring.campaign_id].cases == {}, "a running exploration is no scenario's case"
+    stores.cases.move_case(exploration.case_id, exploration.version, stage=PipelineStage.VERDICT, state=CaseState.COMPLETE)
+    (scenario,) = stores.cases.create_cases(exploring.campaign_id, [NewCase(class_id=CLASS_A, case_index=0, seed=0)])
+    stores.cases.move_case(scenario.case_id, scenario.version, state=CaseState.FAILED, reason="simulate:0:0 job failed")
+    # No scenario case completed: the exploration's complete case must not read as one
+    assert stores.campaigns.campaign_totals([exploring.campaign_id])[exploring.campaign_id].cases == {CaseState.FAILED: 1}
 
 
 def test_current_configs_of_a_page_of_campaigns(stores, campaign):

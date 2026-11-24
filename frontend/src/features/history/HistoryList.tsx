@@ -6,7 +6,7 @@ import { formatDateTime, plural } from "../campaigns/campaignFormat";
 import { ACTUAL_STATES, ACTUAL_STATE_LABELS, LIST_PAGE_SIZES, pageInfo } from "./campaignModel";
 import { EmptyState, StateBadge, ToneBadge } from "./campaignParts";
 import { DeleteEntry } from "./DeleteEntry";
-import { entryKind, entrySteps, KIND_LABELS, madeByLabel, rowOriginNote, rowTotalsSummary, STEP_LABELS, stepsLabel } from "./historyModel";
+import { entryKind, entrySteps, KIND_LABELS, leadingVerdicts, madeByLabel, rowOriginNote, rowTotalsSummary, STEP_LABELS, stepsLabel, stepsRangeLabel } from "./historyModel";
 import { MadeFrom, VerdictChips } from "./historyParts";
 import { useHistoryStore } from "./historyStore";
 import { useHistoryList } from "./useHistoryData";
@@ -27,7 +27,9 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
   const kind = entryKind(entry);
   const steps = entrySteps(entry);
   const totals = rowTotalsSummary(entry.totals, steps);
+  const verdicts = leadingVerdicts(totals.verdicts);
   const originNote = rowOriginNote(entry);
+  const madeFrom = entry.made_from ?? [];
   return (
     <tr className="camp-row" onClick={() => onOpen(entry.campaign_id)}>
       <td className="camp-cell-name">
@@ -40,18 +42,22 @@ function EntryRow({ entry, names, onOpen }: { entry: CampaignRow; names: Map<str
           </ToneBadge>
           {originNote && <span className="meta">{originNote}</span>}
         </span>
+        {/* Most entries start from their own input: only an entry made from others says so */}
+        {madeFrom.length > 0 && (
+          <span className="history-kind-line">
+            <span className="meta">made from</span>
+            <MadeFrom ids={madeFrom} names={names} onOpen={onOpen} />
+          </span>
+        )}
         {entry.state_reason && <span className="camp-reason">{entry.state_reason}</span>}
       </td>
-      <td>{stepsLabel(steps)}</td>
+      <td title={stepsLabel(steps)}>{stepsRangeLabel(steps)}</td>
       <td>
         <StateBadge state={entry.actual_state} desired={entry.desired_state} />
       </td>
-      <td className="history-cell-made-from">
-        <MadeFrom ids={entry.made_from ?? []} names={names} onOpen={onOpen} />
-      </td>
       <td className="history-cell-totals">
         {totals.cases === null ? <span className="meta">not reported</span> : <span>{totals.cases}</span>}
-        <VerdictChips lines={totals.verdicts} />
+        <VerdictChips lines={verdicts.shown ? [verdicts.shown] : []} title={verdicts.others.length > 0 ? `Earlier steps\n${verdicts.others.join("\n")}` : undefined} />
       </td>
       <td className="camp-cell-time" title={formatDateTime(entry.created_at)}>
         {formatDateTime(entry.created_at).slice(0, 16)}
@@ -190,8 +196,7 @@ export function HistoryList({ onOpen, clusterName, operatorUrl }: HistoryListPro
                 <th>Entry</th>
                 <th>Steps</th>
                 <th>State</th>
-                <th>Made from</th>
-                <th>Totals</th>
+                <th title="The cases by state, and the monitor result summaries of the last step a monitor judged">Cases and results</th>
                 <th>Created</th>
                 <th>
                   <span className="sr-only">Actions</span>

@@ -65,4 +65,16 @@ describe("the Resources page", () => {
     setup(workerNodes);
     expect(screen.getByRole("alert")).toHaveTextContent("No usable machine of the campaign runs simulation with Replay, ArduPilot and ArduPilot SITL.");
   });
+
+  it("has nothing to set: no machine to choose, no queue size, priority or label", () => {
+    setup([workerNode("sitl", { simulation: 2 }, SITL), workerNode("gazebo", { simulation: 1 }, GAZEBO_ONLY)]);
+    const machines = screen.getByRole("region", { name: "Machines" });
+    expect(within(machines).getByText(/Nothing to set here: the campaign uses every machine that can take jobs/)).toHaveTextContent("2 machines usable now.");
+    expect(within(machines).getAllByRole("listitem").filter((item) => item.classList.contains("wiz-machine"))).toHaveLength(2);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Advanced|Priority|Queue depth|label/)).not.toBeInTheDocument();
+  });
 });

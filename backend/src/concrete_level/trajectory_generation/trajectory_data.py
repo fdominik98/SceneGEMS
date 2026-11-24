@@ -11,7 +11,8 @@ from utils.serializable import Serializable
 
 # The trajectory generation result is a serialized TrajectoryData plus the monitor output
 # recorded for each of its scenes. "monitor_frames" is index-aligned with
-# trajectories.scene_list and is not a TrajectoryData field, so producer
+# trajectories.scene_list, written as a series of scenegems_tool/gateway/frame_series.py
+# (a list, or an object whose frames leave out what repeats), and is not a TrajectoryData field, so producer
 # (trajectory_generation_worker._trajectory_payload) and consumer both go through these
 # names rather than repeating the literal.
 MONITOR_FRAMES_KEY = "monitor_frames"

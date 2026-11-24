@@ -7,7 +7,7 @@ import pytest
 from websockets.asyncio.client import connect
 
 from scenegems_tool.cluster.control_node.api.control_node_apps import create_control_node_apps
-from scenegems_tool.cluster.control_node.server import MAX_WORKER_NODE_FRAME_BYTES, build_assurance_stores, build_control_node, build_live_channel, listeners, load_env_file
+from scenegems_tool.cluster.control_node.server import MAX_OPERATOR_FRAME_BYTES, MAX_WORKER_NODE_FRAME_BYTES, build_assurance_stores, build_control_node, build_live_channel, listeners, load_env_file
 from scenegems_tool.cluster.control_node.settings import BrokerClientSettings, ControlNodeSettings, Listener
 from scenegems_tool.cluster.protocol.codec import decode_control_node_message, encode
 from scenegems_tool.cluster.protocol.jobs import JobSubmission
@@ -26,6 +26,8 @@ def test_the_control_node_has_two_plain_listeners_on_their_hosts(plane):
     worker_node_api, operator = listeners(_settings(), apps)
     assert worker_node_api.config.ssl_certfile is None and operator.config.ssl_certfile is None
     assert operator.config.ws_ping_interval is None and worker_node_api.config.ws_max_size == MAX_WORKER_NODE_FRAME_BYTES == 64 * 1024 * 1024
+    # The console sends a scenario file to the gateway as one message: uvicorn's default of 16 MiB would close the socket on a long run's trajectories
+    assert operator.config.ws_max_size == MAX_OPERATOR_FRAME_BYTES == 64 * 1024 * 1024
     assert (worker_node_api.config.app, operator.config.app) == (apps.worker_node_api, apps.operator)
     assert len(listeners(_settings(), apps)) == 2  # no broker login hook
 

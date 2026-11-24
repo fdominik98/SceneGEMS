@@ -290,17 +290,17 @@ function reviewFacts(draft: WizardDraft, context: MapContext, steps: readonly Ca
 
 function settingsOf(draft: WizardDraft, context: MapContext): MapSetting[] {
   const { plan, problems } = context;
-  const { resources, policy } = draft;
+  const { policy } = draft;
   let machines: MapFact[];
   if (plan === null) {
-    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.workerNodes.length, "machine")} chosen`), fact("Machines not read yet", "muted")];
+    machines = [fact("Every machine, automatically"), fact("Machines not read yet", "muted")];
   } else if (plan.missing.length > 0) {
     // The need as the resources step names it: a simulation with the components its runs need
     const label = needLabel(plan.missing[0]);
     const missing = label.charAt(0).toUpperCase() + label.slice(1);
     machines = [fact(plan.missing.length === 1 ? `Missing: ${missing}` : `Missing: ${missing} and ${plan.missing.length - 1} more`, "bad")];
   } else {
-    machines = [fact(resources.fullUsage ? "Every machine, full capacity" : `${plural(resources.workerNodes.length, "machine")} chosen`), fact(`${plural(plan.usable.length, "machine")} usable`, plan.usable.length > 0 ? "ok" : "warn")];
+    machines = [fact("Every machine, automatically"), fact(`${plural(plan.usable.length, "machine")} usable`, plan.usable.length > 0 ? "ok" : "warn")];
   }
   const stops = [policy.maxCases, policy.maxFailedVerdicts, policy.maxDurationS].filter((value) => value !== null).length;
   const name = draft.name.trim();

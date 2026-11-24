@@ -5,8 +5,48 @@ import {
   buildFramesFromTrajectoryData,
   buildScenarioJsonForServer,
   formatScenarioJsonForExport,
+  GATEWAY_SCENARIO_LIMIT_BYTES,
+  gatewayClosedMessage,
+  gatewayScenarioContent,
+  gatewayTooLargeMessage,
+  hasMonitorFrames,
   parseScenarioFile,
 } from "./parseEvaluationDataFile";
+
+describe("a planned trajectory that carries the monitor's frames", () => {
+  const scene = { _data: [] };
+  const judged = { ruleResults: [], situationContexts: [] };
+
+  it("goes to the gateway without them, the rest unchanged", () => {
+    const raw = { config_name: "3vessel", trajectories: { scene_list: [scene, scene], time_step: 1 }, monitor_frames: [judged, judged] };
+    const content = JSON.stringify(raw);
+    expect(JSON.parse(gatewayScenarioContent(raw, content))).toEqual({ config_name: "3vessel", trajectories: raw.trajectories });
+  });
+
+  it("goes to the gateway as it is when it carries none, or is no object", () => {
+    const content = JSON.stringify({ trajectories: { scene_list: [scene], time_step: 1 } });
+    expect(gatewayScenarioContent(JSON.parse(content), content)).toBe(content);
+    expect(gatewayScenarioContent(null, "not json")).toBe("not json");
+  });
+
+  it("says why a file is not sent, and what a socket that closed over a file means", () => {
+    expect(GATEWAY_SCENARIO_LIMIT_BYTES).toBeLessThan(64 * 1024 * 1024);
+    expect(gatewayTooLargeMessage(80 * 1024 * 1024)).toBe("The scenario is too large for the workbench server: 80 MB, and it takes 60 MB.");
+    // Above what a control node of an earlier release takes, that limit is the likely cause
+    expect(gatewayClosedMessage(20 * 1024 * 1024)).toMatch(/closed the connection while it took the scenario \(20 MB\)\. A control node of an earlier release takes 16 MB/);
+    expect(gatewayClosedMessage(3.5 * 1024 * 1024)).toBe("The workbench server closed the connection before it answered for the scenario (3.5 MB): load it again.");
+  });
+
+  it("is judged already only with a monitor frame for every scene", () => {
+    const trajectories = { scene_list: [scene, scene], time_step: 1 };
+    expect(hasMonitorFrames({ trajectories, monitor_frames: [judged, judged] })).toBe(true);
+    expect(hasMonitorFrames({ trajectories, monitor_frames: [judged] })).toBe(false);
+    expect(hasMonitorFrames({ trajectories, monitor_frames: [judged, null] })).toBe(false);
+    expect(hasMonitorFrames({ trajectories, monitor_frames: [judged, {}] })).toBe(false);
+    expect(hasMonitorFrames({ trajectories })).toBe(false);
+    expect(hasMonitorFrames({ best_scene: scene, monitor_frames: [judged] })).toBe(false);
+  });
+});
 
 describe("parseScenarioFile", () => {
   it("parses wrapped scene and metadata", () => {

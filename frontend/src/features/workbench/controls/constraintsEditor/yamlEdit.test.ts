@@ -119,9 +119,11 @@ describe("table operations", () => {
   it("removes a row and keeps the others and their comments", () => {
     const edited = edit(VESSEL_TYPES, { kind: "removeRow", path: [], key: "Tanker" });
     expect(parse(edited)).not.toHaveProperty("Tanker");
-    expect(Object.keys(parse(edited))).toHaveLength(10);
+    expect(Object.keys(parse(edited))).toHaveLength(13);
     // The comment of the removed row goes with it.
-    expect(commentsOf(edited)).toEqual(commentsOf(VESSEL_TYPES).filter((comment) => comment !== "# ~0.34 deg/s"));
+    const comments = commentsOf(VESSEL_TYPES);
+    const removed = comments.indexOf("# ~0.34 deg/s"); // the Tanker's; the Panamax bulk carrier turns as slowly and keeps its own
+    expect(commentsOf(edited)).toEqual(comments.filter((_, index) => index !== removed));
     expect(edited.split("\n").every((line) => line === "" || line.endsWith("\r"))).toBe(true);
   });
 
@@ -213,7 +215,7 @@ describe("table operations", () => {
     const text = edit(VESSEL_TYPES, { kind: "duplicateRow", path: [], key: "MiniUSV", newKey: "Skiff" });
     const model = buildConstraintsModel(text);
     const fields = model.ok ? flattenScalarFields(model.root) : [];
-    expect(fields).toHaveLength(12 * 11);
+    expect(fields).toHaveLength(15 * 11);
     expect(fields.every((field) => typeof field.value === (field.key === "steering_type" ? "string" : "number"))).toBe(true);
     expect(parse(text).Skiff).toMatchObject({ steering_type: "skid", block_coefficient: 0.45, length_to_beam: 2, beam_to_draft: 4 });
   });

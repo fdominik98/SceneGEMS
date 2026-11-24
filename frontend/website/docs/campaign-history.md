@@ -14,10 +14,9 @@ Each row shows:
 | Column | Description |
 |--------|-------------|
 | Entry | The name, the kind (campaign or workbench run) and, for a campaign, where it was made (the wizard or the command line). A workbench run comes from the page of the step its **Steps** column names, so the row does not repeat it; the kind's tooltip has it. An entry an earlier release recorded from a live session on the control node says "live session", and entries made before Campaign History existed say "not recorded" |
-| Steps | The steps the entry runs, in chain order |
+| Steps | The steps the entry runs: one step by its name, more as the stretch of the chain they cover ("Scene generation to simulation"); the tooltip lists them |
 | State | Created, running, paused, draining, stalled, stopped or completed, with what it is asked to become when that differs |
-| Made from | Links to the entries whose outputs this one took as its input; "its own input" when it started from catalog FECs, scenarios or files |
-| Totals | Cases by state, and the monitor result summaries of each monitored step |
+| Cases and results | Cases by state, and the monitor result summaries of the last step a monitor judged (the earlier steps' are in the tooltip) |
 | Created | When the entry was made, in your local time to the minute (the tooltip has the seconds). Every page writes a time the same way: `2026-11-12 13:08` |
 
 Filter the list by kind, by state, by step and by a part of the name. The kind, state and name filters are applied by the control node; the step filter narrows the page that is shown. The list follows the control node's live channel (the badge says **live**); when the channel does not deliver, it is read every 4 seconds (**polling**).
@@ -32,9 +31,10 @@ Filter the list by kind, by state, by step and by a part of the name. The kind, 
 
 Clicking a row opens the entry:
 
-- **Header**: the name, the kind, the state, who made it, what it was made from and its input. **Open the results** shows its findings in Results; **Load the config into the wizard** (campaigns only) starts a new campaign from its config, see below; **Delete** removes a finished entry. **Entry details** has the id, the times and the config version.
-- **Controls** (campaigns only): Start, Pause, Drain, Resume and Stop, each with what it does. A stop is confirmed and cannot be undone.
-- **Numbers**: complete cases against the quota, cases in flight and dropped, and the monitor result summaries.
+- **Header**: the name, the kind, the state, the steps, how long it ran and, when it took its input from other entries, links to them. **Open the results** shows its findings in Results; **Load the config into the wizard** (campaigns only) starts a new campaign from its config, see below; **Delete** removes a finished entry. **Entry details** has who made it, what it was made from, its input, the base seed, the id and the times.
+- **Controls** (campaigns only): the controls that apply to the campaign now, each with what it does: Pause, Drain and Stop while it runs, Resume and Stop while it is paused or draining, Start before it started. A finished campaign has none, so the bar is not shown. A stop is confirmed and cannot be undone.
+- **Numbers**: complete cases against the quota, cases in flight, cases dropped or failed, and the monitor result summaries. The cases are those of the scenarios: the design space exploration's own run is not counted, here or in the list, so an entry that is still exploring has no cases yet and says so.
+- **Why cases did not complete**: shown when cases were dropped or failed. It groups them by the step they stopped at and the reason they share, the most frequent first, so one line says what many rows of the outputs say one by one: "12 failed in trajectory generation" with the error, "8 dropped in scene generation" because no valid scene was found. **Open a case** shows one case of the reason in Results, with its jobs and their errors. It reads at most 200 dropped and 200 failed cases.
 - **Outputs per step**: a tab per executed step with its outputs, a page of 20 at a time.
 - **Coverage** (campaigns only): the FECs (functional equivalence classes) with their progress, failure budgets and monitor result summaries per run. A campaign that explores lists `exploration`, labeled as the design space exploration itself, and then the FECs it found as `explored/<index>`. A campaign that only explores shows a tile with the number of explored FECs and says they need no cases.
 - **Activity log** and **Config**: the entry's events and its config versions as YAML.
@@ -47,7 +47,7 @@ The draft holds what the config says, written the way the wizard writes it:
 
 - The input comes along: uploaded scenario files and the scenes or trajectories picked from other entries. The control node keeps those files for as long as an entry uses them; when an entry they came from was deleted, the Review page reports the item.
 - Domain contents equal to the cluster's domain configuration become "the cluster's configuration", so a later change of the cluster's configuration applies. Contents that differ stay the campaign's own.
-- A campaign that named no worker nodes uses every worker node, with the queue caps sized to the cluster as it is now. One that named worker nodes keeps them and its queue caps.
+- The new campaign uses every machine of the cluster, with the queue caps sized to the cluster as it is now. The wizard has no setting for machines, labels or priority; when the loaded config named any, the notice says so.
 - A run whose stack this control node does not offer needs another stack on the Simulation page; the notice counts such runs.
 
 The button waits for the control node's stack catalog and domain configuration, which it needs to read the config. Workbench runs have no such button: run them again on their workbench page.
@@ -60,10 +60,9 @@ The tab of the design space exploration lists the explored FECs with their vesse
 
 | Column | Description |
 |--------|-------------|
-| Case | The case, its FEC, and the run and repeat of a simulated run |
-| State | In progress, complete, dropped, failed or cancelled, with the reason |
-| Output | **valid** or **not valid** (the case dropped at this step), and **complete** or **incomplete** (the best trajectory set the planner found: it ends early or still fails a COLREGS rule) |
-| Monitor result summary | Only for a step with a monitor configured: whether the monitor passed or failed the output and, per vessel pair, the scenario type, each vessel's role (give-way or stand-on) and the rules that failed. Pairs that never met in an encounter are only counted, and a list longer than three failed rules is cut short: Results has them all. A summary written before the roles were recorded says "roles not recorded" |
-| Input from | The case of another entry the input came from (a link), the uploaded file, or "a deleted entry" |
+| Case | The case, its FEC, and the run and repeat of a simulated run. Repeats of a run that are the same run again (the same state log and state, as a repeatable stack gives) share one line, "run 1, 3 identical repeats" |
+| State | In progress, complete, dropped, failed or cancelled, with the reason, and a flag for what is off about the output: **not valid** (the case dropped at this step) or **incomplete** (the best trajectory set the planner found: it ends early or still fails a COLREGS rule). A valid and complete output has no flag |
+| Monitor result summary | Only for a step with a monitor configured: whether the monitor passed or failed the output and, per vessel pair, the scenario type, each vessel's role (give-way or stand-on) and the rules that failed. Pairs that never met in an encounter are only counted, and a list longer than three failed rules is cut short: Results has them all. A summary written before the roles were recorded says "roles not recorded". The monitor judges the first repeat of a simulated run, and the other repeats measure how repeatable the stack is: a line of folded repeats shows that summary, and a later repeat on a line of its own says "judged on repeat 1 of the run" |
+| Input from | The case of another entry the input came from (a link), the uploaded file, or "a deleted entry". The column is left out when no output of the page names a source |
 
-**Open in workbench** loads the output on its page: a scene on Scene Generation, a trajectory set on Trajectory Generation, a simulated run on Simulation (as a replay of its frames with the monitor). A case still working on the step shows **Watch live** instead, which opens the page following the running job.
+**Open in workbench** loads the output on its page: a scene on Scene Generation, a trajectory set on Trajectory Generation, a simulated run on Simulation. A run is shown at once as its state log recorded it; the monitor's judgment of it is a job on a worker node that takes a while, and the page says how far it is and adds the judgment when it is there. A line of folded repeats opens its first repeat, and the numbers under the button the others. A case still working on the step shows **Watch live** instead, which opens the page following the running job.

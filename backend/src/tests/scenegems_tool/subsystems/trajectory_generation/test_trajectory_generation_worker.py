@@ -5,6 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from concrete_level.trajectory_generation.trajectory_data import MONITOR_FRAMES_KEY, TrajectoryData
+from scenegems_tool.gateway.frame_series import decode_frames, is_encoded
 from scenegems_tool.subsystems.trajectory_generation import trajectory_generation_worker
 from scenegems_tool.subsystems.trajectory_generation.trajectory_generation_types import (
     TRAJECTORY_PREVIEW_STREAM,
@@ -111,6 +113,32 @@ def test_a_partial_path_is_valid_but_not_complete(search, expected, monkeypatch)
     trajectory_generation_worker._emit_result(channel, task, search, lambda trajectories, iteration: SimpleNamespace(trajectories=trajectories))
     [(payload, valid, complete, error)] = _results(channel)
     assert (valid, complete, error) == expected
+
+
+def test_the_monitor_frames_of_a_plan_are_written_without_what_repeats_and_read_back_whole(monkeypatch):
+    trajectories = encounter_trajectories("crossing_from_starboard", 60)
+    data = TrajectoryData(config_name="crossing", trajectories=trajectories)
+    rules = [{"relationId": "0->1", "isFailed": False, "rules": [{"ruleId": "rule:16", "result": "PASSED"}]}]
+    frames = [{"ruleResults": rules, "metrics": {"scene": {"dcpa": float(index)}}} for index in range(len(trajectories.scene_list))]
+    monkeypatch.setattr(trajectory_generation_worker, "serialize_monitored_trajectory", lambda monitored: frames)
+    payload = trajectory_generation_worker._trajectory_payload(data, object())
+    written = payload[MONITOR_FRAMES_KEY]
+    assert is_encoded(written) and decode_frames(written) == frames, "one frame per scene, as the monitor gave them"
+    assert all("ruleResults" not in frame and "metrics" in frame for frame in written["encoded_frames"][1:]), "the rule results that did not change are left out"
+    # The trajectories themselves are untouched, and the payload still loads as trajectory data
+    assert payload["trajectories"] == data.to_dict()["trajectories"]
+    assert TrajectoryData.from_payload(json.loads(json.dumps(payload))).config_name == "crossing"
+
+
+def test_a_plan_without_a_monitored_path_carries_no_monitor_frames(monkeypatch):
+    data = TrajectoryData(config_name="crossing", trajectories=encounter_trajectories("crossing_from_starboard", 60))
+    assert MONITOR_FRAMES_KEY not in trajectory_generation_worker._trajectory_payload(data, None)
+
+    def unserializable(monitored):
+        raise ValueError("a monitored path that cannot be written")
+
+    monkeypatch.setattr(trajectory_generation_worker, "serialize_monitored_trajectory", unserializable)
+    assert MONITOR_FRAMES_KEY not in trajectory_generation_worker._trajectory_payload(data, object())
 
 
 def test_previews_are_spaced_from_the_end_of_the_last_one(monkeypatch):

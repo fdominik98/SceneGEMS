@@ -5,7 +5,7 @@ import { sampleCase, sampleRunRecord } from "../../../test/fixtures/clusterViews
 import { sampleFrames } from "../../../test/fixtures/sampleFrames";
 import twoVesselCrossing from "../../encounter/fixtures/twoVesselCrossing.json";
 import { EntryEndedError, isGone } from "./entryFollower";
-import { loadEntryOutput, runSetupOf, trajectoryScenarioOf, type LoaderClient } from "./entryLoader";
+import { framesProgressMessage, loadEntryOutput, runSetupOf, trajectoryScenarioOf, type LoaderClient } from "./entryLoader";
 import type { WorkbenchTarget } from "./workbenchTarget";
 
 const SCENE = "a".repeat(64);
@@ -143,10 +143,38 @@ describe("entry loader", () => {
     const { client, fetch } = fakeClient(detail, { [INPUT]: inputDoc });
     const loaded = await loadEntryOutput(client, { page: "simulation", campaignId: "wb1", caseId: 1, step: "simulation", runRecordId: 11 }, { fetch, runFrames: async () => sampleFrames.slice(0, 3) });
     if (loaded.step !== "simulation") throw new Error("wrong step");
+    // The state log is not on the control node, so the run comes from the monitor's frames alone.
     expect(loaded.frames).toHaveLength(3);
+    expect(loaded.monitored).toBe(true);
     expect(loaded.scenario).toEqual({ trajectories: inputDoc });
     expect(loaded.setup).toEqual({ simulationLayer: "kinematic", controlLayer: null, mode: "usv_navigation", speedup: null, windVector: [1, 2, 0], waves: null });
     expect(loaded.input?.ref).toMatchObject({ sha256: INPUT, kind: "trajectories", pointer: null });
+  });
+
+  it("shows a run from its state log at once, without waiting for the monitor", async () => {
+    const STATE_LOG = "e".repeat(64);
+    const record = { ...sampleRunRecord, run_record_id: 11, artifacts: { trajectories: INPUT, state_log: STATE_LOG } };
+    const detail = caseDetail({ stage: "verdict", run_records: [record] });
+    const stateLog = { scene_list: [sceneOf(0), sceneOf(5), sceneOf(10)], time_step: 2 };
+    const { client, fetch } = fakeClient(detail, { [INPUT]: { scene_list: [sceneOf(0)], time_step: 1 }, [STATE_LOG]: stateLog });
+    const runFrames = async () => {
+      throw new Error("the monitor's frames are not asked for while the state log shows the run");
+    };
+    const loaded = await loadEntryOutput(client, { page: "simulation", campaignId: "wb1", caseId: 1, step: "simulation", runRecordId: 11 }, { fetch, runFrames });
+    if (loaded.step !== "simulation") throw new Error("wrong step");
+    expect(loaded.monitored).toBe(false);
+    expect(loaded.frames.map((frame) => frame.timestamp)).toEqual([0, 2, 4]);
+    expect(loaded.frames[0]?.ruleResults ?? []).toEqual([]);
+  });
+
+  it("falls back to the monitor's frames when the state log holds no scenes", async () => {
+    const STATE_LOG = "e".repeat(64);
+    const record = { ...sampleRunRecord, run_record_id: 11, artifacts: { state_log: STATE_LOG } };
+    const detail = caseDetail({ stage: "verdict", run_records: [record] });
+    const { client, fetch } = fakeClient(detail, { [STATE_LOG]: { note: "no scenes" } });
+    const loaded = await loadEntryOutput(client, { page: "simulation", campaignId: "wb1", caseId: 1, step: "simulation", runRecordId: 11 }, { fetch, runFrames: async () => sampleFrames.slice(0, 2) });
+    expect(loaded.step === "simulation" && loaded.monitored).toBe(true);
+    expect(loaded.step === "simulation" && loaded.frames).toHaveLength(2);
   });
 
   it("rejects as gone when the entry was deleted (404)", async () => {
@@ -172,6 +200,16 @@ describe("entry loader", () => {
 });
 
 describe("loader helpers", () => {
+  it("says how far the monitor's judgment of a run is", () => {
+    const job = jobDetail({});
+    expect(framesProgressMessage({ phase: "submitting" })).toMatch(/Asking the monitor/);
+    expect(framesProgressMessage({ phase: "submitted", job })).toMatch(/waits for a free monitoring slot/);
+    expect(framesProgressMessage({ phase: "running", job })).toMatch(/is judging the run/);
+    expect(framesProgressMessage({ phase: "downloading", job, sizeBytes: 59481981 })).toBe("Reading the monitor's frames (57 MB)...");
+    expect(framesProgressMessage({ phase: "downloading", job, sizeBytes: null })).toBe("Reading the monitor's frames...");
+    expect(framesProgressMessage({ phase: "done", job, frames: [] })).toBeNull();
+  });
+
   it("makes a full trajectory scenario of planned or recorded trajectories", () => {
     const trajectories = { scene_list: [{}] };
     expect(trajectoryScenarioOf({ trajectories })).toEqual({ trajectories });

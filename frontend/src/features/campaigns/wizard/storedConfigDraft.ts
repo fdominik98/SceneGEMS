@@ -125,9 +125,29 @@ export interface StoredConfigContext {
 }
 
 /**
- * The draft a stored campaign config describes, with its input. A campaign that names no worker
- * nodes uses every worker node: its queue caps are then sized to the cluster again when the config
- * is built, and the stored ones stay in the draft for when the operator picks worker nodes.
+ * What a stored config says about where its jobs run that the wizard does not take over: a new
+ * campaign uses every machine, with its queue caps sized to the cluster as it is then.
+ */
+export function namedAllocation(source: Record<string, unknown>): string[] {
+  const resources = record(record(source).resources);
+  const named: string[] = [];
+  const workerNodes = Array.isArray(resources.worker_nodes) ? resources.worker_nodes.length : 0;
+  if (workerNodes > 0) {
+    named.push(workerNodes === 1 ? "one chosen machine" : `${workerNodes} chosen machines`);
+  }
+  if (Object.keys(record(resources.required_labels)).length > 0) {
+    named.push("machine labels");
+  }
+  if (typeof resources.priority === "number" && resources.priority !== 0) {
+    named.push(`priority ${resources.priority}`);
+  }
+  return named;
+}
+
+/**
+ * The draft a stored campaign config describes, with its input. The config's resources are not
+ * part of it (`namedAllocation` says what they named): the wizard sizes the queue caps to the
+ * cluster again when the config is built.
  */
 export function draftFromStoredConfig(source: Record<string, unknown>, catalog: BuilderCatalog, context: StoredConfigContext = {}): WizardDraft {
   const config = record(source);
@@ -136,7 +156,6 @@ export function draftFromStoredConfig(source: Record<string, unknown>, catalog: 
     ...draft,
     input: inputOf(config),
     domain: domainOf(draft.domain, context.clusterDomain),
-    resources: { ...draft.resources, fullUsage: draft.resources.workerNodes.length === 0 },
   };
 }
 

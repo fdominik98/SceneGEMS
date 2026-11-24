@@ -88,6 +88,42 @@ describe("the wizard's pages follow the chosen steps", () => {
     expect(screen.getByText("Page 5 of 7")).toBeVisible();
   });
 
+  it("lists what a new draft still misses and opens the page of an item", async () => {
+    const { user } = renderWizard();
+    const guide = screen.getByRole("region", { name: "What is left to do" });
+    expect(within(guide).getByRole("status")).toHaveTextContent("2 things left to do before the campaign can be created. Every other page has defaults that work.");
+    const items = within(guide).getAllByRole("listitem");
+    expect(items.map((item) => item.textContent)).toEqual(["StepsGive the campaign a name.", "InputChoose FECs or a folder pattern, or add a functional scenario file."]);
+    // The page shown is marked; an item of a page not opened yet is listed all the same
+    expect(within(guide).getByRole("button", { name: "Steps" })).toHaveAttribute("aria-current", "step");
+    await user.click(within(guide).getByRole("button", { name: "Input" }));
+    expect(screen.getByText("Page 2 of 9")).toBeVisible();
+    expect(within(screen.getByRole("region", { name: "What is left to do" })).getByRole("button", { name: "Input" })).toHaveAttribute("aria-current", "step");
+  });
+
+  it("drops an item from the guide as soon as it is done", async () => {
+    const { user } = renderWizard();
+    await user.type(screen.getByRole("textbox", { name: "Name" }), "head-on sweep");
+    const guide = screen.getByRole("region", { name: "What is left to do" });
+    expect(within(guide).getByRole("status")).toHaveTextContent("1 thing left to do");
+    expect(within(guide).queryByRole("button", { name: "Steps" })).not.toBeInTheDocument();
+  });
+
+  it("says that nothing is missing and leads to the review, where the guide is not repeated", async () => {
+    const draft = emptyDraft();
+    draft.name = "scenes only";
+    draft.steps = ["scene_generation"];
+    draft.scope = [{ id: "s", classes: ["2vessel_0obstacle_scenarios/fec1"], patterns: [], quota: 2, failureBudget: 0 }];
+    useWizardStore.setState({ step: "steps", draft });
+    mocks.validateCampaignConfig.mockResolvedValue(VALID);
+    const { user } = renderWizard();
+    const guide = screen.getByRole("region", { name: "What is left to do" });
+    expect(within(guide).getByRole("status")).toHaveTextContent("Nothing is missing. Review the config and create the campaign.");
+    await user.click(within(guide).getByRole("button", { name: "Go to the review" }));
+    expect(screen.getByRole("heading", { name: "Review", level: 3 })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "What is left to do" })).not.toBeInTheDocument();
+  });
+
   it("says where a draft loaded from Campaign History came from, until the draft is discarded", async () => {
     useWizardStore.getState().replaceDraft({ ...emptyDraft(), name: "head-on sweep" }, 'Started from the config of "head-on sweep" (version 1).');
     const { user } = renderWizard();

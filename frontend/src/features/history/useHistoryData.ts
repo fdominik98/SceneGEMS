@@ -99,6 +99,34 @@ export function useStepOutputs(campaignId: string, step: CampaignStep, page: num
   });
 }
 
+/** How many dropped and how many failed cases the failure reasons read at most: enough for the reasons that matter, one request each. */
+export const FAILURE_CASES_READ = 200;
+export const FAILURES_POLL_MS = 10_000;
+
+/**
+ * The dropped and the failed cases of an entry (the first `FAILURE_CASES_READ` of each), for the
+ * reasons they share. Read only when the entry has such cases, again every few seconds while it runs.
+ */
+export function useCaseFailures(campaignId: string, enabled: boolean, running: boolean) {
+  const client = useOperatorClient();
+  return useQuery({
+    queryKey: ["history", client?.baseUrl, "failures", campaignId],
+    queryFn: async ({ signal }) => {
+      const target = client as OperatorClient;
+      const [failed, dropped] = await Promise.all([
+        target.listCases(campaignId, { state: "failed", limit: FAILURE_CASES_READ }, signal),
+        target.listCases(campaignId, { state: "dropped", limit: FAILURE_CASES_READ }, signal),
+      ]);
+      const cases = [...failed.items, ...dropped.items];
+      return { cases, total: (failed.total ?? failed.items.length) + (dropped.total ?? dropped.items.length) };
+    },
+    enabled: client !== null && enabled,
+    refetchInterval: running ? FAILURES_POLL_MS : false,
+    placeholderData: keepPreviousData,
+    retry: retryUnlessUnreachable,
+  });
+}
+
 /** Deletes a final entry; the list is read again and the entry's cached queries are dropped. */
 export function useDeleteEntry(campaignId: string, onDeleted: () => void) {
   const client = useOperatorClient();

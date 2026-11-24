@@ -39,7 +39,7 @@ from scenegems_tool.persistence.schema import (
 )
 from scenegems_tool.persistence.schema.artifact_tables import require_sha256_hex
 from scenegems_tool.persistence.stores.artifact_records import drop_references
-from scenegems_tool.persistence.stores.campaign_records import CampaignEventRecord, CampaignRecord, CampaignTotals, ClassSpec, ConfigVersionRecord
+from scenegems_tool.persistence.stores.campaign_records import EXPLORATION_CLASS_ID, CampaignEventRecord, CampaignRecord, CampaignTotals, ClassSpec, ConfigVersionRecord
 from scenegems_tool.persistence.stores.store_session import session_scope
 
 
@@ -178,6 +178,7 @@ class CampaignStore:
     def campaign_totals(self, campaign_ids: Collection[str], *, session: Optional[Session] = None) -> Dict[str, CampaignTotals]:
         """Per campaign: its cases by state and its verdicts by step and state, in two queries for a whole page of campaigns.
 
+        The cases are the scenarios' cases: the one case of a design space exploration is not counted.
         Every campaign asked for gets an entry, empty when it has no cases (or does not exist).
         """
         ids = sorted(set(campaign_ids))
@@ -185,7 +186,12 @@ class CampaignStore:
         if not ids:
             return totals
         with session_scope(self._sessions, session) as scope:
-            cases = select(ScenarioCaseRow.campaign_id, ScenarioCaseRow.state, func.count()).where(ScenarioCaseRow.campaign_id.in_(ids)).group_by(ScenarioCaseRow.campaign_id, ScenarioCaseRow.state)
+            # The case of the design space exploration is no scenario's case: the outputs and the findings leave it out as well (step_outputs_query)
+            cases = (
+                select(ScenarioCaseRow.campaign_id, ScenarioCaseRow.state, func.count())
+                .where(ScenarioCaseRow.campaign_id.in_(ids), ScenarioCaseRow.class_id != EXPLORATION_CLASS_ID)
+                .group_by(ScenarioCaseRow.campaign_id, ScenarioCaseRow.state)
+            )
             for campaign_id, state, count in scope.execute(cases):
                 totals[campaign_id].cases[state] = count
             verdicts = (

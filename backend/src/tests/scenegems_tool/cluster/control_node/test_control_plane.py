@@ -516,6 +516,59 @@ def test_an_attached_pipeline_engine_submits_through_the_control_plane(plane):
     assert engine._submit == plane.submit and engine._cancel == plane.cancel
 
 
+class _WokenEngine:
+    """Stands in for the pipeline engine: counts the ticks it is asked to run at once."""
+
+    def __init__(self):
+        self.wakes = 0
+
+    def wake(self):
+        self.wakes += 1
+
+
+def test_a_job_that_ends_wakes_the_pipeline_engine_so_the_next_step_does_not_wait_for_its_tick(make_worker_node, plane, on_loop, schedule):
+    engine = plane.pipeline = _WokenEngine()
+    worker_node = make_worker_node("lab 1", slots={SCENE: 2})
+    worker_node.connect()
+    first, second = _submit(on_loop, plane), _submit(on_loop, plane)
+    schedule()
+    offers = _offers(worker_node, 2)
+    for offer in offers:
+        worker_node.accept(offer)
+    assert engine.wakes == 0, "a job that starts is nothing the engine acts on"
+    worker_node.succeed(offers[0])
+    assert engine.wakes == 1 and plane.jobs.get(first.job_id).state == JobState.SUCCEEDED
+    # A failed attempt and a job that fails for good are ends too: the engine retries, drops or fails the case
+    worker_node.send(worker_node.result(offers[1], JobOutcome.FAILED, error="invalid payload"))
+    worker_node.heartbeat()
+    assert engine.wakes == 2 and plane.jobs.get(second.job_id).state == JobState.FAILED
+
+
+def test_an_expired_lease_wakes_the_pipeline_engine(make_worker_node, plane, stores, on_loop, schedule, clock):
+    engine = plane.pipeline = _WokenEngine()
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    worker_node.connect()
+    job = _submit(on_loop, plane, max_attempts=1)
+    schedule()
+    worker_node.accept(worker_node.expect(LeaseOffer))
+    clock.advance(plane.timing.lease_timeout_s + 1)
+    on_loop(plane.leases.sweep_expired)
+    assert stores.jobs.get(job.job_id).state == JobState.FAILED and engine.wakes == 1
+
+
+def test_without_a_pipeline_engine_a_job_that_ends_wakes_the_scheduler_alone(make_worker_node, plane, on_loop, schedule):
+    assert plane.pipeline is None
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    worker_node.connect()
+    _submit(on_loop, plane)
+    waiting = _submit(on_loop, plane)
+    schedule()
+    offer = worker_node.expect(LeaseOffer)
+    worker_node.accept(offer)
+    worker_node.succeed(offer)
+    assert schedule() == 1 and worker_node.expect(LeaseOffer).job.job_id == waiting.job_id
+
+
 def test_the_pipeline_engine_runs_as_a_timer_of_the_control_plane(plane):
     intervals = []
 

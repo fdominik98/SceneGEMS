@@ -1,7 +1,8 @@
 enum VesselType {CargoShip, Tanker, OSPassengerShip,
                  ContainerShip, PassengerShip,
                  FishingShip, MotorVessel,
-                 SailingVessel, MilitaryVessel, MiniUSV}
+                 SailingVessel, MilitaryVessel, MiniUSV,
+                 PanamaxContainerShip, PanamaxBulkCarrier, PanamaxCruiseShip}
 
 
 //enum StaticObstacleType {Small, Medium, Large}

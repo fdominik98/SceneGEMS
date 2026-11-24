@@ -80,18 +80,22 @@ def dropped_at_step(step: StepKind):
 def step_outputs_query(columns, campaign_id: str, step: StepKind, states: Optional[Collection[CaseState]] = None, class_id: Optional[str] = None):
     """The rows of a step's outputs with the given columns: the campaign's cases that reached the step or have its output,
     joined with their run records (simulation), the output's artifact record and the step's verdict (all outer joins).
+    Of the repeats of a simulated run, only the one its verdict judged has the verdict.
     The exploration case of a campaign that explores the design space is no scenario's case and is left out.
     """
     output_hash = output_hash_of(step)
     query = select(*columns).select_from(ScenarioCaseRow)
+    verdict_of = [VerdictRow.case_id == ScenarioCaseRow.id, VerdictRow.step == step]
     if step == StepKind.SIMULATION:
         query = query.outerjoin(RunRecordRow, RunRecordRow.case_id == ScenarioCaseRow.id)
-        verdict_run_index, has_output = RunRecordRow.run_index, RunRecordRow.id.is_not(None)
+        # A run's verdict judges one of its repeats (the first): it belongs to that run record's row, not to every repeat's.
+        # A verdict that names no run record (one of before the column, or its run record is gone) stays on every repeat of its run.
+        verdict_of += [VerdictRow.run_index == RunRecordRow.run_index, or_(VerdictRow.run_record_id.is_(None), VerdictRow.run_record_id == RunRecordRow.id)]
+        has_output = RunRecordRow.id.is_not(None)
     else:
-        verdict_run_index, has_output = 0, output_hash.is_not(None)
-    query = query.outerjoin(ArtifactRow, ArtifactRow.hash == output_hash).outerjoin(
-        VerdictRow, and_(VerdictRow.case_id == ScenarioCaseRow.id, VerdictRow.step == step, VerdictRow.run_index == verdict_run_index)
-    )
+        verdict_of.append(VerdictRow.run_index == 0)
+        has_output = output_hash.is_not(None)
+    query = query.outerjoin(ArtifactRow, ArtifactRow.hash == output_hash).outerjoin(VerdictRow, and_(*verdict_of))
     query = query.where(ScenarioCaseRow.campaign_id == campaign_id, or_(ScenarioCaseRow.stage.in_(stages_from(FIRST_STAGE_OF_STEP[step])), has_output))
     query = query.where(ScenarioCaseRow.class_id != EXPLORATION_CLASS_ID)  # the exploration case runs none of these steps
     if class_id is not None:

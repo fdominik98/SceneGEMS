@@ -10,7 +10,7 @@ Needs Docker and the image (./build.sh --simulation): pytest -m docker.
 import math
 import subprocess
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 import pytest
 
@@ -48,12 +48,12 @@ def helm_container() -> Iterator[Endpoint]:
         subprocess.run(["docker", "rm", "-f", container], capture_output=True, check=False)
 
 
-def run_encounter(helm: Endpoint, name: str, timespan: int) -> KinematicInstanceRun:
-    """The own ship on the container's helm against the encounter's replaying target."""
+def run_encounter(helm: Endpoint, name: str, timespan: int, dt: Optional[float] = None) -> KinematicInstanceRun:
+    """The own ship on the container's helm against the encounter's replaying target, at the trajectories' time step or at dt."""
     trajectories = encounter_trajectories(name, timespan)
     with loopback_endpoints(kinematic_instance(trajectories)) as endpoints:  # the simulator and the target's replay
         endpoints["os-asv-system"] = helm
-        return run_kinematic_instance(trajectories, kinematic_instance(trajectories, {0: AsvSystemId.MOOS_IVP}), hosting=ContainerHosting(endpoints, connect_timeout_s=60.0))
+        return run_kinematic_instance(trajectories, kinematic_instance(trajectories, {0: AsvSystemId.MOOS_IVP}), dt=dt, hosting=ContainerHosting(endpoints, connect_timeout_s=60.0))
 
 
 def closest_approach(run: KinematicInstanceRun) -> float:
@@ -86,6 +86,13 @@ def test_a_run_repeats_bit_for_bit(helm_container, head_on):
     again = run_encounter(helm_container, "head_on", 600)
     assert again.result.state_digest() == head_on.result.state_digest()
     assert again.reports[0] == head_on.reports[0]
+
+
+def test_the_helm_runs_at_a_step_longer_than_the_lead_in(helm_container):
+    """The helm is due on the first step, LEAD_IN_S after its start, whatever the step is: with a period of half a 5 s step it never was."""
+    run = run_encounter(helm_container, "head_on", 600, dt=5.0)
+    assert run.result.steps == 120 and run.reports[0]["no_decision_steps"] == 0
+    assert closest_approach(run) > SAFETY_RADIUS_M
 
 
 @pytest.mark.parametrize("name", ["crossing_from_starboard", "overtaking"])

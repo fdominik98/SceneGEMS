@@ -83,6 +83,27 @@ class TestShippedVesselTypes:
         assert 30.0 <= breadth <= 37.0
         assert 8.0 <= vessel_types["ContainerShip"].draft_of(breadth) <= 13.5
 
+    @pytest.mark.parametrize("name", ["PanamaxContainerShip", "PanamaxBulkCarrier", "PanamaxCruiseShip"])
+    def test_a_panamax_type_stays_within_the_old_locks_of_the_canal(self, vessel_types, name):
+        vessel_type = vessel_types[name]
+        assert vessel_type.steering_type == "rudder"
+        assert vessel_type.max_length <= 294.13
+        for length in (vessel_type.min_length, (vessel_type.min_length + vessel_type.max_length) / 2, vessel_type.max_length):
+            breadth = vessel_type.breadth_of(length)
+            assert 30.0 <= breadth <= 32.31, length
+            assert vessel_type.draft_of(breadth) <= 12.04, length
+
+    def test_the_panamax_cruise_ship_is_the_statendam_at_her_length(self, vessel_types):
+        """The figures of the Transportation Safety Board of Canada's report M96W0187."""
+        cruise_ship = vessel_types["PanamaxCruiseShip"]
+        breadth = cruise_ship.breadth_of(219.4)
+        assert breadth == pytest.approx(30.8, abs=0.05)
+        assert cruise_ship.draft_of(breadth) == pytest.approx(7.55, abs=0.05)
+        assert cruise_ship.max_speed == pytest.approx(21.7 * 1852 / 3600, abs=1e-4)  # full sea speed
+        assert cruise_ship.max_acceleration == pytest.approx(20.57 * 1852 / 3600 / 171, abs=0.005)  # the crash stop from 20.57 knots in 171 s
+        # hard over, the final turning circle has a radius of 129 m: the turn rate is one the ship holds below the trial's approach speed of 20.24 knots
+        assert cruise_ship.max_angular_speed * 129.0 < 20.24 * 1852 / 3600
+
     def test_fixed_size_types_keep_their_beam(self, vessel_types):
         assert vessel_types["OSPassengerShip"].breadth_of(30.0) == 10.0
         assert vessel_types["MiniUSV"].breadth_of(1.0) == 0.5

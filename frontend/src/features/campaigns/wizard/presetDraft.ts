@@ -12,7 +12,6 @@ import {
   emptyRun,
   emptyScopeEntry,
   newEntryId,
-  QUEUE_DEPTH_DEFAULTS,
   UNLIMITED_FAILURE_BUDGET,
   type FailureBudgetDraft,
   type ParamValues,
@@ -155,20 +154,6 @@ function runOf(item: unknown, catalog: BuilderCatalog): RunDraft {
   };
 }
 
-function resourcesOf(config: ConfigObject): WizardDraft["resources"] {
-  const resources = record(config.resources);
-  const workerNodes = strings(resources.worker_nodes);
-  const queueDepth = record(resources.queue_depth);
-  return {
-    // A preset that names neither worker nodes nor queue caps uses every worker node with caps sized to their slots
-    fullUsage: workerNodes.length === 0 && Object.keys(queueDepth).length === 0,
-    workerNodes,
-    labels: Object.entries(record(resources.required_labels)).map(([key, value]) => ({ key, value: String(value) })),
-    queueDepth: Object.fromEntries(Object.entries(QUEUE_DEPTH_DEFAULTS).map(([stage, depth]) => [stage, numberOr(queueDepth[stage], depth)])),
-    priority: numberOr(resources.priority, 0),
-  };
-}
-
 const RETENTIONS: readonly RetentionPolicy[] = ["all", "failures", "verdicts_only"];
 
 function policyOf(config: ConfigObject): WizardDraft["policy"] {
@@ -201,7 +186,6 @@ export function draftFromConfig(source: Record<string, unknown>, catalog: Builde
     domain: domainOf(config),
     trajectories: trajectoriesOf(config, catalog),
     runs: runs.length > 0 ? runs : [emptyRun()],
-    resources: resourcesOf(config),
     policy: policyOf(config),
   };
 }

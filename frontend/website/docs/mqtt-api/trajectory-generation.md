@@ -94,7 +94,7 @@ One message per task: its result. A search that plans nothing still has a result
 | `trajectory-data.random_seed` | integer | The seed of the search |
 | `trajectory-data.iter_numbers` | object | How many iterations the search took |
 | `trajectory-data.overall_eval_time` | number | The search's time in seconds |
-| `trajectory-data.monitor_frames` | object[] | The monitor's output for each scene of the plan, in the order of the scenes. Present only when monitor results are on and could be made. |
+| `trajectory-data.monitor_frames` | object[] or object | The monitor's output for each scene of the plan, in the order of the scenes, written without what repeats from scene to scene. For a plan of two scenes or more it is the object `{"encoding": "carry_forward", "encoded_frames": [...]}`: the first entry of `encoded_frames` is the first scene's output whole, and every later entry holds only the sections (`ruleResults`, `situationContexts`, `colregsStates`, `maneuverStates`, `metrics`) that differ from the scene before; a section that is missing is the one of the scene before. There is one entry per scene, an empty object where nothing changed. A plan of one scene, and a result written by an earlier release, has a plain list of one object per scene. Present only when monitor results are on and could be made. |
 | `valid` | boolean | Whether a plan was found |
 | `complete` | boolean | Whether it is a whole plan; false for the best partial path |
 | `error-message` | string or null | Why there is no plan |

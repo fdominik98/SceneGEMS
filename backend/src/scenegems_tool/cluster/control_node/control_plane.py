@@ -15,7 +15,9 @@ frames the worker nodes relay to the live channel, which create_live_channel wir
 
 With attach_pipeline the pipeline engine (assurance/pipeline) runs as one more timer on the
 same loop; it submits and cancels through this control plane like the operator does. It is
-loaded only then, for the same reason. wake_pipeline runs its next tick at once.
+loaded only then, for the same reason. wake_pipeline runs its next tick at once: a new campaign
+does, and every lease that ends (a result, a release, an expiry), so the next step of a case is
+submitted when its job ends and not at the engine's next tick, while a slot stands free.
 """
 
 import asyncio
@@ -124,7 +126,7 @@ class ControlPlane:
         self.backoff = RejectBackoff(clock=clock)
         self.activity = JobActivity(clock)
         self.scheduler = Scheduler(job_store, self.registry, expected, self.backoff, timing, guard, self.activity)
-        self.leases = LeaseManager(job_store, self.registry, self.backoff, self.activity, timing, on_change=self.scheduler.wake)
+        self.leases = LeaseManager(job_store, self.registry, self.backoff, self.activity, timing, on_change=self._leases_changed)
         self.observations = ObservedJobs(self.registry)
         self._clock = clock
         self._tasks: List[asyncio.Task] = []
@@ -302,6 +304,12 @@ class ControlPlane:
         """Runs a pipeline engine tick at once, so a campaign or workbench entry just created starts without waiting; nothing without an engine."""
         if self.pipeline is not None:
             self.pipeline.wake()
+
+    def _leases_changed(self) -> None:
+        """A lease ended or went back to the queue: the scheduler has a slot or a job to hand out, and the
+        pipeline engine a job's end to act on. Several ends at once are one tick: a wake during a tick runs one more after it."""
+        self.scheduler.wake()
+        self.wake_pipeline()
 
     def worker_node_availability(self) -> List["WorkerNodeAvailability"]:
         """The connected worker nodes as the pipeline engine's stall check sees them."""

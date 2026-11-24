@@ -6,7 +6,7 @@ from scenegems_tool.persistence.database import transaction
 from scenegems_tool.persistence.schema import CampaignClassRow, CampaignClassState, CaseState, MonitorImplementation, PipelineStage, StepKind, VerdictState
 from scenegems_tool.persistence.stores import CaseConflict, ClassCounts, ClassStateConflict, NewCase, NewVerdict, OutputArtifact, UnknownCase, UnknownClass
 from tests.scenegems_tool.persistence.stores.builders import sha256_of
-from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B, SCENE_0, SCENE_1, STATE_LOG_0, STATE_LOG_1, TRAJECTORY_DATA_0, TRAJECTORY_DATA_1, TRAJECTORY_FAILURES
+from tests.scenegems_tool.persistence.stores.conftest import CLASS_A, CLASS_B, SCENE_0, SCENE_1, STATE_LOG_0, STATE_LOG_1, TRAJECTORY_DATA_0, TRAJECTORY_DATA_1, TRAJECTORY_FAILURES, _run_record
 
 pytestmark = pytest.mark.postgres
 
@@ -254,10 +254,26 @@ def test_simulation_outputs_are_one_row_per_run_record(stores, step_outputs):
     case_id = step_outputs.a0.case_id
     assert _rows(outputs) == [
         (case_id, CaseState.COMPLETE, STATE_LOG_0, True, True, VerdictState.FAILED),
-        (case_id, CaseState.COMPLETE, STATE_LOG_1, True, False, VerdictState.FAILED),  # the repeat of run 0 shows the run's verdict
+        (case_id, CaseState.COMPLETE, STATE_LOG_1, True, False, None),  # the run's verdict judged its first repeat: this repeat, with another state log, has none
         (case_id, CaseState.COMPLETE, None, False, True, VerdictState.PASSED),
     ]
     assert outputs[0].artifact.kind == "trajectories" and outputs[0].failed_rules == ("OS_0 - TS_1: rule_8",)
+    assert outputs[1].failed_rules == ()
+
+
+def test_a_verdict_that_names_no_run_record_stays_on_every_repeat_of_its_run(stores, campaign):
+    (case,) = stores.cases.create_cases(campaign.campaign_id, [NewCase(class_id=CLASS_A, case_index=0, seed=0, stage=PipelineStage.SIMULATE)])
+    repeats = [stores.results.add_run_record(_run_record(case.case_id, 0, repeat, STATE_LOG_0, True)) for repeat in range(2)]
+    other_run = stores.results.add_run_record(_run_record(case.case_id, 1, 0, STATE_LOG_1, True))
+    # A verdict of before the column, or one whose run record is gone
+    stores.results.add_verdict(NewVerdict(case_id=case.case_id, run_index=0, state=VerdictState.FAILED, monitor=MonitorImplementation.POST_HOC, failed_rules=("OS_0 - TS_1: rule_8",)))
+    outputs = stores.cases.list_outputs(campaign.campaign_id, StepKind.SIMULATION)
+    assert [(output.run_record_id, output.verdict_state) for output in outputs] == [
+        (repeats[0].run_record_id, VerdictState.FAILED),
+        (repeats[1].run_record_id, VerdictState.FAILED),
+        (other_run.run_record_id, None),
+    ]
+    assert stores.cases.count_outputs(campaign.campaign_id, StepKind.SIMULATION) == 3
 
 
 def test_a_case_at_simulation_without_runs_has_a_row(stores, campaign, step_outputs):

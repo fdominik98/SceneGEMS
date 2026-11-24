@@ -88,10 +88,10 @@ describe("the domain configuration files", () => {
     }
   });
 
-  it("vessel types are a table with eleven rows and eleven columns", () => {
+  it("vessel types are a table with fourteen rows and eleven columns", () => {
     const table = rootOf(VESSEL_TYPES) as TableModel;
     expect(table.nodeType).toBe("table");
-    expect(table.rows).toHaveLength(11);
+    expect(table.rows).toHaveLength(14);
     expect(table.rows[0].key).toBe("UnspecifiedVesselType");
     expect(table.columns.map((column) => column.key)).toEqual([
       "min_length",
@@ -117,7 +117,7 @@ describe("the domain configuration files", () => {
     const byRow = Object.fromEntries(table.rows.map((row) => [row.key, row.cells[index]]));
     expect(byRow.MiniUSV).toMatchObject({ kind: "string", value: "skid", choices: ["rudder", "skid", "vectored_thrust"] });
     expect(byRow.CargoShip).toMatchObject({ kind: "string", value: "rudder" });
-    expect(table.rows.map((row) => row.cells[index]?.value)).toEqual(["rudder", "rudder", "skid", ...Array<string>(8).fill("rudder")]);
+    expect(table.rows.map((row) => row.cells[index]?.value)).toEqual(["rudder", "rudder", "skid", ...Array<string>(11).fill("rudder")]);
   });
 
   it("the hull ratios are number columns without a unit", () => {

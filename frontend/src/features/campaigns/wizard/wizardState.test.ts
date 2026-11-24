@@ -148,9 +148,8 @@ describe("normalizeDraft", () => {
   it("fills the sections a stored draft lacks", () => {
     const draft = normalizeDraft({ name: "old", resources: { priority: 3, queueDepth: { simulate: 8 } }, runs: [{ stackId: "kinematic.replay" }] });
     expect(draft.name).toBe("old");
-    expect(draft.resources.priority).toBe(3);
-    expect(draft.resources.queueDepth).toMatchObject({ simulate: 8, generate_scene: 16 });
-    expect(draft.resources).toMatchObject({ fullUsage: true, workerNodes: [] });
+    // A draft stored when the wizard still had allocation settings: they are dropped
+    expect(Object.keys(draft)).not.toContain("resources");
     expect(draft.runs[0]).toMatchObject({ stackId: "kinematic.replay", monitor: "post_hoc", repeats: 1 });
     expect(draft.trajectories.generator).toBe("monitor_driven_rrt");
   });

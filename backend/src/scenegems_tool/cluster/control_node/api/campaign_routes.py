@@ -26,19 +26,22 @@ routes set. Without Postgres stores the control node mounts unavailable_router i
                                            catalog, the artifact store or the vessel stack resolver refuses
     GET  CAMPAIGNS_PATH?state=&kind=&origin=&q=&limit=&offset=      campaigns, newest first; state, kind and origin are repeatable,
                                            q is a case-insensitive part of the name. A row adds steps, input (first_step, item_count),
-                                           made_from (campaign ids of its items) and totals (cases by state, verdicts by step and state)
+                                           made_from (campaign ids of its items) and totals (cases by state, verdicts by step and state;
+                                           the cases are the scenarios': the one case of a design space exploration is not counted)
     DELETE <id>                            deletes a final campaign with its rows and references: 204, 404, or 409 until it is
                                            stopped or completed
     GET  <id>                              the campaign with its FECs (fecs: counts, state, verdicts per run and state) and totals
                                            (fecs, fecs_open, ...); a FEC's failure_budget and failure_budget_left are null when its
-                                           failure budget is unlimited
+                                           failure budget is unlimited. The class of a design space exploration (exploration) is listed
+                                           in fecs and left out of the totals
     GET  <id>/fecs                         the FECs alone
     GET  <id>/cases?fec_id=&state=&stage=&limit=&offset=      cases by FEC and index
     GET  <id>/cases/<case id>              the case with its jobs, run records and verdicts. A case names its input_artifact (the
                                            functional scenario or item it started from, null for a catalog FEC) and input_source
     GET  <id>/outputs?step=&state=&fec_id=&limit=&offset=      the outputs of a step (scene_generation, trajectory_generation or
                                            simulation) by FEC and case: the artifact, whether it is valid and complete, the step's verdict
-                                           and where the input came from; a row per run for the simulation. 422 for a step the campaign does not run.
+                                           and where the input came from; a row per run record for the simulation, of which only the repeat
+                                           the run's verdict judged (the first) has the verdict. 422 for a step the campaign does not run.
                                            step=design_space_exploration lists the FECs the exploration found, in the same row shape: a row per
                                            explored FEC (fec_id explored/<index>, case_index the index, case_id the exploration case) with its
                                            functional scenario as the artifact and its vessel_count and obstacle_count; empty until the

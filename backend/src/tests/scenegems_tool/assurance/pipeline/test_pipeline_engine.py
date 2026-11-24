@@ -25,7 +25,8 @@ from scenegems_tool.persistence.schema import (
 )
 from tests.scenegems_tool.assurance.pipeline.checks import assert_consistent
 from tests.scenegems_tool.assurance.pipeline.conftest import CLASS_A, CLASS_B, config_dict, create_campaign
-from tests.scenegems_tool.assurance.pipeline.fake_executor import EXPECTED, CaseScript
+from tests.scenegems_tool.assurance.pipeline.fake_executor import ALL_SLOTS, EXPECTED, CaseScript
+from tests.scenegems_tool.persistence.stores.builders import make_hello
 
 pytestmark = pytest.mark.postgres
 
@@ -196,7 +197,9 @@ def test_verdicts_and_run_records_carry_what_the_runs_reported(make_harness):
 # Backpressure
 
 
-def test_new_cases_wait_while_a_stage_is_at_its_cap(harness):
+def test_new_cases_wait_while_a_stage_is_at_its_cap(make_harness):
+    # The cluster has as many slots as the caps: a cap is never below the slots of its stage
+    harness = make_harness(slots={**ALL_SLOTS, JobType.SCENE_GENERATION: 2, JobType.TRAJECTORY_GENERATION: 1})
     caps = {"generate_scene": 2, "generate_trajectories": 1}
     campaign = create_campaign(harness.stores, config_dict(classes=(CLASS_A, CLASS_B), quota=3, failure_budget=0, resources={"queue_depth": caps}))
     harness.settle()
@@ -216,6 +219,34 @@ def test_new_cases_wait_while_a_stage_is_at_its_cap(harness):
         harness.executor.run(limit=1)
     assert harness.campaign(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
     assert assert_consistent(harness.stores, campaign.campaign_id) == {"complete": 6}
+
+
+def test_a_cap_below_the_slots_of_the_cluster_is_raised_to_them(make_harness):
+    harness = make_harness(slots={**ALL_SLOTS, JobType.SCENE_GENERATION: 5})
+    resources = {"queue_depth": {"generate_scene": 2}, "worker_nodes": ["fake-worker-node", "joined"]}
+    campaign = create_campaign(harness.stores, config_dict(quota=12, failure_budget=0, resources=resources))
+    harness.tick()
+    # one tick starts a case for every scene slot, though the config was written for two
+    assert len(_cases(harness, campaign)) == 5
+    assert harness.stores.pipeline.queued_jobs_by_stage(campaign.campaign_id) == {SCENE: 5}
+    # a worker node the campaign may not use adds nothing
+    outsider = harness.worker_node_store.register(make_hello("outsider", slots={JobType.SCENE_GENERATION: 4}, fingerprints=EXPECTED))
+    harness.worker_nodes.append(WorkerNodeAvailability(outsider))
+    harness.settle()
+    assert len(_cases(harness, campaign)) == 5
+    # one that joins the campaign's worker nodes raises the cap by its slots at the next tick
+    joined = harness.worker_node_store.register(make_hello("joined", slots={JobType.SCENE_GENERATION: 3}, fingerprints=EXPECTED))
+    harness.worker_nodes.append(WorkerNodeAvailability(joined))
+    harness.settle()
+    assert len(_cases(harness, campaign)) == 8
+    assert harness.stores.pipeline.queued_jobs_by_stage(campaign.campaign_id) == {SCENE: 8}
+    # and the cap falls back when it leaves: no case starts until the queue is below the slots that are left
+    harness.worker_nodes.pop()
+    harness.executor.run(limit=2, job_types=[JobType.SCENE_GENERATION])
+    harness.settle()
+    assert len(_cases(harness, campaign)) == 8
+    assert harness.drive(campaign.campaign_id).actual_state == CampaignActualState.COMPLETED
+    assert assert_consistent(harness.stores, campaign.campaign_id) == {"complete": 12}
 
 
 # Controls
@@ -246,7 +277,8 @@ def test_pause_holds_every_job_and_resume_releases_them(harness):
     assert kinds.index(CampaignEventKind.PAUSED) < kinds.index(CampaignEventKind.RESUMED) < kinds.index(CampaignEventKind.COMPLETED)
 
 
-def test_drain_finishes_started_cases_and_pauses_until_resumed(harness):
+def test_drain_finishes_started_cases_and_pauses_until_resumed(make_harness):
+    harness = make_harness(slots={**ALL_SLOTS, JobType.SCENE_GENERATION: 2})  # two scene slots, so the cap of two holds
     campaign = create_campaign(harness.stores, config_dict(quota=3, failure_budget=0, resources={"queue_depth": {"generate_scene": 2}}))
     harness.settle()
     assert len(_cases(harness, campaign)) == 2

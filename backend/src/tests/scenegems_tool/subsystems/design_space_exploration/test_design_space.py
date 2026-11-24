@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from functional_level.models.model_parser import ModelParser
+from logical_level.mapping.vessel_type import VesselTypeMap
 from scenegems_tool.assurance.campaign import class_catalog
 from scenegems_tool.subsystems.design_space_exploration.design_space import (
     DEFAULT_SCOPE,
@@ -71,6 +72,14 @@ def test_the_default_specification_is_the_first_part_of_the_catalog_fecs_with_th
     assert "declare" not in before_pin
     assert pin.split() == ["os.", "OS(os).", "vesselType(os,", "OSPassengerShip).", "!exists(OS::new)."]
     assert "\r" not in specification
+
+
+def test_every_vessel_type_of_the_default_specification_is_a_shipped_vessel_type():
+    literals = ModelParser.parse_enum_literals(default_specification(), "VesselType")
+    assert len(literals) == len(set(literals)) == 13
+    assert {"PanamaxContainerShip", "PanamaxBulkCarrier", "PanamaxCruiseShip"} <= set(literals)
+    shipped = VesselTypeMap()
+    assert [literal for literal in literals if literal not in shipped] == []
 
 
 def test_a_generated_model_counts_and_parses_as_a_catalog_fec_does():

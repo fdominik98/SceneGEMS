@@ -1,3 +1,4 @@
+import { decodeFrameSeries, frameSeriesParser } from "../simulation/frameSeries";
 import { parseFrame } from "../simulation/protocol";
 import type { ActorStaticInfo, EvaluationData, SimulationFrame } from "../simulation/types";
 import { createActorNamer } from "../simulation/actorNaming";
@@ -47,6 +48,66 @@ export function isFullTrajectoryScenario(raw: unknown): boolean {
   }
   const sceneList = trajectories.scene_list;
   return Array.isArray(sceneList) && sceneList.length > 0;
+}
+
+/** The key of the monitor's frames a planned trajectory carries beside its `TrajectoryData` fields (`MONITOR_FRAMES_KEY` in the backend). */
+const MONITOR_FRAMES_KEY = "monitor_frames";
+
+/**
+ * The largest scenario file the gateway is sent: the operator listener takes a message of 64 MiB
+ * (`MAX_OPERATOR_FRAME_BYTES`) and closes its WebSocket on a larger one, which would leave the page
+ * waiting for an answer that never comes. The rest of the message is a few hundred bytes.
+ */
+export const GATEWAY_SCENARIO_LIMIT_BYTES = 60 * 1024 * 1024;
+
+/** What a control node of before the operator listener's 64 MiB took in one message: uvicorn's default. */
+export const EARLIER_GATEWAY_LIMIT_BYTES = 16 * 1024 * 1024;
+
+function megabytesOf(bytes: number): string {
+  const value = bytes / (1024 * 1024);
+  return value >= 10 ? String(Math.round(value)) : value.toFixed(1);
+}
+
+/** Why a scenario file is not sent to the gateway at all. */
+export function gatewayTooLargeMessage(bytes: number): string {
+  return `The scenario is too large for the workbench server: ${megabytesOf(bytes)} MB, and it takes ${megabytesOf(GATEWAY_SCENARIO_LIMIT_BYTES)} MB.`;
+}
+
+/**
+ * What to say when the gateway's socket closed while it had a scenario file of this size and had
+ * not answered: the page would wait for good otherwise. Above the earlier limit the likely cause
+ * is a control node that still has it.
+ */
+export function gatewayClosedMessage(bytes: number): string {
+  const size = `${megabytesOf(bytes)} MB`;
+  return bytes > EARLIER_GATEWAY_LIMIT_BYTES
+    ? `The workbench server closed the connection while it took the scenario (${size}). A control node of an earlier release takes ${megabytesOf(EARLIER_GATEWAY_LIMIT_BYTES)} MB in one message: update the control node, or load a shorter scenario.`
+    : `The workbench server closed the connection before it answered for the scenario (${size}): load it again.`;
+}
+
+/**
+ * A scenario file as the gateway is sent it: without the monitor's frames a planned trajectory
+ * carries. The gateway drops them unread (`TrajectoryData.from_payload`), and they make the file many
+ * times larger: 59 MB instead of 3.5 MB for 1600 scenes of three vessels.
+ */
+export function gatewayScenarioContent(raw: unknown, content: string): string {
+  if (!isRecord(raw) || raw[MONITOR_FRAMES_KEY] === undefined) {
+    return content;
+  }
+  const slim = { ...raw };
+  delete slim[MONITOR_FRAMES_KEY];
+  return JSON.stringify(slim);
+}
+
+/** Whether a trajectory scenario carries the monitor's frame of every scene, so that its preview is judged already. */
+export function hasMonitorFrames(raw: unknown): boolean {
+  if (!isFullTrajectoryScenario(raw)) {
+    return false;
+  }
+  const document = raw as { trajectories: { scene_list: unknown[] }; monitor_frames?: unknown };
+  // A list, or the series without what repeats from scene to scene (`frameSeries.ts`)
+  const frames = decodeFrameSeries(document.monitor_frames);
+  return frames !== null && frames.length === document.trajectories.scene_list.length && frames.every((frame) => isRecord(frame) && Array.isArray(frame.ruleResults));
 }
 
 function extractFirstTrajectoryScene(raw: Record<string, unknown>): unknown | null {
@@ -305,7 +366,9 @@ const MONITOR_FRAME_KEYS = [
  * When the payload carries `monitor_frames` (index-aligned with
  * `trajectories.scene_list`), the COLREGS monitor output the planner recorded for
  * each scene is merged in, so the preview stream carries the same monitor data as a
- * simulated run. Older payloads without the key still parse, with empty monitor
+ * simulated run. They come as a list or as the series without what repeats from
+ * scene to scene (`frameSeries.ts`); rule results that a scene carries forward are
+ * parsed once. Older payloads without the key still parse, with empty monitor
  * fields.
  */
 export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
@@ -316,10 +379,11 @@ export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
   if (!isRecord(trajectories) || !Array.isArray(trajectories.scene_list)) {
     return [];
   }
-  const monitorFrames = Array.isArray(raw.monitor_frames) ? raw.monitor_frames : null;
+  const monitorFrames = decodeFrameSeries(raw.monitor_frames);
   const timeStepRaw = Number(trajectories.time_step);
   const timeStep = Number.isFinite(timeStepRaw) && timeStepRaw > 0 ? timeStepRaw : 1;
   const frames: SimulationFrame[] = [];
+  const parse = frameSeriesParser();
   trajectories.scene_list.forEach((scene, index) => {
     if (!isRecord(scene)) {
       return;
@@ -338,7 +402,7 @@ export function buildFramesFromTrajectoryData(raw: unknown): SimulationFrame[] {
       }
     }
     frames.push(
-      parseFrame({
+      parse({
         ...payload,
         ...monitorFields,
         timestamp: index * timeStep,

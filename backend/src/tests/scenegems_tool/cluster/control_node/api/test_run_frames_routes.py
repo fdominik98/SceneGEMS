@@ -4,11 +4,11 @@ import pytest
 from starlette.testclient import TestClient
 
 from scenegems_tool.cluster.control_node.api.control_node_apps import create_operator_app
-from scenegems_tool.cluster.control_node.api.run_frames_routes import FRAMES_PRIORITY, frames_key
+from scenegems_tool.cluster.control_node.api.run_frames_routes import FRAMES_PRIORITY, frames_key, run_record_frames_key
 from scenegems_tool.cluster.control_node.control_plane import ControlPlane
 from scenegems_tool.cluster.control_node.scheduling.fingerprint_policy import ExpectedFingerprints
 from scenegems_tool.cluster.protocol.artifacts import ArtifactKind, ArtifactRef
-from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobType
+from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobSubmission, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
 from scenegems_tool.cluster.protocol.routes import CAMPAIGNS_PATH, JOBS_PATH
 from scenegems_tool.persistence.schema import TrajectoryGeneratorImplementation
@@ -71,6 +71,11 @@ def _path(campaign_id: str, run_record_id: int) -> str:
     return f"{CAMPAIGNS_PATH}/{campaign_id}/run-records/{run_record_id}/frames"
 
 
+def _key(campaign_id: str, attempt: int = 1, sha256: str = STATE_LOG["sha256"]) -> str:
+    """The frames key of a state log in a campaign of these tests, whose cases run with config version 1."""
+    return frames_key(campaign_id, 1, sha256, attempt)
+
+
 def test_frames_are_requested_once_and_answered_with_the_job_then_the_frames(client, plane, stores, campaign):
     simulation = client.post(JOBS_PATH, json={"job_type": KINEMATIC.value, "payload": valid_payload(KINEMATIC)}).json()
     _run_job(plane, simulation["job_id"], {"trajectories": STATE_LOG, "steps": 10})
@@ -84,7 +89,7 @@ def test_frames_are_requested_once_and_answered_with_the_job_then_the_frames(cli
     job = view["job"]
     assert view["run_record_id"] == run_record_id and view["frames"] is None
     assert job["job_type"] == "monitoring.post_hoc" and job["state"] == "queued" and job["priority"] == FRAMES_PRIORITY
-    assert job["idempotency_key"] == frames_key(run_record_id)
+    assert job["idempotency_key"] == _key(campaign["campaign_id"]) == f"frames:{campaign['campaign_id']}:v1:{STATE_LOG['sha256']}"
     assert set(job["requirements"]["fingerprints"].values()) <= set(EXPECTED.values()) and job["requirements"]["fingerprints"]
     assert job["allowed_worker_nodes"] == []  # the campaign may use every worker node
     payload = plane.jobs.get(job["job_id"]).payload
@@ -151,16 +156,16 @@ def test_a_failed_frames_job_is_returned_as_it_is_without_retry(client, plane, f
         assert response.json()["job"]["job_id"] == job["job_id"] and response.json()["job"]["state"] == "failed"
 
 
-def test_retry_submits_a_new_job_after_a_failed_one_and_get_follows_the_newest(client, plane, stores, frames_path):
+def test_retry_submits_a_new_job_after_a_failed_one_and_get_follows_the_newest(client, plane, stores, campaign, frames_path):
     first = client.post(frames_path).json()
-    run_record_id = first["run_record_id"]
+    base_key = _key(campaign["campaign_id"])
     _fail_job(plane, first["job"]["job_id"])
 
     retried = client.post(frames_path, params={"retry": "true"})
     assert retried.status_code == 201
     second = retried.json()["job"]
     assert second["job_id"] != first["job"]["job_id"] and second["state"] == "queued"
-    assert second["idempotency_key"] == frames_key(run_record_id, 2) == f"frames:{run_record_id}:2"
+    assert second["idempotency_key"] == _key(campaign["campaign_id"], 2) == f"{base_key}:2"
     assert second["priority"] == FRAMES_PRIORITY
     assert plane.jobs.get(second["job_id"]).payload == plane.jobs.get(first["job"]["job_id"]).payload
     assert client.get(frames_path).json()["job"]["job_id"] == second["job_id"]
@@ -171,7 +176,7 @@ def test_retry_submits_a_new_job_after_a_failed_one_and_get_follows_the_newest(c
 
     _fail_job(plane, second["job_id"])
     third = client.post(frames_path, params={"retry": "true"})
-    assert third.status_code == 201 and third.json()["job"]["idempotency_key"] == f"frames:{run_record_id}:3"
+    assert third.status_code == 201 and third.json()["job"]["idempotency_key"] == f"{base_key}:3"
 
     _run_job(plane, third.json()["job"]["job_id"], {"frames": FRAMES, "passed": True})
     done = client.get(frames_path).json()
@@ -188,25 +193,79 @@ def test_retry_submits_a_new_job_after_a_cancelled_one(client, plane, frames_pat
     assert retried.status_code == 201 and retried.json()["job"]["idempotency_key"].endswith(":2")
 
 
-def test_retry_without_a_request_submits_the_first_job_and_a_running_job_is_kept(client, plane, frames_path):
+def test_retry_without_a_request_submits_the_first_job_and_a_running_job_is_kept(client, plane, campaign, frames_path):
     first = client.post(frames_path, params={"retry": "true"})
-    assert first.status_code == 201 and first.json()["job"]["idempotency_key"] == frames_key(first.json()["run_record_id"])
+    assert first.status_code == 201 and first.json()["job"]["idempotency_key"] == _key(campaign["campaign_id"])
     lease = plane.jobs.claim_next(WORKER_NODE, 30.0)
     plane.jobs.accept(lease.lease_id, 30.0)
     running = client.post(frames_path, params={"retry": "true"})
     assert running.status_code == 200 and running.json()["job"]["state"] == "running" and running.json()["job"]["job_id"] == first.json()["job"]["job_id"]
 
 
-def test_the_newest_job_is_found_among_the_keys_of_the_same_run_record_only(client, plane, stores, campaign, frames_path):
-    stores.artifacts.insert_if_absent("d" * 64, "trajectories", 4096, "application/json")
-    others = [_run_record(stores, campaign["campaign_id"], case_index=index, artifacts={"state_log": "d" * 64}) for index in (1, 2)]
+def test_the_newest_job_is_found_among_the_keys_of_the_same_state_log_only(client, plane, stores, campaign, frames_path):
+    for sha256 in ("d" * 64, "e" * 64):
+        stores.artifacts.insert_if_absent(sha256, "trajectories", 4096, "application/json")
+    others = [_run_record(stores, campaign["campaign_id"], case_index=index, artifacts={"state_log": sha256}) for index, sha256 in ((1, "d" * 64), (2, "e" * 64))]
     mine = client.post(frames_path).json()
     _fail_job(plane, mine["job"]["job_id"])
     for other in others:
         assert client.post(_path(campaign["campaign_id"], other)).status_code == 201
     retried = client.post(frames_path, params={"retry": "true"}).json()
-    assert retried["job"]["idempotency_key"] == frames_key(mine["run_record_id"], 2)
+    assert retried["job"]["idempotency_key"] == _key(campaign["campaign_id"], 2)
     assert client.get(frames_path).json()["job"]["job_id"] == retried["job"]["job_id"]
+
+
+def test_the_repeats_of_a_run_with_one_state_log_share_one_frames_job(client, plane, stores, campaign):
+    stores.artifacts.insert_if_absent(STATE_LOG["sha256"], "trajectories", 4096, "application/json")
+    (case,) = stores.cases.create_cases(campaign["campaign_id"], [NewCase(CLASS_A, 0, 100)])
+    repeats = [
+        stores.results.add_run_record(
+            NewRunRecord(case.case_id, 0, TrajectoryGeneratorImplementation.STRAIGHT, True, {"mode": "replay"}, {}, case.seed, repeat_index=repeat, artifacts={"state_log": STATE_LOG["sha256"]})
+        ).run_record_id
+        for repeat in range(3)
+    ]
+    first, second, third = (_path(campaign["campaign_id"], run_record_id) for run_record_id in repeats)
+    assert client.get(second).status_code == 404  # nothing judged the state log yet
+
+    asked = client.post(first)
+    assert asked.status_code == 201
+    job_id = asked.json()["job"]["job_id"]
+    # Another repeat has the same state log: the job that judges it is this one, queued or done
+    waiting = client.post(second)
+    assert waiting.status_code == 200 and waiting.json()["job"]["job_id"] == job_id and waiting.json()["run_record_id"] == repeats[1]
+    _run_job(plane, job_id, {"frames": FRAMES, "passed": True})
+    for path, run_record_id in zip((first, second, third), repeats):
+        for answer in (client.post(path), client.get(path)):
+            assert answer.status_code == 200
+            assert (answer.json()["run_record_id"], answer.json()["job"]["job_id"], answer.json()["frames"]) == (run_record_id, job_id, FRAMES)
+    assert [job.job_type for job in plane.jobs.list_jobs()] == [JobType.MONITORING_POST_HOC]  # one job judged all three
+
+
+def test_a_state_log_judged_with_another_config_version_or_in_another_campaign_has_a_job_of_its_own():
+    sha256 = STATE_LOG["sha256"]
+    assert len({frames_key("c1", 1, sha256), frames_key("c1", 2, sha256), frames_key("c2", 1, sha256), frames_key("c1", 1, "d" * 64)}) == 4
+    assert frames_key("c1", 1, sha256, 3) == f"frames:c1:v1:{sha256}:3"
+
+
+def test_a_job_made_under_the_run_records_own_key_is_still_found(client, plane, stores, campaign, frames_path):
+    """Frames asked for before the jobs belonged to the state log: they are not judged again."""
+    run_record_id = int(frames_path.rsplit("/", 2)[1])
+    payload = valid_payload(JobType.MONITORING_POST_HOC)
+
+    def submit(key: str) -> str:
+        return plane.jobs.submit(JobSubmission(job_type=JobType.MONITORING_POST_HOC, payload=payload, idempotency_key=key)).job.job_id
+
+    earlier = submit(run_record_frames_key(run_record_id))
+    submit(run_record_frames_key(run_record_id + 10))  # another run record's, not this one's
+    assert client.get(frames_path).json()["job"]["job_id"] == earlier
+    found = client.post(frames_path)
+    assert found.status_code == 200 and found.json()["job"]["job_id"] == earlier
+
+    assert plane.jobs.cancel(earlier, "operator").cancelled
+    # A retry of it is the state log's first job, which every later request finds first
+    retried = client.post(frames_path, params={"retry": "true"})
+    assert retried.status_code == 201 and retried.json()["job"]["idempotency_key"] == _key(campaign["campaign_id"])
+    assert client.get(frames_path).json()["job"]["job_id"] == retried.json()["job"]["job_id"]
 
 
 def test_retry_still_refuses_a_run_without_a_kept_state_log(client, stores, campaign):

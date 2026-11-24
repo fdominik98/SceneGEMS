@@ -54,6 +54,7 @@ Frame mapping:
 import argparse
 import math
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -121,8 +122,10 @@ def speed_domain(speed: float, max_speed: float) -> str:
 
 def mission_text(port: int, dt: float, speed: float, max_speed: float) -> str:
     """The mission file of the run: the MOOSDB's address and the helm's block."""
-    # Two passes per step would fit in the period, but the clock only moves once a step, so the helm runs one.
-    app_tick = 2.0 / dt
+    # The helm runs a pass only when the clock has moved a period since its last one. The clock moves by the lead-in
+    # before the first step and by dt at every later one, so the period is half the shorter of the two.
+    # Two passes per step would fit in it, but the clock only moves once a step, so the helm runs one.
+    app_tick = 2.0 / min(dt, LEAD_IN_S)
     return (
         f"ServerHost = localhost\nServerPort = {port}\nCommunity = {OWN_SHIP_NAME}\nMOOSTimeWarp = 1\n"
         f"LatOrigin = {LATITUDE_ORIGIN}\nLongOrigin = {LONGITUDE_ORIGIN}\n\n"
@@ -166,6 +169,19 @@ def life_event(text: str) -> Tuple[str, str]:
     """(event, behaviour name) of the helm's IVPHELM_LIFE_EVENT, such as ("spawn", "avd_c1")."""
     fields = dict(part.strip().split("=", 1) for part in text.split(",") if "=" in part)
     return fields.get("event", ""), fields.get("bname", "")
+
+
+LOG_TAIL_CHARACTERS = 1500  # how much of a process's log an error carries
+_TERMINAL_CODES = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")  # the colours a MOOS app writes for a terminal
+
+
+def log_tail(text: str, characters: int = LOG_TAIL_CHARACTERS) -> str:
+    """The end of a process's log on one line, for an error message: its last whole lines, without the terminal's colour codes."""
+    plain = _TERMINAL_CODES.sub("", text)
+    tail = plain[-characters:]
+    if len(plain) > characters and "\n" in tail:
+        tail = tail.split("\n", 1)[1]  # the cut went through the middle of a line
+    return " | ".join(line.strip() for line in tail.splitlines() if line.strip())
 
 
 @dataclass
@@ -251,7 +267,7 @@ class HelmProcesses:
         self._tick(BASE_TIME, int(START_TIMEOUT_S * 1000))
         state = self._latest("IVPHELM_STATE")[2]
         if state != "DRIVE":
-            raise WireError(f"pHelmIvP is in state {state!r}, not DRIVE: {self._log_tail('pHelmIvP')}")
+            raise WireError(f"pHelmIvP is in state {state!r}, not DRIVE. {self._log_tail('pHelmIvP')}")
 
     def run_pass(self, moos_time: float, posts: Sequence[Post]) -> HelmPass:
         self._expect_ok(self._ask("CLOCK", repr(moos_time)), "setting the clock")
@@ -303,7 +319,7 @@ class HelmProcesses:
         deadline = time.monotonic() + timeout_s
         while text not in self._log(name):
             if self._processes[name].poll() is not None or time.monotonic() > deadline:
-                raise WireError(f"{name} did not start: {self._log_tail(name)}")
+                raise WireError(f"{name} did not start. {self._log_tail(name)}")
             time.sleep(0.05)
 
     def _tick(self, moos_time: float, timeout_ms: int) -> None:
@@ -313,7 +329,7 @@ class HelmProcesses:
         if reply[0] != "OK":
             ended = self._processes["pHelmIvP"].poll()
             state = f"pHelmIvP ended with code {ended}" if ended is not None else "pHelmIvP did not acknowledge the tick"
-            raise WireError(f"{state} at MOOS time {stamp}: {self._log_tail('pHelmIvP')}")
+            raise WireError(f"{state} at MOOS time {stamp}. {self._log_tail('pHelmIvP')}")
 
     def _send(self, *parts: str) -> None:
         assert self._bridge is not None and self._bridge.stdin is not None
@@ -351,8 +367,8 @@ class HelmProcesses:
         with open(os.path.join(self._folder, f"{name}.log"), encoding="utf-8", errors="replace") as file:
             return file.read()
 
-    def _log_tail(self, name: str, characters: int = 1500) -> str:
-        return " | ".join(line.strip() for line in self._log(name)[-characters:].splitlines() if line.strip())
+    def _log_tail(self, name: str) -> str:
+        return f"The end of {name}'s log: {log_tail(self._log(name))}"
 
 
 class MoosIvpNavigator:

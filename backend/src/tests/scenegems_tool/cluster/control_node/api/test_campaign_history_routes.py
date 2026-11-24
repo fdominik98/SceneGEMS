@@ -613,6 +613,33 @@ def test_an_exploring_entry_is_created_with_its_origin_and_first_step(client, st
     assert [row["campaign_id"] for row in listed.json()] == [created["campaign_id"]]
 
 
+def test_the_totals_of_an_exploring_entry_count_the_explored_fecs_and_their_cases_not_the_exploration(client, stores):
+    campaign_id = create_exploring(client)["campaign_id"]
+    path = f"{CAMPAIGNS_PATH}/{campaign_id}"
+
+    def row():
+        (listed,) = client.get(CAMPAIGNS_PATH, params={"origin": "design_space_exploration"}).json()
+        return listed["totals"]
+
+    # While it explores there is no FEC and no scenario's case yet
+    stores.cases.create_cases(campaign_id, [NewCase("exploration", 0, 7, stage=PipelineStage.EXPLORE_DESIGN_SPACE)])
+    exploring = client.get(path).json()
+    assert [entry["fec_id"] for entry in exploring["fecs"]] == ["exploration"], "the exploration is still listed among the FECs"
+    assert {key: exploring["totals"][key] for key in ("fecs", "quota", "complete", "in_flight")} == {"fecs": 0, "quota": 0, "complete": 0, "in_flight": 0}
+    assert row()["cases"] == {}
+
+    other = create_exploring(client)["campaign_id"]
+    _, specs = seed_explored(stores, other)
+    (case,) = stores.cases.create_cases(other, [NewCase(specs[0].class_id, 0, 1)])
+    stores.cases.move_case(case.case_id, case.version, state=CaseState.FAILED, reason="generate_scene job failed")
+    explored = client.get(f"{CAMPAIGNS_PATH}/{other}").json()
+    assert [entry["fec_id"] for entry in explored["fecs"]] == ["exploration", *(spec.class_id for spec in specs)]
+    totals = explored["totals"]
+    assert (totals["fecs"], totals["quota"], totals["complete"]) == (len(specs), sum(spec.quota for spec in specs), 0), "the complete exploration is no complete case"
+    rows = {listed["campaign_id"]: listed["totals"] for listed in client.get(CAMPAIGNS_PATH, params={"origin": "design_space_exploration"}).json()}
+    assert rows[other]["cases"] == {"failed": 1}
+
+
 def test_the_outputs_of_the_exploration_are_the_fecs_it_found(client, stores):
     campaign_id = create_exploring(client)["campaign_id"]
     path = f"{CAMPAIGNS_PATH}/{campaign_id}/outputs"

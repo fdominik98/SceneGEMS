@@ -3,7 +3,7 @@ import { catalogStacksSchema } from "../../../domain/cluster/campaignApi";
 import { sampleCatalogStacks } from "../../../test/fixtures/campaignCatalog";
 import { buildCampaignConfig, type BuilderCatalog } from "./configBuilder";
 import { checkDraft } from "./draftChecks";
-import { draftFromStoredConfig, runsWithoutStack } from "./storedConfigDraft";
+import { draftFromStoredConfig, namedAllocation, runsWithoutStack } from "./storedConfigDraft";
 
 const parsedCatalog = catalogStacksSchema.parse(sampleCatalogStacks);
 const catalog: BuilderCatalog = { stacks: parsedCatalog.stacks, generators: parsedCatalog.trajectory_generators };
@@ -169,14 +169,16 @@ describe("draftFromStoredConfig", () => {
     expect(draftFromStoredConfig(stored, catalog).input).toEqual({ scenarios: [], items: [] });
   });
 
-  it("uses every worker node unless the campaign named some, and keeps the stored queue caps for then", () => {
-    const any = draftFromStoredConfig(STORED_FULL_CHAIN, catalog);
-    expect(any.resources).toMatchObject({ fullUsage: true, workerNodes: [] });
+  it("uses every machine whatever the campaign named, and says what it named", () => {
+    expect(namedAllocation(STORED_FULL_CHAIN)).toEqual([]);
     const resources = { ...STORED_RESOURCES, worker_nodes: ["worker-node-2"], required_labels: { gpu: "yes" }, queue_depth: { ...STORED_RESOURCES.queue_depth, simulate: 4 }, priority: 5 };
-    const named = draftFromStoredConfig({ ...STORED_FULL_CHAIN, resources }, catalog);
-    expect(named.resources).toMatchObject({ fullUsage: false, workerNodes: ["worker-node-2"], labels: [{ key: "gpu", value: "yes" }], priority: 5 });
-    expect(named.resources.queueDepth.simulate).toBe(4);
-    expect(buildCampaignConfig(named, catalog).resources).toEqual({ worker_nodes: ["worker-node-2"], required_labels: { gpu: "yes" }, queue_depth: { simulate: 4 }, priority: 5 });
+    const stored = { ...STORED_FULL_CHAIN, resources };
+    const named = draftFromStoredConfig(stored, catalog);
+    // The new campaign names no machines, no labels and no priority: the wizard offers none of them
+    expect(buildCampaignConfig(named, catalog).resources).toEqual({ priority: 0 });
+    expect(namedAllocation(stored)).toEqual(["one chosen machine", "machine labels", "priority 5"]);
+    expect(namedAllocation({ ...stored, resources: { ...resources, worker_nodes: ["a", "b"], required_labels: {}, priority: 0 } })).toEqual(["2 chosen machines"]);
+    expect(namedAllocation({})).toEqual([]);
   });
 
   it("reads a config stored before the steps existed as the whole chain, with its FECs under classes", () => {

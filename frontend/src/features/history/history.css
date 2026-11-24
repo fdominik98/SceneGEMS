@@ -60,16 +60,11 @@
   line-height: 1.4;
 }
 
-/* The name and what it was made from take the room: both are long, the other columns are a word or a number. */
+/* The name takes the room: it is long, the other columns are a word or a number. */
 .history-table .camp-cell-name {
   display: table-cell;
   width: 38%;
   min-width: 260px;
-}
-
-.history-table .history-cell-made-from {
-  width: 26%;
-  min-width: 200px;
 }
 
 .history-table .camp-cell-name > * {
@@ -137,10 +132,6 @@
   white-space: normal;
 }
 
-.history-origin {
-  margin: 0;
-}
-
 .history-steps {
   display: flex;
   flex-direction: column;
@@ -179,6 +170,12 @@
   gap: var(--space-2);
 }
 
+.history-monitor-relation {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+}
+
 /* The pair's name, then each encounter's type and roles, on one line when the cell is wide enough; the failed rules below them. */
 .history-monitor-pair {
   display: flex;
@@ -197,14 +194,74 @@
   border-left-color: rgb(var(--danger-rgb) / 0.6);
 }
 
-.history-monitor-relation {
-  color: var(--text-muted);
-  font-size: var(--font-size-xs);
+.history-monitor-type {
   font-weight: 600;
 }
 
-.history-monitor-type {
-  font-weight: 600;
+/* The other repeats of a folded line, as small links under its button. */
+.history-repeats {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--font-size-xs);
+}
+
+.history-repeats .meta {
+  margin: 0;
+}
+
+/* Why cases did not complete: a line per reason. */
+.history-failures {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.history-failure-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.history-failure {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr) max-content;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.history-failure-stage {
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.history-failure-reason {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .history-failure {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .history-failure-reason {
+    grid-column: 1 / -1;
+    white-space: normal;
+  }
+}
+
+/* The few facts of an entry that matter at a glance, beside its name. */
+.history-entry-line {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
 }
 
 .history-monitor-rules {
