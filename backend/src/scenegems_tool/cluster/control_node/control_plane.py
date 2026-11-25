@@ -24,6 +24,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from typing import TYPE_CHECKING, Any, List, Optional
 
 import anyio
@@ -238,16 +239,18 @@ class ControlPlane:
 
     # Jobs
 
-    async def submit(self, submission: JobSubmission) -> SubmitOutcome:
+    async def submit(self, submission: JobSubmission, held: bool = False) -> SubmitOutcome:
+        """Queues a job; a held one (a paused campaign's) waits until the pipeline engine releases it, so the scheduler is not woken for it."""
         expected = self.expected.current()
         if expected is None and not submission.requirements.fingerprints:
             raise FingerprintsUnavailable(f"the control node's expected image fingerprints are {self.expected.state.value}" + (f": {self.expected.error}" if self.expected.error else ""))
         submission = await anyio.to_thread.run_sync(validate_submission_payload, submission)
         if expected is not None:
             submission = with_required_fingerprints(submission, expected)
-        outcome = await anyio.to_thread.run_sync(self.jobs.submit, submission)
+        outcome = await anyio.to_thread.run_sync(partial(self.jobs.submit, submission, held=held))
         self.activity.changed(outcome.job.job_id)
-        self.scheduler.wake()
+        if not held:
+            self.scheduler.wake()
         return outcome
 
     async def cancel(self, job_id: str, reason: str) -> CancelOutcome:

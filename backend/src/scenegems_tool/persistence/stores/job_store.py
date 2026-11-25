@@ -17,7 +17,7 @@ other or take the same job). Every other step locks the job row it changes.
 """
 
 from datetime import datetime, timedelta
-from typing import Collection, List, Optional
+from typing import Any, Collection, Dict, List, Optional
 from uuid import uuid4
 
 from sqlalchemy import func, select, update
@@ -78,11 +78,13 @@ class JobStore:
 
     # Submission and queries
 
-    def submit(self, submission: JobSubmission) -> SubmitOutcome:
+    def submit(self, submission: JobSubmission, held: bool = False) -> SubmitOutcome:
         """Queues a job. A second submission with the same idempotency key returns the first job.
 
         Without a key the job id becomes the key. Concurrent submissions with one key create
-        one job: the insert skips on the key's unique constraint.
+        one job: the insert skips on the key's unique constraint. A held job (a paused
+        campaign's) is queued held, so it is never claimable before release_held_jobs; the
+        first job returned for a repeated key keeps its own availability.
         """
         now = self._clock()
         job_id = str(uuid4())
@@ -108,7 +110,7 @@ class JobStore:
                     attempt=0,
                     failed_attempts=0,
                     submitted_at=now,
-                    available_at=now,
+                    available_at=HELD_UNTIL if held else now,
                     updated_at=now,
                 )
                 .on_conflict_do_nothing(index_elements=[JobRow.idempotency_key])
@@ -261,9 +263,14 @@ class JobStore:
             row.updated_at = now
             return Lease.from_row(row)
 
-    def reject(self, lease_id: str, reason: str) -> Optional[JobRecord]:
-        """The worker node refused the offer: the job is queued again without a failed attempt."""
-        return self._give_back(lease_id, reason, JobEventKind.REJECTED, (JobState.LEASED,))
+    def reject(self, lease_id: str, reason: str, hold: bool = False) -> Optional[JobRecord]:
+        """The offer ended unaccepted: the job is queued again without a failed attempt.
+
+        hold says that the control node holds the job back from that worker node for a while (the
+        worker node refused it); an offer withdrawn on a disconnect or one that could not be sent holds
+        nothing. The event's detail keeps it, so a restarted control node restores only those holds.
+        """
+        return self._give_back(lease_id, reason, JobEventKind.REJECTED, (JobState.LEASED,), {"hold": hold})
 
     def release(self, lease_id: str, reason: str) -> Optional[JobRecord]:
         """The worker node gave the job back unfinished (for example while draining): queued again without a failed attempt."""
@@ -330,11 +337,13 @@ class JobStore:
             return CancelOutcome(job=JobRecord.from_row(row), cancelled=True, lease_id=row.lease_id if was_active else None, worker_node_id=row.lease_owner if was_active else None)
 
     def expire_leases(self, limit: Optional[int] = None) -> List[ExpiredLease]:
-        """Ends every lease whose expiry has passed; each counts as a failed attempt.
+        """Ends every lease whose expiry has passed.
 
-        The job is queued for its next attempt, or failed when it has no attempts left.
-        Rows another transaction holds (a renewal in flight) are skipped and seen by the
-        next call.
+        An expired running lease counts as a failed attempt: the job is queued for its next
+        attempt, or failed when it has no attempts left. An offer the worker node never answered
+        ends like a refused one: queued again without a failed attempt, with a REJECTED event that
+        holds the job back from that worker node (ExpiredLease.offer). Rows another transaction
+        holds (a renewal in flight) are skipped and seen by the next call.
         """
         now = self._clock()
         expired: List[ExpiredLease] = []
@@ -343,6 +352,15 @@ class JobStore:
             for row in session.execute(query).scalars().all():
                 from_state = row.state
                 lease_expired_at = row.lease_expires_at
+                if from_state == JobState.LEASED:
+                    # Not the job's fault: the worker node did not answer in time
+                    row.state = JobState.QUEUED
+                    row.lease_expires_at = None
+                    row.updated_at = now
+                    detail = {"reason": "the offer expired unanswered", "hold": True, "lease_expired_at": lease_expired_at.isoformat()}
+                    append_job_event(session, row, JobEventKind.REJECTED, from_state, now, detail)
+                    expired.append(ExpiredLease(lease_id=row.lease_id, worker_node_id=row.lease_owner, job=JobRecord.from_row(row), offer=True))
+                    continue
                 row.failed_attempts += 1
                 row.state = state_after_failed_attempt(row.failed_attempts, row.max_attempts)
                 row.lease_expires_at = None
@@ -394,7 +412,7 @@ class JobStore:
     def _lock_by_lease(session: Session, lease_id: str) -> Optional[JobRow]:
         return session.execute(select(JobRow).where(JobRow.lease_id == lease_id).with_for_update()).scalar_one_or_none()
 
-    def _give_back(self, lease_id: str, reason: str, kind: JobEventKind, allowed_states: Collection[JobState]) -> Optional[JobRecord]:
+    def _give_back(self, lease_id: str, reason: str, kind: JobEventKind, allowed_states: Collection[JobState], detail: Optional[Dict[str, Any]] = None) -> Optional[JobRecord]:
         now = self._clock()
         with transaction(self._sessions) as session:
             row = self._lock_by_lease(session, lease_id)
@@ -404,5 +422,5 @@ class JobStore:
             row.state = JobState.QUEUED
             row.lease_expires_at = None
             row.updated_at = now
-            append_job_event(session, row, kind, from_state, now, {"reason": reason})
+            append_job_event(session, row, kind, from_state, now, {"reason": reason, **(detail or {})})
             return JobRecord.from_row(row)

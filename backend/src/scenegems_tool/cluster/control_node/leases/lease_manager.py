@@ -74,7 +74,7 @@ class LeaseManager:
             return
         job_id = session.job_of(frame.lease_id)
         session.forget(frame.lease_id)
-        if await self._store(self._jobs.reject, frame.lease_id, frame.reason) is not None:
+        if await self._store(self._jobs.reject, frame.lease_id, frame.reason, hold=True) is not None:
             until = self._backoff.rejected(session.worker_node_id, job_id)
             logger.info("Worker node %s rejected job %s (%s); not offered to it again before %s", session.worker_node_id, job_id, frame.reason, until.isoformat(timespec="seconds"))
         self._activity.changed(job_id)
@@ -165,10 +165,18 @@ class LeaseManager:
     # Timers
 
     async def sweep_expired(self) -> List[ExpiredLease]:
-        """Requeues (or fails) every expired lease and tells a connected owner to stop the job."""
+        """Requeues (or fails) every expired lease and tells a connected owner to stop the job.
+
+        An offer the worker node never answered costs the job no attempt; like a refused offer, the
+        job is not offered to that worker node again for a while (RejectBackoff).
+        """
         expired = await self._store(self._jobs.expire_leases)
         for lease in expired:
-            logger.warning("Lease %s of job %s on worker node %s expired; job now %s", lease.lease_id, lease.job.job_id, lease.worker_node_id, lease.job.state.value)
+            if lease.offer:
+                until = self._backoff.rejected(lease.worker_node_id, lease.job.job_id)
+                logger.info("Worker node %s did not answer the offer of job %s; not offered to it again before %s", lease.worker_node_id, lease.job.job_id, until.isoformat(timespec="seconds"))
+            else:
+                logger.warning("Lease %s of job %s on worker node %s expired; job now %s", lease.lease_id, lease.job.job_id, lease.worker_node_id, lease.job.state.value)
             if lease.job.state.is_terminal:
                 self._backoff.job_ended(lease.job.job_id)
             self._activity.changed(lease.job.job_id)

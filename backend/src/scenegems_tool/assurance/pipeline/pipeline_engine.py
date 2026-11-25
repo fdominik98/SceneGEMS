@@ -177,7 +177,7 @@ class PipelineEngine:
         self,
         stores: AssuranceStores,
         job_store: JobStore,
-        submit: Callable[[JobSubmission], Awaitable[SubmitOutcome]],
+        submit: Callable[..., Awaitable[SubmitOutcome]],  # ControlPlane.submit(submission, held=)
         cancel: Callable[[str, str], Awaitable[object]],
         expected: Callable[[], Optional[Dict[str, str]]],
         worker_nodes: Callable[[], Sequence[WorkerNodeAvailability]],
@@ -655,7 +655,7 @@ class PipelineEngine:
         async def submit_one(planned: PlannedSubmission) -> None:
             async with limit:
                 try:
-                    outcome = await self._submit(planned.submission)
+                    outcome = await self._submit(planned.submission, held=planned.hold)
                 except InvalidPayload as error:
                     refused.append((planned, str(error)))
                     return
@@ -678,6 +678,7 @@ class PipelineEngine:
             for planned, job_id in links:
                 self.stores.pipeline.link_job(planned.idempotency_key, job_id, session=session)
             if held:
+                # Submitted held already; this holds a job that a repeated key returned from before the pause
                 self.jobs.hold_jobs(held, session=session)
             if not refused:
                 return set()

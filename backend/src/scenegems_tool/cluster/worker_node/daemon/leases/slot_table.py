@@ -1,8 +1,11 @@
 """Slot accounting: how many jobs of each type the worker node runs at once.
 
-A slot is taken when the worker node accepts a lease and given back when the job's worker has
-stopped and its containers are gone, so a slot count is never exceeded on the machine,
-not even while a cancelled job is still being torn down.
+A slot is taken when the worker node accepts a lease and given back when the job's thread has
+stopped. After a cancel that is once the cancel is sent to the job's pool, which may still be
+tearing the task down (a run's pod is removed by the simulation pool): the pool's own size, the
+same number of slots, then makes the next task wait in the pool's queue until that task has left,
+so a slot count is not exceeded on the machine. Holding the slot until then instead would make the
+worker node refuse offers for a job the control node already counts as finished.
 
 A job may take slots of more than one type: a simulation that is judged while it runs takes a
 monitoring slot beside its simulation slot (cluster/fingerprints/components.py slot_job_types).

@@ -203,7 +203,7 @@ class InMemoryJobStore:
     def _event(self, job: _Job, kind: JobEventKind, from_state: Optional[JobState], at: datetime, detail: Optional[dict] = None) -> None:
         job.events.append(JobEventRecord(next(self._event_ids), job.id, at, kind, from_state, job.state, job.attempt, job.lease_id, job.lease_owner, detail or {}))
 
-    def submit(self, submission: JobSubmission) -> SubmitOutcome:
+    def submit(self, submission: JobSubmission, held: bool = False) -> SubmitOutcome:
         with self._lock:
             now = self._clock()
             job_id = str(uuid4())
@@ -228,7 +228,7 @@ class InMemoryJobStore:
                 idempotency_key=key,
                 state=JobState.QUEUED,
                 submitted_at=now,
-                available_at=now,
+                available_at=HELD_UNTIL if held else now,
                 updated_at=now,
             )
             self._jobs[job_id] = job
@@ -257,7 +257,7 @@ class InMemoryJobStore:
                 for job in self._jobs.values()
                 if job.state in (JobState.QUEUED,) + ACTIVE_STATES
                 for event in job.events
-                if event.kind == JobEventKind.REJECTED and event.at >= since and event.worker_node_id is not None
+                if event.kind == JobEventKind.REJECTED and event.at >= since and event.worker_node_id is not None and event.detail.get("hold") is True
             ]
             return sorted(found, key=lambda event: (event.at, event.event_id))
 
@@ -344,13 +344,13 @@ class InMemoryJobStore:
             job.updated_at = now
             return Lease.from_row(job)
 
-    def reject(self, lease_id: str, reason: str) -> Optional[JobRecord]:
-        return self._give_back(lease_id, reason, JobEventKind.REJECTED, (JobState.LEASED,))
+    def reject(self, lease_id: str, reason: str, hold: bool = False) -> Optional[JobRecord]:
+        return self._give_back(lease_id, reason, JobEventKind.REJECTED, (JobState.LEASED,), {"hold": hold})
 
     def release(self, lease_id: str, reason: str) -> Optional[JobRecord]:
         return self._give_back(lease_id, reason, JobEventKind.RELEASED, ACTIVE_STATES)
 
-    def _give_back(self, lease_id: str, reason: str, kind: JobEventKind, allowed: Collection[JobState]) -> Optional[JobRecord]:
+    def _give_back(self, lease_id: str, reason: str, kind: JobEventKind, allowed: Collection[JobState], detail: Optional[dict] = None) -> Optional[JobRecord]:
         with self._lock:
             now = self._clock()
             job = self._by_lease(lease_id)
@@ -360,7 +360,7 @@ class InMemoryJobStore:
             job.state = JobState.QUEUED
             job.lease_expires_at = None
             job.updated_at = now
-            self._event(job, kind, from_state, now, {"reason": reason})
+            self._event(job, kind, from_state, now, {"reason": reason, **(detail or {})})
             return JobRecord.from_row(job)
 
     def report_result(self, report: JobResult) -> ResultReport:
@@ -416,6 +416,13 @@ class InMemoryJobStore:
             expired = []
             for job in due[:limit]:
                 from_state = job.state
+                if from_state == JobState.LEASED:
+                    job.state = JobState.QUEUED
+                    job.lease_expires_at = None
+                    job.updated_at = now
+                    self._event(job, JobEventKind.REJECTED, from_state, now, {"reason": "the offer expired unanswered", "hold": True})
+                    expired.append(ExpiredLease(lease_id=job.lease_id, worker_node_id=job.lease_owner, job=JobRecord.from_row(job), offer=True))
+                    continue
                 job.failed_attempts += 1
                 job.state = state_after_failed_attempt(job.failed_attempts, job.max_attempts)
                 job.lease_expires_at = None

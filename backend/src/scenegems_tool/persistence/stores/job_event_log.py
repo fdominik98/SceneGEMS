@@ -34,11 +34,21 @@ def job_events(session: Session, job_id: str) -> List[JobEventRecord]:
 
 
 def rejections_since(session: Session, since: datetime, unfinished_states: Sequence[JobState]) -> List[JobEventRecord]:
-    """The reject events since `since` of jobs in unfinished_states that name their worker node, oldest first."""
+    """The reject events since `since` of jobs in unfinished_states that name their worker node and held the job back from it, oldest first.
+
+    A withdrawn or undeliverable offer is a reject that held nothing (detail hold false); rejects written before the
+    flag existed carry none and are left out too.
+    """
     query = (
         select(JobEventRow)
         .join(JobRow, JobRow.id == JobEventRow.job_id)
-        .where(JobEventRow.kind == JobEventKind.REJECTED, JobEventRow.at >= since, JobEventRow.worker_node_id.is_not(None), JobRow.state.in_(unfinished_states))
+        .where(
+            JobEventRow.kind == JobEventKind.REJECTED,
+            JobEventRow.at >= since,
+            JobEventRow.worker_node_id.is_not(None),
+            JobEventRow.detail["hold"].as_boolean().is_(True),
+            JobRow.state.in_(unfinished_states),
+        )
         .order_by(JobEventRow.at, JobEventRow.id)
     )
     return [JobEventRecord.from_row(row) for row in session.execute(query).scalars()]

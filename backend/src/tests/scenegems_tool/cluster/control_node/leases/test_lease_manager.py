@@ -63,7 +63,10 @@ def test_an_offer_holds_ten_seconds(harness):
     assert harness.sweep() == []
     harness.clock.advance(0.1)
     assert [lease.lease_id for lease in harness.sweep()] == [offer.lease_id]
-    assert harness.state(offer).state == JobState.QUEUED and harness.state(offer).failed_attempts == 1
+    # An unanswered offer costs no attempt; the job is held back from the worker node that did not answer
+    assert harness.state(offer).state == JobState.QUEUED and harness.state(offer).failed_attempts == 0
+    assert harness.plane.backoff.held_jobs("worker-node-a") == [offer.job.job_id]
+    assert harness.run(harness.plane.scheduler.run_once) == 0
 
 
 def test_accepting_starts_a_thirty_second_lease(harness):

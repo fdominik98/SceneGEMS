@@ -81,7 +81,7 @@ def test_concurrent_sweepers_expire_each_lease_once(job_store, worker_node_store
     worker_node_store.register(make_hello("worker-node-a", slots={SCENE: job_count}))
     for _ in range(job_count):
         job_store.submit(make_submission(max_attempts=3))
-        job_store.claim_next("worker-node-a", LEASE_S)
+        job_store.accept(job_store.claim_next("worker-node-a", LEASE_S).lease_id, LEASE_S)  # running leases, which count an attempt
     clock.advance(LEASE_S)
 
     expired = _run_together(workers, lambda worker: job_store.expire_leases(limit=7) + job_store.expire_leases())

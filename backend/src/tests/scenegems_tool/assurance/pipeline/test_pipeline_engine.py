@@ -277,6 +277,29 @@ def test_pause_holds_every_job_and_resume_releases_them(harness):
     assert kinds.index(CampaignEventKind.PAUSED) < kinds.index(CampaignEventKind.RESUMED) < kinds.index(CampaignEventKind.COMPLETED)
 
 
+def test_a_job_submitted_while_paused_is_never_claimable(harness):
+    campaign = create_campaign(harness.stores, config_dict(quota=2, failure_budget=0))
+    harness.settle()
+    running = harness.executor.claim_all(limit=2)  # the scene jobs run while the campaign pauses
+    _set_desired(harness, campaign, CampaignDesiredState.PAUSED)
+    harness.settle()
+    for lease in running:
+        harness.executor.report(lease)
+    link = harness.engine._link
+    claimed_between = []
+
+    def claim_then_link(links, refused):
+        # Between the submission of the trajectory jobs and their link: nothing may be claimed
+        claimed_between.extend(harness.executor.claim_all())
+        return link(links, refused)
+
+    harness.engine._link = claim_then_link
+    harness.settle()
+    trajectory_jobs = [job for case in _cases(harness, campaign) for pipeline_job, job in _jobs_of(harness, case) if pipeline_job.stage == TRAJECTORIES]
+    assert len(trajectory_jobs) == 2 and all(job.available_at == HELD_UNTIL for job in trajectory_jobs)
+    assert claimed_between == []
+
+
 def test_drain_finishes_started_cases_and_pauses_until_resumed(make_harness):
     harness = make_harness(slots={**ALL_SLOTS, JobType.SCENE_GENERATION: 2})  # two scene slots, so the cap of two holds
     campaign = create_campaign(harness.stores, config_dict(quota=3, failure_budget=0, resources={"queue_depth": {"generate_scene": 2}}))

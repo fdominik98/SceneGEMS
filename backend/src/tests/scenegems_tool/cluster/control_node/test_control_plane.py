@@ -8,6 +8,7 @@ import os
 import subprocess
 import sys
 from datetime import timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -344,6 +345,56 @@ def test_a_restarted_control_node_keeps_its_reject_holds(make_worker_node, plane
     assert plane.backoff.held_jobs(picky.worker_node_id) == [job.job_id]
     picky.heartbeat()
     assert schedule() == 0  # still held back from picky
+
+
+def test_a_restart_restores_no_hold_for_a_withdrawn_offer(make_worker_node, plane, stores, on_loop, schedule):
+    gone, other = make_worker_node("lab gone", slots={SCENE: 1}), make_worker_node("lab other", slots={SCENE: 1})
+    gone.connect()
+    job = _submit(on_loop, plane)
+    schedule()
+    gone.expect(LeaseOffer)
+    gone.close()  # the offer is withdrawn, which holds nothing
+    other.connect()
+    other.sync()
+    assert stores.jobs.get(job.job_id).state == JobState.QUEUED
+    plane.backoff._holds.clear()
+    on_loop(plane._restore_reject_holds)
+    assert plane.backoff.held_jobs(gone.worker_node_id) == []
+
+
+def test_an_unanswered_offer_costs_no_attempt_and_goes_to_another_worker_node(make_worker_node, plane, stores, on_loop, schedule, clock):
+    silent, other = make_worker_node("silent", slots={SCENE: 1}), make_worker_node("other", slots={SCENE: 1})
+    silent.connect()
+    job = _submit(on_loop, plane)
+    schedule()
+    silent.expect(LeaseOffer)  # and never answered
+    clock.advance(11)
+    (expired,) = on_loop(plane.leases.sweep_expired)
+    assert expired.offer
+    stored = stores.jobs.get(job.job_id)
+    assert (stored.state, stored.failed_attempts) == (JobState.QUEUED, 0)
+    assert silent.expect(Cancel).reason == "the lease expired"
+    silent.heartbeat()
+    assert schedule() == 0  # held back from the worker node that did not answer
+    other.connect()
+    other.heartbeat()
+    assert schedule() == 1
+    assert other.expect(LeaseOffer).job.job_id == job.job_id
+    plane.backoff._holds.clear()
+    on_loop(plane._restore_reject_holds)
+    assert plane.backoff.held_jobs(silent.worker_node_id) == [job.job_id]  # a restart keeps that hold
+
+
+def test_a_held_submission_is_offered_only_once_released(make_worker_node, plane, stores, on_loop, schedule):
+    worker_node = make_worker_node("lab 1", slots={SCENE: 1})
+    worker_node.connect()
+    submission = JobSubmission(job_type=SCENE, payload=valid_payload(SCENE))
+    job = on_loop(partial(plane.submit, submission, held=True)).job
+    worker_node.heartbeat()
+    assert schedule() == 0
+    stores.jobs.release_held_jobs([job.job_id])
+    assert schedule() == 1
+    assert worker_node.expect(LeaseOffer).job.job_id == job.job_id
 
 
 def test_a_released_job_returns_without_using_an_attempt(make_worker_node, plane, stores, on_loop, schedule):

@@ -119,6 +119,7 @@ class ExpiredLease:
     lease_id: str
     worker_node_id: str
     job: JobRecord  # queued for the next attempt, or failed when it had no attempts left
+    offer: bool = False  # an offer the worker node never answered: queued again without a failed attempt
 
 
 @dataclass(frozen=True)

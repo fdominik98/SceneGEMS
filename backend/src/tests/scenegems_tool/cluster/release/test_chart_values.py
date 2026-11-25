@@ -171,7 +171,7 @@ def test_a_sample_cluster_gives_one_entry_per_worker_node_and_the_pushed_images(
             "node": "pc-2",
             "machine": "lab-pc-2",
             "components": DEFAULT_WORKER_NODE_COMPONENTS.split(","),
-            "slots": {"simulation": 2, "design_space_exploration": 1, "scene_generation": 1, "trajectory_generation": 1, "monitoring.post_hoc": 1},
+            "slots": {"simulation": 2, "design_space_exploration": 1, "scene_generation": 1, "trajectory_generation": 1, "monitoring.post_hoc": 1, "calibration.deviation": 1},
             "labels": {},
             "artifactCacheMaxBytes": 2147483648,
         },

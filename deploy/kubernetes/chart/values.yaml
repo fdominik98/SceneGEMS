@@ -115,6 +115,7 @@ workerNodeDefaults:
     - scene_generation
     - trajectory_generation
     - monitoring
+    - calibration
   # How many jobs of each type run at once (SCENEGEMS_WORKER_NODE_SLOTS, joined as type:slots with commas)
   slots:
     simulation: 2
@@ -122,6 +123,7 @@ workerNodeDefaults:
     scene_generation: 1
     trajectory_generation: 1
     monitoring.post_hoc: 1
+    calibration.deviation: 1
   # Labels jobs can require (SCENEGEMS_WORKER_NODE_LABELS, joined as key=value with commas)
   labels: {}
   # Bound of its artifact cache in bytes; 0 turns the cache off (SCENEGEMS_WORKER_NODE_ARTIFACT_CACHE_MAX_BYTES)

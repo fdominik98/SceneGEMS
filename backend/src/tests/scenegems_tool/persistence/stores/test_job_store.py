@@ -4,7 +4,7 @@ import pytest
 
 from scenegems_tool.cluster.protocol.jobs import JobOutcome, JobRequirements, JobState, JobType
 from scenegems_tool.cluster.protocol.messages import JobResult
-from scenegems_tool.persistence.schema import JobEventKind, WorkerNodeStatus
+from scenegems_tool.persistence.schema import HELD_UNTIL, JobEventKind, WorkerNodeStatus
 from scenegems_tool.persistence.stores import IdempotencyKeyMismatch, ResultStatus, UnknownJob, UnknownWorkerNode
 from tests.scenegems_tool.persistence.stores.builders import START, make_hello, make_resources, make_submission
 
@@ -291,23 +291,32 @@ def test_reject_requeues_without_a_failed_attempt(job_store, worker_node_a):
     assert next_lease.lease_id != lease.lease_id
     assert job_store.reject(lease.lease_id, "again") is None  # superseded
     rejected_event = job_store.events(job.job_id)[2]
-    assert (rejected_event.kind, rejected_event.detail) == (JobEventKind.REJECTED, {"reason": "no free slot"})
+    assert (rejected_event.kind, rejected_event.detail) == (JobEventKind.REJECTED, {"reason": "no free slot", "hold": False})
 
 
 def test_recent_rejections_are_those_of_unfinished_jobs(job_store, worker_node_a, clock):
     waiting = job_store.submit(make_submission()).job
-    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "busy")
+    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "busy", hold=True)
     first_reject = clock.now
     clock.advance(60)
-    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "still busy")
+    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "still busy", hold=True)
     ended = job_store.submit(make_submission(idempotency_key="ended")).job
-    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S, exclude_job_ids=[waiting.job_id]).lease_id, "busy")
+    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S, exclude_job_ids=[waiting.job_id]).lease_id, "busy", hold=True)
     job_store.cancel(ended.job_id, "not needed")
     assert [(event.job_id, event.worker_node_id, event.at) for event in job_store.recent_rejections(first_reject)] == [
         (waiting.job_id, "worker-node-a", first_reject),
         (waiting.job_id, "worker-node-a", clock.now),
     ]
     assert [event.at for event in job_store.recent_rejections(first_reject + timedelta(seconds=1))] == [clock.now]
+
+
+def test_recent_rejections_leave_out_offers_that_held_nothing(job_store, worker_node_a, clock):
+    job = job_store.submit(make_submission()).job
+    since = clock.now
+    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "the worker node disconnected before accepting")
+    job_store.reject(job_store.claim_next("worker-node-a", LEASE_S).lease_id, "busy", hold=True)
+    (held,) = job_store.recent_rejections(since)
+    assert (held.job_id, held.detail) == (job.job_id, {"reason": "busy", "hold": True})
 
 
 def test_reject_needs_an_unaccepted_offer(job_store, worker_node_a):
@@ -484,11 +493,35 @@ def test_expired_lease_requeues_with_the_next_attempt(job_store, worker_node_a, 
 
 
 def test_unaccepted_offer_expires_too(job_store, worker_node_a, clock):
-    job_store.submit(make_submission())
-    job_store.claim_next("worker-node-a", LEASE_S)
+    job = job_store.submit(make_submission(max_attempts=1)).job
+    since = clock.now
+    lease = job_store.claim_next("worker-node-a", LEASE_S)
     clock.advance(LEASE_S)
     (expired,) = job_store.expire_leases()
-    assert expired.job.state == JobState.QUEUED
+    # The worker node did not answer: no failed attempt, and it holds the job back from that worker node like a refusal
+    assert expired.offer and (expired.lease_id, expired.worker_node_id) == (lease.lease_id, "worker-node-a")
+    assert (expired.job.state, expired.job.attempt, expired.job.failed_attempts) == (JobState.QUEUED, 1, 0)
+    event = job_store.events(job.job_id)[-1]
+    assert (event.kind, event.detail["reason"], event.detail["hold"]) == (JobEventKind.REJECTED, "the offer expired unanswered", True)
+    assert [held.job_id for held in job_store.recent_rejections(since)] == [job.job_id]
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == job.job_id  # max_attempts 1, still runnable
+
+
+def test_an_expired_running_lease_is_not_an_offer(job_store, worker_node_a, clock):
+    job_store.submit(make_submission())
+    lease = job_store.claim_next("worker-node-a", LEASE_S)
+    job_store.accept(lease.lease_id, LEASE_S)
+    clock.advance(LEASE_S)
+    (expired,) = job_store.expire_leases()
+    assert not expired.offer and expired.job.failed_attempts == 1
+
+
+def test_a_held_submission_is_never_claimed(job_store, worker_node_a):
+    held = job_store.submit(make_submission(idempotency_key="held"), held=True).job
+    assert held.available_at == HELD_UNTIL
+    assert job_store.claim_next("worker-node-a", LEASE_S) is None
+    assert job_store.release_held_jobs([held.job_id]) == [held.job_id]
+    assert job_store.claim_next("worker-node-a", LEASE_S).job.job_id == held.job_id
 
 
 def test_expiry_fails_the_job_at_the_retry_limit(job_store, worker_node_a, clock):
@@ -496,6 +529,7 @@ def test_expiry_fails_the_job_at_the_retry_limit(job_store, worker_node_a, clock
     for attempt in (1, 2):
         lease = job_store.claim_next("worker-node-a", LEASE_S)
         assert lease.job.attempt == attempt
+        job_store.accept(lease.lease_id, LEASE_S)  # a running lease: an unanswered offer costs no attempt
         clock.advance(LEASE_S)
         (expired,) = job_store.expire_leases()
     assert (expired.job.state, expired.job.failed_attempts, expired.job.finished_at) == (JobState.FAILED, 2, clock.now)
@@ -510,6 +544,7 @@ def test_released_leases_do_not_use_up_attempts(job_store, worker_node_a, clock)
         lease = job_store.claim_next("worker-node-a", LEASE_S)
         job_store.release(lease.lease_id, "draining")
     lease = job_store.claim_next("worker-node-a", LEASE_S)
+    job_store.accept(lease.lease_id, LEASE_S)
     clock.advance(LEASE_S)
     (expired,) = job_store.expire_leases()
     assert (expired.job.attempt, expired.job.failed_attempts, expired.job.state) == (4, 1, JobState.FAILED)
